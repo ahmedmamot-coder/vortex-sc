@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Club Platform · Scope &amp; Build Sequence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f4f7fb;
+    --surface:#ffffff;
+    --surface2:#f8fafc;
+    --ink:#11202f;
+    --text:#374559;
+    --muted:#6b7a8d;
+    --border:#e2e8f1;
+    --border2:#d3dce7;
+    --accent:#2563eb;
+    --accent-soft:#eef3ff;
+    --p1:#2563eb; --p1b:#4f46e5; --p2:#0d9488; --p3:#c2410c; --p4:#15803d;
+    --ok:#15803d; --warn:#b45309;
+    --radius:14px;
+    --maxw:1060px;
+    --shadow:0 1px 2px rgba(16,32,48,.04), 0 10px 30px rgba(16,32,48,.06);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+    color:var(--text); background:var(--bg); line-height:1.62; font-size:15px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:var(--maxw); margin:0 auto; padding:0 26px}
+  .mono{font-family:'JetBrains Mono',monospace}
+  h1,h2,h3,h4{color:var(--ink); letter-spacing:-.015em; line-height:1.15}
+  .eyebrow{font-family:'JetBrains Mono',monospace; font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); font-weight:600}
+
+  /* nav */
+  nav.top{position:sticky; top:0; z-index:50; background:rgba(255,255,255,.86); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); border-bottom:1px solid var(--border)}
+  nav.top .row{max-width:var(--maxw); margin:0 auto; padding:13px 26px; display:flex; align-items:center; justify-content:space-between; gap:14px}
+  nav.top .brand{display:flex; align-items:center; gap:10px}
+  nav.top .brand .mk{width:28px; height:28px; border-radius:8px; background:var(--accent); display:grid; place-items:center; flex:none}
+  nav.top .brand .wm{font-weight:700; font-size:14px; letter-spacing:.01em; color:var(--ink)}
+  nav.top ul{list-style:none; display:flex; gap:20px}
+  nav.top a{color:var(--muted); text-decoration:none; font-size:13.5px; font-weight:500; transition:color .18s}
+  nav.top a:hover{color:var(--accent)}
+  @media(max-width:860px){nav.top ul{display:none}}
+
+  /* hero */
+  .hero{padding:64px 0 54px; background:linear-gradient(180deg,#ffffff,var(--bg))}
+  .hero .badge{display:inline-flex; align-items:center; gap:8px; padding:6px 13px; border-radius:100px; background:var(--accent-soft); border:1px solid #d7e2fb; font-family:'JetBrains Mono'; font-size:11px; letter-spacing:.06em; color:var(--accent); margin-bottom:20px}
+  .hero h1{font-size:clamp(33px,5.4vw,55px); font-weight:800; letter-spacing:-.03em; max-width:18ch; margin-bottom:18px; color:var(--ink)}
+  .hero h1 .u{color:var(--accent)}
+  .hero p.lead{font-size:clamp(16px,2vw,19px); color:var(--text); max-width:64ch}
+
+  /* stepper */
+  .stepper{display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-top:42px}
+  .pstep{background:var(--surface); border:1px solid var(--border); border-radius:13px; padding:17px 15px; box-shadow:var(--shadow); border-top:3px solid var(--accent)}
+  .pstep .pn{font-family:'JetBrains Mono'; font-size:11px; font-weight:600; letter-spacing:.05em}
+  .pstep h4{font-size:15px; font-weight:700; margin:8px 0 5px}
+  .pstep p{font-size:12.5px; color:var(--muted); line-height:1.45}
+  @media(max-width:820px){.stepper{grid-template-columns:1fr 1fr}}
+  @media(max-width:480px){.stepper{grid-template-columns:1fr}}
+
+  /* section */
+  section.phase{padding:52px 0; border-top:1px solid var(--border)}
+  .ph-head{margin-bottom:30px}
+  .ph-tagline{display:flex; align-items:center; gap:11px; flex-wrap:wrap; margin-bottom:13px}
+  .ph-num{font-family:'JetBrains Mono'; font-weight:600; font-size:13px; padding:5px 12px; border-radius:7px}
+  .ph-status{font-family:'JetBrains Mono'; font-size:11px; letter-spacing:.06em; padding:5px 11px; border-radius:7px; background:var(--surface2); border:1px solid var(--border2); color:var(--muted)}
+  .ph-head h2{font-size:clamp(24px,3.6vw,33px); font-weight:800; margin-bottom:14px}
+  .ph-head p.intro{font-size:16.5px; color:var(--text); max-width:68ch}
+
+  /* cards */
+  .cards{display:grid; grid-template-columns:1fr 1fr; gap:16px}
+  @media(max-width:760px){.cards{grid-template-columns:1fr}}
+  .card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; box-shadow:var(--shadow)}
+  .card .ch{padding:15px 18px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:11px; background:var(--surface2)}
+  .card .ch .ci{width:29px; height:29px; border-radius:8px; flex:none; display:grid; place-items:center; font-family:'JetBrains Mono'; font-weight:600; font-size:12px; color:#fff}
+  .card .ch h3{font-size:15.5px; font-weight:700}
+  .frow{padding:15px 18px; border-bottom:1px solid var(--border)}
+  .frow:last-child{border-bottom:0}
+  .frow h4{font-size:14.5px; font-weight:600; color:var(--ink)}
+  .frow p{font-size:13.5px; color:var(--text); margin-top:3px; line-height:1.55}
+  .ntag{display:inline-block; margin-top:9px; margin-right:6px; font-family:'JetBrains Mono'; font-size:11px; padding:4px 9px; border-radius:6px; background:var(--accent-soft); color:#1d4ed8; border:1px solid #d3e0ff}
+  .ntag.green{background:#e9f7ee; color:#15803d; border-color:#c5e8d1}
+  .ntag.warn{background:#fdf0e6; color:#b45309; border-color:#f6dcc4}
+
+  /* bridge */
+  .bridge{margin-top:16px; background:var(--surface); border:1px dashed var(--border2); border-radius:var(--radius); padding:18px; display:flex; gap:14px; align-items:flex-start; box-shadow:var(--shadow)}
+  .bridge .bi{flex:none; width:34px; height:34px; border-radius:9px; background:#e9f7ee; border:1px solid #c5e8d1; display:grid; place-items:center; color:#15803d; font-weight:700}
+  .bridge h4{font-size:14.5px; font-weight:700; color:var(--ink)}
+  .bridge p{font-size:13.5px; color:var(--text); margin-top:4px}
+
+  /* white-label */
+  .wl-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:14px}
+  @media(max-width:820px){.wl-grid{grid-template-columns:1fr}}
+  .wl-card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:22px; box-shadow:var(--shadow)}
+  .wl-card .t{font-family:'JetBrains Mono'; font-size:11px; letter-spacing:.08em; text-transform:uppercase; font-weight:600}
+  .wl-card.c1 .t{color:var(--accent)} .wl-card.c2 .t{color:#0d9488} .wl-card.c3 .t{color:#b45309}
+  .wl-card h3{font-size:16.5px; font-weight:700; margin:8px 0 13px}
+  .wl-card ul{list-style:none}
+  .wl-card li{font-size:13.6px; color:var(--text); padding:8px 0 8px 19px; position:relative; border-top:1px solid var(--border)}
+  .wl-card li:first-child{border-top:0}
+  .wl-card li::before{content:'›'; position:absolute; left:1px; top:7px; color:var(--accent); font-weight:700}
+  .callout{margin-top:22px; border-radius:var(--radius); padding:19px 21px; background:#fdf6ec; border:1px solid #f3dfc0; display:flex; gap:13px; align-items:flex-start}
+  .callout .ic{color:var(--warn); flex:none; font-weight:800}
+  .callout h4{color:#92400e; font-size:14.5px; font-weight:700}
+  .callout p{color:var(--text); font-size:13.6px; margin-top:5px}
+
+  /* academy */
+  .a-list{display:grid; grid-template-columns:1fr 1fr; gap:12px 26px}
+  @media(max-width:680px){.a-list{grid-template-columns:1fr}}
+  .a-item{display:flex; gap:13px; padding:14px 0; border-bottom:1px solid var(--border)}
+  .a-item .dot{width:8px; height:8px; border-radius:50%; background:var(--p4); margin-top:8px; flex:none}
+  .a-item h4{font-size:14.5px; font-weight:600}
+  .a-item p{font-size:13.5px; color:var(--text); margin-top:3px}
+  .scoped{margin-top:22px; font-size:13.6px; color:var(--muted); font-style:italic; border-left:3px solid var(--border2); padding-left:15px; line-height:1.6}
+
+  /* decisions */
+  .dec-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px}
+  @media(max-width:760px){.dec-grid{grid-template-columns:1fr}}
+  .dcol{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:6px 0; box-shadow:var(--shadow)}
+  .dcol .dh{padding:16px 20px 12px; display:flex; align-items:center; gap:10px}
+  .dcol .dh .bdg{font-family:'JetBrains Mono'; font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; padding:4px 10px; border-radius:5px; font-weight:600}
+  .dcol.done .bdg{background:#e9f7ee; color:#15803d}
+  .dcol.open .bdg{background:#fdf0e6; color:#b45309}
+  .dcol .dh h3{font-size:15.5px; font-weight:700}
+  .drow{padding:12px 20px; border-top:1px solid var(--border); display:flex; gap:11px; font-size:13.6px; line-height:1.5}
+  .drow .mk{flex:none; font-family:'JetBrains Mono'; font-weight:700; font-size:14px}
+  .dcol.done .mk{color:var(--ok)} .dcol.open .mk{color:var(--warn)}
+  .drow span.q{color:var(--text)}
+
+  /* footer */
+  footer{border-top:1px solid var(--border); padding:36px 0 46px; background:var(--surface)}
+  footer .wrap{display:flex; flex-wrap:wrap; gap:18px; justify-content:space-between; align-items:flex-end}
+  footer .q{font-size:14.5px; color:var(--ink); max-width:52ch; line-height:1.6; font-weight:500}
+  footer .stamp{font-family:'JetBrains Mono'; font-size:11px; letter-spacing:.04em; color:var(--muted); text-align:right; line-height:1.8}
+
+  .reveal{opacity:0; transform:translateY(13px); transition:opacity .55s ease, transform .55s ease}
+  .reveal.in{opacity:1; transform:none}
+  @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto} .reveal{opacity:1; transform:none; transition:none}}
+</style>
+</head>
+<body>
+
+<nav class="top">
+  <div class="row">
+    <div class="brand">
+      <span class="mk"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M2 8c2.5 2 4 2 6 0s3.5-2 6 0 4 2 6 0M2 14c2.5 2 4 2 6 0s3.5-2 6 0 4 2 6 0"/></svg></span>
+      <span class="wm">Club Platform</span>
+    </div>
+    <ul>
+      <li><a href="#p1">Phase 1</a></li>
+      <li><a href="#p1b">1B</a></li>
+      <li><a href="#p2">Phase 2</a></li>
+      <li><a href="#p3">White-label</a></li>
+      <li><a href="#p4">Academy</a></li>
+      <li><a href="#dec">Decisions</a></li>
+    </ul>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="badge">INTERNAL SCOPE · FOUNDERS &amp; DEVELOPER</div>
+    <h1>Perfect the <span class="u">club</span> first. Open it to families. Then sell it.</h1>
+    <p class="lead">A working scope for the swimming club platform, built in sequence. Coaches first, families second, then white-label to other clubs, then the academy. This page is for the three founders and the developer to read and agree on before the next build starts.</p>
+
+    <div class="stepper">
+      <div class="pstep reveal" style="border-top-color:var(--p1)"><div class="pn" style="color:var(--p1)">PHASE 1</div><h4>Coach core</h4><p>The operational engine. Mostly built.</p></div>
+      <div class="pstep reveal" style="border-top-color:var(--p1b)"><div class="pn" style="color:var(--p1b)">PHASE 1B</div><h4>Coach edge</h4><p>The differentiators that set us apart.</p></div>
+      <div class="pstep reveal" style="border-top-color:var(--p2)"><div class="pn" style="color:var(--p2)">PHASE 2</div><h4>Family access</h4><p>One login for parent and swimmer.</p></div>
+      <div class="pstep reveal" style="border-top-color:var(--p3)"><div class="pn" style="color:var(--p3)">PHASE 3</div><h4>White-label</h4><p>Sell the finished club product.</p></div>
+      <div class="pstep reveal" style="border-top-color:var(--p4)"><div class="pn" style="color:var(--p4)">PHASE 4</div><h4>Academy</h4><p>Add the learn-to-swim side.</p></div>
+    </div>
+  </div>
+</header>
+
+<section class="phase" id="p1">
+  <div class="wrap">
+    <div class="ph-head reveal">
+      <div class="ph-tagline"><span class="ph-num" style="background:#eef3ff;color:var(--p1)">PHASE 1</span><span class="ph-status">BUILD NOW · MOSTLY BUILT</span></div>
+      <h2>Coach core: the club's operational engine</h2>
+      <p class="intro">Everything coaches and admin need to run the club day to day. This is the part already standing in the demo. The job here is to perfect it and make it rock solid before anything is added on top.</p>
+    </div>
+
+    <div class="cards">
+      <div class="card reveal">
+        <div class="ch"><span class="ci" style="background:var(--p1)">A</span><h3>Squad &amp; access</h3></div>
+        <div class="frow"><h4>Admin and coach roles</h4><p>PIN login per user. Admin runs the club, each coach manages only their own squad.</p></div>
+        <div class="frow"><h4>Squad structure</h4><p>Six training groups from beginner squad to elite, each with its own roster and coach.</p></div>
+      </div>
+
+      <div class="card reveal">
+        <div class="ch"><span class="ci" style="background:var(--p1)">B</span><h3>Planning &amp; poolside</h3></div>
+        <div class="frow"><h4>Training plans &amp; set builder</h4><p>Structured sets with repeats, distance, stroke, interval, rest, and labels, plus goal and equipment tagging.</p></div>
+        <div class="frow"><h4>Pace clock</h4><p>Live poolside countdown that runs the session set by set, with rep tracking and a next-set preview.</p></div>
+      </div>
+
+      <div class="card reveal">
+        <div class="ch"><span class="ci" style="background:var(--p1)">C</span><h3>Attendance &amp; testing</h3></div>
+        <div class="frow"><h4>Attendance</h4><p>One-tap session attendance per squad, with trends and history per swimmer.</p></div>
+        <div class="frow"><h4>Test sets</h4><p>Log repeated training times per swimmer and event, with the best time tracked. Separate from meet results.</p></div>
+      </div>
+
+      <div class="card reveal">
+        <div class="ch"><span class="ci" style="background:var(--p1)">D</span><h3>Meets &amp; performance</h3></div>
+        <div class="frow"><h4>Meet management</h4><p>Entries with seed times, heats, and lanes, a status lifecycle, and a printable results program.</p></div>
+        <div class="frow"><h4>Hy-Tek import</h4><p>Import the meet file and pull every swimmer's times in. Auto-creates new swimmers and updates PBs.</p><span class="ntag green">File import, no live API</span></div>
+        <div class="frow"><h4>Swimmer profiles &amp; PBs</h4><p>Each swimmer's page leads with best times. This profile is the spine of the whole product.</p><span class="ntag">PBs by course: LCM / SCM / SCY</span></div>
+        <div class="frow"><h4>Per-swimmer analysis</h4><p>Time progression, splits, and season trends for each swimmer.</p></div>
+      </div>
+    </div>
+
+    <div class="bridge reveal">
+      <span class="bi">W</span>
+      <div>
+        <h4>WhatsApp sharing, kept as a Phase 1 bridge</h4>
+        <p>Coaches push plans and schedules to families over WhatsApp, manually. This stays in Phase 1 so families get value before the portal exists. Limited to plans and schedules only, never a minor's results or body data, and treated as a stopgap that Phase 2 replaces.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="phase" id="p1b">
+  <div class="wrap">
+    <div class="ph-head reveal">
+      <div class="ph-tagline"><span class="ph-num" style="background:#eef0ff;color:var(--p1b)">PHASE 1B</span><span class="ph-status">BUILD NEXT · ON A STABLE CORE</span></div>
+      <h2>Coach edge: the differentiators</h2>
+      <p class="intro">The features no generic club app has. These are the heavier, riskier builds, so they come after the core is perfected, on stable ground and with real coach feedback behind them. If this work slips, the club still has a working product.</p>
+    </div>
+
+    <div class="cards">
+      <div class="card reveal">
+        <div class="ch"><span class="ci" style="background:var(--p1b)">1</span><h3>Coaching intelligence</h3></div>
+        <div class="frow"><h4>AI lesson-plan review</h4><p>The AI checks each coach's plan against the club guidebook and suggests edits, keeping coaching consistent to one standard.</p><span class="ntag">Configurable: each club loads its own guidebook</span></div>
+        <div class="frow"><h4>Dryland &amp; fitness</h4><p>Assign and log gym and dryland work alongside the pool program.</p></div>
+      </div>
+
+      <div class="card reveal">
+        <div class="ch"><span class="ci" style="background:var(--p1b)">2</span><h3>Body &amp; nutrition</h3></div>
+        <div class="frow"><h4>InBody scan import</h4><p>Body composition tracked over time on the profile, read next to the performance trend.</p><span class="ntag">File import from LookinBody</span><span class="ntag warn">Minors: consent-gated</span></div>
+        <div class="frow"><h4>Nutrition</h4><p>Per-swimmer nutrition guidance and logging, tied to body composition over time.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="phase" id="p2">
+  <div class="wrap">
+    <div class="ph-head reveal">
+      <div class="ph-tagline"><span class="ph-num" style="background:#e6f5f3;color:var(--p2)">PHASE 2</span><span class="ph-status">AFTER THE CLUB CORE IS TRUSTED</span></div>
+      <h2>Family access: open the club to parents and swimmers</h2>
+      <p class="intro">Once coaches are reliably entering plans, attendance, results, and times, the data is ready to expose. Families come second by dependency, not preference. There is nothing to show a parent until the coach side is solid.</p>
+    </div>
+
+    <div class="cards">
+      <div class="card reveal">
+        <div class="ch"><span class="ci" style="background:var(--p2)">F</span><h3>One family account</h3></div>
+        <div class="frow"><h4>Single login for parent and swimmer</h4><p>One access covers both. The swimmer's training, PBs, and results live inside the family account, with multi-child switching.</p></div>
+        <div class="frow"><h4>Family portal</h4><p>PBs, results, training plans, attendance, upcoming meets, and test history, all on one view families return to.</p></div>
+      </div>
+
+      <div class="card reveal">
+        <div class="ch"><span class="ci" style="background:var(--p2)">N</span><h3>Notifications</h3></div>
+        <div class="frow"><h4>Automated alerts</h4><p>Class reminders, schedule changes, new results, and promotions sent to parents and swimmers. This replaces the manual WhatsApp bridge from Phase 1.</p></div>
+        <div class="frow"><h4>Consent &amp; visibility</h4><p>Controls over who sees a minor's body data and coach notes, built in from the start.</p></div>
+      </div>
+    </div>
+
+    <p class="scoped reveal">Parked for Phase 2: for the older competitive squads, a shared family login means parent and swimmer see exactly the same thing. A separate swimmer view for 15-plus athletes is a detail to settle when we reach this phase.</p>
+  </div>
+</section>
+
+<section class="phase" id="p3">
+  <div class="wrap">
+    <div class="ph-head reveal">
+      <div class="ph-tagline"><span class="ph-num" style="background:#fcefe6;color:var(--p3)">PHASE 3</span><span class="ph-status">COMMERCIAL · AFTER THE CLUB IS COMPLETE</span></div>
+      <h2>White-label: sell the finished club product</h2>
+      <p class="intro">Once the full club product (Phases 1, 1B, and 2) works for us, the same product sells to other clubs. Most clubs run on the same operational core, so the build is reused and only a thin layer changes per client. We sell the engine. The methodology stays theirs to bring, and ours stays ours.</p>
+    </div>
+
+    <div class="wl-grid">
+      <div class="wl-card c1 reveal">
+        <span class="t">Configurable per client</span>
+        <h3>What changes</h3>
+        <ul>
+          <li>Brand: logo and colours set to the client's identity</li>
+          <li>Guidebook: each club loads its own handbook for the AI review</li>
+          <li>Governing-body standards and meet structure</li>
+          <li>Course units, language including Arabic right to left</li>
+          <li>Currency and local payment rails</li>
+        </ul>
+      </div>
+      <div class="wl-card c2 reveal">
+        <span class="t">Fixed &amp; shared</span>
+        <h3>What stays the same</h3>
+        <ul>
+          <li>The core engine and feature set from Phases 1 to 2</li>
+          <li>One codebase, so updates ship to every client at once</li>
+          <li>The data model: profiles, meets, PBs, attendance</li>
+          <li>The AI review feature itself, minus the content</li>
+        </ul>
+      </div>
+      <div class="wl-card c3 reveal">
+        <span class="t">Stays ours</span>
+        <h3>What we keep</h3>
+        <ul>
+          <li>Our coaching guidebook and methodology stay private</li>
+          <li>Clients get the engine, not our content</li>
+          <li>Our own swimmer and club data is never shared</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="callout reveal">
+      <span class="ic">▲</span>
+      <div>
+        <h4>Localisation is the part that looks small and is not</h4>
+        <p>Governing-body time standards, language direction, and payment rails are real engineering, not a colour swap. Budget for them as a localisation layer, and decide which standards and which markets we support first, so selling to other clubs does not quietly get filed under minor modifications.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="phase" id="p4">
+  <div class="wrap">
+    <div class="ph-head reveal">
+      <div class="ph-tagline"><span class="ph-num" style="background:#e8f5ed;color:var(--p4)">PHASE 4</span><span class="ph-status">LATER</span></div>
+      <h2>Academy: the learn-to-swim side</h2>
+      <p class="intro">Same platform, a different audience: beginners, younger ages, and the parents paying for lessons. Built after the club is complete and the white-label motion is proven. The scope below is an outline, to be detailed in its own pass.</p>
+    </div>
+
+    <div class="a-list">
+      <div class="a-item reveal"><span class="dot"></span><div><h4>Registration, trials &amp; admissions</h4><p>Online sign-up, trial booking, and trial-to-enrolment conversion.</p></div></div>
+      <div class="a-item reveal"><span class="dot"></span><div><h4>Learn-to-swim level ladder</h4><p>Water confidence through stroke development, with promotion logic.</p></div></div>
+      <div class="a-item reveal"><span class="dot"></span><div><h4>Parent dashboard &amp; progress</h4><p>Weekly skill updates and transparency for lesson families.</p></div></div>
+      <div class="a-item reveal"><span class="dot"></span><div><h4>Skill assessment &amp; badges</h4><p>Stroke checklists, readiness scoring, and digital certificates.</p></div></div>
+      <div class="a-item reveal"><span class="dot"></span><div><h4>Scheduling, make-ups &amp; waitlists</h4><p>Class timetables, make-up requests, and capacity management.</p></div></div>
+      <div class="a-item reveal"><span class="dot"></span><div><h4>High-volume billing</h4><p>Packages, auto-pay, and statements for large numbers of lesson families.</p></div></div>
+    </div>
+
+    <p class="scoped reveal">Outline only. Full academy scope, including how it shares the swimmer profile and progression model with the club side, is defined in a later pass once the club is complete.</p>
+  </div>
+</section>
+
+<section class="phase" id="dec">
+  <div class="wrap">
+    <div class="ph-head reveal">
+      <span class="eyebrow">Sign-off</span>
+      <h2 style="margin-top:10px">Open decisions</h2>
+      <p class="intro">What the four of us have already agreed, and what still needs a call before the developer moves.</p>
+    </div>
+
+    <div class="dec-grid">
+      <div class="dcol done reveal">
+        <div class="dh"><span class="bdg">Decided</span><h3>Already agreed</h3></div>
+        <div class="drow"><span class="mk">✓</span><span class="q">Build order: coach core, then coach edge, then family access, then white-label, then academy.</span></div>
+        <div class="drow"><span class="mk">✓</span><span class="q">Perfect the whole club (Phases 1, 1B, 2) before white-label and academy.</span></div>
+        <div class="drow"><span class="mk">✓</span><span class="q">Split Phase 1 into a core and a 1B, so the basics ship and stabilise before the heavy features.</span></div>
+        <div class="drow"><span class="mk">✓</span><span class="q">Meet results and InBody come in by file import, not a live API.</span></div>
+        <div class="drow"><span class="mk">✓</span><span class="q">Best times stored by course, LCM and SCM and SCY kept separate.</span></div>
+        <div class="drow"><span class="mk">✓</span><span class="q">One family login covers parent and swimmer together.</span></div>
+        <div class="drow"><span class="mk">✓</span><span class="q">AI review ships to white-label clients, each with its own guidebook. Ours stays private.</span></div>
+        <div class="drow"><span class="mk">✓</span><span class="q">WhatsApp stays a Phase 1 bridge, plans and schedules only, replaced by Phase 2 notifications.</span></div>
+      </div>
+
+      <div class="dcol open reveal">
+        <div class="dh"><span class="bdg">To decide</span><h3>Still open</h3></div>
+        <div class="drow"><span class="mk">?</span><span class="q">AI review: review and suggest only, or also draft a plan from the guidebook plus the squad's level and goals?</span></div>
+        <div class="drow"><span class="mk">?</span><span class="q">Does the head coach approve AI suggestions before they reach the coach?</span></div>
+        <div class="drow"><span class="mk">?</span><span class="q">InBody: which export format, what test cadence, and who can see a minor's body data?</span></div>
+        <div class="drow"><span class="mk">?</span><span class="q">Separate swimmer view for the older squads, or one family view for everyone?</span></div>
+        <div class="drow"><span class="mk">?</span><span class="q">Phase 2 notification channels: push, email, SMS, WhatsApp, and which come first?</span></div>
+        <div class="drow"><span class="mk">?</span><span class="q">White-label: which governing-body standards and which markets do we support first?</span></div>
+        <div class="drow"><span class="mk">?</span><span class="q">Product name and brand for the platform itself.</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="q">One product, built in sequence. Coaches make it work. Families make it sticky. White-label makes it a business. The academy makes it complete.</div>
+    <div class="stamp">CLUB PLATFORM · SCOPE &amp; BUILD SEQUENCE<br>Confidential internal draft · Founders &amp; developer · June 2026</div>
+  </div>
+</footer>
+
+<script>
+  (function(){
+    var els=document.querySelectorAll('.reveal');
+    if(!('IntersectionObserver' in window)||window.matchMedia('(prefers-reduced-motion: reduce)').matches){els.forEach(function(e){e.classList.add('in')});return;}
+    var io=new IntersectionObserver(function(en){en.forEach(function(x){if(x.isIntersecting){x.target.classList.add('in');io.unobserve(x.target);}})},{threshold:.12,rootMargin:'0px 0px -7% 0px'});
+    els.forEach(function(e){io.observe(e)});
+  })();
+</script>
+
+</body>
+</html>

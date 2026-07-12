@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>Club Platform · Developer Scope</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#0a0e18; --surface:#141b2c; --surface2:#1b2336; --surface3:#212b42;
+    --ink:#ffffff; --text:#dbe3f4; --muted:#aab8d6; --dim:#8493b5;
+    --border:#2b3551; --border2:#3b4866;
+    --accent:#5b9bff; --accent-text:#9fc4ff;
+    --p1:#5b9bff; --p1b:#9b8cff; --p2:#2dd4bf; --p3:#ff9f45; --p4:#4ade80;
+    --ok:#4ade80; --warn:#ffb454; --no:#6b7794;
+    --z1:#4ade80; --z2:#2dd4bf; --z3:#5b9bff; --z4:#9b8cff; --z5:#ff9f45; --z6:#ff6b6b;
+    --radius:14px; --maxw:1080px;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 14px 34px rgba(0,0,0,.4);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth; color-scheme:dark; background:var(--bg)}
+  body{font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif; color:var(--text); background:var(--bg); line-height:1.62; font-size:15px; -webkit-font-smoothing:antialiased}
+  .wrap{max-width:var(--maxw); margin:0 auto; padding:0 26px}
+  .mono{font-family:'JetBrains Mono',monospace}
+  h1,h2,h3,h4{color:var(--ink); letter-spacing:-.015em; line-height:1.16}
+  .eyebrow{font-family:'JetBrains Mono',monospace; font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent-text); font-weight:600}
+  code{font-family:'JetBrains Mono',monospace; font-size:.9em; background:var(--surface3); border:1px solid var(--border); border-radius:5px; padding:1px 6px; color:#cfe0ff}
+
+  nav.top{position:sticky; top:0; z-index:50; background:rgba(10,14,24,.85); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); border-bottom:1px solid var(--border)}
+  nav.top .row{max-width:var(--maxw); margin:0 auto; padding:13px 26px; display:flex; align-items:center; justify-content:space-between; gap:14px}
+  nav.top .brand{display:flex; align-items:center; gap:10px}
+  nav.top .brand .mk{width:28px; height:28px; border-radius:8px; background:var(--accent); display:grid; place-items:center; flex:none}
+  nav.top .brand .wm{font-weight:700; font-size:14px; color:var(--ink)}
+  nav.top .brand .wm small{display:block; font-family:'JetBrains Mono'; font-size:9.5px; letter-spacing:.1em; color:var(--dim); font-weight:500}
+  nav.top ul{list-style:none; display:flex; gap:15px}
+  nav.top a{color:var(--muted); text-decoration:none; font-size:12.5px; font-weight:500; transition:color .18s}
+  nav.top a:hover{color:var(--accent-text)}
+  @media(max-width:980px){nav.top ul{display:none}}
+
+  .hero{padding:56px 0 42px; background:radial-gradient(900px 360px at 18% -8%, rgba(91,155,255,.14), transparent 60%), linear-gradient(180deg,#0d1322,var(--bg))}
+  .hero .badge{display:inline-flex; align-items:center; gap:8px; padding:6px 13px; border-radius:100px; background:rgba(91,155,255,.13); border:1px solid rgba(91,155,255,.42); font-family:'JetBrains Mono'; font-size:11px; letter-spacing:.06em; color:var(--accent-text); margin-bottom:20px}
+  .hero h1{font-size:clamp(31px,5vw,50px); font-weight:800; letter-spacing:-.03em; max-width:20ch; margin-bottom:16px; color:var(--ink)}
+  .hero h1 .u{color:#6ea8ff}
+  .hero p.lead{font-size:clamp(15.5px,2vw,18px); color:var(--text); max-width:70ch}
+  .toc{display:flex; flex-wrap:wrap; gap:8px; margin-top:30px}
+  .toc a{font-family:'JetBrains Mono'; font-size:11.5px; color:var(--muted); text-decoration:none; background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:7px 12px; transition:.18s}
+  .toc a:hover{border-color:var(--accent); color:var(--accent-text)}
+
+  section.sec{padding:46px 0; border-top:1px solid var(--border)}
+  .sh{margin-bottom:24px}
+  .sh .num{font-family:'JetBrains Mono'; font-size:12px; font-weight:700; color:var(--accent)}
+  .sh h2{font-size:clamp(22px,3.3vw,30px); font-weight:800; margin:7px 0 12px}
+  .sh p{font-size:16px; color:var(--text); max-width:74ch}
+
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:16px}
+  .grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:14px}
+  @media(max-width:820px){.grid2,.grid3{grid-template-columns:1fr}}
+
+  .panel{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px 22px; box-shadow:var(--shadow)}
+  .panel h3{font-size:16px; font-weight:700; margin-bottom:10px}
+  .panel h3 .tag{font-family:'JetBrains Mono'; font-size:10.5px; font-weight:600; color:var(--accent-text); background:rgba(91,155,255,.14); border:1px solid rgba(91,155,255,.32); border-radius:5px; padding:2px 8px; margin-left:8px; letter-spacing:.04em; vertical-align:middle}
+  .panel p{font-size:13.8px; color:var(--text)}
+  .panel ul{list-style:none; margin-top:8px}
+  .panel li{font-size:13.6px; color:var(--text); padding:6px 0 6px 18px; position:relative; line-height:1.5}
+  .panel li::before{content:'›'; position:absolute; left:1px; top:6px; color:var(--accent); font-weight:700}
+
+  /* tables */
+  .tbl{width:100%; border-collapse:separate; border-spacing:0; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; box-shadow:var(--shadow)}
+  .tbl th{font-family:'JetBrains Mono'; font-size:10.5px; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); font-weight:600; text-align:left; padding:12px 13px; background:var(--surface2); border-bottom:1px solid var(--border)}
+  .tbl td{padding:11px 13px; border-bottom:1px solid var(--border); font-size:13px; color:var(--text); vertical-align:middle}
+  .tbl tr:last-child td{border-bottom:0}
+  .tbl td.c, .tbl th.c{text-align:center}
+  .tbl .rowlab{font-weight:600; color:var(--ink)}
+  .zchip{display:inline-block; font-family:'JetBrains Mono'; font-weight:700; font-size:11.5px; color:#091020; padding:3px 8px; border-radius:5px; min-width:42px; text-align:center}
+  .yes{color:var(--ok); font-weight:700}
+  .lim{color:var(--warn); font-weight:700}
+  .non{color:var(--no); font-weight:700}
+  .scrollx{overflow-x:auto; -webkit-overflow-scrolling:touch}
+  .legend{display:flex; flex-wrap:wrap; gap:16px; margin-top:11px; font-size:12px; color:var(--muted)}
+  .legend span b{font-family:'JetBrains Mono'}
+
+  /* entity cards */
+  .ent-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:14px}
+  @media(max-width:820px){.ent-grid{grid-template-columns:1fr}}
+  .ent{background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; box-shadow:var(--shadow)}
+  .ent .eh{padding:11px 15px; background:var(--surface2); border-bottom:1px solid var(--border); display:flex; align-items:center; gap:9px}
+  .ent .eh .en{font-family:'JetBrains Mono'; font-weight:700; font-size:13.5px; color:var(--ink)}
+  .ent .eh .ct{margin-left:auto; font-size:11px; color:var(--dim); font-family:'JetBrains Mono'}
+  .ent .fields{padding:12px 15px; font-family:'JetBrains Mono'; font-size:12.3px; color:var(--muted); line-height:1.85}
+  .ent .fields b{color:#cfe0ff; font-weight:500}
+  .ent .fields .pii{color:#ffc488}
+  .ent .fields .rel{color:#9fe7da}
+
+  .spec{background:var(--surface2); border:1px solid var(--border); border-left:3px solid var(--accent); border-radius:10px; padding:15px 17px; font-family:'JetBrains Mono'; font-size:12.8px; color:#cfe0ff; line-height:1.85; overflow-x:auto}
+  .spec .k{color:var(--muted)}
+  .spec .v{color:#fff}
+
+  .mnote{margin-top:18px; background:rgba(91,155,255,.1); border:1px solid rgba(91,155,255,.32); border-radius:var(--radius); padding:16px 19px; font-size:13.8px; color:#cdddf8}
+  .mnote b{color:#fff}
+  .callout{margin-top:18px; border-radius:var(--radius); padding:17px 20px; background:rgba(255,159,69,.1); border:1px solid rgba(255,159,69,.34); display:flex; gap:12px; align-items:flex-start}
+  .callout .ic{color:var(--warn); flex:none; font-weight:800}
+  .callout h4{color:#ffc488; font-size:14px; font-weight:700}
+  .callout p{color:var(--text); font-size:13.5px; margin-top:4px}
+
+  /* integrations */
+  .intg{display:flex; gap:14px; align-items:flex-start; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:15px 17px; box-shadow:var(--shadow); margin-bottom:11px}
+  .intg .ib{flex:none; width:40px; height:40px; border-radius:10px; background:var(--surface3); border:1px solid var(--border2); display:grid; place-items:center; font-family:'JetBrains Mono'; font-weight:700; font-size:12px; color:var(--accent-text)}
+  .intg .ic2{flex:1; min-width:0}
+  .intg h4{font-size:14.5px; font-weight:700; color:var(--ink); display:flex; align-items:center; gap:9px; flex-wrap:wrap}
+  .intg p{font-size:13.3px; color:var(--text); margin-top:3px}
+  .pill{font-family:'JetBrains Mono'; font-size:10px; letter-spacing:.03em; padding:3px 8px; border-radius:5px; font-weight:600; white-space:nowrap}
+  .pill.file{background:rgba(74,222,128,.14); color:#86efac; border:1px solid rgba(74,222,128,.32)}
+  .pill.api{background:rgba(91,155,255,.15); color:#9fc4ff; border:1px solid rgba(91,155,255,.32)}
+  .pill.bridge{background:rgba(255,159,69,.14); color:#ffc488; border:1px solid rgba(255,159,69,.32)}
+  .pill.later{background:var(--surface3); color:var(--muted); border:1px solid var(--border2)}
+
+  /* milestones */
+  .mile{display:flex; gap:15px; padding:16px 0; border-bottom:1px solid var(--border)}
+  .mile:last-child{border-bottom:0}
+  .mile .mn{flex:none; width:44px; height:44px; border-radius:11px; display:grid; place-items:center; font-family:'JetBrains Mono'; font-weight:700; font-size:14px; color:#091020}
+  .mile .mc{flex:1; min-width:0}
+  .mile h4{font-size:15.5px; font-weight:700; color:var(--ink); margin-bottom:4px}
+  .mile p{font-size:13.5px; color:var(--text)}
+  .mile .dep{margin-top:8px; display:flex; flex-wrap:wrap; gap:7px}
+  .mile .dep span{font-family:'JetBrains Mono'; font-size:10.5px; padding:3px 9px; border-radius:5px; background:var(--surface3); border:1px solid var(--border2); color:var(--muted)}
+  .mile .dep span.done{background:rgba(74,222,128,.13); color:#86efac; border-color:rgba(74,222,128,.3)}
+
+  /* decisions */
+  .dec-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px}
+  @media(max-width:760px){.dec-grid{grid-template-columns:1fr}}
+  .dcol{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:6px 0; box-shadow:var(--shadow)}
+  .dcol .dh{padding:15px 20px 11px; display:flex; align-items:center; gap:10px}
+  .dcol .dh .bdg{font-family:'JetBrains Mono'; font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; padding:4px 10px; border-radius:5px; font-weight:600}
+  .dcol.done .bdg{background:rgba(74,222,128,.15); color:#86efac}
+  .dcol.open .bdg{background:rgba(255,159,69,.15); color:#ffc488}
+  .dcol .dh h3{font-size:15px; font-weight:700}
+  .drow{padding:11px 20px; border-top:1px solid var(--border); display:flex; gap:11px; font-size:13.4px; line-height:1.5}
+  .drow .mk{flex:none; font-family:'JetBrains Mono'; font-weight:700; font-size:14px}
+  .dcol.done .mk{color:var(--ok)} .dcol.open .mk{color:var(--warn)}
+
+  .nf-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:12px}
+  @media(max-width:680px){.nf-grid{grid-template-columns:1fr}}
+  .nf{background:var(--surface); border:1px solid var(--border); border-radius:11px; padding:14px 16px; box-shadow:var(--shadow)}
+  .nf h4{font-size:13.8px; font-weight:700; color:var(--ink); margin-bottom:3px}
+  .nf p{font-size:13px; color:var(--text)}
+
+  footer{border-top:1px solid var(--border); padding:34px 0 46px; background:var(--surface)}
+  footer .wrap{display:flex; flex-wrap:wrap; gap:18px; justify-content:space-between; align-items:flex-end}
+  footer .q{font-size:14px; color:#cdddf8; max-width:54ch; line-height:1.6; font-weight:500}
+  footer .stamp{font-family:'JetBrains Mono'; font-size:11px; letter-spacing:.04em; color:var(--muted); text-align:right; line-height:1.8}
+
+  .reveal{opacity:0; transform:translateY(13px); transition:opacity .5s ease, transform .5s ease}
+  .reveal.in{opacity:1; transform:none}
+  @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto} .reveal{opacity:1; transform:none; transition:none}}
+</style>
+</head>
+<body>
+
+<nav class="top">
+  <div class="row">
+    <div class="brand">
+      <span class="mk"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#091020" stroke-width="2.4" stroke-linecap="round"><path d="M2 8c2.5 2 4 2 6 0s3.5-2 6 0 4 2 6 0M2 14c2.5 2 4 2 6 0s3.5-2 6 0 4 2 6 0"/></svg></span>
+      <span class="wm">Club Platform<small>DEVELOPER SCOPE</small></span>
+    </div>
+    <ul>
+      <li><a href="#overview">Overview</a></li>
+      <li><a href="#roles">Roles</a></li>
+      <li><a href="#model">Model</a></li>
+      <li><a href="#zones">Zone engine</a></li>
+      <li><a href="#ai">AI review</a></li>
+      <li><a href="#intg">Integrations</a></li>
+      <li><a href="#build">Build order</a></li>
+      <li><a href="#data">Data &amp; access</a></li>
+      <li><a href="#wl">White-label</a></li>
+      <li><a href="#dec">Decisions</a></li>
+    </ul>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="badge">ENGINEERING SPEC · FOR THE DEVELOPER</div>
+    <h1>Club Platform: <span class="u">build specification</span></h1>
+    <p class="lead">What the platform is, the pieces it is made of, and the order to build them. This is the technical companion to the founders' scope. It is a mobile app for iOS and Android on a shared backend. It is stack-agnostic on the backend, the existing prototype informs the Phase 1 UI, and the zone rules from the club guidebook are written here as the spec to encode, not as a reference to chase down.</p>
+    <div class="toc">
+      <a href="#overview">01 Overview</a>
+      <a href="#roles">02 Roles</a>
+      <a href="#model">03 Domain model</a>
+      <a href="#zones">04 Zone engine</a>
+      <a href="#ai">05 AI review</a>
+      <a href="#intg">06 Integrations</a>
+      <a href="#build">07 Build order</a>
+      <a href="#data">08 Data &amp; access</a>
+      <a href="#wl">09 White-label</a>
+      <a href="#dec">10 Decisions</a>
+      <a href="#nf">11 Non-functional</a>
+    </div>
+  </div>
+</header>
+
+<!-- 01 OVERVIEW -->
+<section class="sec" id="overview">
+  <div class="wrap">
+    <div class="sh reveal"><div class="num">01</div><h2>System overview &amp; tenancy</h2><p>A mobile app for running a competitive swimming club, on iOS and Android: coaches plan and run training, meets and times are tracked, families get visibility, and the same product is later sold to other clubs. One codebase, many clubs, each club configured by data.</p></div>
+    <div class="grid2">
+      <div class="panel reveal">
+        <h3>Shape of the system</h3>
+        <ul>
+          <li>A cross-platform mobile app for iOS and Android, talking to a shared backend API.</li>
+          <li>Single multi-tenant backend. A club is a <code>Tenant</code>; all data is scoped to a tenant.</li>
+          <li>Our first and only live tenant is Vortex Swimming Club. White-label tenants come in Phase 3.</li>
+          <li>The existing prototype informs the Phase 1 UI. Native or cross-platform is the developer's call.</li>
+          <li>Backend needs an API, a relational store, auth with roles, file parsing, an LLM call path, and background jobs for push notifications and retest prompts.</li>
+        </ul>
+      </div>
+      <div class="panel reveal">
+        <h3>Two ideas the build rests on</h3>
+        <ul>
+          <li><b>The zone engine is the core domain.</b> Sets are tagged by zone; the engine holds each zone's rules; the AI checks plans against them. See section 04.</li>
+          <li><b>Config over code.</b> What differs between clubs (brand, method, squads, zone rules, locale, currency) is per-tenant data. The engine and features are shared. See section 09.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 02 ROLES -->
+<section class="sec" id="roles">
+  <div class="wrap">
+    <div class="sh reveal"><div class="num">02</div><h2>Roles &amp; permissions</h2><p>Five roles. Access is scoped to a tenant first, then to the role, then for coaches to their own squads. Minor PII and body data are restricted even from roles that can otherwise see the profile.</p></div>
+    <div class="scrollx reveal">
+    <table class="tbl">
+      <thead><tr><th>Capability</th><th class="c">Admin</th><th class="c">Head coach</th><th class="c">Coach</th><th class="c">Family</th></tr></thead>
+      <tbody>
+        <tr><td class="rowlab">Tenant settings, branding, config</td><td class="c"><span class="yes">●</span></td><td class="c"><span class="non">○</span></td><td class="c"><span class="non">○</span></td><td class="c"><span class="non">○</span></td></tr>
+        <tr><td class="rowlab">Manage squads, groups, rosters</td><td class="c"><span class="yes">●</span></td><td class="c"><span class="yes">●</span></td><td class="c"><span class="lim">◐</span></td><td class="c"><span class="non">○</span></td></tr>
+        <tr><td class="rowlab">Build and edit session plans</td><td class="c"><span class="non">○</span></td><td class="c"><span class="yes">●</span></td><td class="c"><span class="lim">◐</span></td><td class="c"><span class="non">○</span></td></tr>
+        <tr><td class="rowlab">Run AI review / draft</td><td class="c"><span class="non">○</span></td><td class="c"><span class="yes">●</span></td><td class="c"><span class="yes">●</span></td><td class="c"><span class="non">○</span></td></tr>
+        <tr><td class="rowlab">Mark attendance</td><td class="c"><span class="lim">◐</span></td><td class="c"><span class="yes">●</span></td><td class="c"><span class="lim">◐</span></td><td class="c"><span class="non">○</span></td></tr>
+        <tr><td class="rowlab">Meets, entries, results, imports</td><td class="c"><span class="yes">●</span></td><td class="c"><span class="yes">●</span></td><td class="c"><span class="lim">◐</span></td><td class="c"><span class="non">○</span></td></tr>
+        <tr><td class="rowlab">View full profile incl. body data</td><td class="c"><span class="yes">●</span></td><td class="c"><span class="yes">●</span></td><td class="c"><span class="lim">◐</span></td><td class="c"><span class="lim">◐</span></td></tr>
+        <tr><td class="rowlab">Edit identity / travel documents</td><td class="c"><span class="yes">●</span></td><td class="c"><span class="non">○</span></td><td class="c"><span class="non">○</span></td><td class="c"><span class="lim">◐</span></td></tr>
+        <tr><td class="rowlab">Approve promotions</td><td class="c"><span class="non">○</span></td><td class="c"><span class="yes">●</span></td><td class="c"><span class="non">○</span></td><td class="c"><span class="non">○</span></td></tr>
+        <tr><td class="rowlab">View own training, PBs, plans</td><td class="c"><span class="yes">●</span></td><td class="c"><span class="yes">●</span></td><td class="c"><span class="yes">●</span></td><td class="c"><span class="yes">●</span></td></tr>
+        <tr><td class="rowlab">Billing &amp; payments, consents</td><td class="c"><span class="yes">●</span></td><td class="c"><span class="non">○</span></td><td class="c"><span class="non">○</span></td><td class="c"><span class="yes">●</span></td></tr>
+      </tbody>
+    </table>
+    </div>
+    <div class="legend reveal"><span><b class="yes">●</b> full</span><span><b class="lim">◐</b> limited or own scope only</span><span><b class="non">○</b> none</span></div>
+    <div class="mnote reveal"><b>Family view:</b> parent and swimmer share the same view, shown here as one Family column, and they see their own swimmer's full profile including body data. There is no plan-approval role, since plans go straight from the coach.</div>
+  </div>
+</section>
+
+<!-- 03 DOMAIN MODEL -->
+<section class="sec" id="model">
+  <div class="wrap">
+    <div class="sh reveal"><div class="num">03</div><h2>Domain model</h2><p>The core entities and how they relate. Field lists are indicative, not final. Fields in <span style="color:#ffc488">amber</span> are sensitive (restricted, consent-gated). Fields in <span style="color:#9fe7da">teal</span> are relationships.</p></div>
+    <div class="ent-grid">
+
+      <div class="ent reveal">
+        <div class="eh"><span class="en">Tenant</span><span class="ct">the club</span></div>
+        <div class="fields">id · name · <b>method</b> (5 | 6 zone) · <b>brand</b> {logo, colours} · locale · <span class="rel">currency</span> · governingBodyStandard</div>
+      </div>
+      <div class="ent reveal">
+        <div class="eh"><span class="en">Squad</span><span class="ct">+ groups</span></div>
+        <div class="fields"><span class="rel">tenantId</span> · code (PRE..LGD) · name · ageRange · <b>allowedZones[]</b> · <span class="rel">coachId</span> · <span class="rel">parentSquadId</span> (group of)</div>
+      </div>
+
+      <div class="ent reveal">
+        <div class="eh"><span class="en">User</span><span class="ct">auth + role</span></div>
+        <div class="fields"><span class="rel">tenantId</span> · role (admin | head_coach | coach | parent | swimmer) · pin / credentials · name · contact</div>
+      </div>
+      <div class="ent reveal">
+        <div class="eh"><span class="en">Swimmer</span><span class="ct">the spine</span></div>
+        <div class="fields"><span class="rel">tenantId</span> · <span class="rel">squadId</span> · name · <span class="pii">dob</span> · sex · status · <span class="rel">familyId</span></div>
+      </div>
+
+      <div class="ent reveal">
+        <div class="eh"><span class="en">IdentityDocument</span><span class="ct">restricted</span></div>
+        <div class="fields"><span class="rel">swimmerId</span> · <span class="pii">passportNo</span> · <span class="pii">qid</span> · <span class="pii">expiry</span> · purpose (travel)</div>
+      </div>
+      <div class="ent reveal">
+        <div class="eh"><span class="en">FamilyAccount</span><span class="ct">parent + swimmer</span></div>
+        <div class="fields">id · <span class="rel">parents[]</span> · <span class="rel">swimmers[]</span> · parent and swimmer share the same view</div>
+      </div>
+
+      <div class="ent reveal">
+        <div class="eh"><span class="en">Plan</span><span class="ct">a session</span></div>
+        <div class="fields"><span class="rel">squadId</span> · sessionAt · status (draft | final) · <span class="rel">authorCoachId</span> · sections (warmup, preSet, mainSet, cooldown) · totalDistance</div>
+      </div>
+      <div class="ent reveal">
+        <div class="eh"><span class="en">Set</span><span class="ct">within a plan</span></div>
+        <div class="fields"><span class="rel">planId</span> · section (warmup | preSet | mainSet | cooldown) · <b>zone</b> · distance · reps · rest · targetPace · hrTarget · notes</div>
+      </div>
+
+      <div class="ent reveal">
+        <div class="eh"><span class="en">ZoneRuleset</span><span class="ct">per tenant</span></div>
+        <div class="fields"><span class="rel">tenantId</span> · zones[] {code, name, hrPct, lactate, workRest, allowedSquads, volumeCap} · tPaceFormula</div>
+      </div>
+      <div class="ent reveal">
+        <div class="eh"><span class="en">Attendance</span><span class="ct">Odoo-synced</span></div>
+        <div class="fields"><span class="rel">planId</span> · <span class="rel">swimmerId</span> · status · <span class="rel">odooApptRef</span></div>
+      </div>
+
+      <div class="ent reveal">
+        <div class="eh"><span class="en">Meet · Entry · Result</span><span class="ct">competition</span></div>
+        <div class="fields">Meet: name · course · dates · status<br>Entry: <span class="rel">meetId</span> · <span class="rel">swimmerId</span> · event · seedTime<br>Result: time · splits</div>
+      </div>
+      <div class="ent reveal">
+        <div class="eh"><span class="en">PersonalBest</span><span class="ct">by course</span></div>
+        <div class="fields"><span class="rel">swimmerId</span> · event · <b>course</b> (LCM | SCM | SCY) · time · <span class="rel">sourceMeetId</span></div>
+      </div>
+
+      <div class="ent reveal">
+        <div class="eh"><span class="en">TestSet / TPace</span><span class="ct">drives E-2, E-3</span></div>
+        <div class="fields"><span class="rel">swimmerId</span> · type (1000m | 400m) · time · tPacePer100 · testedAt · nextDueAt</div>
+      </div>
+      <div class="ent reveal">
+        <div class="eh"><span class="en">InBodyScan</span><span class="ct">image / pdf</span></div>
+        <div class="fields"><span class="rel">swimmerId</span> · date · <span class="pii">file (image | pdf)</span> · uploadedBy · visibleTo (coaches, family)</div>
+      </div>
+
+      <div class="ent reveal">
+        <div class="eh"><span class="en">Sponsorship</span><span class="ct">profile flag</span></div>
+        <div class="fields"><span class="rel">swimmerId</span> · type (club | sponsor) · sponsorName (e.g. Arena)</div>
+      </div>
+      <div class="ent reveal">
+        <div class="eh"><span class="en">PromotionSuggestion</span><span class="ct">to head coach</span></div>
+        <div class="fields"><span class="rel">swimmerId</span> · <span class="rel">fromSquad</span> · <span class="rel">toSquad</span> · basis · status (suggested | accepted | declined)</div>
+      </div>
+
+      <div class="ent reveal">
+        <div class="eh"><span class="en">PlanReview</span><span class="ct">AI output</span></div>
+        <div class="fields"><span class="rel">planId</span> · checks[] {rule, pass, message} · mode (edit | draft) · aiDraft?</div>
+      </div>
+      <div class="ent reveal">
+        <div class="eh"><span class="en">Notification</span><span class="ct">Phase 2</span></div>
+        <div class="fields">recipient · type · channel (push | email | sms) · payload · sentAt</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- 04 ZONE ENGINE -->
+<section class="sec" id="zones">
+  <div class="wrap">
+    <div class="sh reveal"><div class="num">04</div><h2>The zone engine</h2><p>This is the heart of the product. Encode it as data in <code>ZoneRuleset</code>, not as logic baked into code, so a white-label client can load their own. The values below are our six-zone (American) ruleset from the club guidebook.</p></div>
+
+    <div class="scrollx reveal">
+    <table class="tbl">
+      <thead><tr><th>Zone</th><th>Targets</th><th class="c">Lactate</th><th class="c">HR %</th><th>Work : rest</th></tr></thead>
+      <tbody>
+        <tr><td><span class="zchip" style="background:var(--z1)">E-1</span></td><td class="rowlab">Aerobic recovery</td><td class="c">1-2 mmol</td><td class="c">60-70%</td><td>1:0.1-0.2 · continuous</td></tr>
+        <tr><td><span class="zchip" style="background:var(--z2)">E-2</span></td><td class="rowlab">Aerobic threshold</td><td class="c">2-4 mmol</td><td class="c">70-80%</td><td>1:0.1-0.25 · short</td></tr>
+        <tr><td><span class="zchip" style="background:var(--z3)">E-3</span></td><td class="rowlab">Lactate threshold (T-pace)</td><td class="c">4-6 mmol</td><td class="c">80-87%</td><td>1:0.1-0.2 · short</td></tr>
+        <tr><td><span class="zchip" style="background:var(--z4)">SP-1</span></td><td class="rowlab">VO2 max / aerobic power</td><td class="c">6-10 mmol</td><td class="c">87-95%</td><td>1:1-2 · partial</td></tr>
+        <tr><td><span class="zchip" style="background:var(--z5)">SP-2</span></td><td class="rowlab">Lactate tolerance</td><td class="c">10-15 mmol</td><td class="c">95-100%</td><td>1:0.3-0.5 · incomplete</td></tr>
+        <tr><td><span class="zchip" style="background:var(--z6)">SP-3</span></td><td class="rowlab">Power &amp; speed (ATP-PC)</td><td class="c">low</td><td class="c">n/a</td><td>1:6-10 · full</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h3 style="font-size:15px;margin:24px 0 10px;color:var(--ink)">Squad to zone permission matrix</h3>
+    <div class="scrollx reveal">
+    <table class="tbl">
+      <thead><tr><th>Squad</th><th class="c">Age</th><th class="c">E-1</th><th class="c">E-2</th><th class="c">E-3</th><th class="c">SP-1</th><th class="c">SP-2</th><th class="c">SP-3</th></tr></thead>
+      <tbody>
+        <tr><td class="rowlab">PRE</td><td class="c">6-9</td><td class="c"><span class="yes">●</span></td><td class="c"><span class="non">○</span></td><td class="c"><span class="non">○</span></td><td class="c"><span class="non">○</span></td><td class="c"><span class="non">○</span></td><td class="c"><span class="lim">◐</span></td></tr>
+        <tr><td class="rowlab">ADV</td><td class="c">8-9</td><td class="c"><span class="yes">●</span></td><td class="c"><span class="lim">◐</span></td><td class="c"><span class="non">○</span></td><td class="c"><span class="non">○</span></td><td class="c"><span class="non">○</span></td><td class="c"><span class="lim">◐</span></td></tr>
+        <tr><td class="rowlab">JNR</td><td class="c">10-12</td><td class="c"><span class="yes">●</span></td><td class="c"><span class="yes">●</span></td><td class="c"><span class="lim">◐</span></td><td class="c"><span class="lim">◐</span></td><td class="c"><span class="lim">◐</span></td><td class="c"><span class="yes">●</span></td></tr>
+        <tr><td class="rowlab">SNR</td><td class="c">11-13</td><td class="c"><span class="yes">●</span></td><td class="c"><span class="yes">●</span></td><td class="c"><span class="yes">●</span></td><td class="c"><span class="yes">●</span></td><td class="c"><span class="yes">●</span></td><td class="c"><span class="yes">●</span></td></tr>
+        <tr><td class="rowlab">VTX</td><td class="c">12-15</td><td class="c"><span class="yes">●</span></td><td class="c"><span class="yes">●</span></td><td class="c"><span class="yes">●</span></td><td class="c"><span class="yes">●</span></td><td class="c"><span class="yes">●</span></td><td class="c"><span class="yes">●</span></td></tr>
+        <tr><td class="rowlab">LGD</td><td class="c">16+</td><td class="c"><span class="yes">●</span></td><td class="c"><span class="yes">●</span></td><td class="c"><span class="yes">●</span></td><td class="c"><span class="yes">●</span></td><td class="c"><span class="yes">●</span></td><td class="c"><span class="yes">●</span></td></tr>
+      </tbody>
+    </table>
+    </div>
+    <div class="legend reveal"><span><b class="yes">●</b> trains it</span><span><b class="lim">◐</b> introduced carefully / limited volume</span><span><b class="non">○</b> never at this age</span></div>
+
+    <div class="grid2" style="margin-top:22px">
+      <div class="panel reveal">
+        <h3>Heart rate &amp; T-pace</h3>
+        <div class="spec"><span class="k">maxHR</span> = <span class="v">220 − age</span> (estimate)<br><span class="k">E-1</span> ~50+ below max  · <span class="k">E-2</span> 30-40 below<br><span class="k">E-3</span> 20-30 below · <span class="k">SP-1</span> 10-20 below<br><span class="k">SP-2</span> at / near max · <span class="k">SP-3</span> n/a<br><br><span class="k">tPace/100</span> = <span class="v">1000m trial ÷ 10</span><br><span class="k">or</span> = <span class="v">400m trial × 2.5 ÷ 10</span></div>
+      </div>
+      <div class="panel reveal">
+        <h3>Rest-drift rules <span class="tag">VALIDATION</span></h3>
+        <ul>
+          <li>E-3 rest too long, the set drops to E-2. Too short, it climbs to SP-1. Hold 15-20" per 200m.</li>
+          <li>E-2 too much rest loses the stimulus. Too little pushes it into E-3 or SP-1.</li>
+          <li>SP-3 rest must be longer than the work (1:6 to 1:10). Less, and it becomes SP-2.</li>
+          <li>SP-2 uses short, incomplete rest so lactate stays high. SP-3 uses full rest so it stays low.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="mnote reveal"><b>Volume caps belong in the ruleset too.</b> SP-3 examples by squad: PRE technique dives only, ADV 6-8×25m, JNR 8×25m, SNR 8-10×25m, VTX 8-10×25m or 6×50m, LGD 6-8×50m. The reference books from the founders extend these per zone, so model <code>volumeCap</code> per zone and squad rather than hard-coding one number.</div>
+  </div>
+</section>
+
+<!-- 05 AI REVIEW -->
+<section class="sec" id="ai">
+  <div class="wrap">
+    <div class="sh reveal"><div class="num">05</div><h2>AI lesson-plan review</h2><p>Two layers. A deterministic rules engine does the checks against <code>ZoneRuleset</code>. An LLM handles language: explaining flags and drafting plans. Keep the verdicts in the rules engine, not the model.</p></div>
+    <div class="grid2">
+      <div class="panel reveal">
+        <h3>Rules engine <span class="tag">DETERMINISTIC</span></h3>
+        <p>For each set in a plan, check against the squad and the ruleset:</p>
+        <ul>
+          <li>Squad-zone permission, for example PRE or ADV in E-3, SP-1, SP-2 fails.</li>
+          <li>Work-to-rest matches the zone, with the rest-drift rules from section 04.</li>
+          <li>HR target sits in the zone's band for the swimmer's age.</li>
+          <li>Volume within the squad and zone cap.</li>
+          <li>E-2 and E-3 paces are derived from a current T-pace, not free text.</li>
+        </ul>
+      </div>
+      <div class="panel reveal">
+        <h3>LLM layer <span class="tag">LANGUAGE</span></h3>
+        <ul>
+          <li><b>Guide mode:</b> walk the coach through structuring the session section by section, warmup, pre-set, main set, cooldown, suggesting sets that fit each part for the squad and goal.</li>
+          <li><b>Edit mode:</b> explain each flag in plain coaching language and propose a fix.</li>
+          <li><b>Draft mode:</b> generate a full session from zone targets, squad, and the swimmer T-paces.</li>
+          <li>The LLM never overrides a rules verdict. Rules decide pass or fail, the model writes the words.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="panel reveal" style="margin-top:16px">
+      <h3>Plan flow</h3>
+      <div class="spec"><span class="v">coach</span> builds with AI  <span class="k">→</span>  review returns to the <span class="v">coach</span>  <span class="k">→</span>  plan goes live</div>
+      <p style="margin-top:10px">Plan <code>status</code> is simply draft then final. There is no head-coach approval step and no submission deadline, since there is no approval system to enforce one. The AI output returns to the coach who owns the plan.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 06 INTEGRATIONS -->
+<section class="sec" id="intg">
+  <div class="wrap">
+    <div class="sh reveal"><div class="num">06</div><h2>Integrations</h2><p>What connects to the outside, and how. Two are file imports we control, one is a live sync, the rest are services.</p></div>
+
+    <div class="intg reveal"><div class="ib">ODO</div><div class="ic2"><h4>Odoo Appointments <span class="pill api">TWO-WAY SYNC</span></h4><p>Attendance and Odoo appointments stay aligned in both directions. Marking attendance in the app updates the Odoo booking, and an Odoo booking creates the session and its expected attendees here. Via Odoo's API, store <code>odooApptRef</code> on attendance.</p></div></div>
+
+    <div class="intg reveal"><div class="ib">HYT</div><div class="ic2"><h4>Hy-Tek <span class="pill file">FILE IMPORT</span></h4><p>Import the meet results file, parse it into entries and results, auto-create unknown swimmers, and update personal bests by course. No live API. Parsing is the work.</p></div></div>
+
+    <div class="intg reveal"><div class="ib">IBD</div><div class="ic2"><h4>InBody scans <span class="pill file">IMAGE / PDF UPLOAD</span></h4><p>Scans are uploaded as an image or PDF and stored on the profile next to the performance trend. The test cadence is also provided as a PDF. Body data is visible to coaches, the swimmer, and the parent.</p></div></div>
+
+    <div class="intg reveal"><div class="ib">WA</div><div class="ic2"><h4>WhatsApp <span class="pill bridge">PHASE 1 BRIDGE</span></h4><p>Manual sharing of plans and schedules only, never a minor's results or body data. A stopgap removed once Phase 2 notifications land.</p></div></div>
+
+    <div class="intg reveal"><div class="ib">LLM</div><div class="ic2"><h4>LLM provider <span class="pill api">SERVICE</span></h4><p>Powers the AI review language and draft mode. Provider, hosting, and what data may be sent for a minor are open (section 10).</p></div></div>
+
+    <div class="intg reveal"><div class="ib">NTF</div><div class="ic2"><h4>Notifications <span class="pill later">PHASE 2</span></h4><p>Push, email, and SMS for reminders, schedule changes, results, and promotions. Replaces the WhatsApp bridge.</p></div></div>
+
+    <div class="intg reveal"><div class="ib">PAY</div><div class="ic2"><h4>Payments <span class="pill later">PHASE 3+ / ACADEMY</span></h4><p>Local rails, Qatar first. Heaviest in the academy with high-volume lesson billing.</p></div></div>
+
+    <div class="callout reveal"><span class="ic">▲</span><div><h4>Hy-Tek import on a phone needs thought</h4><p>Hy-Tek meet files live on the meet computer. On mobile the app takes them through the device share sheet or file picker. Decide whether meet-day import needs a tablet layout or a small admin companion, since it is awkward on a phone. InBody is fine on a phone, since it is just a photo or PDF.</p></div></div>
+  </div>
+</section>
+
+<!-- 07 BUILD ORDER -->
+<section class="sec" id="build">
+  <div class="wrap">
+    <div class="sh reveal"><div class="num">07</div><h2>Build order &amp; dependencies</h2><p>Five milestones. The order is a dependency chain, not a wish list. Coach data must exist and be trusted before it is exposed to families, and our own club must run on the product before it is sold.</p></div>
+
+    <div class="mile reveal"><div class="mn" style="background:var(--p1)">M1</div><div class="mc"><h4>Phase 1 · Coach core</h4><p>Auth and roles, squads and groups, set builder with zone tagging, pace clock, attendance with Odoo sync, test sets and T-pace, meets with Hy-Tek import, swimmer profiles with identity and sponsorship, per-swimmer analysis. The existing prototype informs the UI. Build it out on mobile.</p><div class="dep"><span class="done">mostly built</span><span>no upstream deps</span></div></div></div>
+
+    <div class="mile reveal"><div class="mn" style="background:var(--p1b)">M2</div><div class="mc"><h4>Phase 1B · Coach edge</h4><p>AI review (rules engine plus LLM), draft mode with the result returning to the coach, InBody scan upload, nutrition, dryland, and the level-up engine that reviews swimmers every 3 months and after each competition.</p><div class="dep"><span>needs M1 stable</span><span>needs ZoneRuleset encoded</span><span>needs LLM path</span></div></div></div>
+
+    <div class="mile reveal"><div class="mn" style="background:var(--p2)">M3</div><div class="mc"><h4>Phase 2 · Family access</h4><p>Separate parent and swimmer logins and permissions, the family portal, and notifications that replace the WhatsApp bridge.</p><div class="dep"><span>needs M1 data trustworthy</span><span>needs notifications service</span></div></div></div>
+
+    <div class="mile reveal"><div class="mn" style="background:var(--p3)">M4</div><div class="mc"><h4>Phase 3 · White-label</h4><p>Multi-tenant config: brand, method 5 or 6 zone, squads, ZoneRuleset, governing-body standard, locale with Arabic RTL, currency, and payments.</p><div class="dep"><span>needs M1-M3 complete for our tenant</span></div></div></div>
+
+    <div class="mile reveal"><div class="mn" style="background:var(--p4)">M5</div><div class="mc"><h4>Phase 4 · Academy</h4><p>Learn-to-swim levels, intake and assessment, scheduling and make-ups, and high-volume billing. Shares the swimmer profile so a graduate moves into PRE with history intact.</p><div class="dep"><span>needs M1-M3</span><span>after white-label proven</span></div></div></div>
+  </div>
+</section>
+
+<!-- 08 DATA & ACCESS -->
+<section class="sec" id="data">
+  <div class="wrap">
+    <div class="sh reveal"><div class="num">08</div><h2>Data sensitivity &amp; access control</h2><p>The platform holds minors' personal and body data. Treat it as the most sensitive thing in the system.</p></div>
+    <div class="grid2">
+      <div class="panel reveal">
+        <h3>Sensitive fields</h3>
+        <ul>
+          <li>Identity and travel: date of birth, passport number, QID.</li>
+          <li>Body composition from InBody scans.</li>
+          <li>Coach notes attached to a minor.</li>
+        </ul>
+      </div>
+      <div class="panel reveal">
+        <h3>Controls</h3>
+        <ul>
+          <li>Field-level access, not just per-record. Coaches and the family see the profile and body data, but identity documents stay restricted.</li>
+          <li>Body data from InBody is visible to coaches, the swimmer, and the parent. Date of birth, passport, and QID are the most restricted.</li>
+          <li>Encryption at rest for identity and body data, plus an access audit log.</li>
+          <li>The WhatsApp bridge never carries any of this.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="callout reveal"><span class="ic">▲</span><div><h4>Decide the data-protection baseline early</h4><p>We start in Qatar, so confirm the local requirements for holding minors' identity and health data before M1 ships profiles. It is far cheaper to build the access model in now than to retrofit it.</p></div></div>
+  </div>
+</section>
+
+<!-- 09 WHITE-LABEL -->
+<section class="sec" id="wl">
+  <div class="wrap">
+    <div class="sh reveal"><div class="num">09</div><h2>White-label &amp; multi-tenant config</h2><p>The line between what a client configures and what we keep shared. Get this boundary right in M1, even though selling is M4, because retrofitting tenancy later is painful.</p></div>
+    <div class="grid3">
+      <div class="panel reveal"><h3>Per-tenant config</h3><ul><li>Brand: logo and colours</li><li>Method: 5-zone or 6-zone</li><li>Squads: count and names</li><li>ZoneRuleset: their zone rules</li><li>Governing-body standard</li><li>Locale, Arabic RTL</li><li>Currency and payment rail</li></ul></div>
+      <div class="panel reveal"><h3>Shared &amp; fixed</h3><ul><li>One codebase</li><li>The zone engine itself</li><li>The AI rules framework</li><li>The data model</li><li>Core features M1-M3</li></ul></div>
+      <div class="panel reveal"><h3>Stays ours</h3><ul><li>Our ZoneRuleset content, the six-zone guidebook</li><li>Our reference-book rules and example sets</li><li>Our club's own data</li></ul></div>
+    </div>
+    <div class="mnote reveal"><b>The engine is the product, the rules are the content.</b> Clients get the engine that tags sets by zone and validates plans. They bring their own rules. Our guidebook never ships with a client tenant.</div>
+    <div class="callout reveal"><span class="ic">▲</span><div><h4>Mobile white-label means an app-store decision</h4><p>Selling to other clubs as a mobile app forces a choice: one app that themes itself per tenant after login, or a separately branded app per client in each store. The second gives each club its own identity and listing but multiplies release and review work. Decide before Phase 3.</p></div></div>
+  </div>
+</section>
+
+<!-- 10 DECISIONS -->
+<section class="sec" id="dec">
+  <div class="wrap">
+    <div class="sh reveal"><div class="num">10</div><h2>Technical decisions</h2><p>Settled positions the developer can build on, and the calls still needed before the affected pieces start.</p></div>
+    <div class="dec-grid">
+      <div class="dcol done reveal">
+        <div class="dh"><span class="bdg">Decided</span><h3>Build on these</h3></div>
+        <div class="drow"><span class="mk">✓</span><span>Zone rules live as structured <code>ZoneRuleset</code> data the rules engine checks, not parsed from a document. Reference books supplied to populate them.</span></div>
+        <div class="drow"><span class="mk">✓</span><span>AI does both edit and full-draft modes. Rules decide pass or fail, the LLM writes language.</span></div>
+        <div class="drow"><span class="mk">✓</span><span>No plan approval gate or deadline. The AI review returns to the coach. Plan status is draft then final.</span></div>
+        <div class="drow"><span class="mk">✓</span><span>T-pace retests every 6 months, with an auto-prompt when a swimmer's times drop.</span></div>
+        <div class="drow"><span class="mk">✓</span><span>Platform reviews each swimmer every 3 months and after each competition, then suggests promotions to the head coach.</span></div>
+        <div class="drow"><span class="mk">✓</span><span>Single multi-tenant codebase. Method and squads are per-tenant config.</span></div>
+        <div class="drow"><span class="mk">✓</span><span>Hy-Tek and InBody are file imports, not live APIs.</span></div>
+        <div class="drow"><span class="mk">✓</span><span>Markets Qatar then Middle East. Our tenant brand is Vortex Swimming Club.</span></div>
+        <div class="drow"><span class="mk">✓</span><span>Parents and swimmers share the same view.</span></div>
+        <div class="drow"><span class="mk">✓</span><span>InBody is an image or PDF upload, cadence as a PDF, visible to coaches, swimmer, and parent.</span></div>
+        <div class="drow"><span class="mk">✓</span><span>Odoo Appointments sync is two-way.</span></div>
+      </div>
+      <div class="dcol open reveal">
+        <div class="dh"><span class="bdg">To decide</span><h3>Needed before the affected work</h3></div>
+        <div class="drow"><span class="mk">?</span><span>Level-up: the exact time standards that qualify a swimmer. The cadence is set.</span></div>
+        <div class="drow"><span class="mk">?</span><span>LLM provider and hosting, and whether minor data may be sent to it.</span></div>
+        <div class="drow"><span class="mk">?</span><span>Backend stack and architecture, if not already chosen.</span></div>
+        <div class="drow"><span class="mk">?</span><span>Native or cross-platform for the mobile build.</span></div>
+        <div class="drow"><span class="mk">?</span><span>White-label distribution: one themed app, or a separately branded app per client in each store.</span></div>
+        <div class="drow"><span class="mk">?</span><span>Phase 2 notification channels: push, email, or SMS.</span></div>
+        <div class="drow"><span class="mk">?</span><span>Whether meet-day Hy-Tek import needs a tablet layout or an admin companion.</span></div>
+        <div class="drow"><span class="mk">?</span><span>Qatar governing-body standard, parked for now.</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 11 NON-FUNCTIONAL -->
+<section class="sec" id="nf">
+  <div class="wrap">
+    <div class="sh reveal"><div class="num">11</div><h2>Non-functional notes</h2><p>Cross-cutting things easy to miss until late.</p></div>
+    <div class="nf-grid">
+      <div class="nf reveal"><h4>Course units</h4><p>Keep LCM, SCM, and SCY separate everywhere a time appears. Never merge bests across courses.</p></div>
+      <div class="nf reveal"><h4>Timezones</h4><p>Sessions, meets, retests, and notifications all need a clear, consistent timezone.</p></div>
+      <div class="nf reveal"><h4>Internationalisation</h4><p>Build for translation and full Arabic right-to-left from the start, needed for white-label.</p></div>
+      <div class="nf reveal"><h4>Offline &amp; poolside</h4><p>The pace clock and attendance run on a wet pool deck with patchy signal. Build offline-first, cache locally, and sync when back online.</p></div>
+      <div class="nf reveal"><h4>Security</h4><p>Role and field-level access, encryption for sensitive data, consent records, and an audit log.</p></div>
+      <div class="nf reveal"><h4>Scale</h4><p>Squad and athlete numbers grow, and white-label adds tenants. Nothing should assume one club.</p></div>
+      <div class="nf reveal"><h4>Push notifications</h4><p>Use native push for the Phase 2 alerts. Handle permissions and deep links into the right screen.</p></div>
+      <div class="nf reveal"><h4>Devices</h4><p>Phones for parents and swimmers. Coaches may want a tablet poolside, so design layouts for both.</p></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="q">Build the engine once, drive it with data. The zone ruleset, the roles, and the tenancy boundary are the three things worth getting right before the rest is layered on.</div>
+    <div class="stamp">CLUB PLATFORM · DEVELOPER SCOPE<br>Confidential internal draft · June 2026</div>
+  </div>
+</footer>
+
+<script>
+  (function(){
+    var els=document.querySelectorAll('.reveal');
+    if(!('IntersectionObserver' in window)||window.matchMedia('(prefers-reduced-motion: reduce)').matches){els.forEach(function(e){e.classList.add('in')});return;}
+    var io=new IntersectionObserver(function(en){en.forEach(function(x){if(x.isIntersecting){x.target.classList.add('in');io.unobserve(x.target);}})},{threshold:.08,rootMargin:'0px 0px -5% 0px'});
+    els.forEach(function(e){io.observe(e)});
+  })();
+</script>
+
+</body>
+</html>
