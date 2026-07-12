@@ -74,8 +74,8 @@ export default function MeetsClient({
             }}
             className="px-2.5 py-1 rounded-[var(--radius-pill)] text-xs font-semibold capitalize"
             style={{
-              background: selectedMeet.status === s ? "var(--vx-blue)" : "rgba(255,255,255,0.06)",
-              color: "#fff",
+              background: selectedMeet.status === s ? "var(--vx-blue)" : "#EEF1F5",
+              color: selectedMeet.status === s? "#fff" : "#4A5568",
             }}
           >
             {s.replace("_", " ")}

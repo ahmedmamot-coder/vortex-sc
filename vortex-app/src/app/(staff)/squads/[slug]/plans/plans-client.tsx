@@ -15,6 +15,31 @@ import {
   updateSet,
 } from "./actions";
 
+function Chip({
+  active,
+  activeBg,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  activeBg: string;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="px-2 py-0.5 rounded-[var(--radius-pill)] text-[10px] font-semibold"
+      style={{
+        background: active ? activeBg : "#EEF1F5",
+        color: active ? "#fff" : "#4A5568",
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
 export default function PlansClient({
   slug,
   squad,
@@ -55,25 +80,23 @@ export default function PlansClient({
 
       <div className="flex flex-wrap gap-2 mb-6">
         {ZONE_DEFS.map((z) => (
-          <button
+          <Chip
             key={z.id}
-            onClick={() =>
-              startTransition(() => updatePlanMeta(plan.id, slug, { zone: z.id }))
-            }
-            className="px-3 py-1.5 rounded-[var(--radius-pill)] text-xs font-semibold"
-            style={{
-              background: plan.zone === z.id ? z.color : "rgba(255,255,255,0.06)",
-              color: "#fff",
-            }}
-          >
-            {z.id} · {z.label}
-          </button>
+            active={plan.zone === z.id}
+            activeBg={z.color}
+            label={`${z.id} · ${z.label}`}
+            onClick={() => startTransition(() => updatePlanMeta(plan.id, slug, { zone: z.id }))}
+          />
         ))}
       </div>
 
       <div className="flex flex-col gap-5">
         {plan.sections.map((section) => (
-          <div key={section.id} className="rounded-[var(--radius-lg)] bg-white border border-[#E5E9F0] p-4">
+          <div
+            key={section.id}
+            className="rounded-[var(--radius-lg)] bg-white p-4"
+            style={{ border: "1px solid #E5E9F0" }}
+          >
             <div className="flex items-center justify-between mb-3">
               <span className="text-[#0C1116] font-bold">{section.name}</span>
               <button
@@ -89,7 +112,7 @@ export default function PlansClient({
                 <div
                   key={set.id}
                   className="rounded-[var(--radius-md)] p-3"
-                  style={{ borderLeft: `3px solid ${squad.accent_color}`, background: "rgba(255,255,255,0.03)" }}
+                  style={{ borderLeft: `3px solid ${squad.accent_color}`, background: "#F6F7F9" }}
                 >
                   <div className="flex items-center gap-2 mb-2">
                     <input
@@ -120,68 +143,50 @@ export default function PlansClient({
                     </button>
                   </div>
 
-                  <div className="flex flex-wrap gap-1.5 mb-1.5">
-                    <span className="text-[10px] text-[#7A8296] mr-1 self-center">Type:</span>
+                  <div className="flex flex-wrap gap-1.5 mb-1.5 items-center">
+                    <span className="text-[10px] text-[#7A8296] mr-1">Type:</span>
                     {SET_TYPE_OPTIONS.map((t) => (
-                      <button
+                      <Chip
                         key={t}
+                        active={set.set_types.includes(t)}
+                        activeBg="var(--vx-blue)"
+                        label={t}
                         onClick={() =>
                           startTransition(() =>
-                            updateSet(set.id, slug, plan.id, {
-                              set_types: toggle(set.set_types, t),
-                            }),
+                            updateSet(set.id, slug, plan.id, { set_types: toggle(set.set_types, t) }),
                           )
                         }
-                        className="px-2 py-0.5 rounded-[var(--radius-pill)] text-[10px] font-semibold"
-                        style={{
-                          background: set.set_types.includes(t) ? "var(--vx-blue)" : "rgba(255,255,255,0.06)",
-                          color: "#fff",
-                        }}
-                      >
-                        {t}
-                      </button>
+                      />
                     ))}
                   </div>
 
-                  <div className="flex flex-wrap gap-1.5 mb-1.5">
-                    <span className="text-[10px] text-[#7A8296] mr-1 self-center">Tools:</span>
+                  <div className="flex flex-wrap gap-1.5 mb-1.5 items-center">
+                    <span className="text-[10px] text-[#7A8296] mr-1">Tools:</span>
                     {EQUIPMENT_OPTIONS.map((eq) => (
-                      <button
+                      <Chip
                         key={eq}
+                        active={set.equipment.includes(eq)}
+                        activeBg="#3B2FD6"
+                        label={eq}
                         onClick={() =>
                           startTransition(() =>
-                            updateSet(set.id, slug, plan.id, {
-                              equipment: toggle(set.equipment, eq),
-                            }),
+                            updateSet(set.id, slug, plan.id, { equipment: toggle(set.equipment, eq) }),
                           )
                         }
-                        className="px-2 py-0.5 rounded-[var(--radius-pill)] text-[10px] font-semibold"
-                        style={{
-                          background: set.equipment.includes(eq) ? "#3B2FD6" : "rgba(255,255,255,0.06)",
-                          color: "#fff",
-                        }}
-                      >
-                        {eq}
-                      </button>
+                      />
                     ))}
                   </div>
 
                   <div className="flex flex-wrap gap-1.5 items-center">
                     <span className="text-[10px] text-[#7A8296] mr-1">Zone:</span>
                     {ZONE_DEFS.map((z) => (
-                      <button
+                      <Chip
                         key={z.id}
-                        onClick={() =>
-                          startTransition(() => updateSet(set.id, slug, plan.id, { zone: z.id }))
-                        }
-                        className="px-2 py-0.5 rounded-[var(--radius-pill)] text-[10px] font-semibold"
-                        style={{
-                          background: (set.zone ?? plan.zone) === z.id ? z.color : "rgba(255,255,255,0.06)",
-                          color: "#fff",
-                        }}
-                      >
-                        {z.id}
-                      </button>
+                        active={(set.zone ?? plan.zone) === z.id}
+                        activeBg={z.color}
+                        label={z.id}
+                        onClick={() => startTransition(() => updateSet(set.id, slug, plan.id, { zone: z.id }))}
+                      />
                     ))}
                     <input
                       defaultValue={set.rest}

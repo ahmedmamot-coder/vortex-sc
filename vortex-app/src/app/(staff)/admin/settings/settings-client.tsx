@@ -34,8 +34,8 @@ export default function SettingsClient({ club, totalSwimmers }: { club: Club; to
               }}
               className="flex-1 py-2 rounded-[var(--radius-sm)] text-sm font-semibold"
               style={{
-                background: zoneMethod === z ? "var(--vx-blue)" : "rgba(255,255,255,0.06)",
-                color: "#fff",
+                background: zoneMethod === z ? "var(--vx-blue)" : "#EEF1F5",
+                color: zoneMethod === z? "#fff" : "#4A5568",
               }}
             >
               {z}-zone

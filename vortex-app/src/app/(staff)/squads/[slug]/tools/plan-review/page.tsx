@@ -18,7 +18,7 @@ export default async function PlanReviewPage({ params }: { params: Promise<{ slu
     <ToolShell slug={slug} title="AI Plan Review">
       <div
         className="rounded-[var(--radius-lg)] p-4 mb-4 border"
-        style={{ borderColor: COLORS[result.verdict], background: "rgba(255,255,255,0.03)" }}
+        style={{ borderColor: COLORS[result.verdict], background: "#F6F7F9" }}
       >
         <div className="flex items-center justify-between">
           <div>

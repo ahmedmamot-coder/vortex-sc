@@ -2,6 +2,7 @@
 
 import { useTransition } from "react";
 import type { Squad, Swimmer, Attendance } from "@/lib/types";
+import type { AttendanceSummary } from "@/lib/data/attendance";
 import { markAttendance } from "./actions";
 
 export default function AttendanceClient({
@@ -11,6 +12,7 @@ export default function AttendanceClient({
   today,
   todayRecords,
   recentDates,
+  summary,
 }: {
   slug: string;
   squad: Squad;
@@ -18,11 +20,14 @@ export default function AttendanceClient({
   today: string;
   todayRecords: Attendance[];
   recentDates: { raw: string; label: string }[];
+  summary: AttendanceSummary;
 }) {
   const [, startTransition] = useTransition();
   const byId = new Map(todayRecords.map((r) => [r.swimmer_id, r.present]));
 
   const presentCount = todayRecords.filter((r) => r.present).length;
+  const monthName = new Date().toLocaleDateString("en-GB", { month: "long" });
+  const year = new Date().getFullYear();
 
   return (
     <div>
@@ -31,6 +36,28 @@ export default function AttendanceClient({
         <span className="text-sm text-[#7A8296]">
           Today · {presentCount}/{swimmers.length} present
         </span>
+      </div>
+
+      {/* Monthly & yearly summary */}
+      <div className="grid grid-cols-2 gap-2 mb-6">
+        <div className="rounded-[var(--radius-lg)] bg-white p-4" style={{ border: "1px solid #E5E9F0" }}>
+          <p className="text-xs text-[#7A8296]">{monthName} attendance</p>
+          <p className="text-2xl font-bold text-[#0C1116]">
+            {summary.monthPct != null ? `${summary.monthPct}%` : "—"}
+          </p>
+          <p className="text-[11px] text-[#9AA2B4]">
+            {summary.monthPresent}/{summary.monthTotal} marks
+          </p>
+        </div>
+        <div className="rounded-[var(--radius-lg)] bg-white p-4" style={{ border: "1px solid #E5E9F0" }}>
+          <p className="text-xs text-[#7A8296]">{year} attendance</p>
+          <p className="text-2xl font-bold text-[#0C1116]">
+            {summary.yearPct != null ? `${summary.yearPct}%` : "—"}
+          </p>
+          <p className="text-[11px] text-[#9AA2B4]">
+            {summary.yearPresent}/{summary.yearTotal} marks
+          </p>
+        </div>
       </div>
 
       <div className="flex flex-col gap-1 mb-6">
@@ -48,8 +75,8 @@ export default function AttendanceClient({
                   }
                   className="px-3 py-1 rounded-[var(--radius-pill)] text-xs font-semibold"
                   style={{
-                    background: present === true ? "var(--vx-success)" : "rgba(255,255,255,0.06)",
-                    color: "#fff",
+                    background: present === true ? "var(--vx-success)" : "#EEF1F5",
+                    color: present === true? "#fff" : "#4A5568",
                   }}
                 >
                   Present
@@ -60,8 +87,8 @@ export default function AttendanceClient({
                   }
                   className="px-3 py-1 rounded-[var(--radius-pill)] text-xs font-semibold"
                   style={{
-                    background: present === false ? "var(--vx-danger)" : "rgba(255,255,255,0.06)",
-                    color: "#fff",
+                    background: present === false ? "var(--vx-danger)" : "#EEF1F5",
+                    color: present === false? "#fff" : "#4A5568",
                   }}
                 >
                   Absent

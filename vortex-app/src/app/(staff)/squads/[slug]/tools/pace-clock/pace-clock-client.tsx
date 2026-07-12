@@ -69,7 +69,7 @@ export default function PaceClockClient({ sets, accent }: { sets: PlanSet[]; acc
       <div className="flex flex-col items-center mb-6">
         <div className="relative w-52 h-52 mb-4">
           <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
-            <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="6" />
+            <circle cx="50" cy="50" r="45" fill="none" stroke="#E5E9F0" strokeWidth="6" />
             <circle
               cx="50"
               cy="50"
@@ -119,7 +119,7 @@ export default function PaceClockClient({ sets, accent }: { sets: PlanSet[]; acc
             key={s.id}
             onClick={() => selectSet(i)}
             className="flex items-center justify-between text-left rounded-[var(--radius-sm)] px-3 py-2 text-sm"
-            style={{ background: i === index ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.03)" }}
+            style={{ background: i === index ? "#E5E9F0" : "#F6F7F9" }}
           >
             <span className="text-[#0C1116]">
               {s.distance}m · {s.description}

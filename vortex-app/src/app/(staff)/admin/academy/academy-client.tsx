@@ -34,7 +34,7 @@ export default function AcademyClient({
             key={t}
             onClick={() => setTab(t)}
             className="px-4 py-2 rounded-[var(--radius-pill)] text-sm font-semibold capitalize"
-            style={{ background: tab === t ? "var(--vx-blue)" : "rgba(255,255,255,0.06)", color: "#fff" }}
+            style={{ background: tab === t ? "var(--vx-blue)" : "#EEF1F5", color: tab === t? "#fff" : "#4A5568" }}
           >
             {t}
           </button>

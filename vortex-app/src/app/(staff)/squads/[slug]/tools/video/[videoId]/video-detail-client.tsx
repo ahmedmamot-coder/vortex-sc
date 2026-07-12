@@ -95,7 +95,7 @@ export default function VideoDetailClient({
               key={r}
               onClick={() => setSpeed(r)}
               className="px-2 py-1 rounded-[var(--radius-pill)] text-xs font-semibold"
-              style={{ background: rate === r ? "var(--vx-blue)" : "rgba(255,255,255,0.06)", color: "#fff" }}
+              style={{ background: rate === r ? "var(--vx-blue)" : "#EEF1F5", color: rate === r? "#fff" : "#4A5568" }}
             >
               {r}x
             </button>

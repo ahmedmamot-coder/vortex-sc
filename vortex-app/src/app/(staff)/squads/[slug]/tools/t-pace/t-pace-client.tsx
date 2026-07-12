@@ -57,7 +57,7 @@ export default function TPaceClient({
                 key={d}
                 onClick={() => setDistance(d)}
                 className="flex-1 py-2 rounded-[var(--radius-sm)] text-sm font-semibold"
-                style={{ background: distance === d ? "var(--vx-blue)" : "rgba(255,255,255,0.06)", color: "#fff" }}
+                style={{ background: distance === d ? "var(--vx-blue)" : "#EEF1F5", color: distance === d? "#fff" : "#4A5568" }}
               >
                 {d}m
               </button>
