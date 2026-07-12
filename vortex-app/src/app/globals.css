@@ -1,0 +1,204 @@
+@import "tailwindcss";
+
+/* ============================================================
+ * Vortex Aquatics — design tokens (ported from the Claude Design
+ * prototype's brand-colors-brief.md / typography / spacing tokens)
+ * ============================================================ */
+@font-face {
+  font-family: "Funnel Display";
+  src: url("/fonts/funnel-400.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Funnel Display";
+  src: url("/fonts/funnel-500.ttf") format("truetype");
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Funnel Display";
+  src: url("/fonts/funnel-600.ttf") format("truetype");
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Funnel Display";
+  src: url("/fonts/funnel-700.ttf") format("truetype");
+  font-weight: 700;
+  font-display: swap;
+}
+
+:root {
+  /* ---- Parent: Vortex Blue ---- */
+  --vx-blue: #067EEA;
+  --vx-blue-dark: #045FB2;
+  --vx-blue-tint: rgba(6, 126, 234, 0.10);
+
+  /* ---- Vortex Academy accents (kept for future use) ---- */
+  --ac-blue: #2221D7;
+  --ac-purple: #9022D5;
+  --ac-teal: #1DFDBE;
+  --ac-cyan: #22D7D7;
+  --ac-blue-dark: #1817A8;
+  --teal-deep: #12C79A;
+  --teal-ink: #08402F;
+  --cyan-dark: #13A9B8;
+  --pink-dark: #761BB0;
+
+  /* ---- Neutrals ---- */
+  --vx-black: #000000;
+  --vx-white: #FFFFFF;
+  --vx-ink: #0C1116;
+  --vx-gray: #8A8A8A;
+  --vx-light: #F4F4F4;
+  --vx-light-2: #F4F6F8;
+  --vx-border-dark: rgba(255, 255, 255, 0.10);
+  --vx-slate-900: #1A2236;
+  --vx-slate-500: #6A748F;
+  --vx-slate-300: #ADB5CB;
+  --vx-slate-200: #CDD3E2;
+  --vx-slate-100: #E7EAF2;
+  --vx-slate-50: #F6F7F9;
+
+  /* ---- Status ---- */
+  --vx-success: #1CB87A;
+  --vx-warning: #F5A623;
+  --vx-danger: #E5484D;
+  --vx-info: var(--vx-blue);
+
+  /* ---- Squad accent colors (indigo ramp, Pre-Team -> Legend) ---- */
+  --sq-preteam: #22C1DA;
+  --sq-advb: #1BA5E6;
+  --sq-adva: #067EEA;
+  --sq-junior: #2A63E0;
+  --sq-seniorb: #2733D6;
+  --sq-seniora: #3B23C7;
+  --sq-vortexb: #5D22CF;
+  --sq-vortexa: #8A22D5;
+  --sq-legend: #1B22E4;
+
+  /* ---- App shell background ---- */
+  --vx-app-bg: #070C16;
+
+  /* ---- Typography scale ---- */
+  --fs-overline: 0.75rem;
+  --fs-caption: 0.8125rem;
+  --fs-small: 0.875rem;
+  --fs-body: 1rem;
+  --fs-body-lg: 1.125rem;
+  --fs-h6: 1.25rem;
+  --fs-h5: 1.5rem;
+  --fs-h4: 1.875rem;
+  --fs-h3: 2.375rem;
+  --fs-h2: 3rem;
+  --fs-h1: 3.75rem;
+
+  /* ---- Radius ---- */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 22px;
+  --radius-xl: 28px;
+  --radius-pill: 999px;
+
+  /* ---- Shadows (cool, water-tinted) ---- */
+  --shadow-xs: 0 1px 2px rgba(11, 14, 26, 0.06);
+  --shadow-sm: 0 2px 8px rgba(11, 14, 26, 0.08);
+  --shadow-md: 0 8px 24px rgba(11, 14, 26, 0.10);
+  --shadow-lg: 0 18px 48px rgba(11, 14, 26, 0.14);
+  --shadow-brand: 0 14px 36px rgba(10, 120, 240, 0.30);
+
+  /* ---- Motion ---- */
+  --ease-glide: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 140ms;
+  --dur-base: 240ms;
+}
+
+@theme inline {
+  --color-vx-blue: var(--vx-blue);
+  --color-vx-blue-dark: var(--vx-blue-dark);
+  --color-vx-ink: var(--vx-ink);
+  --color-vx-gray: var(--vx-gray);
+  --color-vx-light: var(--vx-light);
+  --color-vx-light-2: var(--vx-light-2);
+  --color-vx-success: var(--vx-success);
+  --color-vx-warning: var(--vx-warning);
+  --color-vx-danger: var(--vx-danger);
+  --color-vx-slate-900: var(--vx-slate-900);
+  --color-vx-slate-500: var(--vx-slate-500);
+  --color-vx-slate-300: var(--vx-slate-300);
+  --color-vx-slate-200: var(--vx-slate-200);
+  --color-vx-slate-100: var(--vx-slate-100);
+  --color-vx-slate-50: var(--vx-slate-50);
+  --font-brand: "Funnel Display", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-brand);
+  background: var(--vx-app-bg);
+  color: var(--vx-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--vx-blue);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--vx-blue-dark);
+}
+
+.vx-scroll {
+  scrollbar-width: none;
+}
+.vx-scroll::-webkit-scrollbar {
+  display: none;
+  width: 0;
+}
+
+.vx-pattern-bg {
+  background-color: #fff;
+  background-repeat: repeat-y;
+  background-position: right top;
+  background-size: 280px 316px;
+  background-image: url("/images/pattern-transparent.png");
+}
+
+@keyframes vxrise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+.vx-screen {
+  animation: vxrise 0.32s var(--ease-glide);
+}
+
+@media print {
+  * { background: transparent !important; background-image: none !important; box-shadow: none !important; }
+  html, body { background: #fff !important; }
+  body * { visibility: hidden; overflow: visible !important; }
+  #vx-print-sheet, #vx-print-sheet * { visibility: visible; }
+  #vx-print-sheet {
+    display: block !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    background-color: #fff !important;
+    padding: 0 !important;
+  }
+  #vx-print-sheet.vx-pattern-bg {
+    background-color: #fff !important;
+    background-image: url("/images/pattern-transparent.png") !important;
+    background-repeat: repeat-y !important;
+    background-position: right top !important;
+    background-size: 280px 316px !important;
+  }
+  @page { size: A4; margin: 14mm; }
+}
