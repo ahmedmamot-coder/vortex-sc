@@ -29,26 +29,26 @@ export default async function ToolsPage({ params }: { params: Promise<{ slug: st
 
   return (
     <div>
-      <h2 className="text-white font-bold mb-4">Tools &amp; AI</h2>
+      <h2 className="text-[#0C1116] font-bold mb-4">Tools &amp; AI</h2>
 
       <div className="grid grid-cols-2 gap-2 mb-8">
         {TOOL_TILES.map((t) => (
           <Link
             key={t.href}
             href={`/squads/${slug}/tools/${t.href}`}
-            className="rounded-[var(--radius-md)] bg-white/5 border border-white/10 p-3 hover:border-white/25"
+            className="rounded-[var(--radius-md)] bg-white border border-[#E5E9F0] p-3 hover:border-[#CDD3E2]"
           >
-            <p className="text-white font-semibold text-sm">{t.label}</p>
-            <p className="text-xs text-[var(--vx-slate-300)] mt-0.5">{t.desc}</p>
+            <p className="text-[#0C1116] font-semibold text-sm">{t.label}</p>
+            <p className="text-xs text-[#7A8296] mt-0.5">{t.desc}</p>
           </Link>
         ))}
       </div>
 
       <section className="mb-8">
-        <h3 className="text-white font-semibold mb-3">Zone Engine</h3>
-        <p className="text-xs text-[var(--vx-slate-300)] mb-3">
+        <h3 className="text-[#0C1116] font-semibold mb-3">Zone Engine</h3>
+        <p className="text-xs text-[#7A8296] mb-3">
           This squad is cleared to train:{" "}
-          <span className="text-white font-semibold">{allowed.join(", ") || "—"}</span>
+          <span className="text-[#0C1116] font-semibold">{allowed.join(", ") || "—"}</span>
         </p>
         <div className="flex flex-col gap-2">
           {ZONE_DEFS.map((z) => {
@@ -57,7 +57,7 @@ export default async function ToolsPage({ params }: { params: Promise<{ slug: st
             return (
               <div
                 key={z.id}
-                className="rounded-[var(--radius-md)] bg-white/5 border border-white/10 p-3"
+                className="rounded-[var(--radius-md)] bg-white border border-[#E5E9F0] p-3"
                 style={{ opacity: permitted ? 1 : 0.45 }}
               >
                 <div className="flex items-center gap-2 mb-1">
@@ -67,16 +67,16 @@ export default async function ToolsPage({ params }: { params: Promise<{ slug: st
                   >
                     {z.id}
                   </span>
-                  <span className="text-white font-semibold text-sm">{z.name}</span>
+                  <span className="text-[#0C1116] font-semibold text-sm">{z.name}</span>
                   {!permitted && (
-                    <span className="text-[10px] text-[var(--vx-slate-300)] ml-auto">not for this squad</span>
+                    <span className="text-[10px] text-[#7A8296] ml-auto">not for this squad</span>
                   )}
                 </div>
-                <p className="text-xs text-[var(--vx-slate-300)]">
+                <p className="text-xs text-[#7A8296]">
                   {g.pct} · HR {g.hr} · La {g.lactate}
                 </p>
-                <p className="text-xs text-[var(--vx-slate-300)] mt-1">{g.purpose}</p>
-                <p className="text-xs text-white/70 mt-1 italic">e.g. {g.example}</p>
+                <p className="text-xs text-[#7A8296] mt-1">{g.purpose}</p>
+                <p className="text-xs text-[#4A5568] mt-1 italic">e.g. {g.example}</p>
               </div>
             );
           })}
@@ -84,12 +84,12 @@ export default async function ToolsPage({ params }: { params: Promise<{ slug: st
       </section>
 
       <section>
-        <h3 className="text-white font-semibold mb-3">Coaches Handbook</h3>
+        <h3 className="text-[#0C1116] font-semibold mb-3">Coaches Handbook</h3>
         <div className="flex flex-col gap-2">
           {HANDBOOK.map((h) => (
-            <details key={h.title} className="rounded-[var(--radius-md)] bg-white/5 border border-white/10 p-3">
-              <summary className="text-white font-medium text-sm cursor-pointer">{h.title}</summary>
-              <p className="text-xs text-[var(--vx-slate-300)] mt-2">{h.body}</p>
+            <details key={h.title} className="rounded-[var(--radius-md)] bg-white border border-[#E5E9F0] p-3">
+              <summary className="text-[#0C1116] font-medium text-sm cursor-pointer">{h.title}</summary>
+              <p className="text-xs text-[#7A8296] mt-2">{h.body}</p>
             </details>
           ))}
         </div>

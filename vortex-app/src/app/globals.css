@@ -78,8 +78,9 @@
   --sq-vortexa: #8A22D5;
   --sq-legend: #1B22E4;
 
-  /* ---- App shell background ---- */
-  --vx-app-bg: #070C16;
+  /* ---- App shell (matches the Vortex SC prototype) ---- */
+  --vx-app-bg: #EEF1F5;   /* light page behind the phone frame */
+  --vx-ink-bg: #0A0F1A;   /* dark hero / header */
 
   /* ---- Typography scale ---- */
   --fs-overline: 0.75rem;
@@ -144,6 +145,53 @@ body {
   background: var(--vx-app-bg);
   color: var(--vx-ink);
   -webkit-font-smoothing: antialiased;
+}
+
+/* Phone-style centered frame, exactly like the Vortex SC prototype. */
+.vx-frame {
+  width: 100%;
+  min-height: 100dvh;
+  max-width: 900px;
+  margin: 0 auto;
+  background: var(--vx-app-bg);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+}
+.vx-hero-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(10, 15, 26, 0.55) 0%,
+    rgba(10, 15, 26, 0.35) 22%,
+    rgba(10, 15, 26, 0.55) 55%,
+    #0a0f1a 88%
+  );
+}
+.vx-glass {
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(6px);
+}
+.vx-input-dark {
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  padding: 12px 14px;
+  color: #fff;
+  font-family: inherit;
+  font-size: 13.5px;
+  outline: none;
+}
+.vx-input-dark::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+.vx-card {
+  background: #fff;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
 }
 
 a {

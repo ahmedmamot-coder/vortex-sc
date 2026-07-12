@@ -19,13 +19,13 @@ export default async function ResultsPage({ params }: { params: Promise<{ slug: 
 
   return (
     <div>
-      <h2 className="text-white font-bold mb-4">Results</h2>
+      <h2 className="text-[#0C1116] font-bold mb-4">Results</h2>
       <div className="flex flex-col gap-6">
         {[...byMeet.entries()].map(([meetName, rows]) => (
           <div key={meetName}>
-            <p className="text-white font-semibold mb-2">
+            <p className="text-[#0C1116] font-semibold mb-2">
               {meetName}{" "}
-              <span className="text-xs text-[var(--vx-slate-300)] font-normal">
+              <span className="text-xs text-[#7A8296] font-normal">
                 {rows[0]?.meets?.meet_date ? formatShortDate(rows[0].meets.meet_date) : ""}
               </span>
             </p>
@@ -33,21 +33,21 @@ export default async function ResultsPage({ params }: { params: Promise<{ slug: 
               {rows.map((r) => (
                 <div
                   key={r.id}
-                  className="flex items-center justify-between text-sm rounded-[var(--radius-sm)] px-3 py-2 bg-white/5"
+                  className="flex items-center justify-between text-sm rounded-[var(--radius-sm)] px-3 py-2 bg-white"
                 >
-                  <span className="text-white">
+                  <span className="text-[#0C1116]">
                     {r.swimmers.first_name} {r.swimmers.last_name}
                   </span>
-                  <span className="text-[var(--vx-slate-300)]">{r.event}</span>
-                  <span className="text-white font-semibold">{r.time_text}</span>
-                  <span className="text-[var(--vx-slate-300)]">{r.place ? `#${r.place}` : "—"}</span>
+                  <span className="text-[#7A8296]">{r.event}</span>
+                  <span className="text-[#0C1116] font-semibold">{r.time_text}</span>
+                  <span className="text-[#7A8296]">{r.place ? `#${r.place}` : "—"}</span>
                 </div>
               ))}
             </div>
           </div>
         ))}
         {results.length === 0 && (
-          <p className="text-sm text-[var(--vx-slate-300)]">No results recorded yet for this squad.</p>
+          <p className="text-sm text-[#7A8296]">No results recorded yet for this squad.</p>
         )}
       </div>
     </div>

@@ -61,7 +61,7 @@ export default function PaceClockClient({ sets, accent }: { sets: PlanSet[]; acc
   const secs = remaining % 60;
 
   if (sets.length === 0) {
-    return <p className="text-sm text-[var(--vx-slate-300)]">Add sets to the plan first.</p>;
+    return <p className="text-sm text-[#7A8296]">Add sets to the plan first.</p>;
   }
 
   return (
@@ -84,10 +84,10 @@ export default function PaceClockClient({ sets, accent }: { sets: PlanSet[]; acc
             />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-4xl font-bold text-white tabular-nums">
+            <span className="text-4xl font-bold text-[#0C1116] tabular-nums">
               {mins}:{String(secs).padStart(2, "0")}
             </span>
-            <span className="text-xs text-[var(--vx-slate-300)] mt-1">rep {reps}</span>
+            <span className="text-xs text-[#7A8296] mt-1">rep {reps}</span>
           </div>
         </div>
 
@@ -101,17 +101,17 @@ export default function PaceClockClient({ sets, accent }: { sets: PlanSet[]; acc
           </button>
           <button
             onClick={() => selectSet(index)}
-            className="px-5 py-2 rounded-[var(--radius-pill)] font-semibold text-white border border-white/20"
+            className="px-5 py-2 rounded-[var(--radius-pill)] font-semibold text-[#0C1116] border border-[#E5E9F0]"
           >
             Reset
           </button>
         </div>
       </div>
 
-      <p className="text-white font-semibold mb-2">
+      <p className="text-[#0C1116] font-semibold mb-2">
         {current.section} · {current.distance}m
       </p>
-      <p className="text-sm text-[var(--vx-slate-300)] mb-4">{current.description}</p>
+      <p className="text-sm text-[#7A8296] mb-4">{current.description}</p>
 
       <div className="flex flex-col gap-1">
         {sets.map((s, i) => (
@@ -121,10 +121,10 @@ export default function PaceClockClient({ sets, accent }: { sets: PlanSet[]; acc
             className="flex items-center justify-between text-left rounded-[var(--radius-sm)] px-3 py-2 text-sm"
             style={{ background: i === index ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.03)" }}
           >
-            <span className="text-white">
+            <span className="text-[#0C1116]">
               {s.distance}m · {s.description}
             </span>
-            <span className="text-xs text-[var(--vx-slate-300)]">{s.rest || "—"}</span>
+            <span className="text-xs text-[#7A8296]">{s.rest || "—"}</span>
           </button>
         ))}
       </div>

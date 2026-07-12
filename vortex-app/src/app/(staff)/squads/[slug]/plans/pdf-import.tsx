@@ -64,11 +64,11 @@ export default function PdfImport({ planId, slug }: { planId: string; slug: stri
 
   return (
     <div className="mb-4">
-      <label className="inline-block rounded-[var(--radius-md)] border border-dashed border-white/25 px-4 py-2 text-sm font-semibold text-white cursor-pointer">
+      <label className="inline-block rounded-[var(--radius-md)] border border-dashed border-[#CDD3E2] px-4 py-2 text-sm font-semibold text-[#0C1116] cursor-pointer">
         {busy ? "Importing…" : "Import plan from PDF"}
         <input type="file" accept="application/pdf" onChange={onFile} className="hidden" disabled={busy} />
       </label>
-      {msg && <p className="text-xs text-[var(--vx-slate-300)] mt-2">{msg}</p>}
+      {msg && <p className="text-xs text-[#7A8296] mt-2">{msg}</p>}
     </div>
   );
 }

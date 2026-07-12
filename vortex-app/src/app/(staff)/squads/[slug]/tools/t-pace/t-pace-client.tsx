@@ -37,13 +37,13 @@ export default function TPaceClient({
 
   return (
     <div>
-      <div className="rounded-[var(--radius-lg)] bg-white/5 border border-white/10 p-4 mb-6">
-        <p className="text-sm text-white font-semibold mb-3">Log a trial</p>
+      <div className="rounded-[var(--radius-lg)] bg-white border border-[#E5E9F0] p-4 mb-6">
+        <p className="text-sm text-[#0C1116] font-semibold mb-3">Log a trial</p>
         <div className="flex flex-col gap-2">
           <select
             value={swimmerId}
             onChange={(e) => setSwimmerId(e.target.value)}
-            className="rounded-[var(--radius-sm)] px-3 py-2 bg-white/5 border border-white/10 text-white text-sm"
+            className="rounded-[var(--radius-sm)] px-3 py-2 bg-white border border-[#E5E9F0] text-[#0C1116] text-sm"
           >
             {swimmers.map((s) => (
               <option key={s.id} value={s.id}>
@@ -67,7 +67,7 @@ export default function TPaceClient({
             value={timeText}
             onChange={(e) => setTimeText(e.target.value)}
             placeholder="Total time e.g. 11:40.00"
-            className="rounded-[var(--radius-sm)] px-3 py-2 bg-white/5 border border-white/10 text-white text-sm"
+            className="rounded-[var(--radius-sm)] px-3 py-2 bg-white border border-[#E5E9F0] text-[#0C1116] text-sm"
           />
           {preview && (
             <p className="text-sm text-[var(--vx-success)]">
@@ -96,21 +96,21 @@ export default function TPaceClient({
         </div>
       </div>
 
-      <p className="text-white font-semibold mb-2 text-sm">Recent trials</p>
+      <p className="text-[#0C1116] font-semibold mb-2 text-sm">Recent trials</p>
       <div className="flex flex-col gap-1">
         {tests.map((t) => {
           const overdue = t.retest_due && new Date(t.retest_due) < new Date();
           return (
-            <div key={t.id} className="flex items-center justify-between rounded-[var(--radius-md)] bg-white/5 border border-white/10 px-3 py-2">
+            <div key={t.id} className="flex items-center justify-between rounded-[var(--radius-md)] bg-white border border-[#E5E9F0] px-3 py-2">
               <div>
-                <p className="text-white text-sm">{t.name}</p>
-                <p className="text-xs text-[var(--vx-slate-300)]">
+                <p className="text-[#0C1116] text-sm">{t.name}</p>
+                <p className="text-xs text-[#7A8296]">
                   {t.distance}m in {formatTime(t.time_seconds)} · {formatShortDate(t.tested_at)}
                 </p>
               </div>
               <div className="flex items-center gap-3">
                 <div className="text-right">
-                  <p className="text-white font-bold text-sm">{formatTime(t.t_pace_seconds)}</p>
+                  <p className="text-[#0C1116] font-bold text-sm">{formatTime(t.t_pace_seconds)}</p>
                   <p className="text-[10px]" style={{ color: overdue ? "var(--vx-danger)" : "var(--vx-slate-300)" }}>
                     {overdue ? "retest due" : "/100m"}
                   </p>
@@ -125,7 +125,7 @@ export default function TPaceClient({
             </div>
           );
         })}
-        {tests.length === 0 && <p className="text-sm text-[var(--vx-slate-300)]">No trials logged yet.</p>}
+        {tests.length === 0 && <p className="text-sm text-[#7A8296]">No trials logged yet.</p>}
       </div>
     </div>
   );

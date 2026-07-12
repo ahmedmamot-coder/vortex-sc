@@ -15,22 +15,22 @@ export default function PromotionsClient({
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-white mb-6">Promotion engine</h1>
+      <h1 className="text-2xl font-bold text-[#0C1116] mb-6">Promotion engine</h1>
 
       <section className="mb-8">
-        <h2 className="text-white font-semibold mb-2 text-sm">Awaiting approval ({pending.length})</h2>
+        <h2 className="text-[#0C1116] font-semibold mb-2 text-sm">Awaiting approval ({pending.length})</h2>
         <div className="flex flex-col gap-2">
           {pending.map((p) => (
-            <div key={p.id} className="rounded-[var(--radius-md)] bg-white/5 border border-white/10 px-3 py-3">
+            <div key={p.id} className="rounded-[var(--radius-md)] bg-white border border-[#E5E9F0] px-3 py-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-white text-sm font-medium">
+                  <p className="text-[#0C1116] text-sm font-medium">
                     {p.swimmers.first_name} {p.swimmers.last_name}
                   </p>
-                  <p className="text-xs text-[var(--vx-slate-300)]">
+                  <p className="text-xs text-[#7A8296]">
                     {p.from_squad.name} → {p.to_squad.name}
                   </p>
-                  {p.reason && <p className="text-xs text-[var(--vx-slate-300)] mt-1">{p.reason}</p>}
+                  {p.reason && <p className="text-xs text-[#7A8296] mt-1">{p.reason}</p>}
                 </div>
                 <div className="flex gap-2">
                   <button
@@ -42,7 +42,7 @@ export default function PromotionsClient({
                   </button>
                   <button
                     onClick={() => startTransition(() => rejectPromotion(p.id))}
-                    className="text-xs font-semibold px-3 py-1.5 rounded-[var(--radius-pill)] text-white border border-white/20"
+                    className="text-xs font-semibold px-3 py-1.5 rounded-[var(--radius-pill)] text-[#0C1116] border border-[#E5E9F0]"
                   >
                     Reject
                   </button>
@@ -50,20 +50,20 @@ export default function PromotionsClient({
               </div>
             </div>
           ))}
-          {pending.length === 0 && <p className="text-sm text-[var(--vx-slate-300)]">Nothing awaiting approval.</p>}
+          {pending.length === 0 && <p className="text-sm text-[#7A8296]">Nothing awaiting approval.</p>}
         </div>
       </section>
 
       <section>
-        <h2 className="text-white font-semibold mb-2 text-sm">
+        <h2 className="text-[#0C1116] font-semibold mb-2 text-sm">
           Flagged — over squad age ({candidates.length})
         </h2>
         <div className="flex flex-col gap-2">
           {candidates.map((c) => (
-            <div key={c.swimmerId} className="flex items-center justify-between rounded-[var(--radius-md)] bg-white/5 border border-white/10 px-3 py-3">
+            <div key={c.swimmerId} className="flex items-center justify-between rounded-[var(--radius-md)] bg-white border border-[#E5E9F0] px-3 py-3">
               <div>
-                <p className="text-white text-sm font-medium">{c.name}</p>
-                <p className="text-xs text-[var(--vx-slate-300)]">
+                <p className="text-[#0C1116] text-sm font-medium">{c.name}</p>
+                <p className="text-xs text-[#7A8296]">
                   Age {c.age} · {c.fromSquadName} → {c.toSlug}
                 </p>
               </div>
@@ -86,7 +86,7 @@ export default function PromotionsClient({
             </div>
           ))}
           {candidates.length === 0 && (
-            <p className="text-sm text-[var(--vx-slate-300)]">No swimmers currently over their squad age band.</p>
+            <p className="text-sm text-[#7A8296]">No swimmers currently over their squad age band.</p>
           )}
         </div>
       </section>

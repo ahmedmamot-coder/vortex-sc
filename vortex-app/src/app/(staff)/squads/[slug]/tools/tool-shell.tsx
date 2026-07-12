@@ -13,11 +13,11 @@ export default function ToolShell({
     <div>
       <Link
         href={`/squads/${slug}/tools`}
-        className="text-xs text-[var(--vx-slate-300)] mb-3 inline-block"
+        className="text-xs text-[#7A8296] mb-3 inline-block"
       >
         ← Tools
       </Link>
-      <h2 className="text-white font-bold text-lg mb-4">{title}</h2>
+      <h2 className="text-[#0C1116] font-bold text-lg mb-4">{title}</h2>
       {children}
     </div>
   );

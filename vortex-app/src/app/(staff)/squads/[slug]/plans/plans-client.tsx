@@ -38,13 +38,13 @@ export default function PlansClient({
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           onBlur={() => startTransition(() => updatePlanMeta(plan.id, slug, { title }))}
-          className="text-white font-bold text-lg bg-transparent border-b border-transparent focus:border-white/30 outline-none"
+          className="text-[#0C1116] font-bold text-lg bg-transparent border-b border-transparent focus:border-[#CDD3E2] outline-none"
         />
         <div className="flex items-center gap-3">
-          <span className="text-sm text-[var(--vx-slate-300)]">{plan.total_metres}m total</span>
+          <span className="text-sm text-[#7A8296]">{plan.total_metres}m total</span>
           <Link
             href={`/squads/${slug}/plans/print`}
-            className="text-xs font-semibold px-3 py-1.5 rounded-[var(--radius-pill)] border border-white/20 text-white"
+            className="text-xs font-semibold px-3 py-1.5 rounded-[var(--radius-pill)] border border-[#E5E9F0] text-[#0C1116]"
           >
             Print
           </Link>
@@ -73,9 +73,9 @@ export default function PlansClient({
 
       <div className="flex flex-col gap-5">
         {plan.sections.map((section) => (
-          <div key={section.id} className="rounded-[var(--radius-lg)] bg-white/5 border border-white/10 p-4">
+          <div key={section.id} className="rounded-[var(--radius-lg)] bg-white border border-[#E5E9F0] p-4">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-white font-bold">{section.name}</span>
+              <span className="text-[#0C1116] font-bold">{section.name}</span>
               <button
                 onClick={() => startTransition(() => removeSection(section.id, slug, plan.id))}
                 className="text-xs text-[var(--vx-danger)]"
@@ -100,9 +100,9 @@ export default function PlansClient({
                           updateSet(set.id, slug, plan.id, { distance: Number(e.target.value) }),
                         )
                       }
-                      className="w-20 rounded-[var(--radius-sm)] bg-white/5 border border-white/10 px-2 py-1 text-white text-sm"
+                      className="w-20 rounded-[var(--radius-sm)] bg-white border border-[#E5E9F0] px-2 py-1 text-[#0C1116] text-sm"
                     />
-                    <span className="text-xs text-[var(--vx-slate-300)]">m</span>
+                    <span className="text-xs text-[#7A8296]">m</span>
                     <input
                       defaultValue={set.description}
                       onBlur={(e) =>
@@ -110,7 +110,7 @@ export default function PlansClient({
                           updateSet(set.id, slug, plan.id, { description: e.target.value }),
                         )
                       }
-                      className="flex-1 rounded-[var(--radius-sm)] bg-white/5 border border-white/10 px-2 py-1 text-white text-sm"
+                      className="flex-1 rounded-[var(--radius-sm)] bg-white border border-[#E5E9F0] px-2 py-1 text-[#0C1116] text-sm"
                     />
                     <button
                       onClick={() => startTransition(() => removeSet(set.id, slug, plan.id))}
@@ -121,7 +121,7 @@ export default function PlansClient({
                   </div>
 
                   <div className="flex flex-wrap gap-1.5 mb-1.5">
-                    <span className="text-[10px] text-[var(--vx-slate-300)] mr-1 self-center">Type:</span>
+                    <span className="text-[10px] text-[#7A8296] mr-1 self-center">Type:</span>
                     {SET_TYPE_OPTIONS.map((t) => (
                       <button
                         key={t}
@@ -144,7 +144,7 @@ export default function PlansClient({
                   </div>
 
                   <div className="flex flex-wrap gap-1.5 mb-1.5">
-                    <span className="text-[10px] text-[var(--vx-slate-300)] mr-1 self-center">Tools:</span>
+                    <span className="text-[10px] text-[#7A8296] mr-1 self-center">Tools:</span>
                     {EQUIPMENT_OPTIONS.map((eq) => (
                       <button
                         key={eq}
@@ -167,7 +167,7 @@ export default function PlansClient({
                   </div>
 
                   <div className="flex flex-wrap gap-1.5 items-center">
-                    <span className="text-[10px] text-[var(--vx-slate-300)] mr-1">Zone:</span>
+                    <span className="text-[10px] text-[#7A8296] mr-1">Zone:</span>
                     {ZONE_DEFS.map((z) => (
                       <button
                         key={z.id}
@@ -189,7 +189,7 @@ export default function PlansClient({
                       onBlur={(e) =>
                         startTransition(() => updateSet(set.id, slug, plan.id, { rest: e.target.value }))
                       }
-                      className="ml-auto w-20 rounded-[var(--radius-sm)] bg-white/5 border border-white/10 px-2 py-0.5 text-white text-xs"
+                      className="ml-auto w-20 rounded-[var(--radius-sm)] bg-white border border-[#E5E9F0] px-2 py-0.5 text-[#0C1116] text-xs"
                     />
                   </div>
                 </div>
@@ -200,7 +200,7 @@ export default function PlansClient({
               onClick={() =>
                 startTransition(() => addSet(section.id, slug, plan.id, section.sets.length))
               }
-              className="mt-3 text-xs font-semibold text-white/80"
+              className="mt-3 text-xs font-semibold text-[#4A5568]"
             >
               + Add set
             </button>

@@ -59,22 +59,22 @@ export default function VideoListClient({
       {!open ? (
         <button
           onClick={() => setOpen(true)}
-          className="w-full rounded-[var(--radius-md)] border border-dashed border-white/25 py-3 text-sm font-semibold text-white mb-4"
+          className="w-full rounded-[var(--radius-md)] border border-dashed border-[#CDD3E2] py-3 text-sm font-semibold text-[#0C1116] mb-4"
         >
           + Add video
         </button>
       ) : (
-        <div className="rounded-[var(--radius-lg)] bg-white/5 border border-white/10 p-4 mb-4">
+        <div className="rounded-[var(--radius-lg)] bg-white border border-[#E5E9F0] p-4 mb-4">
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Clip title"
-            className="w-full rounded-[var(--radius-sm)] px-3 py-2 bg-white/5 border border-white/10 text-white text-sm mb-2"
+            className="w-full rounded-[var(--radius-sm)] px-3 py-2 bg-white border border-[#E5E9F0] text-[#0C1116] text-sm mb-2"
           />
           <select
             value={swimmerId}
             onChange={(e) => setSwimmerId(e.target.value)}
-            className="w-full rounded-[var(--radius-sm)] px-3 py-2 bg-white/5 border border-white/10 text-white text-sm mb-2"
+            className="w-full rounded-[var(--radius-sm)] px-3 py-2 bg-white border border-[#E5E9F0] text-[#0C1116] text-sm mb-2"
           >
             <option value="">Squad (no specific swimmer)</option>
             {swimmers.map((s) => (
@@ -86,7 +86,7 @@ export default function VideoListClient({
           <select
             value={raceType}
             onChange={(e) => setRaceType(e.target.value)}
-            className="w-full rounded-[var(--radius-sm)] px-3 py-2 bg-white/5 border border-white/10 text-white text-sm mb-2"
+            className="w-full rounded-[var(--radius-sm)] px-3 py-2 bg-white border border-[#E5E9F0] text-[#0C1116] text-sm mb-2"
           >
             {RACE_TYPES.map((r) => (
               <option key={r} value={r}>
@@ -98,7 +98,7 @@ export default function VideoListClient({
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder="YouTube / Vimeo / video URL"
-            className="w-full rounded-[var(--radius-sm)] px-3 py-2 bg-white/5 border border-white/10 text-white text-sm mb-2"
+            className="w-full rounded-[var(--radius-sm)] px-3 py-2 bg-white border border-[#E5E9F0] text-[#0C1116] text-sm mb-2"
           />
           {error && <p className="text-sm text-[var(--vx-danger)] mb-2">{error}</p>}
           <div className="flex gap-2">
@@ -110,12 +110,12 @@ export default function VideoListClient({
             >
               Add YouTube / link
             </button>
-            <label className="flex-1 rounded-[var(--radius-md)] py-2 text-sm font-semibold text-white border border-white/20 text-center cursor-pointer">
+            <label className="flex-1 rounded-[var(--radius-md)] py-2 text-sm font-semibold text-[#0C1116] border border-[#E5E9F0] text-center cursor-pointer">
               Upload file
               <input type="file" accept="video/*" onChange={onFile} className="hidden" />
             </label>
           </div>
-          <button onClick={() => setOpen(false)} className="mt-2 text-xs text-white/60">
+          <button onClick={() => setOpen(false)} className="mt-2 text-xs text-[#7A8296]">
             Cancel
           </button>
         </div>
@@ -123,10 +123,10 @@ export default function VideoListClient({
 
       <div className="flex flex-col gap-2">
         {videos.map((v) => (
-          <div key={v.id} className="flex items-center justify-between rounded-[var(--radius-md)] bg-white/5 border border-white/10 px-3 py-3">
+          <div key={v.id} className="flex items-center justify-between rounded-[var(--radius-md)] bg-white border border-[#E5E9F0] px-3 py-3">
             <Link href={`/squads/${slug}/tools/video/${v.id}`} className="flex-1">
-              <p className="text-white text-sm font-medium">{v.title}</p>
-              <p className="text-xs text-[var(--vx-slate-300)]">
+              <p className="text-[#0C1116] text-sm font-medium">{v.title}</p>
+              <p className="text-xs text-[#7A8296]">
                 {v.kind.toUpperCase()}
                 {v.race_type ? ` · ${v.race_type}m` : ""}
               </p>
@@ -140,7 +140,7 @@ export default function VideoListClient({
           </div>
         ))}
         {videos.length === 0 && (
-          <p className="text-sm text-[var(--vx-slate-300)]">No videos yet.</p>
+          <p className="text-sm text-[#7A8296]">No videos yet.</p>
         )}
       </div>
     </div>

@@ -9,24 +9,24 @@ export default function StaffClient({ squads }: { squads: Squad[] }) {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-white mb-6">Staff</h1>
+      <h1 className="text-2xl font-bold text-[#0C1116] mb-6">Staff</h1>
       <div className="flex flex-col gap-2">
         {squads.map((sq) => (
-          <div key={sq.id} className="rounded-[var(--radius-md)] bg-white/5 border border-white/10 px-4 py-3">
+          <div key={sq.id} className="rounded-[var(--radius-md)] bg-white border border-[#E5E9F0] px-4 py-3">
             {editing === sq.id ? (
               <StaffEditRow squad={sq} onClose={() => setEditing(null)} />
             ) : (
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-white font-semibold">{sq.name}</p>
-                  <p className="text-xs text-[var(--vx-slate-300)]">
+                  <p className="text-[#0C1116] font-semibold">{sq.name}</p>
+                  <p className="text-xs text-[#7A8296]">
                     {sq.coach_name}
                     {sq.assistant_coach_name ? ` · asst. ${sq.assistant_coach_name}` : ""}
                   </p>
                 </div>
                 <button
                   onClick={() => setEditing(sq.id)}
-                  className="text-xs font-semibold text-white/80 border border-white/15 rounded-[var(--radius-pill)] px-3 py-1"
+                  className="text-xs font-semibold text-[#4A5568] border border-[#E5E9F0] rounded-[var(--radius-pill)] px-3 py-1"
                 >
                   Edit
                 </button>
@@ -49,16 +49,16 @@ function StaffEditRow({ squad, onClose }: { squad: Squad; onClose: () => void })
       <input
         value={coach}
         onChange={(e) => setCoach(e.target.value)}
-        className="rounded-[var(--radius-sm)] px-3 py-2 bg-white/5 border border-white/10 text-white text-sm"
+        className="rounded-[var(--radius-sm)] px-3 py-2 bg-white border border-[#E5E9F0] text-[#0C1116] text-sm"
       />
       <input
         value={asst}
         onChange={(e) => setAsst(e.target.value)}
         placeholder="Assistant coach (optional)"
-        className="rounded-[var(--radius-sm)] px-3 py-2 bg-white/5 border border-white/10 text-white text-sm"
+        className="rounded-[var(--radius-sm)] px-3 py-2 bg-white border border-[#E5E9F0] text-[#0C1116] text-sm"
       />
       <div className="flex gap-2 justify-end">
-        <button onClick={onClose} className="text-xs px-3 py-1.5 text-white/70">
+        <button onClick={onClose} className="text-xs px-3 py-1.5 text-[#4A5568]">
           Cancel
         </button>
         <button

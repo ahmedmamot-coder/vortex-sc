@@ -33,8 +33,8 @@ export default function LinkSwimmerPage() {
       className="flex flex-1 flex-col items-center px-6 py-16"
       style={{ background: "var(--vx-app-bg)" }}
     >
-      <h1 className="text-2xl font-bold text-white mb-1">Link your swimmer</h1>
-      <p className="text-[var(--vx-slate-300)] mb-8 text-sm text-center max-w-xs">
+      <h1 className="text-2xl font-bold text-[#0C1116] mb-1">Link your swimmer</h1>
+      <p className="text-[#7A8296] mb-8 text-sm text-center max-w-xs">
         Search by name. You can link more than one child.
       </p>
 
@@ -43,7 +43,7 @@ export default function LinkSwimmerPage() {
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
           placeholder="Search swimmer name…"
-          className="w-full rounded-[var(--radius-md)] px-4 py-3 bg-white/5 border border-white/15 text-white placeholder:text-white/40 outline-none focus:border-[var(--vx-blue)] mb-4"
+          className="w-full rounded-[var(--radius-md)] px-4 py-3 bg-white border border-[#E5E9F0] text-[#0C1116] placeholder:text-[#9AA2B4] outline-none focus:border-[var(--vx-blue)] mb-4"
         />
 
         <div className="flex flex-col gap-2">
@@ -52,11 +52,11 @@ export default function LinkSwimmerPage() {
             return (
               <div
                 key={m.id}
-                className="flex items-center justify-between rounded-[var(--radius-md)] bg-white/5 border border-white/10 px-4 py-3"
+                className="flex items-center justify-between rounded-[var(--radius-md)] bg-white border border-[#E5E9F0] px-4 py-3"
               >
                 <div>
-                  <p className="text-white font-medium">{m.full_name}</p>
-                  <p className="text-xs text-[var(--vx-slate-300)]">
+                  <p className="text-[#0C1116] font-medium">{m.full_name}</p>
+                  <p className="text-xs text-[#7A8296]">
                     {m.squad_name} · Age {m.age} · {m.gender}
                   </p>
                 </div>
@@ -72,7 +72,7 @@ export default function LinkSwimmerPage() {
             );
           })}
           {query.length >= 2 && !pending && results.length === 0 && (
-            <p className="text-sm text-[var(--vx-slate-300)] text-center py-4">No matches.</p>
+            <p className="text-sm text-[#7A8296] text-center py-4">No matches.</p>
           )}
         </div>
 

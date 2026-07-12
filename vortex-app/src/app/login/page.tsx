@@ -2,50 +2,52 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
-import Image from "next/image";
 import { signInStaff } from "./actions";
 
 export default function StaffLoginPage() {
   const [state, formAction, pending] = useActionState(signInStaff, undefined);
 
   return (
-    <div
-      className="flex flex-1 flex-col items-center justify-center px-6 py-16"
-      style={{ background: "var(--vx-app-bg)" }}
-    >
-      <Image src="/images/vx-mark.png" alt="Vortex" width={56} height={56} className="mb-6" />
-      <h1 className="text-2xl font-bold text-white mb-1">Staff sign in</h1>
-      <p className="text-[var(--vx-slate-300)] mb-8 text-sm">Coaches, admins &amp; club staff</p>
-
-      <form action={formAction} className="w-full max-w-xs flex flex-col gap-3">
-        <input
-          name="email"
-          type="email"
-          placeholder="Email"
-          required
-          className="rounded-[var(--radius-md)] px-4 py-3 bg-white/5 border border-white/15 text-white placeholder:text-white/40 outline-none focus:border-[var(--vx-blue)]"
+    <div className="vx-frame">
+      <div className="relative flex flex-col min-h-dvh text-white" style={{ background: "#0A0F1A" }}>
+        <div
+          className="absolute inset-0"
+          style={{ backgroundImage: "url(/images/hero-coach.jpg)", backgroundSize: "cover", backgroundPosition: "center" }}
         />
-        <input
-          name="password"
-          type="password"
-          placeholder="Password"
-          required
-          className="rounded-[var(--radius-md)] px-4 py-3 bg-white/5 border border-white/15 text-white placeholder:text-white/40 outline-none focus:border-[var(--vx-blue)]"
-        />
-        {state?.error && <p className="text-sm text-[var(--vx-danger)]">{state.error}</p>}
-        <button
-          type="submit"
-          disabled={pending}
-          className="rounded-[var(--radius-md)] px-5 py-3 font-semibold text-white disabled:opacity-60"
-          style={{ background: "var(--vx-blue)" }}
-        >
-          {pending ? "Signing in…" : "Sign in"}
-        </button>
-      </form>
+        <div className="vx-hero-overlay" />
 
-      <Link href="/family/login" className="mt-8 text-sm text-[var(--vx-slate-300)] underline">
-        Parent or swimmer? Sign in here
-      </Link>
+        <div className="relative flex flex-col px-7 pt-16 pb-8 flex-1">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/images/vx-mark.png" alt="Vortex" style={{ width: 52, height: 52 }} />
+          <h1 className="font-bold mt-5 mb-1" style={{ fontSize: 31, letterSpacing: "-0.02em", lineHeight: 1.04 }}>
+            Welcome back.
+          </h1>
+          <p className="m-0 text-[14px]" style={{ color: "rgba(255,255,255,.6)", lineHeight: 1.45, maxWidth: 272 }}>
+            Coaches, admins &amp; club staff — sign in to your account.
+          </p>
+
+          <form action={formAction} className="mt-8 flex flex-col gap-3.5">
+            <p className="text-[10.5px] font-semibold tracking-[0.14em] uppercase m-0" style={{ color: "rgba(255,255,255,.42)" }}>
+              Staff account
+            </p>
+            <input name="email" type="email" placeholder="Email" required className="vx-input-dark" />
+            <input name="password" type="password" placeholder="Password" required className="vx-input-dark" />
+            {state?.error && <p className="m-0 text-[12px] font-semibold" style={{ color: "#FF8A8D" }}>{state.error}</p>}
+            <button
+              type="submit"
+              disabled={pending}
+              className="rounded-[13px] py-3.5 font-bold text-[14px] text-white disabled:opacity-60"
+              style={{ background: "var(--vx-blue)" }}
+            >
+              {pending ? "Signing in…" : "Sign in"}
+            </button>
+          </form>
+
+          <Link href="/family/login" className="mt-auto pt-8 text-[12.5px] text-center" style={{ color: "rgba(255,255,255,.55)" }}>
+            Parent or swimmer? Sign in here
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }

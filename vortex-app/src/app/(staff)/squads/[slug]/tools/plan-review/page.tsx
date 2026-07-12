@@ -22,30 +22,30 @@ export default async function PlanReviewPage({ params }: { params: Promise<{ slu
       >
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs text-[var(--vx-slate-300)]">Verdict</p>
+            <p className="text-xs text-[#7A8296]">Verdict</p>
             <p className="text-xl font-bold" style={{ color: COLORS[result.verdict] }}>
               {LABELS[result.verdict]}
             </p>
           </div>
           <div className="text-right">
-            <p className="text-xs text-[var(--vx-slate-300)]">{plan.title}</p>
-            <p className="text-white font-semibold">{plan.total_metres}m</p>
+            <p className="text-xs text-[#7A8296]">{plan.title}</p>
+            <p className="text-[#0C1116] font-semibold">{plan.total_metres}m</p>
           </div>
         </div>
       </div>
 
-      <p className="text-xs text-[var(--vx-slate-300)] mb-2">
+      <p className="text-xs text-[#7A8296] mb-2">
         Rules decide; the wording explains. Deterministic — no API key needed.
       </p>
 
       <div className="flex flex-col gap-2">
         {result.findings.map((f, i) => (
-          <div key={i} className="flex gap-2 rounded-[var(--radius-md)] bg-white/5 border border-white/10 p-3">
+          <div key={i} className="flex gap-2 rounded-[var(--radius-md)] bg-white border border-[#E5E9F0] p-3">
             <span
               className="mt-0.5 w-2.5 h-2.5 rounded-full flex-none"
               style={{ background: COLORS[f.severity] }}
             />
-            <p className="text-sm text-white/90">{f.message}</p>
+            <p className="text-sm text-[#0C1116]/90">{f.message}</p>
           </div>
         ))}
       </div>

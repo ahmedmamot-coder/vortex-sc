@@ -27,8 +27,8 @@ export default function AttendanceClient({
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-white font-bold">Attendance</h2>
-        <span className="text-sm text-[var(--vx-slate-300)]">
+        <h2 className="text-[#0C1116] font-bold">Attendance</h2>
+        <span className="text-sm text-[#7A8296]">
           Today · {presentCount}/{swimmers.length} present
         </span>
       </div>
@@ -37,8 +37,8 @@ export default function AttendanceClient({
         {swimmers.map((s) => {
           const present = byId.get(s.id);
           return (
-            <div key={s.id} className="flex items-center justify-between rounded-[var(--radius-md)] px-3 py-2 hover:bg-white/5">
-              <span className="text-white text-sm">
+            <div key={s.id} className="flex items-center justify-between rounded-[var(--radius-md)] px-3 py-2 hover:bg-white">
+              <span className="text-[#0C1116] text-sm">
                 {s.first_name} {s.last_name}
               </span>
               <div className="flex gap-1.5">
@@ -72,18 +72,18 @@ export default function AttendanceClient({
         })}
       </div>
 
-      <h3 className="text-white font-bold mb-2 text-sm">Recent sessions</h3>
+      <h3 className="text-[#0C1116] font-bold mb-2 text-sm">Recent sessions</h3>
       <div className="flex flex-wrap gap-2">
         {recentDates.map((d) => (
           <span
             key={d.raw}
-            className="px-3 py-1.5 rounded-[var(--radius-pill)] text-xs bg-white/5 border border-white/10 text-[var(--vx-slate-300)]"
+            className="px-3 py-1.5 rounded-[var(--radius-pill)] text-xs bg-white border border-[#E5E9F0] text-[#7A8296]"
           >
             {d.label}
           </span>
         ))}
         {recentDates.length === 0 && (
-          <p className="text-sm text-[var(--vx-slate-300)]">No sessions recorded yet.</p>
+          <p className="text-sm text-[#7A8296]">No sessions recorded yet.</p>
         )}
       </div>
     </div>

@@ -47,10 +47,10 @@ export default function MeetsClient({
           <button
             key={m.id}
             onClick={() => setSelectedMeet(m)}
-            className="text-left rounded-[var(--radius-md)] bg-white/5 border border-white/10 px-4 py-3 hover:border-white/25"
+            className="text-left rounded-[var(--radius-md)] bg-white border border-[#E5E9F0] px-4 py-3 hover:border-[#CDD3E2]"
           >
-            <p className="text-white font-medium text-sm">{m.name}</p>
-            <p className="text-xs text-[var(--vx-slate-300)] capitalize">{m.status.replace("_", " ")}</p>
+            <p className="text-[#0C1116] font-medium text-sm">{m.name}</p>
+            <p className="text-xs text-[#7A8296] capitalize">{m.status.replace("_", " ")}</p>
           </button>
         ))}
       </div>
@@ -59,10 +59,10 @@ export default function MeetsClient({
 
   return (
     <div>
-      <button onClick={() => setSelectedMeet(null)} className="text-xs text-[var(--vx-slate-300)] mb-3">
+      <button onClick={() => setSelectedMeet(null)} className="text-xs text-[#7A8296] mb-3">
         ← All meets
       </button>
-      <h3 className="text-white font-bold mb-2">{selectedMeet.name}</h3>
+      <h3 className="text-[#0C1116] font-bold mb-2">{selectedMeet.name}</h3>
 
       <div className="flex flex-wrap gap-1.5 mb-4">
         {STATUSES.map((s) => (
@@ -83,21 +83,21 @@ export default function MeetsClient({
         ))}
       </div>
 
-      <div className="rounded-[var(--radius-lg)] bg-white/5 border border-white/10 p-4 mb-4">
-        <p className="text-white font-semibold text-sm mb-3">Add entry</p>
+      <div className="rounded-[var(--radius-lg)] bg-white border border-[#E5E9F0] p-4 mb-4">
+        <p className="text-[#0C1116] font-semibold text-sm mb-3">Add entry</p>
         <div className="grid grid-cols-2 gap-2 mb-2">
-          <select value={swimmerId} onChange={(e) => setSwimmerId(e.target.value)} className="rounded-[var(--radius-sm)] px-2 py-1.5 bg-white/5 border border-white/10 text-white text-sm">
+          <select value={swimmerId} onChange={(e) => setSwimmerId(e.target.value)} className="rounded-[var(--radius-sm)] px-2 py-1.5 bg-white border border-[#E5E9F0] text-[#0C1116] text-sm">
             {swimmers.map((s) => (
               <option key={s.id} value={s.id}>{s.name}</option>
             ))}
           </select>
-          <select value={event} onChange={(e) => setEvent(e.target.value)} className="rounded-[var(--radius-sm)] px-2 py-1.5 bg-white/5 border border-white/10 text-white text-sm">
+          <select value={event} onChange={(e) => setEvent(e.target.value)} className="rounded-[var(--radius-sm)] px-2 py-1.5 bg-white border border-[#E5E9F0] text-[#0C1116] text-sm">
             {EVENT_CATALOG.map((ev) => (
               <option key={ev} value={ev}>{ev}</option>
             ))}
           </select>
-          <input type="number" value={heat} onChange={(e) => setHeat(Number(e.target.value))} placeholder="Heat" className="rounded-[var(--radius-sm)] px-2 py-1.5 bg-white/5 border border-white/10 text-white text-sm" />
-          <input type="number" value={lane} onChange={(e) => setLane(Number(e.target.value))} placeholder="Lane" className="rounded-[var(--radius-sm)] px-2 py-1.5 bg-white/5 border border-white/10 text-white text-sm" />
+          <input type="number" value={heat} onChange={(e) => setHeat(Number(e.target.value))} placeholder="Heat" className="rounded-[var(--radius-sm)] px-2 py-1.5 bg-white border border-[#E5E9F0] text-[#0C1116] text-sm" />
+          <input type="number" value={lane} onChange={(e) => setLane(Number(e.target.value))} placeholder="Lane" className="rounded-[var(--radius-sm)] px-2 py-1.5 bg-white border border-[#E5E9F0] text-[#0C1116] text-sm" />
         </div>
         <button
           onClick={() =>
@@ -115,10 +115,10 @@ export default function MeetsClient({
       </div>
 
       <div className="flex items-center justify-between mb-2">
-        <p className="text-white font-semibold text-sm">Entries ({entries.length})</p>
+        <p className="text-[#0C1116] font-semibold text-sm">Entries ({entries.length})</p>
         <button
           onClick={() => window.print()}
-          className="text-xs font-semibold text-white border border-white/20 rounded-[var(--radius-pill)] px-3 py-1"
+          className="text-xs font-semibold text-[#0C1116] border border-[#E5E9F0] rounded-[var(--radius-pill)] px-3 py-1"
         >
           Print program
         </button>
@@ -131,11 +131,11 @@ export default function MeetsClient({
           </p>
           <div className="flex flex-col gap-1">
             {entries.map((e) => (
-              <div key={e.id} className="flex items-center justify-between rounded-[var(--radius-sm)] bg-white/5 print:bg-transparent px-3 py-2 text-sm">
-                <span className="text-white print:text-black">
+              <div key={e.id} className="flex items-center justify-between rounded-[var(--radius-sm)] bg-white print:bg-transparent px-3 py-2 text-sm">
+                <span className="text-[#0C1116] print:text-black">
                   H{e.heat} · Ln {e.lane} · {e.swimmers.first_name} {e.swimmers.last_name}
                 </span>
-                <span className="text-[var(--vx-slate-300)] print:text-black">{e.event}</span>
+                <span className="text-[#7A8296] print:text-black">{e.event}</span>
                 <button
                   onClick={() =>
                     startTransition(async () => {
@@ -151,7 +151,7 @@ export default function MeetsClient({
               </div>
             ))}
             {entries.length === 0 && (
-              <p className="text-sm text-[var(--vx-slate-300)] print:text-black">No entries yet.</p>
+              <p className="text-sm text-[#7A8296] print:text-black">No entries yet.</p>
             )}
           </div>
         </div>

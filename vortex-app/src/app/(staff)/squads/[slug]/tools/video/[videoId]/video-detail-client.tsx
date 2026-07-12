@@ -89,7 +89,7 @@ export default function VideoDetailClient({
 
       {video.kind === "mp4" && (
         <div className="flex gap-1.5 mb-3">
-          <span className="text-xs text-[var(--vx-slate-300)] self-center mr-1">Speed:</span>
+          <span className="text-xs text-[#7A8296] self-center mr-1">Speed:</span>
           {[0.25, 0.5, 0.75, 1].map((r) => (
             <button
               key={r}
@@ -103,7 +103,7 @@ export default function VideoDetailClient({
           <a
             href={video.url}
             download
-            className="ml-auto px-2 py-1 rounded-[var(--radius-pill)] text-xs font-semibold text-white border border-white/20"
+            className="ml-auto px-2 py-1 rounded-[var(--radius-pill)] text-xs font-semibold text-[#0C1116] border border-[#E5E9F0]"
           >
             Download
           </a>
@@ -111,9 +111,9 @@ export default function VideoDetailClient({
       )}
 
       {/* Split capture */}
-      <div className="rounded-[var(--radius-lg)] bg-white/5 border border-white/10 p-4 mb-4">
+      <div className="rounded-[var(--radius-lg)] bg-white border border-[#E5E9F0] p-4 mb-4">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-white font-semibold text-sm">
+          <p className="text-[#0C1116] font-semibold text-sm">
             Race splits · {video.race_type ?? "50"}m
           </p>
           <button onClick={resetSplits} className="text-xs text-[var(--vx-danger)]">
@@ -150,9 +150,9 @@ export default function VideoDetailClient({
               const delta = i === 0 ? s.seconds : s.seconds - splits[i - 1].seconds;
               return (
                 <div key={i} className="flex items-center justify-between text-sm">
-                  <span className="text-white">{s.label}</span>
-                  <span className="text-[var(--vx-slate-300)]">
-                    {formatTime(s.seconds)} <span className="text-white/50">(+{formatTime(delta)})</span>
+                  <span className="text-[#0C1116]">{s.label}</span>
+                  <span className="text-[#7A8296]">
+                    {formatTime(s.seconds)} <span className="text-[#9AA2B4]">(+{formatTime(delta)})</span>
                   </span>
                 </div>
               );
@@ -162,14 +162,14 @@ export default function VideoDetailClient({
       </div>
 
       {/* Notes */}
-      <div className="rounded-[var(--radius-lg)] bg-white/5 border border-white/10 p-4">
-        <p className="text-white font-semibold text-sm mb-3">Notes</p>
+      <div className="rounded-[var(--radius-lg)] bg-white border border-[#E5E9F0] p-4">
+        <p className="text-[#0C1116] font-semibold text-sm mb-3">Notes</p>
         <div className="flex gap-2 mb-3">
           <input
             value={noteText}
             onChange={(e) => setNoteText(e.target.value)}
             placeholder="Note at current time…"
-            className="flex-1 rounded-[var(--radius-sm)] px-3 py-2 bg-white/5 border border-white/10 text-white text-sm"
+            className="flex-1 rounded-[var(--radius-sm)] px-3 py-2 bg-white border border-[#E5E9F0] text-[#0C1116] text-sm"
           />
           <button
             onClick={() => {
@@ -195,7 +195,7 @@ export default function VideoDetailClient({
             .sort((a, b) => a.timestamp_seconds - b.timestamp_seconds)
             .map((n) => (
               <div key={n.id} className="flex items-center justify-between text-sm">
-                <span className="text-white">
+                <span className="text-[#0C1116]">
                   <span className="text-[var(--vx-blue)] font-semibold mr-2">
                     {formatTime(n.timestamp_seconds)}
                   </span>
@@ -212,7 +212,7 @@ export default function VideoDetailClient({
                 </button>
               </div>
             ))}
-          {notes.length === 0 && <p className="text-xs text-[var(--vx-slate-300)]">No notes yet.</p>}
+          {notes.length === 0 && <p className="text-xs text-[#7A8296]">No notes yet.</p>}
         </div>
       </div>
     </div>

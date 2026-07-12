@@ -27,7 +27,7 @@ export default function AcademyClient({
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-white mb-4">Academy</h1>
+      <h1 className="text-2xl font-bold text-[#0C1116] mb-4">Academy</h1>
       <div className="flex gap-2 mb-4">
         {(["trials", "fees"] as const).map((t) => (
           <button
@@ -43,12 +43,12 @@ export default function AcademyClient({
 
       {tab === "trials" && (
         <div>
-          <div className="rounded-[var(--radius-lg)] bg-white/5 border border-white/10 p-4 mb-4">
-            <p className="text-white font-semibold text-sm mb-3">New trial request</p>
+          <div className="rounded-[var(--radius-lg)] bg-white border border-[#E5E9F0] p-4 mb-4">
+            <p className="text-[#0C1116] font-semibold text-sm mb-3">New trial request</p>
             <div className="grid grid-cols-3 gap-2 mb-2">
-              <input placeholder="Child name" value={name} onChange={(e) => setName(e.target.value)} className="rounded-[var(--radius-sm)] px-2 py-1.5 bg-white/5 border border-white/10 text-white text-sm" />
-              <input placeholder="Age" value={age} onChange={(e) => setAge(e.target.value)} className="rounded-[var(--radius-sm)] px-2 py-1.5 bg-white/5 border border-white/10 text-white text-sm" />
-              <input placeholder="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} className="rounded-[var(--radius-sm)] px-2 py-1.5 bg-white/5 border border-white/10 text-white text-sm" />
+              <input placeholder="Child name" value={name} onChange={(e) => setName(e.target.value)} className="rounded-[var(--radius-sm)] px-2 py-1.5 bg-white border border-[#E5E9F0] text-[#0C1116] text-sm" />
+              <input placeholder="Age" value={age} onChange={(e) => setAge(e.target.value)} className="rounded-[var(--radius-sm)] px-2 py-1.5 bg-white border border-[#E5E9F0] text-[#0C1116] text-sm" />
+              <input placeholder="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} className="rounded-[var(--radius-sm)] px-2 py-1.5 bg-white border border-[#E5E9F0] text-[#0C1116] text-sm" />
             </div>
             <button
               onClick={() =>
@@ -69,17 +69,17 @@ export default function AcademyClient({
 
           <div className="flex flex-col gap-2">
             {trials.map((t) => (
-              <div key={t.id} className="flex items-center justify-between rounded-[var(--radius-md)] bg-white/5 border border-white/10 px-3 py-2">
+              <div key={t.id} className="flex items-center justify-between rounded-[var(--radius-md)] bg-white border border-[#E5E9F0] px-3 py-2">
                 <div>
-                  <p className="text-white text-sm">{t.child_name}</p>
-                  <p className="text-xs text-[var(--vx-slate-300)]">
+                  <p className="text-[#0C1116] text-sm">{t.child_name}</p>
+                  <p className="text-xs text-[#7A8296]">
                     {t.age ? `Age ${t.age}` : ""} {t.phone ? `· ${t.phone}` : ""}
                   </p>
                 </div>
                 <select
                   value={t.status}
                   onChange={(e) => startTransition(() => setTrialStatus(t.id, e.target.value))}
-                  className="rounded-[var(--radius-sm)] px-2 py-1 bg-white/5 border border-white/10 text-white text-xs capitalize"
+                  className="rounded-[var(--radius-sm)] px-2 py-1 bg-white border border-[#E5E9F0] text-[#0C1116] text-xs capitalize"
                 >
                   {TRIAL_STATUSES.map((s) => (
                     <option key={s} value={s}>{s}</option>
@@ -87,18 +87,18 @@ export default function AcademyClient({
                 </select>
               </div>
             ))}
-            {trials.length === 0 && <p className="text-sm text-[var(--vx-slate-300)]">No trial requests yet.</p>}
+            {trials.length === 0 && <p className="text-sm text-[#7A8296]">No trial requests yet.</p>}
           </div>
         </div>
       )}
 
       {tab === "fees" && (
         <div>
-          <div className="rounded-[var(--radius-lg)] bg-white/5 border border-white/10 p-4 mb-4">
-            <p className="text-white font-semibold text-sm mb-3">Add fee</p>
+          <div className="rounded-[var(--radius-lg)] bg-white border border-[#E5E9F0] p-4 mb-4">
+            <p className="text-[#0C1116] font-semibold text-sm mb-3">Add fee</p>
             <div className="grid grid-cols-2 gap-2 mb-2">
-              <input placeholder="Program" value={program} onChange={(e) => setProgram(e.target.value)} className="rounded-[var(--radius-sm)] px-2 py-1.5 bg-white/5 border border-white/10 text-white text-sm" />
-              <input placeholder={`Price (${currency})`} value={price} onChange={(e) => setPrice(e.target.value)} className="rounded-[var(--radius-sm)] px-2 py-1.5 bg-white/5 border border-white/10 text-white text-sm" />
+              <input placeholder="Program" value={program} onChange={(e) => setProgram(e.target.value)} className="rounded-[var(--radius-sm)] px-2 py-1.5 bg-white border border-[#E5E9F0] text-[#0C1116] text-sm" />
+              <input placeholder={`Price (${currency})`} value={price} onChange={(e) => setPrice(e.target.value)} className="rounded-[var(--radius-sm)] px-2 py-1.5 bg-white border border-[#E5E9F0] text-[#0C1116] text-sm" />
             </div>
             <button
               onClick={() =>
@@ -118,10 +118,10 @@ export default function AcademyClient({
 
           <div className="flex flex-col gap-2">
             {fees.map((f) => (
-              <div key={f.id} className="flex items-center justify-between rounded-[var(--radius-md)] bg-white/5 border border-white/10 px-3 py-2">
-                <span className="text-white text-sm">{f.program_name}</span>
+              <div key={f.id} className="flex items-center justify-between rounded-[var(--radius-md)] bg-white border border-[#E5E9F0] px-3 py-2">
+                <span className="text-[#0C1116] text-sm">{f.program_name}</span>
                 <div className="flex items-center gap-3">
-                  <span className="text-white font-semibold text-sm">
+                  <span className="text-[#0C1116] font-semibold text-sm">
                     {f.price} {f.currency}
                   </span>
                   <button onClick={() => startTransition(() => deleteFee(f.id))} className="text-[var(--vx-danger)] text-xs">
@@ -130,7 +130,7 @@ export default function AcademyClient({
                 </div>
               </div>
             ))}
-            {fees.length === 0 && <p className="text-sm text-[var(--vx-slate-300)]">No fees set.</p>}
+            {fees.length === 0 && <p className="text-sm text-[#7A8296]">No fees set.</p>}
           </div>
         </div>
       )}

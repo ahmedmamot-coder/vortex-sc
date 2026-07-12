@@ -38,7 +38,7 @@ export default function SwimmersAdminClient({
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold text-white">Swimmers</h1>
+        <h1 className="text-2xl font-bold text-[#0C1116]">Swimmers</h1>
         <button
           onClick={() => setShowAdd((v) => !v)}
           className="text-sm font-semibold px-3 py-1.5 rounded-[var(--radius-pill)] text-white"
@@ -55,12 +55,12 @@ export default function SwimmersAdminClient({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search name…"
-          className="flex-1 rounded-[var(--radius-md)] px-3 py-2 bg-white/5 border border-white/10 text-white text-sm"
+          className="flex-1 rounded-[var(--radius-md)] px-3 py-2 bg-white border border-[#E5E9F0] text-[#0C1116] text-sm"
         />
         <select
           value={squadFilter}
           onChange={(e) => setSquadFilter(e.target.value)}
-          className="rounded-[var(--radius-md)] px-3 py-2 bg-white/5 border border-white/10 text-white text-sm"
+          className="rounded-[var(--radius-md)] px-3 py-2 bg-white border border-[#E5E9F0] text-[#0C1116] text-sm"
         >
           <option value="all">All squads</option>
           {squads.map((sq) => (
@@ -71,11 +71,11 @@ export default function SwimmersAdminClient({
         </select>
       </div>
 
-      <p className="text-xs text-[var(--vx-slate-300)] mb-2">{filtered.length} swimmers</p>
+      <p className="text-xs text-[#7A8296] mb-2">{filtered.length} swimmers</p>
 
       <div className="flex flex-col gap-1 max-h-[70vh] overflow-y-auto vx-scroll">
         {filtered.map((s) => (
-          <div key={s.id} className="rounded-[var(--radius-md)] bg-white/5 border border-white/10 p-3">
+          <div key={s.id} className="rounded-[var(--radius-md)] bg-white border border-[#E5E9F0] p-3">
             {editingId === s.id ? (
               <EditSwimmerForm
                 swimmer={s}
@@ -85,10 +85,10 @@ export default function SwimmersAdminClient({
             ) : (
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-white font-medium">
+                  <p className="text-[#0C1116] font-medium">
                     {s.first_name} {s.last_name}
                   </p>
-                  <p className="text-xs text-[var(--vx-slate-300)]">
+                  <p className="text-xs text-[#7A8296]">
                     {s.squads?.name} · Age {s.age} · {s.gender} ·{" "}
                     {s.personal_bests[0] ? `${s.personal_bests[0].event} ${s.personal_bests[0].time_text}` : "no PBs"}
                   </p>
@@ -96,7 +96,7 @@ export default function SwimmersAdminClient({
                 <div className="flex gap-2">
                   <button
                     onClick={() => setEditingId(s.id)}
-                    className="text-xs font-semibold text-white/80 border border-white/15 rounded-[var(--radius-pill)] px-3 py-1"
+                    className="text-xs font-semibold text-[#4A5568] border border-[#E5E9F0] rounded-[var(--radius-pill)] px-3 py-1"
                   >
                     Edit
                   </button>
@@ -106,7 +106,7 @@ export default function SwimmersAdminClient({
                         startTransition(() => deleteSwimmer(s.id));
                       }
                     }}
-                    className="text-xs font-semibold text-[var(--vx-danger)] border border-white/15 rounded-[var(--radius-pill)] px-3 py-1"
+                    className="text-xs font-semibold text-[var(--vx-danger)] border border-[#E5E9F0] rounded-[var(--radius-pill)] px-3 py-1"
                   >
                     Delete
                   </button>
@@ -129,31 +129,31 @@ function AddSwimmerForm({ squads, onClose }: { squads: Squad[]; onClose: () => v
   const [pending, startTransition] = useTransition();
 
   return (
-    <div className="rounded-[var(--radius-md)] bg-white/5 border border-white/10 p-4 mb-4">
+    <div className="rounded-[var(--radius-md)] bg-white border border-[#E5E9F0] p-4 mb-4">
       <div className="grid grid-cols-2 gap-2 mb-2">
         <input
           placeholder="First name"
           value={firstName}
           onChange={(e) => setFirstName(e.target.value)}
-          className="rounded-[var(--radius-sm)] px-3 py-2 bg-white/5 border border-white/10 text-white text-sm"
+          className="rounded-[var(--radius-sm)] px-3 py-2 bg-white border border-[#E5E9F0] text-[#0C1116] text-sm"
         />
         <input
           placeholder="Last name"
           value={lastName}
           onChange={(e) => setLastName(e.target.value)}
-          className="rounded-[var(--radius-sm)] px-3 py-2 bg-white/5 border border-white/10 text-white text-sm"
+          className="rounded-[var(--radius-sm)] px-3 py-2 bg-white border border-[#E5E9F0] text-[#0C1116] text-sm"
         />
         <input
           type="number"
           placeholder="Age"
           value={age}
           onChange={(e) => setAge(Number(e.target.value))}
-          className="rounded-[var(--radius-sm)] px-3 py-2 bg-white/5 border border-white/10 text-white text-sm"
+          className="rounded-[var(--radius-sm)] px-3 py-2 bg-white border border-[#E5E9F0] text-[#0C1116] text-sm"
         />
         <select
           value={gender}
           onChange={(e) => setGender(e.target.value as "Girls" | "Boys")}
-          className="rounded-[var(--radius-sm)] px-3 py-2 bg-white/5 border border-white/10 text-white text-sm"
+          className="rounded-[var(--radius-sm)] px-3 py-2 bg-white border border-[#E5E9F0] text-[#0C1116] text-sm"
         >
           <option value="Girls">Girls</option>
           <option value="Boys">Boys</option>
@@ -161,7 +161,7 @@ function AddSwimmerForm({ squads, onClose }: { squads: Squad[]; onClose: () => v
         <select
           value={squadId}
           onChange={(e) => setSquadId(e.target.value)}
-          className="col-span-2 rounded-[var(--radius-sm)] px-3 py-2 bg-white/5 border border-white/10 text-white text-sm"
+          className="col-span-2 rounded-[var(--radius-sm)] px-3 py-2 bg-white border border-[#E5E9F0] text-[#0C1116] text-sm"
         >
           {squads.map((sq) => (
             <option key={sq.id} value={sq.id}>
@@ -171,7 +171,7 @@ function AddSwimmerForm({ squads, onClose }: { squads: Squad[]; onClose: () => v
         </select>
       </div>
       <div className="flex gap-2 justify-end">
-        <button onClick={onClose} className="text-xs px-3 py-1.5 text-white/70">
+        <button onClick={onClose} className="text-xs px-3 py-1.5 text-[#4A5568]">
           Cancel
         </button>
         <button
@@ -216,23 +216,23 @@ function EditSwimmerForm({
         <input
           value={firstName}
           onChange={(e) => setFirstName(e.target.value)}
-          className="rounded-[var(--radius-sm)] px-3 py-2 bg-white/5 border border-white/10 text-white text-sm"
+          className="rounded-[var(--radius-sm)] px-3 py-2 bg-white border border-[#E5E9F0] text-[#0C1116] text-sm"
         />
         <input
           value={lastName}
           onChange={(e) => setLastName(e.target.value)}
-          className="rounded-[var(--radius-sm)] px-3 py-2 bg-white/5 border border-white/10 text-white text-sm"
+          className="rounded-[var(--radius-sm)] px-3 py-2 bg-white border border-[#E5E9F0] text-[#0C1116] text-sm"
         />
         <input
           type="number"
           value={age}
           onChange={(e) => setAge(Number(e.target.value))}
-          className="rounded-[var(--radius-sm)] px-3 py-2 bg-white/5 border border-white/10 text-white text-sm"
+          className="rounded-[var(--radius-sm)] px-3 py-2 bg-white border border-[#E5E9F0] text-[#0C1116] text-sm"
         />
         <select
           value={squadId}
           onChange={(e) => setSquadId(e.target.value)}
-          className="rounded-[var(--radius-sm)] px-3 py-2 bg-white/5 border border-white/10 text-white text-sm"
+          className="rounded-[var(--radius-sm)] px-3 py-2 bg-white border border-[#E5E9F0] text-[#0C1116] text-sm"
         >
           {squads.map((sq) => (
             <option key={sq.id} value={sq.id}>
@@ -242,12 +242,12 @@ function EditSwimmerForm({
         </select>
       </div>
 
-      <p className="text-xs text-[var(--vx-slate-300)] mb-1">Personal Bests</p>
+      <p className="text-xs text-[#7A8296] mb-1">Personal Bests</p>
       <div className="flex flex-wrap gap-1.5 mb-2">
         {pbs.map((pb) => (
           <span
             key={pb.id}
-            className="flex items-center gap-1 text-xs bg-white/10 rounded-[var(--radius-pill)] px-2 py-1 text-white"
+            className="flex items-center gap-1 text-xs bg-[#EEF1F5] rounded-[var(--radius-pill)] px-2 py-1 text-[#0C1116]"
           >
             {pb.event} · {pb.time_text}
             <button
@@ -266,7 +266,7 @@ function EditSwimmerForm({
         <select
           value={newEvent}
           onChange={(e) => setNewEvent(e.target.value)}
-          className="rounded-[var(--radius-sm)] px-2 py-1 bg-white/5 border border-white/10 text-white text-xs"
+          className="rounded-[var(--radius-sm)] px-2 py-1 bg-white border border-[#E5E9F0] text-[#0C1116] text-xs"
         >
           {EVENT_CATALOG.map((ev) => (
             <option key={ev} value={ev}>
@@ -278,7 +278,7 @@ function EditSwimmerForm({
           placeholder="e.g. 1:05.19"
           value={newTime}
           onChange={(e) => setNewTime(e.target.value)}
-          className="rounded-[var(--radius-sm)] px-2 py-1 bg-white/5 border border-white/10 text-white text-xs w-28"
+          className="rounded-[var(--radius-sm)] px-2 py-1 bg-white border border-[#E5E9F0] text-[#0C1116] text-xs w-28"
         />
         <button
           onClick={() => {
@@ -299,7 +299,7 @@ function EditSwimmerForm({
       </div>
 
       <div className="flex gap-2 justify-end">
-        <button onClick={onClose} className="text-xs px-3 py-1.5 text-white/70">
+        <button onClick={onClose} className="text-xs px-3 py-1.5 text-[#4A5568]">
           Cancel
         </button>
         <button

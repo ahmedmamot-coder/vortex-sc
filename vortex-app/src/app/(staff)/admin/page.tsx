@@ -11,16 +11,16 @@ const ROWS = [
 export default function AdminHome() {
   return (
     <div>
-      <h1 className="text-2xl font-bold text-white mb-6">Club Administration</h1>
+      <h1 className="text-2xl font-bold text-[#0C1116] mb-6">Club Administration</h1>
       <div className="flex flex-col gap-2">
         {ROWS.map((r) => (
           <Link
             key={r.href}
             href={r.href}
-            className="rounded-[var(--radius-md)] bg-white/5 border border-white/10 px-4 py-4 hover:border-white/25"
+            className="rounded-[var(--radius-md)] bg-white border border-[#E5E9F0] px-4 py-4 hover:border-[#CDD3E2]"
           >
-            <p className="text-white font-semibold">{r.label}</p>
-            <p className="text-sm text-[var(--vx-slate-300)]">{r.desc}</p>
+            <p className="text-[#0C1116] font-semibold">{r.label}</p>
+            <p className="text-sm text-[#7A8296]">{r.desc}</p>
           </Link>
         ))}
       </div>

@@ -33,7 +33,7 @@ export default function FitnessClient({
     <div>
       <div className="flex flex-col gap-4">
         {sections.map((section, si) => (
-          <div key={si} className="rounded-[var(--radius-lg)] bg-white/5 border border-white/10 p-4">
+          <div key={si} className="rounded-[var(--radius-lg)] bg-white border border-[#E5E9F0] p-4">
             <div className="flex items-center justify-between mb-3">
               <input
                 value={section.name}
@@ -42,7 +42,7 @@ export default function FitnessClient({
                   next[si] = { ...section, name: e.target.value };
                   update(next);
                 }}
-                className="text-white font-bold bg-transparent outline-none border-b border-transparent focus:border-white/30"
+                className="text-[#0C1116] font-bold bg-transparent outline-none border-b border-transparent focus:border-[#CDD3E2]"
               />
               <button
                 onClick={() => update(sections.filter((_, i) => i !== si))}
@@ -62,7 +62,7 @@ export default function FitnessClient({
                       next[si].exercises[ei] = { ...ex, name: e.target.value };
                       update(next);
                     }}
-                    className="rounded-[var(--radius-sm)] px-2 py-1.5 bg-white/5 border border-white/10 text-white text-sm"
+                    className="rounded-[var(--radius-sm)] px-2 py-1.5 bg-white border border-[#E5E9F0] text-[#0C1116] text-sm"
                   />
                   {(["sets", "reps", "rest"] as const).map((field) => (
                     <input
@@ -74,7 +74,7 @@ export default function FitnessClient({
                         next[si].exercises[ei] = { ...ex, [field]: e.target.value };
                         update(next);
                       }}
-                      className="w-16 rounded-[var(--radius-sm)] px-2 py-1.5 bg-white/5 border border-white/10 text-white text-xs"
+                      className="w-16 rounded-[var(--radius-sm)] px-2 py-1.5 bg-white border border-[#E5E9F0] text-[#0C1116] text-xs"
                     />
                   ))}
                   <button
@@ -97,7 +97,7 @@ export default function FitnessClient({
                 next[si].exercises = [...section.exercises, { name: "New exercise", sets: "3", reps: "10", rest: "60s" }];
                 update(next);
               }}
-              className="mt-2 text-xs font-semibold text-white/80"
+              className="mt-2 text-xs font-semibold text-[#4A5568]"
             >
               + Add exercise
             </button>
@@ -108,7 +108,7 @@ export default function FitnessClient({
       <div className="flex gap-2 mt-4">
         <button
           onClick={() => update([...sections, { name: "New section", exercises: [] }])}
-          className="rounded-[var(--radius-md)] px-4 py-2 text-sm font-semibold text-white border border-white/20"
+          className="rounded-[var(--radius-md)] px-4 py-2 text-sm font-semibold text-[#0C1116] border border-[#E5E9F0]"
         >
           + Add section
         </button>

@@ -64,48 +64,48 @@ export default function SwimmerProfileClient({
   const best = series.length ? Math.min(...series.map((s) => s.seconds)) : null;
 
   return (
-    <div className="px-5 py-6 max-w-3xl mx-auto">
+    <div className="px-4 py-5 max-w-3xl mx-auto">
       <div className="flex items-center gap-4 mb-6">
         <div
-          className="w-16 h-16 rounded-full flex items-center justify-center text-white text-xl font-bold relative"
+          className="w-16 h-16 rounded-[16px] flex items-center justify-center text-white text-xl font-bold relative"
           style={{ background: squad.accent_color }}
         >
           {swimmer.first_name[0]}
           {swimmer.last_name[0]}
           <span
-            className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center text-xs bg-[#0C1116] border-2 border-[var(--vx-app-bg)]"
+            className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center text-xs bg-white border-2 border-white shadow"
             style={{ color: swimmer.gender === "Girls" ? "#E5497D" : "#2A63E0" }}
           >
             {swimmer.gender === "Girls" ? "♀" : "♂"}
           </span>
         </div>
         <div>
-          <h1 className="text-xl font-bold text-white">
+          <h1 className="text-xl font-bold text-[#0C1116]">
             {swimmer.first_name} {swimmer.last_name}
           </h1>
-          <p className="text-sm text-[var(--vx-slate-300)]">
+          <p className="text-sm text-[#7A8296]">
             {squad.name} · Age {swimmer.age}
           </p>
         </div>
       </div>
 
-      <h2 className="text-white font-bold mb-2">Personal Bests</h2>
+      <h2 className="text-[#0C1116] font-bold mb-2">Personal Bests</h2>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-8">
         {pbs.map((pb) => (
-          <div key={pb.id} className="rounded-[var(--radius-md)] bg-white/5 border border-white/10 p-3">
-            <p className="text-xs text-[var(--vx-slate-300)]">
+          <div key={pb.id} className="rounded-[var(--radius-md)] bg-white p-3" style={{ border: "1px solid #E5E9F0" }}>
+            <p className="text-xs text-[#7A8296]">
               {pb.event} · {pb.course === "L" ? "LCM" : "SCM"}
             </p>
-            <p className="text-white font-bold">{pb.time_text}</p>
+            <p className="text-[#0C1116] font-bold">{pb.time_text}</p>
             {pb.drop_text && <p className="text-xs text-[var(--vx-success)]">{pb.drop_text}</p>}
           </div>
         ))}
         {pbs.length === 0 && (
-          <p className="text-sm text-[var(--vx-slate-300)] col-span-full">No recorded PBs.</p>
+          <p className="text-sm text-[#7A8296] col-span-full">No recorded PBs.</p>
         )}
       </div>
 
-      <div className="flex rounded-[var(--radius-md)] overflow-hidden border border-white/15 mb-4 w-fit">
+      <div className="flex rounded-[var(--radius-md)] overflow-hidden mb-4 w-fit" style={{ border: "1px solid #E5E9F0" }}>
         {(["L", "S"] as Course[]).map((c) => (
           <button
             key={c}
@@ -116,7 +116,7 @@ export default function SwimmerProfileClient({
             className="px-4 py-2 text-sm font-semibold"
             style={{
               background: course === c ? "var(--vx-blue)" : "transparent",
-              color: course === c ? "#fff" : "var(--vx-slate-300)",
+              color: course === c ? "#fff" : "#7A8296",
             }}
           >
             {c === "L" ? "Long Course" : "Short Course"}
@@ -131,24 +131,24 @@ export default function SwimmerProfileClient({
             onClick={() => setSelectedEvent(ev)}
             className="px-3 py-1.5 rounded-[var(--radius-pill)] text-xs font-semibold"
             style={{
-              background: ev === activeEvent ? squad.accent_color : "rgba(255,255,255,0.06)",
-              color: "#fff",
+              background: ev === activeEvent ? squad.accent_color : "#EEF1F5",
+              color: ev === activeEvent ? "#fff" : "#4A5568",
             }}
           >
             {ev}
           </button>
         ))}
         {eventsForCourse.length === 0 && (
-          <p className="text-sm text-[var(--vx-slate-300)]">
+          <p className="text-sm text-[#7A8296]">
             No recorded swims for this course.
           </p>
         )}
       </div>
 
       {series.length > 0 && (
-        <div className="rounded-[var(--radius-lg)] bg-white/5 border border-white/10 p-4 mb-4">
+        <div className="rounded-[var(--radius-lg)] bg-white p-4 mb-4" style={{ border: "1px solid #E5E9F0" }}>
           <div className="flex items-baseline justify-between mb-2">
-            <p className="text-white font-bold">{activeEvent}</p>
+            <p className="text-[#0C1116] font-bold">{activeEvent}</p>
             {best != null && (
               <p className="text-sm text-[var(--vx-success)] font-semibold">
                 Best {formatTime(best)}
@@ -177,7 +177,7 @@ export default function SwimmerProfileClient({
                       cy={props.cy}
                       r={5}
                       fill={props.payload?.color ?? "#3B82F6"}
-                      stroke="#0C1116"
+                      stroke="#fff"
                     />
                   )}
                 />
@@ -189,12 +189,12 @@ export default function SwimmerProfileClient({
             {[...series].reverse().map((s, i) => (
               <div key={i} className="flex items-center gap-2 text-sm">
                 <span className="w-2.5 h-2.5 rounded-full" style={{ background: s.color }} />
-                <span className="text-[var(--vx-slate-300)] flex-1">
+                <span className="text-[#7A8296] flex-1">
                   {s.date} · {s.meet}
                 </span>
                 <span
                   className="font-semibold"
-                  style={{ color: s.seconds === best ? "var(--vx-success)" : "#fff" }}
+                  style={{ color: s.seconds === best ? "var(--vx-success)" : "#0C1116" }}
                 >
                   {s.label}
                 </span>

@@ -12,18 +12,18 @@ export default function SettingsClient({ club, totalSwimmers }: { club: Club; to
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-white mb-6">Settings</h1>
+      <h1 className="text-2xl font-bold text-[#0C1116] mb-6">Settings</h1>
 
-      <div className="rounded-[var(--radius-md)] bg-white/5 border border-white/10 p-4 mb-4">
-        <p className="text-sm text-[var(--vx-slate-300)] mb-1">Club name</p>
+      <div className="rounded-[var(--radius-md)] bg-white border border-[#E5E9F0] p-4 mb-4">
+        <p className="text-sm text-[#7A8296] mb-1">Club name</p>
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
           onBlur={() => startTransition(() => updateClub(club.id, { name }))}
-          className="w-full rounded-[var(--radius-sm)] px-3 py-2 bg-white/5 border border-white/10 text-white text-sm mb-4"
+          className="w-full rounded-[var(--radius-sm)] px-3 py-2 bg-white border border-[#E5E9F0] text-[#0C1116] text-sm mb-4"
         />
 
-        <p className="text-sm text-[var(--vx-slate-300)] mb-1">Zone ruleset</p>
+        <p className="text-sm text-[#7A8296] mb-1">Zone ruleset</p>
         <div className="flex gap-2 mb-4">
           {(["5", "6"] as const).map((z) => (
             <button
@@ -43,18 +43,18 @@ export default function SettingsClient({ club, totalSwimmers }: { club: Club; to
           ))}
         </div>
 
-        <p className="text-sm text-[var(--vx-slate-300)] mb-1">Currency</p>
+        <p className="text-sm text-[#7A8296] mb-1">Currency</p>
         <input
           value={currency}
           onChange={(e) => setCurrency(e.target.value)}
           onBlur={() => startTransition(() => updateClub(club.id, { currency }))}
-          className="w-full rounded-[var(--radius-sm)] px-3 py-2 bg-white/5 border border-white/10 text-white text-sm"
+          className="w-full rounded-[var(--radius-sm)] px-3 py-2 bg-white border border-[#E5E9F0] text-[#0C1116] text-sm"
         />
       </div>
 
-      <div className="rounded-[var(--radius-md)] bg-white/5 border border-white/10 p-4">
-        <p className="text-sm text-[var(--vx-slate-300)]">Club stats</p>
-        <p className="text-white font-bold text-xl">{totalSwimmers} swimmers</p>
+      <div className="rounded-[var(--radius-md)] bg-white border border-[#E5E9F0] p-4">
+        <p className="text-sm text-[#7A8296]">Club stats</p>
+        <p className="text-[#0C1116] font-bold text-xl">{totalSwimmers} swimmers</p>
       </div>
     </div>
   );

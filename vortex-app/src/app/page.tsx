@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import Image from "next/image";
 
 export default async function Home() {
   const session = await getSession();
@@ -9,29 +8,53 @@ export default async function Home() {
   if (session.kind === "family") redirect("/family");
 
   return (
-    <div
-      className="flex flex-1 flex-col items-center justify-center px-6 py-16 text-center"
-      style={{ background: "var(--vx-app-bg)" }}
-    >
-      <Image src="/images/vx-mark.png" alt="Vortex" width={72} height={72} className="mb-6" />
-      <h1 className="text-3xl font-bold text-white mb-2">Vortex Swimming Club</h1>
-      <p className="text-[var(--vx-slate-300)] mb-10 max-w-sm">
-        Coaching, roster, plans, results and family access — all in one place.
-      </p>
-      <div className="flex flex-col gap-3 w-full max-w-xs">
-        <Link
-          href="/login"
-          className="rounded-[var(--radius-md)] px-5 py-3 font-semibold text-white text-center"
-          style={{ background: "var(--vx-blue)" }}
-        >
-          Staff sign in
-        </Link>
-        <Link
-          href="/family/login"
-          className="rounded-[var(--radius-md)] px-5 py-3 font-semibold text-center border border-white/20 text-white"
-        >
-          Parent / swimmer sign in
-        </Link>
+    <div className="vx-frame">
+      <div
+        className="relative flex flex-col min-h-dvh text-white"
+        style={{ background: "#0A0F1A" }}
+      >
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage: "url(/images/hero-dive.jpg)",
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+          }}
+        />
+        <div className="vx-hero-overlay" />
+
+        <div className="relative flex flex-col h-full px-7 pt-16 pb-8 flex-1">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/images/vx-mark.png" alt="Vortex" style={{ width: 52, height: 52 }} />
+          <h1
+            className="font-bold mt-5 mb-1"
+            style={{ fontSize: 31, letterSpacing: "-0.02em", lineHeight: 1.04 }}
+          >
+            Welcome back.
+          </h1>
+          <p
+            className="m-0 text-[14px]"
+            style={{ color: "rgba(255,255,255,.6)", lineHeight: 1.45, maxWidth: 272 }}
+          >
+            Vortex SC — squad management for the technical team, coaches &amp; families.
+          </p>
+
+          <div className="mt-auto flex flex-col gap-3">
+            <Link
+              href="/login"
+              className="rounded-[16px] px-4 py-4 font-semibold text-white text-center"
+              style={{ background: "var(--vx-blue)", boxShadow: "var(--shadow-brand)" }}
+            >
+              Staff sign in
+            </Link>
+            <Link
+              href="/family/login"
+              className="vx-glass rounded-[16px] px-4 py-4 font-semibold text-center text-white flex items-center justify-center gap-2"
+            >
+              Parent or swimmer? Sign in / register
+            </Link>
+          </div>
+        </div>
       </div>
     </div>
   );
