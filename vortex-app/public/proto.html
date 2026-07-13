@@ -23,7 +23,7 @@
   var SB_URL = "https://qhrpwiakobgcxfmcoyfg.supabase.co";
   var SB_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFocnB3aWFrb2JnY3hmbWNveWZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4NTgyMzQsImV4cCI6MjA5OTQzNDIzNH0.NVmLPF99O9M6rj-Srp3tP-ZkuhzIea0jSN4r0asW1eI";
   // Club-wide shared keys (NOT the per-device Anthropic API key).
-  var SYNC = ["vx_family","vx_plans","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_staff_accounts"];
+  var SYNC = ["vx_family","vx_plans","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_staff_accounts","vx_meets_cal"];
   function boot(){ var s=document.createElement("script"); s.src="assets/support.js"; document.body.appendChild(s); }
   try {
     var sb = window.supabase.createClient(SB_URL, SB_ANON);
@@ -451,6 +451,30 @@
                         <span style="flex:1"><span style="display:block;font-weight:700;font-size:15px;color:#0C1116">Academy</span><span style="display:block;font-size:12.5px;color:#7A8296;margin-top:1px">Trials · level ladder · schedule · fees</span></span>
                         <i data-lucide="arrow-right" style="width:18px;height:18px;color:#AEB6C7"></i>
                       </button>
+                    </div>
+
+                    <div style="background:#fff;border:1px solid #E5E9F0;border-radius:18px;padding:15px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                      <div style="display:flex;align-items:center;gap:8px;margin-bottom:11px"><i data-lucide="calendar-days" style="width:17px;height:17px;color:#067EEA"></i><p style="margin:0;font-size:13px;font-weight:700;color:#0C1116">Upcoming meets</p></div>
+                      <sc-if value="{{ isAdminUser }}" hint-placeholder-val="{{ true }}">
+                        <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:11px">
+                          <input value="{{ meetsForm.name }}" oninput="{{ onMeetsName }}" placeholder="Meet name" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                          <div style="display:flex;gap:7px">
+                            <input value="{{ meetsForm.date }}" oninput="{{ onMeetsDate }}" type="date" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                            <input value="{{ meetsForm.place }}" oninput="{{ onMeetsPlace }}" placeholder="Place" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                            <button onclick="{{ onMeetsAdd }}" style="flex:none;background:var(--vx-blue);color:#fff;border:none;border-radius:9px;padding:0 14px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer">Add</button>
+                          </div>
+                        </div>
+                      </sc-if>
+                      <div style="display:flex;flex-direction:column;gap:7px">
+                        <sc-for list="{{ meetsCalRows }}" as="m" hint-placeholder-count="0">
+                          <div style="display:flex;align-items:center;gap:10px;background:#F8FAFC;border-radius:10px;padding:9px 11px">
+                            <span style="flex:none;width:38px;text-align:center"><span style="display:block;font-size:15px;font-weight:800;color:#067EEA;line-height:1">{{ m.day }}</span><span style="display:block;font-size:9px;font-weight:700;text-transform:uppercase;color:#9AA2B4">{{ m.mon }}</span></span>
+                            <span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;font-weight:700;color:#0C1116">{{ m.name }}</span><span style="display:block;font-size:11px;color:#7A8296">{{ m.place }}</span></span>
+                            <sc-if value="{{ isAdminUser }}" hint-placeholder-val="{{ true }}"><button onclick="{{ m.onDelete }}" style="flex:none;background:none;border:none;color:#C7CDDA;cursor:pointer"><i data-lucide="x" style="width:15px;height:15px"></i></button></sc-if>
+                          </div>
+                        </sc-for>
+                        <sc-if value="{{ meetsCalEmpty }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:11.5px;color:#9AA2B4">No meets scheduled yet.</p></sc-if>
+                      </div>
                     </div>
 
                     <div>
@@ -2747,6 +2771,7 @@ class Component extends DCLogic {
     ];
     try { this.customStaff = JSON.parse(localStorage.getItem('vx_staff_accounts')||'[]'); } catch(e){ this.customStaff = []; }
     for (var _si=0; _si<this.customStaff.length; _si++){ var _sa=this.customStaff[_si]; this.accounts.push({id:_sa.id, user:_sa.user, label:_sa.name, role:_sa.role, pin:_sa.pin, accent:'#2733D6', photo:'', initials:(_sa.name||'?').slice(0,2).toUpperCase()}); }
+    try { this.meetsCal = JSON.parse(localStorage.getItem('vx_meets_cal')||'[]'); } catch(e){ this.meetsCal = []; }
     this.squads = [
       {id:'preteam', name:'Pre-Team', ages:'≤6', count:3, coach:'Coach Fathy & Coach Mahady', accent:'#22C1DA', glow:'rgba(34,193,218,.35)', photo:'assets/coach-fathy.jpg', short:'Pre'},
       {id:'advb', name:'Advanced B', ages:'7–8', count:41, coach:'Coach Matuze', accent:'#1BA5E6', glow:'rgba(27,165,230,.35)', photo:'', short:'AdvB'},
@@ -2886,7 +2911,7 @@ class Component extends DCLogic {
       showVortexId:false,
       compBuildOpen:false, compName:'', compLocation:'', compDate:'', compCourse:'LCM', compEvents:[], compErr:'',
       printPreviewOpen:false,
-      staffEditId:null, staffForm:{name:'',pin:''}, staffAddOpen:false, staffAddForm:{name:'',user:'',pin:'',role:'Coach',phone:''},
+      staffEditId:null, staffForm:{name:'',pin:''}, staffAddOpen:false, staffAddForm:{name:'',user:'',pin:'',role:'Coach',phone:''}, meetsCalForm:{name:'',date:'',place:''},
       apiKey:this._loadJSON('vx_api_key',''), apiKeyDraft:'', settingsMsg:'',
       tpaceQuery:'', tpaceSwId:null, tpaceType:'1000', tpaceTime:'', tpaceErr:'',
       inbodyForm:{weight:'',fat:'',muscle:''},
@@ -3145,6 +3170,8 @@ class Component extends DCLogic {
   staffSave(squadId, form){ this.staffOverrides[squadId]={name:form.name.trim(), pin:form.pin.trim()}; this._saveJSON('vx_staff_ovr', this.staffOverrides); const sq=this.squadById[squadId]; if(sq) sq.coach=form.name.trim(); this.setState({staffEditId:null}); }
   staffAddCreate(){ const f=this.state.staffAddForm||{}; const name=(f.name||'').trim(); const user=(f.user||'').trim().toLowerCase(); const pin=(f.pin||'').trim(); if(!name||!user||!pin){ return; } const id='st_'+Date.now(); const rec={id:id, name:name, user:user, pin:pin, role:f.role||'Coach', phone:(f.phone||'').trim()}; this.customStaff.push(rec); this._saveJSON('vx_staff_accounts', this.customStaff); this.accounts.push({id:id, user:user, label:name, role:rec.role, pin:pin, accent:'#2733D6', photo:'', initials:name.slice(0,2).toUpperCase()}); this.setState({staffAddOpen:false, staffAddForm:{name:'',user:'',pin:'',role:'Coach',phone:''}}); }
   staffAddDelete(id){ this.customStaff=this.customStaff.filter(function(a){return a.id!==id;}); this._saveJSON('vx_staff_accounts', this.customStaff); this.accounts=this.accounts.filter(function(a){return a.id!==id;}); this.setState({}); }
+  meetsCalAdd(){ const f=this.state.meetsCalForm||{}; const name=(f.name||'').trim(); const date=(f.date||'').trim(); if(!name||!date) return; this.meetsCal.push({id:'mc_'+Date.now(), name:name, date:date, place:(f.place||'').trim()}); this.meetsCal.sort(function(a,b){return (a.date||'').localeCompare(b.date||'');}); this._saveJSON('vx_meets_cal', this.meetsCal); this.setState({meetsCalForm:{name:'',date:'',place:''}}); }
+  meetsCalDelete(id){ this.meetsCal=this.meetsCal.filter(function(m){return m.id!==id;}); this._saveJSON('vx_meets_cal', this.meetsCal); this.setState({}); }
   settingsSaveKey(){ this._saveJSON('vx_api_key', this.state.apiKeyDraft); this.setState({apiKey:this.state.apiKeyDraft, settingsMsg:'API key saved ✓'}); }
   tpaceCompute(type, sec){ return type==='1000' ? sec/10 : (sec*2.5)/10; }
   tpaceLog(swId){ const S=this.state; const sec=this.parseTimeStr(S.tpaceTime);
@@ -5143,6 +5170,14 @@ class Component extends DCLogic {
       onStaffPhone:(e)=>this.setState({staffAddForm:{...(this.state.staffAddForm||{}), phone:e.target.value}}),
       onStaffCreate:()=>this.staffAddCreate(),
       customStaffRows: this.customStaff.map((a)=>({id:a.id, name:a.name, sub:(a.role||'')+(a.phone?(' · '+a.phone):'')+(a.user?(' · @'+a.user):''), initials:(a.name||'?').slice(0,2).toUpperCase(), onDelete:()=>this.staffAddDelete(a.id)})),
+      isAdminUser: (()=>{ const acc=this.accounts.find(a=>a.id===S.pickedId); return !!(acc && (acc.id==='ahmed'||acc.id==='sameh')); })(),
+      meetsForm: S.meetsCalForm||{name:'',date:'',place:''},
+      onMeetsName:(e)=>this.setState({meetsCalForm:{...(this.state.meetsCalForm||{}), name:e.target.value}}),
+      onMeetsDate:(e)=>this.setState({meetsCalForm:{...(this.state.meetsCalForm||{}), date:e.target.value}}),
+      onMeetsPlace:(e)=>this.setState({meetsCalForm:{...(this.state.meetsCalForm||{}), place:e.target.value}}),
+      onMeetsAdd:()=>this.meetsCalAdd(),
+      meetsCalEmpty: this.meetsCal.length===0,
+      meetsCalRows: this.meetsCal.map((m)=>{ const d=m.date? new Date(m.date+'T00:00:00'):null; const mon=d?['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][d.getMonth()]:''; return {id:m.id, name:m.name, place:m.place||'', day:d?String(d.getDate()):'', mon:mon, onDelete:()=>this.meetsCalDelete(m.id)}; }),
       apiKeyDraft: S.apiKeyDraft || S.apiKey, onApiKeyDraft:(e)=>this.setState({apiKeyDraft:e.target.value}), onApiKeySave:()=>this.settingsSaveKey(),
       settingsMsg:S.settingsMsg, settingsMsgColor, settingsMsgShow:!!S.settingsMsg, swimmerTotal, meetTotal:this.allMeets().length, onSettingsReset:()=>this.settingsReset(),
       // tool overlay
