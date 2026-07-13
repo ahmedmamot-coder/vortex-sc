@@ -3,8 +3,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Vortex Swimming Club</title>
-<link rel="icon" type="image/png" href="assets/b798adf9.png">
-<link rel="apple-touch-icon" href="assets/b798adf9.png">
+<link rel="icon" type="image/png" href="assets/icon-black.png">
+<link rel="apple-touch-icon" href="assets/icon-black.png">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/icon-black.png">
 <meta name="theme-color" content="#0A0F1A">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -24,7 +25,12 @@
   var SB_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFocnB3aWFrb2JnY3hmbWNveWZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4NTgyMzQsImV4cCI6MjA5OTQzNDIzNH0.NVmLPF99O9M6rj-Srp3tP-ZkuhzIea0jSN4r0asW1eI";
   // Club-wide shared keys (NOT the per-device Anthropic API key).
   var SYNC = ["vx_family","vx_plans","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_staff_accounts","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta"];
-  function boot(){ var s=document.createElement("script"); s.src="assets/support.js"; document.body.appendChild(s); }
+  var booted = false;
+  function hideSplash(){ setTimeout(function(){ var el=document.getElementById("vx-splash"); if(el){ el.style.opacity="0"; setTimeout(function(){ if(el.parentNode) el.parentNode.removeChild(el); }, 380); } }, 220); }
+  function boot(){ if(booted) return; booted=true; var s=document.createElement("script"); s.src="assets/support.js"; s.onload=hideSplash; document.body.appendChild(s); }
+  // Boot no matter what: if the database is slow/unreachable, don't hang on the splash.
+  setTimeout(boot, 2200);
+  setTimeout(function(){ hideSplash(); }, 6000);
   try {
     var sb = window.supabase.createClient(SB_URL, SB_ANON);
     window.__vxsb = sb;
@@ -50,6 +56,10 @@
 </script>
 </head>
 <body>
+<div id="vx-splash" style="position:fixed;inset:0;z-index:99999;background:#0A0F1A;display:flex;align-items:center;justify-content:center;transition:opacity .38s ease">
+  <img src="assets/b798adf9.png" alt="Vortex SC" style="width:88px;height:88px;animation:vxsplashpulse 1.15s ease-in-out infinite">
+</div>
+<style>@keyframes vxsplashpulse{0%,100%{opacity:.5;transform:scale(.95)}50%{opacity:1;transform:scale(1)}}</style>
 <template id="__bundler_thumbnail">
 <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
 <rect width="100" height="100" fill="#0A0F1A"/>
@@ -419,38 +429,44 @@
                       </div>
                     </div>
                     <div style="position:relative;display:flex;align-items:center;gap:13px;margin-top:20px">
-                      <span style="width:54px;height:54px;border-radius:15px;overflow:hidden;flex:none;box-shadow:0 0 0 2px rgba(255,255,255,.15)"><img src="assets/acb9bc6a.jpg" alt="" style="width:100%;height:100%;object-fit:cover;object-position:top"></span>
-                      <div><p style="margin:0;font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:600">Technical Director</p><h1 style="font-size:23px;font-weight:700;letter-spacing:-.02em;margin:2px 0 0">Ahmed Mamo</h1></div>
+                      <span style="width:54px;height:54px;border-radius:15px;overflow:hidden;flex:none;box-shadow:0 0 0 2px rgba(255,255,255,.15)">{{ hubUserAvatar }}</span>
+                      <div><p style="margin:0;font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:600">{{ hubUserRole }}</p><h1 style="font-size:23px;font-weight:700;letter-spacing:-.02em;margin:2px 0 0">{{ hubUserName }}</h1></div>
                     </div>
                     <p style="position:relative;margin:16px 0 0;color:rgba(255,255,255,.62);font-size:13.5px;line-height:1.4">{{ clubStatLine }}</p>
                   </div>
 
                   <div style="position:relative;z-index:1;padding:16px 15px 22px;display:flex;flex-direction:column;gap:16px;margin-top:-16px">
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                      <sc-if value="{{ isAdminUser }}" hint-placeholder-val="{{ true }}">
                       <button onclick="{{ onGoAdmin }}" style="text-align:left;background:#fff;border:1px solid #E5E9F0;border-radius:19px;padding:15px;box-shadow:0 6px 18px rgba(11,20,40,.07);cursor:pointer;grid-column:span 2;display:flex;align-items:center;gap:13px">
                         <span style="width:46px;height:46px;flex:none;border-radius:13px;background:var(--vx-blue-tint);color:var(--vx-blue);display:flex;align-items:center;justify-content:center"><i data-lucide="building-2" style="width:22px;height:22px"></i></span>
                         <span style="flex:1"><span style="display:block;font-weight:700;font-size:15px;color:#0C1116">Club Administration</span><span style="display:block;font-size:12.5px;color:#7A8296;margin-top:1px">Swimmers · meets · staff · parents</span></span>
                         <i data-lucide="arrow-right" style="width:18px;height:18px;color:#AEB6C7"></i>
                       </button>
-                      <button onclick="{{ onGoTools }}" style="text-align:left;background:#0A0F1A;color:#fff;border:none;border-radius:19px;padding:15px;box-shadow:0 10px 26px rgba(11,20,40,.16);cursor:pointer;display:flex;flex-direction:column;justify-content:space-between;min-height:124px;position:relative;overflow:hidden">
+                      </sc-if>
+                      <button onclick="{{ onGoTools }}" style="text-align:left;grid-column:{{ toolsSpan }};background:#0A0F1A;color:#fff;border:none;border-radius:19px;padding:15px;box-shadow:0 10px 26px rgba(11,20,40,.16);cursor:pointer;display:flex;flex-direction:column;justify-content:space-between;min-height:124px;position:relative;overflow:hidden">
                         <img src="assets/a4d3e396.jpg" alt="" style="position:absolute;bottom:-40px;right:-30px;width:120px;opacity:.4;mix-blend-mode:screen">
                         <span style="position:relative;width:42px;height:42px;border-radius:12px;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center"><i data-lucide="sparkles" style="width:20px;height:20px"></i></span>
-                        <span style="position:relative"><span style="display:block;font-weight:700;font-size:15px">Tools &amp; AI</span><span style="display:block;font-size:11.5px;opacity:.6;margin-top:1px">Club-wide · 272 swimmers</span></span>
+                        <span style="position:relative"><span style="display:block;font-weight:700;font-size:15px">Tools &amp; AI</span><span style="display:block;font-size:11.5px;opacity:.6;margin-top:1px">{{ toolsSubLabel }}</span></span>
                       </button>
+                      <sc-if value="{{ isAdminUser }}" hint-placeholder-val="{{ true }}">
                       <button onclick="{{ onGoMove }}" style="text-align:left;background:#fff;border:1px solid #E5E9F0;border-radius:19px;padding:15px;box-shadow:0 6px 18px rgba(11,20,40,.07);cursor:pointer;display:flex;flex-direction:column;justify-content:space-between;min-height:124px">
                         <span style="width:42px;height:42px;border-radius:12px;background:var(--vx-blue-tint);color:var(--vx-blue);display:flex;align-items:center;justify-content:center"><i data-lucide="arrow-left-right" style="width:20px;height:20px"></i></span>
                         <span><span style="display:block;font-weight:700;font-size:15px;color:#0C1116">Move swimmers</span><span style="display:block;font-size:11.5px;color:#7A8296;margin-top:1px">Reassign between squads</span></span>
                       </button>
+                      </sc-if>
                       <button onclick="{{ onGoHandbook }}" style="text-align:left;background:#fff;border:1px solid #E5E9F0;border-radius:19px;padding:15px;box-shadow:0 6px 18px rgba(11,20,40,.07);cursor:pointer;grid-column:span 2;display:flex;align-items:center;gap:13px">
                         <span style="width:46px;height:46px;flex:none;border-radius:13px;background:var(--vx-blue-tint);color:var(--vx-blue);display:flex;align-items:center;justify-content:center"><i data-lucide="book-open" style="width:22px;height:22px"></i></span>
                         <span style="flex:1"><span style="display:block;font-weight:700;font-size:15px;color:#0C1116">Coaches Handbook</span><span style="display:block;font-size:12.5px;color:#7A8296;margin-top:1px">Pathway · zones · technique · meets</span></span>
                         <i data-lucide="arrow-right" style="width:18px;height:18px;color:#AEB6C7"></i>
                       </button>
+                      <sc-if value="{{ isAdminUser }}" hint-placeholder-val="{{ true }}">
                       <button onclick="{{ onGoAcademy }}" style="text-align:left;background:#fff;border:1px solid #E5E9F0;border-radius:19px;padding:15px;box-shadow:0 6px 18px rgba(11,20,40,.07);cursor:pointer;grid-column:span 2;display:flex;align-items:center;gap:13px">
                         <span style="width:46px;height:46px;flex:none;border-radius:13px;background:rgba(12,122,79,.1);color:#0C7A4F;display:flex;align-items:center;justify-content:center"><i data-lucide="graduation-cap" style="width:22px;height:22px"></i></span>
                         <span style="flex:1"><span style="display:block;font-weight:700;font-size:15px;color:#0C1116">Academy</span><span style="display:block;font-size:12.5px;color:#7A8296;margin-top:1px">Trials · level ladder · schedule · fees</span></span>
                         <i data-lucide="arrow-right" style="width:18px;height:18px;color:#AEB6C7"></i>
                       </button>
+                      </sc-if>
                     </div>
 
                     <div style="background:#fff;border:1px solid #E5E9F0;border-radius:18px;padding:15px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
@@ -4999,8 +5015,16 @@ class Component extends DCLogic {
 
       showHub:S.view==='hub', showAdmin:S.view==='admin', showMove:S.view==='move', showToolsHome:S.view==='tools', showHandbook:S.view==='handbook',
       showSquad:S.view==='squad', showProfile:S.view==='profile', showNav:S.view==='squad', showFamily:S.view==='family',
-      clubStatLine:'272 swimmers across 9 squads · 2,570 results · 10 meets. 3 squads training this morning.',
-      onGoAdmin:()=>this.setState({view:'admin'}), onGoTools:()=>this.setState({view:'tools'}), onGoMove:()=>this.setState({view:'move'}),
+      ...(()=>{ const acc=this.accounts.find(a=>a.id===S.pickedId)||{}; const isAdm=!!(acc.id==='ahmed'||acc.id==='sameh'); const lockSq=acc.squadId?this.squadById[acc.squadId]:null;
+        return {
+          hubUserName: acc.label||'', hubUserRole: acc.role||'', hubUserAvatar: this.av(acc.photo||null, acc.initials||'?', 54, 15, acc.accent||'#067EEA', '#fff', 20),
+          clubStatLine: isAdm ? '272 swimmers across 9 squads · 2,570 results · 10 meets. 3 squads training this morning.'
+            : (lockSq ? (lockSq.count+' swimmers · '+lockSq.name+' · '+lockSq.coach) : 'Welcome back.'),
+          toolsSpan: isAdm ? 'auto' : 'span 2',
+          toolsSubLabel: isAdm ? 'Club-wide · 272 swimmers' : (lockSq ? (lockSq.name+' · '+lockSq.count+' swimmers') : 'Your squad'),
+        };
+      })(),
+      onGoAdmin:()=>this.setState({view:'admin'}), onGoTools:()=>{ const a=this.accounts.find(x=>x.id===S.pickedId)||{}; const adm=!!(a.id==='ahmed'||a.id==='sameh'); this.setState({view:'tools', toolScopeClub:adm}); }, onGoMove:()=>this.setState({view:'move'}),
       onGoHub:()=>this.setState({view:'hub', showSwitcher:false}), onLogout:()=>this.setState({screen:'login', loginStage:'accounts', pin:'', view:'hub'}),
       onGoHandbook:()=>this.setState({view:'handbook'}), handbookCards:this.handbook.map(c=>({icon:c.icon, title:c.title, summary:c.summary, expanded:S.handbookOpen===c.id, chevron:S.handbookOpen===c.id?'chevron-up':'chevron-down', onToggle:()=>this.setState({handbookOpen:S.handbookOpen===c.id?null:c.id}), sections:c.sections.map(s=>({h:s.h, lead:s.lead||'', hasLead:!!s.lead, bullets:s.bullets||[]}))})),
       ...(()=>{
