@@ -324,8 +324,8 @@
               <sc-if value="{{ loginAccounts }}" hint-placeholder-val="{{ true }}">
                 <div class="vx-screen" style="margin-top:30px;display:flex;flex-direction:column;gap:12px">
                   <p style="font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.42);margin:0 0 2px">Staff sign in</p>
-                  <input value="{{ loginUser }}" oninput="{{ onLoginUser }}" placeholder="Username" autocapitalize="off" autocomplete="username" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
-                  <input value="{{ loginPinVal }}" oninput="{{ onLoginPin }}" type="password" placeholder="PIN" autocomplete="current-password" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
+                  <input id="vx-login-user" value="{{ loginUser }}" oninput="{{ onLoginUser }}" placeholder="Username" autocapitalize="none" autocorrect="off" autocomplete="off" spellcheck="false" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
+                  <input id="vx-login-pin" value="{{ loginPinVal }}" oninput="{{ onLoginPin }}" type="password" placeholder="PIN" autocapitalize="none" autocorrect="off" autocomplete="off" spellcheck="false" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
                   <sc-if value="{{ loginErrShow }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:12px;color:#FF8A8D;font-weight:600">{{ loginErr }}</p></sc-if>
                   <button onclick="{{ onLoginSubmit }}" style="background:var(--vx-blue);color:#fff;border:none;border-radius:13px;padding:13px;font-family:inherit;font-weight:700;font-size:14px;cursor:pointer">Sign in</button>
                   <button onclick="{{ onGoFamily }}" style="margin-top:6px;display:flex;align-items:center;justify-content:center;gap:9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:12px;cursor:pointer;color:#fff;font-family:inherit"><i data-lucide="users" style="width:16px;height:16px"></i><span style="font-size:13px;font-weight:600">Parent or swimmer? Sign in / register</span></button>
@@ -5077,7 +5077,18 @@ class Component extends DCLogic {
       loginUser: S.loginUser||'', loginPinVal: S.loginPinVal||'', loginErr: S.loginErr||'', loginErrShow: !!S.loginErr,
       onLoginUser:(e)=>this.setState({loginUser:e.target.value, loginErr:''}),
       onLoginPin:(e)=>this.setState({loginPinVal:e.target.value, loginErr:''}),
-      onLoginSubmit:()=>{ const u=(this.state.loginUser||'').trim().toLowerCase(); const p=(this.state.loginPinVal||'').trim(); const acct=this.accounts.find(a=>(a.user&&a.user.toLowerCase()===u)||(a.label&&a.label.toLowerCase()===u)); if(acct && acct.pin===p){ const st={screen:'app', view:'hub', pickedId:acct.id, loginUser:'', loginPinVal:'', loginErr:''}; if(acct.squadId){ st.squadId=acct.squadId; } this.setState(st); } else { this.setState({loginErr:'Wrong username or PIN'}); } },
+      onLoginSubmit:()=>{
+        // Read the live DOM values too: iPad Safari autofill/QuickType often fills the
+        // field without firing oninput, so state can lag behind what the user typed.
+        const uEl=document.getElementById('vx-login-user'), pEl=document.getElementById('vx-login-pin');
+        const norm=(s)=>(''+(s==null?'':s)).replace(/[\s ]+/g,'');
+        const rawU = (uEl && uEl.value) || this.state.loginUser || '';
+        const rawP = (pEl && pEl.value) || this.state.loginPinVal || '';
+        const u=norm(rawU).toLowerCase(); const p=norm(rawP);
+        const acct=this.accounts.find(a=>(a.user&&norm(a.user).toLowerCase()===u)||(a.label&&norm(a.label).toLowerCase()===u));
+        if(acct && norm(acct.pin)===p){ const st={screen:'app', view:'hub', pickedId:acct.id, loginUser:'', loginPinVal:'', loginErr:''}; if(acct.squadId){ st.squadId=acct.squadId; } if(uEl)uEl.value=''; if(pEl)pEl.value=''; this.setState(st); }
+        else { this.setState({loginErr:'Wrong username or PIN'}); }
+      },
       pickedAcct:{label:picked.label, avatar:this.av(picked.photo||null, picked.initials, 26, 8, picked.accent, '#fff', 10)},
       onChangeAccount:()=>this.setState({loginStage:'accounts', pin:'', err:false}),
       pinMsg: S.err ? 'Wrong PIN — try again' : 'Enter your PIN',
