@@ -409,7 +409,7 @@
               <!-- ===== HUB ===== -->
               <sc-if value="{{ showHub }}" hint-placeholder-val="{{ true }}">
                 <div class="vx-screen" data-screen-label="Technical Director hub" style="position:relative">
-                  <div style="background:#0A0F1A;color:#fff;padding:2px 22px 30px;position:relative;overflow:hidden">
+                  <div style="background:#0A0F1A;color:#fff;padding:calc(env(safe-area-inset-top) + 8px) 22px 30px;position:relative;overflow:hidden">
                     <img src="assets/a4d3e396.jpg" alt="" style="position:absolute;top:-30px;right:-40px;width:78%;height:200%;object-fit:cover;opacity:.55;mix-blend-mode:screen">
                     <div style="position:relative;display:flex;align-items:center;justify-content:space-between">
                       <img src="assets/9b59d9a2.png" alt="Vortex SC" style="height:20px">
@@ -502,7 +502,7 @@
               <!-- ===== ADMIN ===== -->
               <sc-if value="{{ showAdmin }}" hint-placeholder-val="{{ true }}">
                 <div class="vx-screen" data-screen-label="Admin dashboard" style="padding:0 0 22px">
-                  <div style="display:flex;align-items:center;gap:12px;padding:4px 16px 14px">
+                  <div style="display:flex;align-items:center;gap:12px;padding:calc(env(safe-area-inset-top) + 6px) 16px 14px">
                     <button onclick="{{ onGoHub }}" style="width:37px;height:37px;border-radius:11px;background:#fff;border:1px solid #E5E9F0;display:flex;align-items:center;justify-content:center;cursor:pointer"><i data-lucide="arrow-left" style="width:18px;height:18px;color:#0C1116"></i></button>
                     <div style="flex:1"><h1 style="font-size:20px;font-weight:700;letter-spacing:-.02em;margin:0;color:#0C1116">Club Administration</h1><p style="margin:1px 0 0;font-size:12px;color:#7A8296">Dashboard · club-wide insights</p></div>
                   </div>
@@ -566,7 +566,7 @@
               <!-- ===== MOVE SWIMMERS ===== -->
               <sc-if value="{{ showMove }}" hint-placeholder-val="{{ true }}">
                 <div class="vx-screen" data-screen-label="Move swimmers" style="padding:0 0 22px">
-                  <div style="display:flex;align-items:center;gap:12px;padding:4px 16px 12px">
+                  <div style="display:flex;align-items:center;gap:12px;padding:calc(env(safe-area-inset-top) + 6px) 16px 12px">
                     <button onclick="{{ onGoHub }}" style="width:37px;height:37px;border-radius:11px;background:#fff;border:1px solid #E5E9F0;display:flex;align-items:center;justify-content:center;cursor:pointer"><i data-lucide="arrow-left" style="width:18px;height:18px;color:#0C1116"></i></button>
                     <div style="flex:1"><h1 style="font-size:20px;font-weight:700;letter-spacing:-.02em;margin:0;color:#0C1116">Move swimmers</h1><p style="margin:1px 0 0;font-size:12px;color:#7A8296">Reassign between squads</p></div>
                   </div>
@@ -593,7 +593,7 @@
               <!-- ===== TOOLS HOME ===== -->
               <sc-if value="{{ showToolsHome }}" hint-placeholder-val="{{ true }}">
                 <div class="vx-screen" data-screen-label="Tools and AI" style="padding:0 0 22px">
-                  <div style="background:#0A0F1A;color:#fff;padding:2px 18px 20px;position:relative;overflow:hidden">
+                  <div style="background:#0A0F1A;color:#fff;padding:calc(env(safe-area-inset-top) + 8px) 18px 20px;position:relative;overflow:hidden">
                     <img src="assets/a4d3e396.jpg" alt="" style="position:absolute;top:-40px;right:-30px;width:60%;height:220%;object-fit:cover;opacity:.5;mix-blend-mode:screen">
                     <button onclick="{{ onGoHub }}" style="position:relative;width:37px;height:37px;border-radius:11px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#fff"><i data-lucide="arrow-left" style="width:18px;height:18px"></i></button>
                     <h1 style="position:relative;font-size:22px;font-weight:700;letter-spacing:-.02em;margin:14px 0 3px">Tools &amp; AI</h1>
@@ -613,7 +613,7 @@
               <!-- ===== COACHES HANDBOOK ===== -->
               <sc-if value="{{ showHandbook }}" hint-placeholder-val="{{ true }}">
                 <div class="vx-screen" data-screen-label="Coaches handbook" style="padding:0 0 22px">
-                  <div style="background:#0A0F1A;color:#fff;padding:2px 18px 20px;position:relative;overflow:hidden">
+                  <div style="background:#0A0F1A;color:#fff;padding:calc(env(safe-area-inset-top) + 8px) 18px 20px;position:relative;overflow:hidden">
                     <img src="assets/a4d3e396.jpg" alt="" style="position:absolute;top:-40px;right:-30px;width:60%;height:220%;object-fit:cover;opacity:.5;mix-blend-mode:screen">
                     <button onclick="{{ onGoHub }}" style="position:relative;width:37px;height:37px;border-radius:11px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#fff"><i data-lucide="arrow-left" style="width:18px;height:18px"></i></button>
                     <h1 style="position:relative;font-size:22px;font-weight:700;letter-spacing:-.02em;margin:14px 0 3px">Coaches Handbook</h1>
@@ -651,7 +651,7 @@
               <!-- ===== FAMILY PORTAL ===== -->
               <sc-if value="{{ showFamily }}" hint-placeholder-val="{{ true }}">
                 <div class="vx-screen" data-screen-label="Family portal" style="position:relative">
-                  <div style="background:#0A0F1A;color:#fff;padding:2px 20px 24px;position:relative;overflow:hidden">
+                  <div style="background:#0A0F1A;color:#fff;padding:calc(env(safe-area-inset-top) + 8px) 20px 24px;position:relative;overflow:hidden">
                     <img src="assets/a4d3e396.jpg" alt="" style="position:absolute;top:-30px;right:-40px;width:78%;height:200%;object-fit:cover;opacity:.4;mix-blend-mode:screen">
                     <div style="position:relative;display:flex;align-items:center;justify-content:space-between">
                       <img src="assets/9b59d9a2.png" alt="Vortex SC" style="height:19px">
@@ -902,7 +902,7 @@
               <!-- ===== ACADEMY ===== -->
               <sc-if value="{{ showAcademy }}" hint-placeholder-val="{{ true }}">
                 <div class="vx-screen" data-screen-label="Academy">
-                  <div style="background:#0A0F1A;color:#fff;padding:2px 18px 20px;position:relative;overflow:hidden">
+                  <div style="background:#0A0F1A;color:#fff;padding:calc(env(safe-area-inset-top) + 8px) 18px 20px;position:relative;overflow:hidden">
                     <img src="assets/a4d3e396.jpg" alt="" style="position:absolute;top:-40px;right:-30px;width:60%;height:220%;object-fit:cover;opacity:.4;mix-blend-mode:screen">
                     <button onclick="{{ onGoHub }}" style="position:relative;width:37px;height:37px;border-radius:11px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#fff"><i data-lucide="arrow-left" style="width:18px;height:18px"></i></button>
                     <h1 style="position:relative;font-size:22px;font-weight:700;letter-spacing:-.02em;margin:14px 0 3px">Academy</h1>
@@ -1009,7 +1009,7 @@
               <!-- ===== SQUAD PORTAL ===== -->
               <sc-if value="{{ showSquad }}" hint-placeholder-val="{{ true }}">
                 <div class="vx-screen" data-screen-label="Squad portal">
-                  <div style="background:{{ squad.accent }};color:#fff;padding:2px 16px 16px;position:relative;overflow:hidden">
+                  <div style="background:{{ squad.accent }};color:#fff;padding:calc(env(safe-area-inset-top) + 8px) 16px 16px;position:relative;overflow:hidden">
                     <img src="assets/a4d3e396.jpg" alt="" style="position:absolute;top:-30px;right:-20px;width:55%;height:210%;object-fit:cover;opacity:.32;mix-blend-mode:screen">
                     <div style="position:relative;display:flex;align-items:center;justify-content:space-between">
                       <button onclick="{{ onOpenSwitcher }}" style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.22);border-radius:11px;padding:7px 12px 7px 9px;cursor:pointer;color:#fff"><i data-lucide="arrow-left-right" style="width:16px;height:16px"></i><span style="font-size:12.5px;font-weight:700">Switch</span></button>
@@ -1060,11 +1060,14 @@
                           <div style="display:flex;flex-direction:column;gap:6px">
                             <sc-for list="{{ ps.sets }}" as="st" hint-placeholder-count="3">
                               <div style="background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:10px 11px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
-                                <div style="display:flex;align-items:center;gap:9px">
-                                  <span style="display:flex;align-items:baseline;gap:2px;flex:none"><input value="{{ st.dist }}" oninput="{{ st.onDist }}" type="number" inputmode="numeric" style="width:46px;border:1px solid #E5E9F0;border-radius:8px;padding:5px 4px;text-align:center;font-family:var(--font-mono);font-weight:700;font-size:13px;color:{{ squad.accent }};outline:none;background:#F8FAFC"><span style="font-size:11px;color:#9AA2B4;font-weight:700">m</span></span>
-                                  <input value="{{ st.txt }}" oninput="{{ st.onTxt }}" placeholder="Describe the set…" style="flex:1;min-width:0;border:none;outline:none;background:none;font-family:inherit;font-size:12.5px;color:#3A4152;padding:4px 0">
+                                <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+                                  <span style="display:flex;align-items:center;gap:3px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:3px 5px;flex:none"><i data-lucide="repeat-2" style="width:16px;height:16px;color:#9AA2B4"></i><button onclick="{{ st.onRepsDec }}" style="width:23px;height:23px;border:none;border-radius:6px;background:#EEF1F5;color:#3A4152;font-size:16px;font-weight:700;cursor:pointer;line-height:1;padding:0">−</button><span style="min-width:20px;text-align:center;font-family:var(--font-mono);font-weight:700;font-size:14px;color:#0C1116">{{ st.reps }}</span><button onclick="{{ st.onRepsInc }}" style="width:23px;height:23px;border:none;border-radius:6px;background:#EEF1F5;color:#3A4152;font-size:16px;font-weight:700;cursor:pointer;line-height:1;padding:0">+</button></span>
+                                  <span style="font-size:14px;font-weight:800;color:#B9C0CC;flex:none">×</span>
+                                  <span style="display:flex;align-items:center;gap:3px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:3px 5px;flex:none"><i data-lucide="ruler" style="width:18px;height:18px;color:{{ squad.accent }}"></i><button onclick="{{ st.onDistDec }}" style="width:23px;height:23px;border:none;border-radius:6px;background:#EEF1F5;color:#3A4152;font-size:16px;font-weight:700;cursor:pointer;line-height:1;padding:0">−</button><input value="{{ st.dist }}" oninput="{{ st.onDist }}" type="number" inputmode="numeric" style="width:42px;border:none;text-align:center;font-family:var(--font-mono);font-weight:700;font-size:14px;color:{{ squad.accent }};outline:none;background:none;padding:0"><button onclick="{{ st.onDistInc }}" style="width:23px;height:23px;border:none;border-radius:6px;background:#EEF1F5;color:#3A4152;font-size:16px;font-weight:700;cursor:pointer;line-height:1;padding:0">+</button><span style="font-size:11px;color:#9AA2B4;font-weight:700">m</span></span>
+                                  <span style="flex:1;min-width:30px;text-align:right;font-family:var(--font-mono);font-size:11px;font-weight:700;color:#9AA2B4">{{ st.setMetres }}m</span>
                                   <button onclick="{{ st.onRemove }}" style="flex:none;width:24px;height:24px;border-radius:7px;border:none;background:#F4F6F8;color:#9AA2B4;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:14px;height:14px"></i></button>
                                 </div>
+                                <input value="{{ st.txt }}" oninput="{{ st.onTxt }}" placeholder="Notes — e.g. build, descend 1–4 (optional)…" style="width:100%;box-sizing:border-box;border:none;outline:none;background:none;font-family:inherit;font-size:12.5px;color:#3A4152;padding:6px 2px 0">
                                 <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:9px">
                                   <span style="font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#B9C0CC;align-self:center;margin-right:2px">Type</span>
                                   <sc-for list="{{ st.types }}" as="ty" hint-placeholder-count="5">
@@ -1083,9 +1086,17 @@
                                     <button onclick="{{ z.onToggle }}" style="background:{{ z.bg }};color:{{ z.fg }};border:none;border-radius:7px;padding:3px 8px;font-family:var(--font-mono);font-size:9.5px;font-weight:700;cursor:pointer">{{ z.label }}</button>
                                   </sc-for>
                                 </div>
-                                <div style="display:flex;align-items:center;gap:7px;margin-top:7px">
-                                  <input value="{{ st.rest }}" oninput="{{ st.onRest }}" placeholder="Rest note e.g. Rest 1'" style="flex:1;border:1px solid #EEF1F5;background:#F8FAFC;border-radius:7px;padding:5px 8px;font-family:inherit;font-size:10.5px;color:#7A8296;outline:none;box-sizing:border-box">
-                                  <sc-if value="{{ st.hasRest }}" hint-placeholder-val="{{ false }}"><span style="flex:none;background:#FCEFD6;color:#9A6206;border-radius:7px;padding:5px 9px;font-size:10px;font-weight:700">⏱ {{ st.rest }}</span></sc-if>
+                                <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:5px">
+                                  <span style="font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#B9C0CC;align-self:center;margin-right:2px;display:flex;align-items:center;gap:3px"><i data-lucide="timer" style="width:12px;height:12px"></i>Rest</span>
+                                  <sc-for list="{{ st.restChips }}" as="r" hint-placeholder-count="8">
+                                    <button onclick="{{ r.onToggle }}" style="background:{{ r.bg }};color:{{ r.fg }};border:1px solid {{ r.border }};border-radius:7px;padding:3px 9px;font-family:var(--font-mono);font-size:10px;font-weight:700;cursor:pointer">{{ r.label }}</button>
+                                  </sc-for>
+                                </div>
+                                <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:5px">
+                                  <span style="font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#B9C0CC;align-self:center;margin-right:2px;display:flex;align-items:center;gap:3px"><i data-lucide="heart-pulse" style="width:12px;height:12px"></i>HR</span>
+                                  <sc-for list="{{ st.hrChips }}" as="h" hint-placeholder-count="7">
+                                    <button onclick="{{ h.onToggle }}" style="background:{{ h.bg }};color:{{ h.fg }};border:1px solid {{ h.border }};border-radius:7px;padding:3px 9px;font-family:var(--font-mono);font-size:10px;font-weight:700;cursor:pointer">{{ h.label }}</button>
+                                  </sc-for>
                                 </div>
                                 <sc-if value="{{ st.hasAdvice }}" hint-placeholder-val="{{ false }}">
                                   <div style="display:flex;gap:6px;align-items:flex-start;margin-top:8px;background:var(--vx-blue-tint);border-radius:8px;padding:7px 9px"><i data-lucide="sparkles" style="width:13px;height:13px;color:var(--vx-blue-dark);flex:none;margin-top:1px"></i><span style="font-size:10.5px;color:var(--vx-blue-dark);line-height:1.4">{{ st.advice }}</span></div>
@@ -1232,7 +1243,7 @@
               <!-- ===== SWIMMER PROFILE ===== -->
               <sc-if value="{{ showProfile }}" hint-placeholder-val="{{ true }}">
                 <div class="vx-screen" data-screen-label="Swimmer profile">
-                  <div style="background:{{ profileHeaderBg }};color:{{ profileHeaderFg }};padding:2px 16px 18px;position:relative;overflow:hidden">
+                  <div style="background:{{ profileHeaderBg }};color:{{ profileHeaderFg }};padding:calc(env(safe-area-inset-top) + 8px) 16px 18px;position:relative;overflow:hidden">
                     <img src="assets/a4d3e396.jpg" alt="" style="position:absolute;top:-30px;right:-20px;width:55%;height:210%;object-fit:cover;opacity:{{ profileHeaderImgOpacity }};mix-blend-mode:screen">
                     <sc-if value="{{ isSponsored }}" hint-placeholder-val="{{ false }}">
                       <span style="position:absolute;top:14px;right:16px;display:flex;align-items:center;gap:5px;background:rgba(12,10,5,.28);border:1px solid rgba(255,224,138,.5);color:#FFE08A;border-radius:999px;padding:5px 11px;font-size:10.5px;font-weight:800;letter-spacing:.08em"><i data-lucide="crown" style="width:13px;height:13px"></i>VIP SPONSORED</span>
@@ -2608,6 +2619,7 @@
                                 <sc-if value="{{ pvset.hasTypes }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#0A0F1A;font-weight:700;margin-top:2px">Type: {{ pvset.typesStr }}</div></sc-if>
                                 <sc-if value="{{ pvset.hasEquip }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#3B2FD6;font-weight:600;margin-top:2px">Tools: {{ pvset.equipStr }}</div></sc-if>
                                 <sc-if value="{{ pvset.hasRest }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#9A6206;font-weight:700;margin-top:2px">Rest: {{ pvset.restStr }}</div></sc-if>
+                                <sc-if value="{{ pvset.hasHr }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#C81E4B;font-weight:700;margin-top:2px">{{ pvset.hrStr }}</div></sc-if>
                               </td>
                             </tr>
                           </sc-for>
@@ -2745,6 +2757,7 @@
                 <sc-if value="{{ pset.hasTypes }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#0A0F1A;font-weight:700;margin-top:2px">Type: {{ pset.typesStr }}</div></sc-if>
                 <sc-if value="{{ pset.hasEquip }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#3B2FD6;font-weight:600;margin-top:2px">Tools: {{ pset.equipStr }}</div></sc-if>
                 <sc-if value="{{ pset.hasRest }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#9A6206;font-weight:700;margin-top:2px">Rest: {{ pset.restStr }}</div></sc-if>
+                <sc-if value="{{ pset.hasHr }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#C81E4B;font-weight:700;margin-top:2px">{{ pset.hrStr }}</div></sc-if>
               </td>
             </tr>
           </sc-for>
@@ -2872,6 +2885,8 @@ class Component extends DCLogic {
 
     this.equipCatalog=['Fins','Paddles','Pull buoy','Kickboard','Snorkel','Band'];
     this.typeCatalog=['Swim','Drill','Kick','Pull','Scull'];
+    this.restCatalog=['None',':10',':15',':20',':30',':45','1:00','1:30','2:00'];
+    this.hrCatalog=['—','140','150','160','170','180','Max'];
     this._pid=0;
     this.planTemplate={
       title:'Aerobic Threshold', zone:'EN2',
@@ -3885,7 +3900,8 @@ class Component extends DCLogic {
   getPlan(id){ const raw=(this.state.plans||{})[id]; return raw ? this._migratePlan(raw) : this.makeDefaultPlan(); }
   mutatePlan(id, fn){ const plans={...(this.state.plans||{})}; const cur=this._migratePlan(plans[id]?JSON.parse(JSON.stringify(plans[id])):this.makeDefaultPlan()); fn(cur); plans[id]=cur; this.setState({plans}); try{ localStorage.setItem('vx_plans', JSON.stringify(plans)); }catch(e){} }
   setSetField(id, secId, setId, field, val){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); const s=sec&&(sec.sets||[]).find(x=>x.id===setId); if(s) s[field]=val; }); }
-  addPlanSet(id, secId){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); if(sec) sec.sets.push({id:this._uid('s'), dist:100, txt:'New set — 4×25 @ :30', equip:[], types:[], rest:''}); }); }
+  addPlanSet(id, secId){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); if(sec) sec.sets.push({id:this._uid('s'), reps:1, dist:100, txt:'New set', equip:[], types:[], rest:'', hr:''}); }); }
+  stepSetField(id, secId, setId, field, delta, min, step){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); const s=sec&&(sec.sets||[]).find(x=>x.id===setId); if(!s)return; const cur=Number(s[field])|| (field==='reps'?1:0); s[field]=Math.max(min, cur+delta*step); }); }
   removePlanSet(id, secId, setId){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); if(sec) sec.sets=(sec.sets||[]).filter(x=>x.id!==setId); }); }
   toggleEquip(id, secId, setId, gear){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); const s=sec&&(sec.sets||[]).find(x=>x.id===setId); if(!s)return; s.equip=s.equip||[]; const i=s.equip.indexOf(gear); if(i>=0) s.equip.splice(i,1); else s.equip.push(gear); }); }
   toggleType(id, secId, setId, ty){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); const s=sec&&(sec.sets||[]).find(x=>x.id===setId); if(!s)return; s.types=s.types||[]; const i=s.types.indexOf(ty); if(i>=0) s.types.splice(i,1); else s.types.push(ty); }); }
@@ -4256,22 +4272,25 @@ class Component extends DCLogic {
     let planTotalN=0;
     const planSections=(plan.sections||[]).map((sm,smi)=>{
       const sets=sm.sets||[];
-      let sub=0; sets.forEach(s=>sub+=(Number(s.dist)||0)); planTotalN+=sub;
+      let sub=0; sets.forEach(s=>sub+=(Number(s.dist)||0)*(Number(s.reps)||1)); planTotalN+=sub;
       const dot = smi===0?'#22C1DA' : smi===(plan.sections.length-1)?'#9AA2B4' : squad.accent;
       return { id:sm.id, title:sm.title, dot, subtotal:sub,
         onTitle:(e)=>this.renameSection(S.squadId, sm.id, e.target.value),
         onRemoveSection:()=>this.removeSection(S.squadId, sm.id),
-        sets:sets.map(s=>({
-          id:s.id, dist:s.dist, txt:s.txt, rest:s.rest||'',
+        sets:sets.map(s=>{ const reps=Number(s.reps)||1; const dist=Number(s.dist)||0; return {
+          id:s.id, dist:dist, reps:reps, txt:s.txt, rest:s.rest||'', hr:s.hr||'', setMetres:(reps*dist),
           equip:this.equipCatalog.map(g=>{ const on=(s.equip||[]).includes(g); return {label:g, on, onToggle:()=>this.toggleEquip(S.squadId,sm.id,s.id,g), bg:on?squad.accent:'#fff', fg:on?'#fff':'#7A8296', border:on?squad.accent:'#E5E9F0'}; }),
           types:this.typeCatalog.map(g=>{ const on=(s.types||[]).includes(g); return {label:g, on, onToggle:()=>this.toggleType(S.squadId,sm.id,s.id,g), bg:on?'#0A0F1A':'#fff', fg:on?'#fff':'#7A8296', border:on?'#0A0F1A':'#E5E9F0'}; }),
           zoneChips:['EN1','EN2','EN3','SP1','SP2','SP3'].map(z=>{ const on=(s.zone||plan.zone)===z; return {label:z, on, onToggle:()=>this.setSetField(S.squadId,sm.id,s.id,'zone',z), bg:on?squad.accent:'#F8FAFC', fg:on?'#fff':'#7A8296'}; }),
+          restChips:this.restCatalog.map(r=>{ const val=(r==='None'?'':r); const on=(s.rest||'')===val; return {label:r, on, onToggle:()=>this.setSetRest(S.squadId,sm.id,s.id,val), bg:on?'#9A6206':'#F8FAFC', fg:on?'#fff':'#7A8296', border:on?'#9A6206':'#EEE4CE'}; }),
+          hrChips:this.hrCatalog.map(h=>{ const val=(h==='—'?'':h); const on=(s.hr||'')===val; return {label:h, on, onToggle:()=>this.setSetField(S.squadId,sm.id,s.id,'hr',val), bg:on?'#C81E4B':'#F8FAFC', fg:on?'#fff':'#7A8296', border:on?'#C81E4B':'#F3D4DC'}; }),
           advice: this.setAdvice(s, plan.zone), hasAdvice: !!this.setAdvice(s, plan.zone), hasRest: !!s.rest,
+          onRepsDec:()=>this.stepSetField(S.squadId,sm.id,s.id,'reps',-1,1,1), onRepsInc:()=>this.stepSetField(S.squadId,sm.id,s.id,'reps',1,1,1),
+          onDistDec:()=>this.stepSetField(S.squadId,sm.id,s.id,'dist',-1,0,25), onDistInc:()=>this.stepSetField(S.squadId,sm.id,s.id,'dist',1,0,25),
           onDist:(e)=>this.setSetField(S.squadId,sm.id,s.id,'dist', Math.max(0, parseInt(e.target.value||'0',10)||0)),
           onTxt:(e)=>this.setSetField(S.squadId,sm.id,s.id,'txt', e.target.value),
-          onRest:(e)=>this.setSetRest(S.squadId,sm.id,s.id, e.target.value),
           onRemove:()=>this.removePlanSet(S.squadId,sm.id,s.id)
-        })),
+        }; }),
         onAdd:()=>this.addPlanSet(S.squadId,sm.id) };
     });
     const onAddSection=()=>this.addSection(S.squadId);
@@ -5047,7 +5066,7 @@ class Component extends DCLogic {
       onSubmitPlanReview:()=>this.submitPlanForReview(S.squadId, squad.name),
       onClosePrintPreview:()=>this.setState({printPreviewOpen:false}), onConfirmPrint:()=>{ this._printEscape(); setTimeout(()=>window.print(), 30); }, printPreviewOpen:S.printPreviewOpen,
       printSheet:{ accent:squad.accent, clubName:this.brandConfig.clubName||'Vortex Swimming Club', squadName:squad.name, printDate:new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}), zoneLabel:(zoneRows[zi]?zoneRows[zi].code+' \u00b7 '+zoneRows[zi].name:zName), title:sessionTitle||'Session', coach:squad.coach, total:planTotalN.toLocaleString(),
-        sections: planSections.map(ps=>({ title:ps.title, dot:ps.dot, subtotal:ps.subtotal, sets: ps.sets.map(st=>{ const onEquip=(st.equip||[]).filter(e=>e.on).map(e=>e.label); const onTypes=(st.types||[]).filter(e=>e.on).map(e=>e.label); return {dist:st.dist, txt:st.txt, hasTypes:onTypes.length>0, typesStr:onTypes.join(', '), hasEquip:onEquip.length>0, equipStr:onEquip.join(', '), hasRest:!!st.rest, restStr:st.rest||'', zoneCode:st.zone||''}; }) })) },
+        sections: planSections.map(ps=>({ title:ps.title, dot:ps.dot, subtotal:ps.subtotal, sets: ps.sets.map(st=>{ const onEquip=(st.equip||[]).filter(e=>e.on).map(e=>e.label); const onTypes=(st.types||[]).filter(e=>e.on).map(e=>e.label); return {dist:(st.reps>1?(st.reps+'×'+st.dist):st.dist), txt:st.txt, hasTypes:onTypes.length>0, typesStr:onTypes.join(', '), hasEquip:onEquip.length>0, equipStr:onEquip.join(', '), hasRest:!!st.rest, restStr:st.rest||'', hasHr:!!st.hr, hrStr:st.hr?('HR '+st.hr):'', zoneCode:st.zone||''}; }) })) },
       onImportPdfClick:()=>{ const el=document.getElementById('vx-pdf-input'); if(el) el.click(); },
       pdfImportBusy:S.pdfImportBusy, pdfImportMsg:S.pdfImportMsg, pdfImportMsgColor: S.pdfImportOk?'#0C7A4F':'#B42318',
       onPdfFileChange:(e)=>this.handlePdfImport(e, S.squadId),
