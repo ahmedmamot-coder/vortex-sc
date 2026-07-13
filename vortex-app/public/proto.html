@@ -24,7 +24,7 @@
   var SB_URL = "https://qhrpwiakobgcxfmcoyfg.supabase.co";
   var SB_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFocnB3aWFrb2JnY3hmbWNveWZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4NTgyMzQsImV4cCI6MjA5OTQzNDIzNH0.NVmLPF99O9M6rj-Srp3tP-ZkuhzIea0jSN4r0asW1eI";
   // Club-wide shared keys (NOT the per-device Anthropic API key).
-  var SYNC = ["vx_family","vx_plans","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_staff_accounts","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta"];
+  var SYNC = ["vx_family","vx_plans","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_staff_accounts","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_account_ovr"];
   var booted = false;
   function hideSplash(){ setTimeout(function(){ var el=document.getElementById("vx-splash"); if(el){ el.style.opacity="0"; setTimeout(function(){ if(el.parentNode) el.parentNode.removeChild(el); }, 380); } }, 220); }
   function boot(){ if(booted) return; booted=true; var s=document.createElement("script"); s.src="assets/support.js"; s.onload=hideSplash; document.body.appendChild(s); }
@@ -877,6 +877,9 @@
                             </sc-for>
                           </div>
                         </div>
+                      </sc-if>
+                      <sc-if value="{{ meetsCalEmpty }}" hint-placeholder-val="{{ false }}">
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:14px;box-shadow:0 1px 4px rgba(11,20,40,.04);display:flex;align-items:center;gap:10px;margin-bottom:12px"><i data-lucide="calendar-x" style="width:17px;height:17px;color:#9AA2B4"></i><span style="font-size:12px;color:#7A8296">No club meets posted yet — the club calendar will appear here.</span></div>
                       </sc-if>
                       <div style="display:flex;flex-direction:column;gap:8px">
                         <sc-for list="{{ famMeetsUpcoming }}" as="m" hint-placeholder-count="3">
@@ -2504,27 +2507,32 @@
                           <button onclick="{{ onStaffCreate }}" style="background:var(--vx-blue);color:#fff;border:none;border-radius:10px;padding:10px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer">Create account</button>
                         </div>
                       </sc-if>
-                      <sc-for list="{{ customStaffRows }}" as="c" hint-placeholder-count="0">
-                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:12px 13px;display:flex;align-items:center;gap:11px">
-                          <span style="width:38px;height:38px;flex:none;border-radius:11px;background:#2733D6;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12.5px">{{ c.initials }}</span>
-                          <span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:13px;color:#0C1116">{{ c.name }}</span><span style="display:block;font-size:11px;color:#7A8296">{{ c.sub }}</span></span>
-                          <button onclick="{{ c.onDelete }}" style="flex:none;width:32px;height:32px;border-radius:9px;border:none;background:#FDECEC;color:#E5484D;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="trash-2" style="width:14px;height:14px"></i></button>
-                        </div>
-                      </sc-for>
-                      <sc-for list="{{ staffRows }}" as="s" hint-placeholder-count="9">
+                      <sc-for list="{{ staffAllRows }}" as="s" hint-placeholder-count="11">
                         <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:12px 13px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
                           <div style="display:flex;align-items:center;gap:11px">
-                            <span style="width:38px;height:38px;flex:none;border-radius:11px;background:{{ s.accent }};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12.5px">{{ s.short }}</span>
-                            <span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:13px;color:#0C1116">{{ s.coach }}</span><span style="display:block;font-size:11px;color:#7A8296">{{ s.squadName }}</span></span>
+                            {{ s.avatar }}
+                            <span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:13px;color:#0C1116">{{ s.name }}</span><span style="display:block;font-size:11px;color:#7A8296">{{ s.sub }}</span></span>
                             <button onclick="{{ s.onEdit }}" style="flex:none;width:32px;height:32px;border-radius:9px;border:none;background:#F4F6F8;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="pencil" style="width:14px;height:14px"></i></button>
                           </div>
                           <sc-if value="{{ s.editing }}" hint-placeholder-val="{{ false }}">
                             <div style="display:flex;flex-direction:column;gap:7px;margin-top:9px">
-                              <input value="{{ s.editName }}" oninput="{{ s.onEditName }}" placeholder="Coach name" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                              <input value="{{ s.editLabel }}" oninput="{{ s.onEditLabel }}" placeholder="Full name" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
                               <div style="display:flex;gap:7px">
-                                <input value="{{ s.editPin }}" oninput="{{ s.onEditPin }}" placeholder="4-digit PIN" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:var(--font-mono);font-size:12.5px;color:#0C1116;outline:none">
-                                <button onclick="{{ s.onSave }}" style="flex:1;background:var(--vx-blue);color:#fff;border:none;border-radius:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">Save</button>
+                                <input value="{{ s.editUser }}" oninput="{{ s.onEditUser }}" placeholder="Username" autocapitalize="off" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                                <input value="{{ s.editPin }}" oninput="{{ s.onEditPin }}" placeholder="PIN" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:var(--font-mono);font-size:12.5px;color:#0C1116;outline:none">
+                              </div>
+                              <sc-if value="{{ s.isCustom }}" hint-placeholder-val="{{ false }}">
+                                <select value="{{ s.editRole }}" onchange="{{ s.onEditRole }}" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                                  <option>Aquatic Director</option><option>Technical Manager</option><option>Head Coach</option><option>Manager</option><option>Admin</option><option>Coach</option><option>Assistant Coach</option><option>Fitness Coach</option>
+                                </select>
+                                <select value="{{ s.editSquad }}" onchange="{{ s.onEditSquad }}" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                                  <option value="">Full access — all squads</option><option value="preteam">Locked to Pre-Team</option><option value="advb">Locked to Advanced B</option><option value="adva">Locked to Advanced A</option><option value="junior">Locked to Junior</option><option value="seniorb">Locked to Senior B</option><option value="seniora">Locked to Senior A</option><option value="vortexb">Locked to Vortex B</option><option value="vortexa">Locked to Vortex A</option><option value="legend">Locked to Legend</option>
+                                </select>
+                              </sc-if>
+                              <div style="display:flex;gap:7px">
+                                <button onclick="{{ s.onSave }}" style="flex:1;background:var(--vx-blue);color:#fff;border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">Save</button>
                                 <button onclick="{{ s.onCancelEdit }}" style="flex:none;width:38px;background:#F4F6F8;color:#7A8296;border:none;border-radius:9px;cursor:pointer"><i data-lucide="x" style="width:14px;height:14px"></i></button>
+                                <sc-if value="{{ s.isCustom }}" hint-placeholder-val="{{ false }}"><button onclick="{{ s.onDelete }}" style="flex:none;width:38px;background:#FDECEC;color:#E5484D;border:none;border-radius:9px;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="trash-2" style="width:14px;height:14px"></i></button></sc-if>
                               </div>
                             </div>
                           </sc-if>
@@ -2833,6 +2841,9 @@ class Component extends DCLogic {
     ];
     try { this.customStaff = JSON.parse(localStorage.getItem('vx_staff_accounts')||'[]'); } catch(e){ this.customStaff = []; }
     for (var _si=0; _si<this.customStaff.length; _si++){ var _sa=this.customStaff[_si]; this.accounts.push({id:_sa.id, user:_sa.user, label:_sa.name, role:_sa.role, pin:_sa.pin, accent:'#2733D6', photo:'', initials:(_sa.name||'?').slice(0,2).toUpperCase(), squadId:_sa.squadId||''}); }
+    // Per-account overrides (name / username / PIN) editable from the Staff admin.
+    try { this.accountOvr = JSON.parse(localStorage.getItem('vx_account_ovr')||'{}'); } catch(e){ this.accountOvr = {}; }
+    this.accounts.forEach(function(a){ var o=this.accountOvr[a.id]; if(o){ if(o.label) a.label=o.label; if(o.user) a.user=o.user; if(o.pin) a.pin=o.pin; if(o.label) a.initials=(o.label||'?').slice(0,2).toUpperCase(); } }, this);
     try { this.meetsCal = JSON.parse(localStorage.getItem('vx_meets_cal')||'[]'); } catch(e){ this.meetsCal = []; }
     this.squads = [
       {id:'preteam', name:'Pre-Team', ages:'≤6', count:3, coach:'Coach Fathy & Coach Mahady', accent:'#22C1DA', glow:'rgba(34,193,218,.35)', photo:'assets/coach-fathy.jpg', short:'Pre'},
@@ -3252,7 +3263,21 @@ class Component extends DCLogic {
   }
   staffSave(squadId, form){ this.staffOverrides[squadId]={name:form.name.trim(), pin:form.pin.trim()}; this._saveJSON('vx_staff_ovr', this.staffOverrides); const sq=this.squadById[squadId]; if(sq) sq.coach=form.name.trim(); this.setState({staffEditId:null}); }
   staffAddCreate(){ const f=this.state.staffAddForm||{}; const name=(f.name||'').trim(); const user=(f.user||'').trim().toLowerCase(); const pin=(f.pin||'').trim(); if(!name||!user||!pin){ return; } const id='st_'+Date.now(); const rec={id:id, name:name, user:user, pin:pin, role:f.role||'Coach', phone:(f.phone||'').trim(), squadId:(f.squadId||'').trim()}; this.customStaff.push(rec); this._saveJSON('vx_staff_accounts', this.customStaff); this.accounts.push({id:id, user:user, label:name, role:rec.role, pin:pin, accent:'#2733D6', photo:'', initials:name.slice(0,2).toUpperCase(), squadId:rec.squadId}); this.setState({staffAddOpen:false, staffAddForm:{name:'',user:'',pin:'',role:'Coach',phone:'',squadId:''}}); }
-  staffAddDelete(id){ this.customStaff=this.customStaff.filter(function(a){return a.id!==id;}); this._saveJSON('vx_staff_accounts', this.customStaff); this.accounts=this.accounts.filter(function(a){return a.id!==id;}); this.setState({}); }
+  staffAddDelete(id){ this.customStaff=this.customStaff.filter(function(a){return a.id!==id;}); this._saveJSON('vx_staff_accounts', this.customStaff); if(this.accountOvr[id]){ delete this.accountOvr[id]; this._saveJSON('vx_account_ovr', this.accountOvr); } this.accounts=this.accounts.filter(function(a){return a.id!==id;}); this.setState({staffEditId:null}); }
+  staffAccOpen(id){ const a=this.accounts.find(x=>x.id===id); if(!a) return; this.setState({staffEditId:id, staffAccDraft:{label:a.label||'', user:a.user||'', pin:a.pin||'', role:a.role||'Coach', squadId:a.squadId||''}}); }
+  staffAccChange(field, val){ this.setState({staffAccDraft:{...(this.state.staffAccDraft||{}), [field]:val}}); }
+  staffAccCancel(){ this.setState({staffEditId:null, staffAccDraft:null}); }
+  staffAccSave(id){ const d=this.state.staffAccDraft||{}; const a=this.accounts.find(x=>x.id===id); if(!a) return;
+    const label=(d.label||'').trim(), user=(d.user||'').trim().toLowerCase(), pin=(d.pin||'').trim();
+    if(!label||!user||!pin){ return; }
+    this.accountOvr[id]={label:label, user:user, pin:pin}; this._saveJSON('vx_account_ovr', this.accountOvr);
+    a.label=label; a.user=user; a.pin=pin; a.initials=label.slice(0,2).toUpperCase();
+    const isCustom=(''+id).indexOf('st_')===0;
+    if(isCustom){ const role=(d.role||'Coach'), squadId=(d.squadId||''); a.role=role; a.squadId=squadId;
+      this.customStaff=this.customStaff.map(function(c){ return c.id===id? {...c, name:label, user:user, pin:pin, role:role, squadId:squadId}:c; }); this._saveJSON('vx_staff_accounts', this.customStaff);
+    }
+    this.setState({staffEditId:null, staffAccDraft:null});
+  }
   meetsCalAdd(){ const f=this.state.meetsCalForm||{}; const name=(f.name||'').trim(); const date=(f.date||'').trim(); if(!name||!date) return; this.meetsCal.push({id:'mc_'+Date.now(), name:name, date:date, place:(f.place||'').trim(), pdf:f.pdf||'', pdfName:f.pdfName||''}); this.meetsCal.sort(function(a,b){return (a.date||'').localeCompare(b.date||'');}); this._saveJSON('vx_meets_cal', this.meetsCal); this.setState({meetsCalForm:{name:'',date:'',place:'',pdf:'',pdfName:''}}); }
   meetsViewPdf(pdf, title){ if(!pdf) return; const w=window.open('', '_blank'); if(!w) return; w.document.title=title||'Meet details'; w.document.body.style.margin='0'; const ifr=w.document.createElement('iframe'); ifr.src=pdf; ifr.style.cssText='border:0;width:100vw;height:100vh'; w.document.body.appendChild(ifr); }
   meetsCalDelete(id){ this.meetsCal=this.meetsCal.filter(function(m){return m.id!==id;}); this._saveJSON('vx_meets_cal', this.meetsCal); this.setState({}); }
@@ -4862,7 +4887,7 @@ class Component extends DCLogic {
 
     // ---- admin section overlay ----
     const adminTitleMap={swimmers:'Swimmers',meets:'Meets',staff:'Staff',settings:'Settings',brand:'Club Configuration'};
-    const adminSubMap={swimmers:'272 swimmers · 9 squads', meets:this.allMeets().length+' meets on record', staff:'9 squad coaches', settings:'API key · reset data', brand:'Brand · zone method · locale · currency'};
+    const adminSubMap={swimmers:'272 swimmers · 9 squads', meets:this.allMeets().length+' meets on record', staff:'Admins, coaches & staff · names, usernames & PINs', settings:'API key · reset data', brand:'Brand · zone method · locale · currency'};
     const onCloseAdmin=()=>this.setState({adminSection:null, swEditId:null, swAddOpen:false, staffEditId:null, meetImportOpen:false, meetImportPreview:null, meetExpanded:null});
 
     // -- swimmers admin --
@@ -4941,6 +4966,30 @@ class Component extends DCLogic {
         onEdit:()=>this.setState({staffEditId:sq.id, staffEditDraft:{name:sq.coach, pin:ov.pin||''}}),
         onCancelEdit:()=>this.setState({staffEditId:null, staffEditDraft:null}),
         onSave:()=>{ const d=this.state.staffEditDraft||{}; this.staffSave(sq.id, {name:d.name||sq.coach, pin:d.pin||''}); this.setState({staffEditDraft:null}); },
+      };
+    });
+    // Unified staff list — admins (Ahmed, Sameh), the 9 squad coaches and any added staff.
+    // Everyone here is editable: name, username & PIN (added staff also role, squad + delete).
+    const staffAllRows=this.accounts.map(a=>{ const editing=S.staffEditId===a.id; const sq=a.squadId?this.squadById[a.squadId]:null;
+      const isCustom=(''+a.id).indexOf('st_')===0; const isAdminAcc=(a.id==='ahmed'||a.id==='sameh');
+      const badge = sq? sq.short : (a.initials||'?'); const accent = sq? sq.accent : (a.accent||'#2733D6');
+      const primary = sq? sq.name : (a.role||''); const sub = primary + ' · @' + (a.user||'');
+      const d=S.staffAccDraft||{};
+      return { id:a.id, name:a.label||'', sub:sub, isCustom, isAdminAcc, editing,
+        avatar:this.av(a.photo||null, badge, 38, 11, accent, '#fff', 12),
+        editLabel: editing? (d.label ?? a.label ?? '') : (a.label||''),
+        editUser: editing? (d.user ?? a.user ?? '') : (a.user||''),
+        editPin: editing? (d.pin ?? a.pin ?? '') : (a.pin||''),
+        editRole: editing? (d.role ?? a.role ?? 'Coach') : (a.role||'Coach'),
+        editSquad: editing? (d.squadId ?? a.squadId ?? '') : (a.squadId||''),
+        onEdit:()=>this.staffAccOpen(a.id),
+        onEditLabel:(e)=>this.staffAccChange('label', e.target.value),
+        onEditUser:(e)=>this.staffAccChange('user', e.target.value),
+        onEditPin:(e)=>this.staffAccChange('pin', e.target.value),
+        onEditRole:(e)=>this.staffAccChange('role', e.target.value),
+        onEditSquad:(e)=>this.staffAccChange('squadId', e.target.value),
+        onSave:()=>this.staffAccSave(a.id), onCancelEdit:()=>this.staffAccCancel(),
+        onDelete:()=>this.staffAddDelete(a.id),
       };
     });
 
@@ -5295,7 +5344,7 @@ class Component extends DCLogic {
       meetImportText:S.meetImportText, onMeetImportText:(e)=>this.setState({meetImportText:e.target.value}),
       onMeetImportPreview:()=>this.meetImportPreview(), meetImportHasPreview, meetImportSummary, onMeetImportConfirm:()=>this.meetImportConfirm(),
       meetRows,
-      staffRows,
+      staffRows, staffAllRows,
       staffAddOpen: S.staffAddOpen,
       staffForm: S.staffAddForm||{name:'',user:'',pin:'',role:'Coach',phone:''},
       onStaffAddToggle:()=>this.setState({staffAddOpen:!S.staffAddOpen}),
