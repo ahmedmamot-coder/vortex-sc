@@ -23,7 +23,7 @@
   var SB_URL = "https://qhrpwiakobgcxfmcoyfg.supabase.co";
   var SB_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFocnB3aWFrb2JnY3hmbWNveWZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4NTgyMzQsImV4cCI6MjA5OTQzNDIzNH0.NVmLPF99O9M6rj-Srp3tP-ZkuhzIea0jSN4r0asW1eI";
   // Club-wide shared keys (NOT the per-device Anthropic API key).
-  var SYNC = ["vx_family","vx_plans","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_staff_accounts","vx_meets_cal"];
+  var SYNC = ["vx_family","vx_plans","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_staff_accounts","vx_meets_cal","vx_swimmer_goals","vx_squad_goals"];
   function boot(){ var s=document.createElement("script"); s.src="assets/support.js"; document.body.appendChild(s); }
   try {
     var sb = window.supabase.createClient(SB_URL, SB_ANON);
@@ -2176,13 +2176,14 @@
                           </div>
                         </sc-if>
                         <sc-if value="{{ goalsHasSwimmer }}" hint-placeholder-val="{{ true }}">
+                          <div style="margin:0 0 10px"><span style="display:block;font-weight:700;font-size:13.5px;color:#0C1116">Squad season goals · {{ goalsSquadName }}</span><span style="display:block;font-size:11px;color:#7A8296;margin-top:1px">Target per event · current = squad average PB</span></div>
                           <input value="{{ goalsSwQuery }}" oninput="{{ onGoalsSwQuery }}" placeholder="Search a swimmer to set individual goals…" style="width:100%;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:10px 12px;font-family:inherit;font-size:13px;color:#0C1116;outline:none;box-sizing:border-box">
                           <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">
                             <sc-for list="{{ goalsSwResults }}" as="r" hint-placeholder-count="3">
                               <button onclick="{{ r.onSelect }}" style="display:flex;flex-direction:column;align-items:flex-start;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:9px 11px;cursor:pointer;font-family:inherit;text-align:left"><span style="font-size:12.5px;font-weight:600;color:#0C1116">{{ r.name }}</span><span style="font-size:11px;color:#7A8296">{{ r.sub }}</span></button>
                             </sc-for>
                           </div>
-                          <p style="margin:8px 2px 0;font-size:11.5px;color:#9AA2B4;line-height:1.5">Showing club-average benchmarks. Search a swimmer above to set and edit their individual season goals with AI-suggested targets.</p>
+                          <p style="margin:8px 2px 0;font-size:11.5px;color:#9AA2B4;line-height:1.5">Editing squad targets below. Search a swimmer above to set and edit their individual season goals with AI-suggested targets.</p>
                         </sc-if>
                         <sc-if value="{{ goalMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:8px 2px 0;font-size:11.5px;font-weight:600;color:#0C7A4F">{{ goalMsg }}</p></sc-if>
                       </div>
@@ -2198,7 +2199,7 @@
                               </div>
                               <div style="display:flex;gap:16px;margin-top:8px"><span><span style="display:block;font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4">Target</span><span style="font-family:var(--font-mono);font-weight:700;font-size:15px;color:{{ g.ringColor }}">{{ g.target }}</span></span><span><span style="display:block;font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4">Current PB</span><span style="font-family:var(--font-mono);font-weight:700;font-size:15px;color:#0C1116">{{ g.current }}</span></span></div>
                             </div>
-                            <sc-if value="{{ goalsHasSwimmer }}" hint-placeholder-val="{{ false }}">
+                            <sc-if value="{{ g.editable }}" hint-placeholder-val="{{ false }}">
                               <button onclick="{{ g.onEdit }}" style="flex:none;width:34px;height:34px;border-radius:10px;background:#F4F6F8;border:none;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="pencil" style="width:15px;height:15px"></i></button>
                             </sc-if>
                           </div>
@@ -2885,6 +2886,14 @@ class Component extends DCLogic {
     this.customMeets=this._loadJSON('vx_custom_meets', []);
     this.eventRequests=this._loadJSON('vx_event_requests', []);
     this.swimmerGoals=this._loadJSON('vx_swimmer_goals', {});
+    this.squadGoals=this._loadJSON('vx_squad_goals', {});
+    this.goalEvents=[
+      {k:'50 Free',b:26.8},{k:'100 Free',b:57.5},{k:'200 Free',b:125},{k:'400 Free',b:265},{k:'800 Free',b:545},{k:'1500 Free',b:1040},
+      {k:'50 Back',b:30},{k:'100 Back',b:66},{k:'200 Back',b:142},
+      {k:'50 Breast',b:33},{k:'100 Breast',b:74},{k:'200 Breast',b:160},
+      {k:'50 Fly',b:28.5},{k:'100 Fly',b:62},{k:'200 Fly',b:140},
+      {k:'100 IM',b:68},{k:'200 IM',b:138},{k:'400 IM',b:295}
+    ];
     this.planSubmissions=this._loadJSON('vx_plan_submissions', {});
     this.notifications=this._loadJSON('vx_notifications', [
       {id:'seed1', audience:'all', icon:'calendar-plus', title:'New meet added', body:'Nautilus Invitational Swim Meet 2026 is open for entries.', at:new Date(Date.now()-86400000*2).toISOString(), read:false},
@@ -3090,6 +3099,17 @@ class Component extends DCLogic {
     this._saveGoals(); this.setState({goalEditEvent:null, goalEditVal:'', goalMsg:'Goal saved ✓'});
   }
   removeGoalOverride(swId, event){ if(this.swimmerGoals[swId]) delete this.swimmerGoals[swId][event]; this._saveGoals(); this.forceUpdate(); }
+  _saveSquadGoals(){ this._saveJSON('vx_squad_goals', this.squadGoals); }
+  startEditSquadGoal(event, curSuggested){ this.setState({goalSqEditEvent:event, goalEditEvent:null, goalEditVal: curSuggested!=null ? this.fmt(curSuggested) : '', goalMsg:''}); }
+  cancelEditSquadGoal(){ this.setState({goalSqEditEvent:null, goalEditVal:''}); }
+  saveSquadGoal(squadId, event){ const sec=this.parseTimeStr(this.state.goalEditVal); if(sec==null || sec<=0) return this.setState({goalMsg:'Enter a valid time, e.g. 26.20 or 2:15.00'});
+    const cur=(this.squadGoals[squadId]=this.squadGoals[squadId]||{}); cur[event]={sec, source:'coach'};
+    this._saveSquadGoals(); this.setState({goalSqEditEvent:null, goalEditVal:'', goalMsg:'Squad goal saved ✓'});
+  }
+  removeSquadGoal(squadId, event){ if(this.squadGoals[squadId]) delete this.squadGoals[squadId][event]; this._saveSquadGoals(); this.forceUpdate(); }
+  aiSuggestSquadGoal(event, baseSec, age){ const sec=this._aiSuggestSec(baseSec, age); this.setState({goalSqEditEvent:event, goalEditEvent:null, goalEditVal:this.fmt(sec), goalMsg:'AI suggested — review and save'}); }
+  squadAvgPb(squadId, event){ const list=this.roster[squadId]||[]; let sum=0,n=0; list.forEach(sw=>{ const pb=(sw.pbs||[]).find(p=>p.event===event); if(pb){ sum+=pb.sec; n++; } }); return n? +(sum/n).toFixed(2) : null; }
+  squadTypicalAge(squadId){ const list=this.roster[squadId]||[]; if(!list.length) return 13; let s=0,n=0; list.forEach(sw=>{ const a=parseInt(sw.age,10); if(!isNaN(a)){ s+=a; n++; } }); return n? Math.round(s/n) : 13; }
   submitPlanForReview(squadId, squadName){
     this.planSubmissions = this.planSubmissions || this._loadJSON('vx_plan_submissions', {});
     this.planSubmissions[squadId] = {at:new Date().toISOString()};
@@ -4728,32 +4748,63 @@ class Component extends DCLogic {
     let goalsSwObj=null, goalsSqObj=null;
     if(S.goalsSwId){ const [gsq,gid]=S.goalsSwId.split('::'); goalsSqObj=this.squads.find(s=>s.id===gsq)||squad; goalsSwObj=(this.roster[gsq]||[]).find(x=>x.id===gid)||null; }
     const goalsSwLabel = goalsSwObj ? goalsSwObj.name+' · '+goalsSqObj.name : '';
+    const _evColor=(ev)=> ev.includes('IM')?'#12A0AE':ev.includes('Free')?'#8A22D5':ev.includes('Back')?'#067EEA':ev.includes('Breast')?'#2733D6':ev.includes('Fly')?'#5D22CF':'#12A0AE';
     let goalRows=[];
     if(goalsSwObj){
+      // Individual swimmer — a goal row for EVERY event, PBs first
       const overrides = this.swimmerGoals[S.goalsSwId] || {};
-      goalRows = (goalsSwObj.pbs||[]).slice(0,8).map(p=>{
-        const ov = overrides[p.event];
-        const tgtSec = ov ? ov.sec : this._aiSuggestSec(p.sec, goalsSwObj.age);
-        const isAiDefault = !ov;
-        const achieved = p.sec<=tgtSec;
-        const pct = achieved?100: Math.max(6, Math.round((1-(p.sec-tgtSec)/(p.sec*0.05))*100));
+      const pbMap={}; (goalsSwObj.pbs||[]).forEach(p=>{ pbMap[p.event]=p.sec; });
+      const ordered=this.goalEvents.slice().sort((a,b)=> (pbMap[b.k]!=null?1:0)-(pbMap[a.k]!=null?1:0));
+      goalRows = ordered.map(ev=>{
+        const cur = pbMap[ev.k]; const hasPb = cur!=null;
+        const ov = overrides[ev.k];
+        const baseSec = hasPb ? cur : ev.b;
+        const tgtSec = ov ? ov.sec : (hasPb ? this._aiSuggestSec(cur, goalsSwObj.age) : null);
+        const hasTarget = tgtSec!=null;
+        const achieved = hasPb && hasTarget && cur<=tgtSec;
+        const pct = (!hasPb||!hasTarget) ? 0 : (achieved?100: Math.max(6, Math.round((1-(cur-tgtSec)/(cur*0.05))*100)));
         const dash=(pct/100*175.9).toFixed(1)+' 175.9';
-        const color = achieved?'#0C7A4F':(p.event.includes('Free')?'#8A22D5':p.event.includes('Back')?'#067EEA':p.event.includes('Breast')?'#2733D6':p.event.includes('Fly')?'#5D22CF':'#12A0AE');
-        const isEditing = S.goalEditEvent===p.event;
-        return { event:p.event, achieved, dash, ringColor:color, pct:pct+'%', current:this.fmt(p.sec), target:this.fmt(tgtSec),
-          isAiDefault, sourceLabel: isAiDefault?'AI suggested':'Coach set', hasReset: !!ov,
-          isEditing, editVal:S.goalEditVal,
+        const color = achieved?'#0C7A4F': (hasPb? _evColor(ev.k) : '#C7CDDA');
+        const isEditing = S.goalEditEvent===ev.k;
+        return { event:ev.k, achieved, dash, ringColor:color, pct: (hasPb&&hasTarget)?pct+'%':'—',
+          current: hasPb? this.fmt(cur):'—', target: hasTarget? this.fmt(tgtSec):'Not set',
+          sourceLabel: ov?'Coach set':(hasPb?'AI suggested':'No PB yet'), hasReset: !!ov,
+          editable:true, isEditing, editVal:S.goalEditVal,
           onEditVal:(e)=>this.setState({goalEditVal:e.target.value}),
-          onEdit:()=>this.startEditGoal(p.event, tgtSec),
+          onEdit:()=>this.startEditGoal(ev.k, tgtSec),
           onCancel:()=>this.cancelEditGoal(),
-          onSave:()=>this.saveGoalEdit(S.goalsSwId, p.event),
-          onAiSuggest:()=>this.aiSuggestGoal(S.goalsSwId, p.event, p.sec, goalsSwObj.age),
-          onReset: ov ? ()=>this.removeGoalOverride(S.goalsSwId, p.event) : null,
+          onSave:()=>this.saveGoalEdit(S.goalsSwId, ev.k),
+          onAiSuggest:()=>this.aiSuggestGoal(S.goalsSwId, ev.k, baseSec, goalsSwObj.age),
+          onReset: ov ? ()=>this.removeGoalOverride(S.goalsSwId, ev.k) : null,
         };
       });
     } else {
-      const goalDefsRaw=[{event:'50 Free',cur:26.9,tgt:26.2},{event:'100 Free',cur:58.4,tgt:57.0},{event:'200 IM',cur:139.2,tgt:135.0},{event:'100 Fly',cur:63.1,tgt:63.4}];
-      goalRows=goalDefsRaw.map((g,i)=>{ const improveNeeded=g.cur-g.tgt; const achieved=improveNeeded<=0; const pct= achieved?100: Math.max(6, Math.round((1-(g.cur-g.tgt)/ (g.cur*0.05))*100)); const dash=(pct/100*175.9).toFixed(1)+' 175.9'; const colors=['#8A22D5','#067EEA','#5D22CF','#12A0AE']; return {event:g.event, achieved, dash, ringColor:colors[i%4], current:this.fmt(g.cur), target:this.fmt(g.tgt), pct:pct+'%', isAiDefault:false, sourceLabel:'Club average', hasReset:false, isEditing:false, onEdit:null}; });
+      // Squad goals — a target for every event, editable, current = squad average PB
+      const sqId=S.squadId; const sqAge=this.squadTypicalAge(sqId);
+      const sqOv=this.squadGoals[sqId]||{};
+      goalRows=this.goalEvents.map(ev=>{
+        const avg=this.squadAvgPb(sqId, ev.k); const hasAvg=avg!=null;
+        const ov=sqOv[ev.k];
+        const baseSec=hasAvg?avg:ev.b;
+        const tgtSec = ov? ov.sec : (hasAvg? this._aiSuggestSec(avg, sqAge) : null);
+        const hasTarget=tgtSec!=null;
+        const achieved = hasAvg && hasTarget && avg<=tgtSec;
+        const pct=(!hasAvg||!hasTarget)?0:(achieved?100:Math.max(6, Math.round((1-(avg-tgtSec)/(avg*0.05))*100)));
+        const dash=(pct/100*175.9).toFixed(1)+' 175.9';
+        const color = achieved?'#0C7A4F':(hasAvg?_evColor(ev.k):'#C7CDDA');
+        const isEditing=S.goalSqEditEvent===ev.k;
+        return { event:ev.k, achieved, dash, ringColor:color, pct:(hasAvg&&hasTarget)?pct+'%':'—',
+          current: hasAvg? this.fmt(avg):'—', target: hasTarget? this.fmt(tgtSec):'Not set',
+          sourceLabel: ov?'Coach set':(hasAvg?'AI suggested':'No data'), hasReset:!!ov,
+          editable:true, isEditing, editVal:S.goalEditVal,
+          onEditVal:(e)=>this.setState({goalEditVal:e.target.value}),
+          onEdit:()=>this.startEditSquadGoal(ev.k, tgtSec),
+          onCancel:()=>this.cancelEditSquadGoal(),
+          onSave:()=>this.saveSquadGoal(sqId, ev.k),
+          onAiSuggest:()=>this.aiSuggestSquadGoal(ev.k, baseSec, sqAge),
+          onReset: ov ? ()=>this.removeSquadGoal(sqId, ev.k) : null,
+        };
+      });
     }
     const goalMsg=S.goalMsg||'';
     // ai
@@ -5294,7 +5345,7 @@ class Component extends DCLogic {
       videoLibEmpty: this.videoLib.length===0,
       composeText:S.compose, onComposeChange:(e)=>this.setState({compose:e.target.value}), composeTags, onPost, feed,
       goalRows,
-      goalsHasSwimmer, goalsSwLabel, goalsSwQuery:S.goalsSwQuery||'', onGoalsSwQuery:(e)=>this.setState({goalsSwQuery:e.target.value}),
+      goalsHasSwimmer, goalsSwLabel, goalsSquadName: squad.name, goalsSwQuery:S.goalsSwQuery||'', onGoalsSwQuery:(e)=>this.setState({goalsSwQuery:e.target.value}),
       goalsSwResults, onGoalsClear:()=>this.clearGoalsSwimmer(), goalMsg, goalMsgShow:!!goalMsg,
       onAiSuggestAll: goalsSwObj ? ()=>this.aiSuggestAllGoals(S.goalsSwId, goalsSwObj.pbs||[], goalsSwObj.age) : null,
       aiKinds, aiPrompt:S.aiPrompt, onAiPrompt:(e)=>this.setState({aiPrompt:e.target.value}), aiPlaceholder:aiPlaceMap[S.aiKind],
