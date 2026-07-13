@@ -6,7 +6,40 @@
 <script src="assets/react-dom.js"></script>
 <script src="assets/vx-photos.js"></script>
 <script src="assets/roster.js"></script>
-<script src="assets/support.js"></script>
+<!-- Real shared-database sync: mirrors club data to Supabase so every device
+     shares the same plans, roster edits, staff, meets & family accounts.
+     Fail-safe: if the database is unreachable it boots normally (per-device). -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function(){
+  var SB_URL = "https://qhrpwiakobgcxfmcoyfg.supabase.co";
+  var SB_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFocnB3aWFrb2JnY3hmbWNveWZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4NTgyMzQsImV4cCI6MjA5OTQzNDIzNH0.NVmLPF99O9M6rj-Srp3tP-ZkuhzIea0jSN4r0asW1eI";
+  // Club-wide shared keys (NOT the per-device Anthropic API key).
+  var SYNC = ["vx_family","vx_plans","vx_roster_edits","vx_staff_ovr","vx_extra_results"];
+  function boot(){ var s=document.createElement("script"); s.src="assets/support.js"; document.body.appendChild(s); }
+  try {
+    var sb = window.supabase.createClient(SB_URL, SB_ANON);
+    window.__vxsb = sb;
+    // Pull shared state into localStorage before the app reads it, then boot.
+    sb.from("club_state").select("key,value").in("key", SYNC).then(function(res){
+      try {
+        (res && res.data ? res.data : []).forEach(function(r){
+          if (r.value != null) localStorage.setItem(r.key, JSON.stringify(r.value));
+        });
+      } catch(e){}
+      // Push future local writes to the shared database (fire-and-forget).
+      var orig = localStorage.setItem.bind(localStorage);
+      localStorage.setItem = function(k,v){
+        orig(k,v);
+        if (SYNC.indexOf(k) !== -1) {
+          try { sb.from("club_state").upsert({key:k, value:JSON.parse(v), updated_at:new Date().toISOString()}); } catch(e){}
+        }
+      };
+      boot();
+    }, function(){ boot(); });
+  } catch(e) { boot(); }
+})();
+</script>
 </head>
 <body>
 <template id="__bundler_thumbnail">
@@ -2681,9 +2714,7 @@ class Component extends DCLogic {
     this.PH = PH;
     this.accounts = [
       {id:'ahmed', label:'Ahmed Mamo', role:'Technical Director · full access', pin:'7777', accent:'#067EEA', photo:'assets/director-ahmed.jpg', initials:'AM', recommended:true},
-      {id:'mahmoud', label:'Mahmoud', role:'Head Coach', pin:'6666', accent:'#2733D6', photo:'assets/coach-mahmoud.jpg', initials:'M'},
-      {id:'admin', label:'Club Admin', role:'Administration', pin:'0000', accent:'#3B23C7', photo:'', initials:'CA'},
-      {id:'martin', label:'Coach Martin', role:'Legend squad coach', pin:'5555', accent:'#3B23C7', photo:'assets/coach-martin.jpg', initials:'CM'},
+      {id:'sameh', label:'Sameh', role:'Administrator · full access', pin:'1234', accent:'#3B23C7', photo:'', initials:'S'},
     ];
     this.squads = [
       {id:'preteam', name:'Pre-Team', ages:'≤6', count:3, coach:'Coach Fathy & Coach Mahady', accent:'#22C1DA', glow:'rgba(34,193,218,.35)', photo:'assets/coach-fathy.jpg', short:'Pre'},
