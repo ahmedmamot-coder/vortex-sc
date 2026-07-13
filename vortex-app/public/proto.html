@@ -433,7 +433,7 @@
               <!-- ===== HUB ===== -->
               <sc-if value="{{ showHub }}" hint-placeholder-val="{{ true }}">
                 <div class="vx-screen" data-screen-label="Technical Director hub" style="position:relative">
-                  <div style="background:#0A0F1A;color:#fff;padding:calc(env(safe-area-inset-top) + 8px) 22px 30px;position:relative;overflow:hidden">
+                  <div style="background:#0A0F1A;color:#fff;padding:calc(max(env(safe-area-inset-top), 44px) + 4px) 22px 30px;position:relative;overflow:hidden">
                     <img src="assets/a4d3e396.jpg" alt="" style="position:absolute;top:-30px;right:-40px;width:78%;height:200%;object-fit:cover;opacity:.55;mix-blend-mode:screen">
                     <div style="position:relative;display:flex;align-items:center;justify-content:space-between">
                       <img src="assets/9b59d9a2.png" alt="Vortex SC" style="height:20px">
@@ -532,7 +532,7 @@
               <!-- ===== ADMIN ===== -->
               <sc-if value="{{ showAdmin }}" hint-placeholder-val="{{ true }}">
                 <div class="vx-screen" data-screen-label="Admin dashboard" style="padding:0 0 22px">
-                  <div style="display:flex;align-items:center;gap:12px;padding:calc(env(safe-area-inset-top) + 6px) 16px 14px">
+                  <div style="display:flex;align-items:center;gap:12px;padding:calc(max(env(safe-area-inset-top), 40px) + 4px) 16px 14px">
                     <button onclick="{{ onGoHub }}" style="width:37px;height:37px;border-radius:11px;background:#fff;border:1px solid #E5E9F0;display:flex;align-items:center;justify-content:center;cursor:pointer"><i data-lucide="arrow-left" style="width:18px;height:18px;color:#0C1116"></i></button>
                     <div style="flex:1"><h1 style="font-size:20px;font-weight:700;letter-spacing:-.02em;margin:0;color:#0C1116">Club Administration</h1><p style="margin:1px 0 0;font-size:12px;color:#7A8296">Dashboard · club-wide insights</p></div>
                   </div>
@@ -596,7 +596,7 @@
               <!-- ===== MOVE SWIMMERS ===== -->
               <sc-if value="{{ showMove }}" hint-placeholder-val="{{ true }}">
                 <div class="vx-screen" data-screen-label="Move swimmers" style="padding:0 0 22px">
-                  <div style="display:flex;align-items:center;gap:12px;padding:calc(env(safe-area-inset-top) + 6px) 16px 12px">
+                  <div style="display:flex;align-items:center;gap:12px;padding:calc(max(env(safe-area-inset-top), 40px) + 4px) 16px 12px">
                     <button onclick="{{ onGoHub }}" style="width:37px;height:37px;border-radius:11px;background:#fff;border:1px solid #E5E9F0;display:flex;align-items:center;justify-content:center;cursor:pointer"><i data-lucide="arrow-left" style="width:18px;height:18px;color:#0C1116"></i></button>
                     <div style="flex:1"><h1 style="font-size:20px;font-weight:700;letter-spacing:-.02em;margin:0;color:#0C1116">Move swimmers</h1><p style="margin:1px 0 0;font-size:12px;color:#7A8296">Reassign between squads</p></div>
                   </div>
@@ -623,7 +623,7 @@
               <!-- ===== TOOLS HOME ===== -->
               <sc-if value="{{ showToolsHome }}" hint-placeholder-val="{{ true }}">
                 <div class="vx-screen" data-screen-label="Tools and AI" style="padding:0 0 22px">
-                  <div style="background:#0A0F1A;color:#fff;padding:calc(env(safe-area-inset-top) + 8px) 18px 20px;position:relative;overflow:hidden">
+                  <div style="background:#0A0F1A;color:#fff;padding:calc(max(env(safe-area-inset-top), 44px) + 4px) 18px 20px;position:relative;overflow:hidden">
                     <img src="assets/a4d3e396.jpg" alt="" style="position:absolute;top:-40px;right:-30px;width:60%;height:220%;object-fit:cover;opacity:.5;mix-blend-mode:screen">
                     <button onclick="{{ onGoHub }}" style="position:relative;width:37px;height:37px;border-radius:11px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#fff"><i data-lucide="arrow-left" style="width:18px;height:18px"></i></button>
                     <h1 style="position:relative;font-size:22px;font-weight:700;letter-spacing:-.02em;margin:14px 0 3px">Tools &amp; AI</h1>
@@ -643,7 +643,7 @@
               <!-- ===== COACHES HANDBOOK ===== -->
               <sc-if value="{{ showHandbook }}" hint-placeholder-val="{{ true }}">
                 <div class="vx-screen" data-screen-label="Coaches handbook" style="padding:0 0 22px">
-                  <div style="background:#0A0F1A;color:#fff;padding:calc(env(safe-area-inset-top) + 8px) 18px 20px;position:relative;overflow:hidden">
+                  <div style="background:#0A0F1A;color:#fff;padding:calc(max(env(safe-area-inset-top), 44px) + 4px) 18px 20px;position:relative;overflow:hidden">
                     <img src="assets/a4d3e396.jpg" alt="" style="position:absolute;top:-40px;right:-30px;width:60%;height:220%;object-fit:cover;opacity:.5;mix-blend-mode:screen">
                     <button onclick="{{ onGoHub }}" style="position:relative;width:37px;height:37px;border-radius:11px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#fff"><i data-lucide="arrow-left" style="width:18px;height:18px"></i></button>
                     <h1 style="position:relative;font-size:22px;font-weight:700;letter-spacing:-.02em;margin:14px 0 3px">Coaches Handbook</h1>
@@ -681,7 +681,7 @@
               <!-- ===== FAMILY PORTAL ===== -->
               <sc-if value="{{ showFamily }}" hint-placeholder-val="{{ true }}">
                 <div class="vx-screen" data-screen-label="Family portal" style="position:relative">
-                  <div style="background:#0A0F1A;color:#fff;padding:calc(env(safe-area-inset-top) + 8px) 20px 24px;position:relative;overflow:hidden">
+                  <div style="background:#0A0F1A;color:#fff;padding:calc(max(env(safe-area-inset-top), 44px) + 4px) 20px 24px;position:relative;overflow:hidden">
                     <img src="assets/a4d3e396.jpg" alt="" style="position:absolute;top:-30px;right:-40px;width:78%;height:200%;object-fit:cover;opacity:.4;mix-blend-mode:screen">
                     <div style="position:relative;display:flex;align-items:center;justify-content:space-between">
                       <img src="assets/9b59d9a2.png" alt="Vortex SC" style="height:19px">
@@ -935,7 +935,7 @@
               <!-- ===== ACADEMY ===== -->
               <sc-if value="{{ showAcademy }}" hint-placeholder-val="{{ true }}">
                 <div class="vx-screen" data-screen-label="Academy">
-                  <div style="background:#0A0F1A;color:#fff;padding:calc(env(safe-area-inset-top) + 8px) 18px 20px;position:relative;overflow:hidden">
+                  <div style="background:#0A0F1A;color:#fff;padding:calc(max(env(safe-area-inset-top), 44px) + 4px) 18px 20px;position:relative;overflow:hidden">
                     <img src="assets/a4d3e396.jpg" alt="" style="position:absolute;top:-40px;right:-30px;width:60%;height:220%;object-fit:cover;opacity:.4;mix-blend-mode:screen">
                     <button onclick="{{ onGoHub }}" style="position:relative;width:37px;height:37px;border-radius:11px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#fff"><i data-lucide="arrow-left" style="width:18px;height:18px"></i></button>
                     <h1 style="position:relative;font-size:22px;font-weight:700;letter-spacing:-.02em;margin:14px 0 3px">Academy</h1>
@@ -1042,7 +1042,7 @@
               <!-- ===== SQUAD PORTAL ===== -->
               <sc-if value="{{ showSquad }}" hint-placeholder-val="{{ true }}">
                 <div class="vx-screen" data-screen-label="Squad portal">
-                  <div style="background:{{ squad.accent }};color:#fff;padding:calc(env(safe-area-inset-top) + 8px) 16px 16px;position:relative;overflow:hidden">
+                  <div style="background:{{ squad.accent }};color:#fff;padding:calc(max(env(safe-area-inset-top), 44px) + 4px) 16px 16px;position:relative;overflow:hidden">
                     <img src="assets/a4d3e396.jpg" alt="" style="position:absolute;top:-30px;right:-20px;width:55%;height:210%;object-fit:cover;opacity:.32;mix-blend-mode:screen">
                     <div style="position:relative;display:flex;align-items:center;justify-content:space-between">
                       <button onclick="{{ onOpenSwitcher }}" style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.22);border-radius:11px;padding:7px 12px 7px 9px;cursor:pointer;color:#fff"><i data-lucide="arrow-left-right" style="width:16px;height:16px"></i><span style="font-size:12.5px;font-weight:700">Switch</span></button>
@@ -1278,7 +1278,7 @@
               <!-- ===== SWIMMER PROFILE ===== -->
               <sc-if value="{{ showProfile }}" hint-placeholder-val="{{ true }}">
                 <div class="vx-screen" data-screen-label="Swimmer profile">
-                  <div style="background:{{ profileHeaderBg }};color:{{ profileHeaderFg }};padding:calc(env(safe-area-inset-top) + 8px) 16px 18px;position:relative;overflow:hidden">
+                  <div style="background:{{ profileHeaderBg }};color:{{ profileHeaderFg }};padding:calc(max(env(safe-area-inset-top), 44px) + 4px) 16px 18px;position:relative;overflow:hidden">
                     <img src="assets/a4d3e396.jpg" alt="" style="position:absolute;top:-30px;right:-20px;width:55%;height:210%;object-fit:cover;opacity:{{ profileHeaderImgOpacity }};mix-blend-mode:screen">
                     <sc-if value="{{ isSponsored }}" hint-placeholder-val="{{ false }}">
                       <span style="position:absolute;top:14px;right:16px;display:flex;align-items:center;gap:5px;background:rgba(12,10,5,.28);border:1px solid rgba(255,224,138,.5);color:#FFE08A;border-radius:999px;padding:5px 11px;font-size:10.5px;font-weight:800;letter-spacing:.08em"><i data-lucide="crown" style="width:13px;height:13px"></i>VIP SPONSORED</span>
@@ -2850,7 +2850,7 @@ class Component extends DCLogic {
     super(props);
     const PH = 'assets/logo-mark.png';
     this.PH = PH;
-    this.accounts = [
+    this._baseAccounts = [
       {id:'ahmed', user:'ahmed', label:'Ahmed Mamo', role:'Technical Director · full access', pin:'7777', accent:'#067EEA', photo:'assets/director-ahmed.jpg', initials:'AM', recommended:true},
       {id:'sameh', user:'sameh', label:'Sameh', role:'Administrator · full access', pin:'1234', accent:'#3B23C7', photo:'', initials:'S'},
       {id:'fathy', user:'fathy', label:'Coach Fathy', role:'Pre-Team coach', pin:'1111', accent:'#22C1DA', photo:'assets/coach-fathy.jpg', initials:'CF', squadId:'preteam'},
@@ -2864,10 +2864,8 @@ class Component extends DCLogic {
       {id:'martin', user:'martin', label:'Coach Martin', role:'Legend coach', pin:'1111', accent:'#1B22E4', photo:'assets/coach-martin.jpg', initials:'CM', squadId:'legend'},
     ];
     try { this.customStaff = JSON.parse(localStorage.getItem('vx_staff_accounts')||'[]'); } catch(e){ this.customStaff = []; }
-    for (var _si=0; _si<this.customStaff.length; _si++){ var _sa=this.customStaff[_si]; this.accounts.push({id:_sa.id, user:_sa.user, label:_sa.name, role:_sa.role, pin:_sa.pin, accent:'#2733D6', photo:'', initials:(_sa.name||'?').slice(0,2).toUpperCase(), squadId:_sa.squadId||''}); }
-    // Per-account overrides (name / username / PIN) editable from the Staff admin.
     try { this.accountOvr = JSON.parse(localStorage.getItem('vx_account_ovr')||'{}'); } catch(e){ this.accountOvr = {}; }
-    this.accounts.forEach(function(a){ var o=this.accountOvr[a.id]; if(o){ if(o.label){ a.label=o.label; a.initials=(o.label||'?').slice(0,2).toUpperCase(); } if(o.user) a.user=o.user; if(o.pin) a.pin=o.pin; if(o.role) a.role=o.role; if(o.squadId!=null) a.squadId=o.squadId; if(o.photo) a.photo=o.photo; if(o.phone!=null) a.phone=o.phone; if(o.email!=null) a.email=o.email; if(o.bio!=null) a.bio=o.bio; } }, this);
+    this._rebuildAccounts();
     try { this.meetsCal = JSON.parse(localStorage.getItem('vx_meets_cal')||'[]'); } catch(e){ this.meetsCal = []; }
     this.squads = [
       {id:'preteam', name:'Pre-Team', ages:'≤6', count:3, coach:'Coach Fathy & Coach Mahady', accent:'#22C1DA', glow:'rgba(34,193,218,.35)', photo:'assets/coach-fathy.jpg', short:'Pre'},
@@ -3143,7 +3141,7 @@ class Component extends DCLogic {
   _uid(pfx){ this._pid=(this._pid||0)+1; return (pfx||'s')+Date.now().toString(36)+'_'+this._pid; }
   _loadPlans(){ try{ return JSON.parse(localStorage.getItem('vx_plans')||'{}')||{}; }catch(e){ return {}; } }
   _loadFamily(){ try{ return JSON.parse(localStorage.getItem('vx_family')||'[]')||[]; }catch(e){ return []; } }
-  _saveFamily(list){ try{ localStorage.setItem('vx_family', JSON.stringify(list)); }catch(e){} this.setState({family:list}); }
+  _saveFamily(list){ this.family=list; try{ localStorage.setItem('vx_family', JSON.stringify(list)); }catch(e){} this.setState({family:list}); }
   _loadJSON(key, fallback){ try{ const v=localStorage.getItem(key); return v==null?fallback:JSON.parse(v); }catch(e){ return fallback; } }
   _saveJSON(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){} }
 
@@ -3288,6 +3286,29 @@ class Component extends DCLogic {
   staffSave(squadId, form){ this.staffOverrides[squadId]={name:form.name.trim(), pin:form.pin.trim()}; this._saveJSON('vx_staff_ovr', this.staffOverrides); const sq=this.squadById[squadId]; if(sq) sq.coach=form.name.trim(); this.setState({staffEditId:null}); }
   staffAddCreate(){ const f=this.state.staffAddForm||{}; const name=(f.name||'').trim(); const user=(f.user||'').trim().toLowerCase(); const pin=(f.pin||'').trim(); if(!name||!user||!pin){ return; } const id='st_'+Date.now(); const rec={id:id, name:name, user:user, pin:pin, role:f.role||'Coach', phone:(f.phone||'').trim(), squadId:(f.squadId||'').trim()}; this.customStaff.push(rec); this._saveJSON('vx_staff_accounts', this.customStaff); this.accounts.push({id:id, user:user, label:name, role:rec.role, pin:pin, accent:'#2733D6', photo:'', initials:name.slice(0,2).toUpperCase(), squadId:rec.squadId}); this.setState({staffAddOpen:false, staffAddForm:{name:'',user:'',pin:'',role:'Coach',phone:'',squadId:''}}); }
   staffAddDelete(id){ this.customStaff=this.customStaff.filter(function(a){return a.id!==id;}); this._saveJSON('vx_staff_accounts', this.customStaff); if(this.accountOvr[id]){ delete this.accountOvr[id]; this._saveJSON('vx_account_ovr', this.accountOvr); } this.accounts=this.accounts.filter(function(a){return a.id!==id;}); this.setState({staffEditId:null}); }
+  _rebuildAccounts(){
+    // Rebuild this.accounts from the base staff + synced custom staff + per-account overrides.
+    this.accounts = this._baseAccounts.map(a=>({...a}));
+    (this.customStaff||[]).forEach(_sa=>{ this.accounts.push({id:_sa.id, user:_sa.user, label:_sa.name, role:_sa.role, pin:_sa.pin, accent:'#2733D6', photo:'', initials:(_sa.name||'?').slice(0,2).toUpperCase(), squadId:_sa.squadId||''}); });
+    const ovr=this.accountOvr||{};
+    this.accounts.forEach(a=>{ const o=ovr[a.id]; if(o){ if(o.label){ a.label=o.label; a.initials=(o.label||'?').slice(0,2).toUpperCase(); } if(o.user) a.user=o.user; if(o.pin) a.pin=o.pin; if(o.role) a.role=o.role; if(o.squadId!=null) a.squadId=o.squadId; if(o.photo) a.photo=o.photo; if(o.phone!=null) a.phone=o.phone; if(o.email!=null) a.email=o.email; if(o.bio!=null) a.bio=o.bio; } });
+  }
+  async _refreshAccountsFromDb(){
+    // Pull the newest staff & family straight from the shared DB so people added on another
+    // device can sign in immediately, without waiting for a full app restart.
+    const sb=window.__vxsb; if(!sb) return;
+    try {
+      const res=await sb.from('club_state').select('key,value').in('key',['vx_staff_accounts','vx_account_ovr','vx_family']);
+      const rows=(res&&res.data)||[]; let touchedFamily=false;
+      rows.forEach(r=>{ if(r.value==null) return;
+        if(r.key==='vx_staff_accounts'){ this.customStaff=r.value; try{localStorage.setItem('vx_staff_accounts',JSON.stringify(r.value));}catch(e){} }
+        else if(r.key==='vx_account_ovr'){ this.accountOvr=r.value; try{localStorage.setItem('vx_account_ovr',JSON.stringify(r.value));}catch(e){} }
+        else if(r.key==='vx_family'){ try{localStorage.setItem('vx_family',JSON.stringify(r.value));}catch(e){} this.family=r.value; touchedFamily=true; }
+      });
+      this._rebuildAccounts();
+      if(touchedFamily) this.setState({family:this.family});
+    } catch(e){}
+  }
   staffAccOpen(id){ const a=this.accounts.find(x=>x.id===id); if(!a) return; this.setState({staffEditId:id, staffAccDraft:{label:a.label||'', user:a.user||'', pin:a.pin||'', role:a.role||'Coach', squadId:a.squadId||'', photo:a.photo||'', phone:a.phone||'', email:a.email||'', bio:a.bio||''}}); }
   staffAccChange(field, val){ this.setState({staffAccDraft:{...(this.state.staffAccDraft||{}), [field]:val}}); }
   staffAccCancel(){ this.setState({staffEditId:null, staffAccDraft:null}); }
@@ -3960,7 +3981,7 @@ class Component extends DCLogic {
     return { hasData:true, caption, drop, linePts, lineArea, dots, swims, best: best?best.t:'—' };
   }
   famToggleSwimmer(uid){ const cur=this.state.famPicked.slice(); const i=cur.indexOf(uid); if(i>=0){ cur.splice(i,1); this.setState({famPicked:cur}); } else { if(this.state.famRole==='swimmer' && cur.length>=1) cur.splice(0,1); cur.push(uid); this.setState({famPicked:cur}); setTimeout(()=>this.setState({famSearch:''}), 260); } }
-  famRegister(){ const S=this.state; const email=(S.famEmail||'').trim().toLowerCase();
+  async famRegister(){ const S=this.state; const email=(S.famEmail||'').trim().toLowerCase();
     if(!S.famName.trim()) return this.setState({famErr:'Enter your name.'});
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return this.setState({famErr:'Enter a valid email.'});
     const phoneDigits=(S.famPhone||'').replace(/[^\d+]/g,'');
@@ -3968,9 +3989,12 @@ class Component extends DCLogic {
     if((S.famPass||'').length<4) return this.setState({famErr:'Password must be at least 4 characters.'});
     if(S.famPass!==S.famPass2) return this.setState({famErr:'Passwords don\u2019t match.'});
     if(!S.famPicked.length) return this.setState({famErr: S.famRole==='swimmer' ? 'Search and select your swimmer profile.' : 'Search and link at least one swimmer.'});
-    if(this.state.family.find(f=>f.email===email)) return this.setState({famErr:'An account with this email already exists \u2014 sign in instead.'});
+    // Merge into the latest shared list so we never overwrite families registered on other devices.
+    try { await this._refreshAccountsFromDb(); } catch(e){}
+    const existing=this.family||this.state.family||[];
+    if(existing.find(f=>(f.email||'').trim().toLowerCase()===email)) return this.setState({famErr:'An account with this email already exists \u2014 sign in instead.'});
     const rec={id:this._uid('fam'), name:S.famName.trim(), email, phone:phoneDigits, pass:S.famPass, role:S.famRole, swimmerIds:S.famPicked.slice()};
-    const list=[...this.state.family, rec]; this._saveFamily(list);
+    const list=[...existing, rec]; this._saveFamily(list);
     const firstSwId=(S.famPicked[0]||'').split('::')[1];
     if(firstSwId) this.notify('family_sw:'+firstSwId, 'party-popper', 'Welcome to Vortex SC!', 'Hi '+S.famName.trim()+', your account is ready \u2014 a confirmation would be emailed to '+email+' in the live app. Explore performance, attendance, results and meets any time.');
     try{
@@ -3980,10 +4004,14 @@ class Component extends DCLogic {
     }catch(e){}
     this.setState({familyUser:rec, familyActiveIdx:0, screen:'app', view:'family', famErr:''});
   }
-  famLogin(){ const S=this.state; const email=(S.famEmail||'').trim().toLowerCase();
-    const rec=this.state.family.find(f=>f.email===email && f.pass===S.famPass);
+  async famLogin(){ this.setState({famErr:''});
+    // Refresh from the shared DB so a parent/swimmer who registered on another device can sign in now.
+    try { await this._refreshAccountsFromDb(); } catch(e){}
+    const S=this.state; const email=(S.famEmail||'').trim().toLowerCase(); const pass=(S.famPass||'').trim();
+    const list=this.family||this.state.family||[];
+    const rec=list.find(f=>(f.email||'').trim().toLowerCase()===email && (''+(f.pass||'')).trim()===pass);
     if(!rec) return this.setState({famErr:'No match \u2014 check email & password, or register below.'});
-    this.setState({familyUser:rec, familyActiveIdx:0, screen:'app', view:'family', famErr:''});
+    this.setState({family:list, familyUser:rec, familyActiveIdx:0, screen:'app', view:'family', famErr:''});
   }
   famLogout(){ this.setState({familyUser:null, screen:'login', loginStage:'accounts', famMode:'login', famName:'', famEmail:'', famPass:'', famPass2:'', famPicked:[], famSearch:'', famErr:''}); }
   makeDefaultPlan(){ const t=this.planTemplate; const migrate=(sec)=>({id:this._uid(sec.key[0]||'s'), title:sec.title, sets:sec.sets.map(s=>({id:this._uid(sec.key[0]||'s'), dist:s.dist, txt:s.txt, equip:[...(s.equip||[])], types:[...(s.types||[])], rest:s.rest||''}))}); return {title:t.title, zone:t.zone, sections:t.sections.map(migrate)}; }
@@ -5091,7 +5119,10 @@ class Component extends DCLogic {
       loginUser: S.loginUser||'', loginPinVal: S.loginPinVal||'', loginErr: S.loginErr||'', loginErrShow: !!S.loginErr,
       onLoginUser:(e)=>this.setState({loginUser:e.target.value, loginErr:''}),
       onLoginPin:(e)=>this.setState({loginPinVal:e.target.value, loginErr:''}),
-      onLoginSubmit:()=>{
+      onLoginSubmit: async ()=>{
+        // Pull the freshest staff list first, so anyone added on another device can sign in now.
+        this.setState({loginErr:''});
+        try { await this._refreshAccountsFromDb(); } catch(e){}
         // Read the live DOM values too: iPad Safari autofill/QuickType often fills the
         // field without firing oninput, so state can lag behind what the user typed.
         const uEl=document.getElementById('vx-login-user'), pEl=document.getElementById('vx-login-pin');
