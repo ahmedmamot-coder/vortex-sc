@@ -835,6 +835,20 @@
                     </sc-if>
 
                     <sc-if value="{{ famShowMeets }}" hint-placeholder-val="{{ false }}">
+                      <sc-if value="{{ meetsHasCal }}" hint-placeholder-val="{{ false }}">
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:15px;box-shadow:0 2px 7px rgba(11,20,40,.05);margin-bottom:12px">
+                          <p style="margin:0 0 10px;font-size:13px;font-weight:700;color:#0C1116">Club calendar</p>
+                          <div style="display:flex;flex-direction:column;gap:8px">
+                            <sc-for list="{{ meetsCalRows }}" as="m" hint-placeholder-count="2">
+                              <div style="display:flex;align-items:center;gap:12px;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:12px;padding:10px 12px">
+                                <span style="flex:none;width:42px;height:42px;border-radius:11px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1"><span style="font-size:15px;font-weight:800">{{ m.day }}</span><span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px">{{ m.mon }}</span></span>
+                                <span style="flex:1"><span style="display:block;font-size:13px;font-weight:700;color:#0C1116">{{ m.name }}</span><span style="display:block;font-size:11.5px;color:#7A8296;margin-top:1px">{{ m.place }}</span></span>
+                                <sc-if value="{{ m.hasPdf }}" hint-placeholder-val="{{ false }}"><button onclick="{{ m.onViewPdf }}" style="flex:none;background:var(--vx-blue);color:#fff;border:none;border-radius:999px;padding:6px 13px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer">Details</button></sc-if>
+                              </div>
+                            </sc-for>
+                          </div>
+                        </div>
+                      </sc-if>
                       <div style="display:flex;flex-direction:column;gap:8px">
                         <sc-for list="{{ famMeetsUpcoming }}" as="m" hint-placeholder-count="3">
                           <div style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:12px 14px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
@@ -5182,6 +5196,7 @@ class Component extends DCLogic {
       meetsPdfLabel: (S.meetsCalForm&&S.meetsCalForm.pdfName) ? S.meetsCalForm.pdfName : 'Attach info PDF (optional)',
       onMeetsAdd:()=>this.meetsCalAdd(),
       meetsCalEmpty: this.meetsCal.length===0,
+      meetsHasCal: this.meetsCal.length>0,
       meetsCalRows: this.meetsCal.map((m)=>{ const d=m.date? new Date(m.date+'T00:00:00'):null; const mon=d?['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][d.getMonth()]:''; return {id:m.id, name:m.name, place:m.place||'', day:d?String(d.getDate()):'', mon:mon, hasPdf:!!m.pdf, onViewPdf:()=>this.meetsViewPdf(m.pdf, m.name), onDelete:()=>this.meetsCalDelete(m.id)}; }),
       apiKeyDraft: S.apiKeyDraft || S.apiKey, onApiKeyDraft:(e)=>this.setState({apiKeyDraft:e.target.value}), onApiKeySave:()=>this.settingsSaveKey(),
       settingsMsg:S.settingsMsg, settingsMsgColor, settingsMsgShow:!!S.settingsMsg, swimmerTotal, meetTotal:this.allMeets().length, onSettingsReset:()=>this.settingsReset(),
