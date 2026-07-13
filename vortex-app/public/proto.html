@@ -1,7 +1,15 @@
 <!DOCTYPE html>
 <html><head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Vortex Swimming Club</title>
+<link rel="icon" type="image/png" href="assets/b798adf9.png">
+<link rel="apple-touch-icon" href="assets/b798adf9.png">
+<meta name="theme-color" content="#0A0F1A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Vortex SC">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <script src="assets/react.js"></script>
 <script src="assets/react-dom.js"></script>
 <script src="assets/vx-photos.js"></script>
@@ -15,7 +23,7 @@
   var SB_URL = "https://qhrpwiakobgcxfmcoyfg.supabase.co";
   var SB_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFocnB3aWFrb2JnY3hmbWNveWZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4NTgyMzQsImV4cCI6MjA5OTQzNDIzNH0.NVmLPF99O9M6rj-Srp3tP-ZkuhzIea0jSN4r0asW1eI";
   // Club-wide shared keys (NOT the per-device Anthropic API key).
-  var SYNC = ["vx_family","vx_plans","vx_roster_edits","vx_staff_ovr","vx_extra_results"];
+  var SYNC = ["vx_family","vx_plans","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_staff_accounts"];
   function boot(){ var s=document.createElement("script"); s.src="assets/support.js"; document.body.appendChild(s); }
   try {
     var sb = window.supabase.createClient(SB_URL, SB_ANON);
@@ -396,11 +404,6 @@
         <!-- ================= APP ================= -->
         <sc-if value="{{ showApp }}" hint-placeholder-val="{{ true }}">
           <div style="height:100%;display:flex;flex-direction:column;position:relative;background:{{ appTopColor }}">
-            <div style="flex:none;height:44px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 26px 5px;color:{{ statusInk }};font-size:14px;font-weight:700;position:relative;z-index:6">
-              <span>{{ liveClock }}</span>
-              <span style="display:flex;align-items:center;gap:6px"><i data-lucide="signal" style="width:15px;height:15px"></i><i data-lucide="{{ wifiIcon }}" style="width:15px;height:15px"></i><span style="display:flex;align-items:center;gap:2px"><span style="font-size:10px;font-weight:700">{{ batteryPct }}</span><span style="position:relative;width:22px;height:11px;border:1.5px solid {{ statusInk }};border-radius:3px;display:inline-flex;align-items:center;padding:1.5px"><span style="position:absolute;right:-4px;top:3px;width:2px;height:5px;background:{{ statusInk }};border-radius:0 1px 1px 0"></span><span style="height:100%;width:{{ batteryWidth }};background:{{ statusInk }};border-radius:1px"></span></span></span></span>
-            </div>
-
             <main class="vx-scroll" style="flex:1;overflow-y:auto;overflow-x:hidden;position:relative;background:#EEF1F5">
 
               <!-- ===== HUB ===== -->
@@ -2402,6 +2405,28 @@
                   <!-- STAFF ADMIN -->
                   <sc-if value="{{ adminStaff }}" hint-placeholder-val="{{ false }}">
                     <div style="display:flex;flex-direction:column;gap:8px">
+                      <button onclick="{{ onStaffAddToggle }}" style="display:flex;align-items:center;justify-content:center;gap:8px;background:var(--vx-blue);color:#fff;border:none;border-radius:12px;padding:11px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer"><i data-lucide="user-plus" style="width:16px;height:16px"></i>Add staff account</button>
+                      <sc-if value="{{ staffAddOpen }}" hint-placeholder-val="{{ false }}">
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:13px;display:flex;flex-direction:column;gap:8px">
+                          <input value="{{ staffForm.name }}" oninput="{{ onStaffName }}" placeholder="Full name" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                          <div style="display:flex;gap:7px">
+                            <input value="{{ staffForm.user }}" oninput="{{ onStaffUser }}" placeholder="Username" autocapitalize="off" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                            <input value="{{ staffForm.pin }}" oninput="{{ onStaffPin }}" placeholder="PIN" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:var(--font-mono);font-size:12.5px;color:#0C1116;outline:none">
+                          </div>
+                          <select value="{{ staffForm.role }}" onchange="{{ onStaffRole }}" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                            <option>Aquatic Director</option><option>Technical Manager</option><option>Head Coach</option><option>Manager</option><option>Admin</option><option>Coach</option><option>Assistant Coach</option><option>Fitness Coach</option>
+                          </select>
+                          <input value="{{ staffForm.phone }}" oninput="{{ onStaffPhone }}" placeholder="Phone / WhatsApp (optional)" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                          <button onclick="{{ onStaffCreate }}" style="background:var(--vx-blue);color:#fff;border:none;border-radius:10px;padding:10px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer">Create account</button>
+                        </div>
+                      </sc-if>
+                      <sc-for list="{{ customStaffRows }}" as="c" hint-placeholder-count="0">
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:12px 13px;display:flex;align-items:center;gap:11px">
+                          <span style="width:38px;height:38px;flex:none;border-radius:11px;background:#2733D6;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12.5px">{{ c.initials }}</span>
+                          <span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:13px;color:#0C1116">{{ c.name }}</span><span style="display:block;font-size:11px;color:#7A8296">{{ c.sub }}</span></span>
+                          <button onclick="{{ c.onDelete }}" style="flex:none;width:32px;height:32px;border-radius:9px;border:none;background:#FDECEC;color:#E5484D;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="trash-2" style="width:14px;height:14px"></i></button>
+                        </div>
+                      </sc-for>
                       <sc-for list="{{ staffRows }}" as="s" hint-placeholder-count="9">
                         <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:12px 13px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
                           <div style="display:flex;align-items:center;gap:11px">
@@ -2720,6 +2745,8 @@ class Component extends DCLogic {
       {id:'mahmoud', user:'mahmoud', label:'Coach Mahmoud', role:'Vortex A coach', pin:'1111', accent:'#8A22D5', photo:'assets/coach-mahmoud.jpg', initials:'CM'},
       {id:'martin', user:'martin', label:'Coach Martin', role:'Legend coach', pin:'1111', accent:'#1B22E4', photo:'assets/coach-martin.jpg', initials:'CM'},
     ];
+    try { this.customStaff = JSON.parse(localStorage.getItem('vx_staff_accounts')||'[]'); } catch(e){ this.customStaff = []; }
+    for (var _si=0; _si<this.customStaff.length; _si++){ var _sa=this.customStaff[_si]; this.accounts.push({id:_sa.id, user:_sa.user, label:_sa.name, role:_sa.role, pin:_sa.pin, accent:'#2733D6', photo:'', initials:(_sa.name||'?').slice(0,2).toUpperCase()}); }
     this.squads = [
       {id:'preteam', name:'Pre-Team', ages:'≤6', count:3, coach:'Coach Fathy & Coach Mahady', accent:'#22C1DA', glow:'rgba(34,193,218,.35)', photo:'assets/coach-fathy.jpg', short:'Pre'},
       {id:'advb', name:'Advanced B', ages:'7–8', count:41, coach:'Coach Matuze', accent:'#1BA5E6', glow:'rgba(27,165,230,.35)', photo:'', short:'AdvB'},
@@ -2859,7 +2886,7 @@ class Component extends DCLogic {
       showVortexId:false,
       compBuildOpen:false, compName:'', compLocation:'', compDate:'', compCourse:'LCM', compEvents:[], compErr:'',
       printPreviewOpen:false,
-      staffEditId:null, staffForm:{name:'',pin:''},
+      staffEditId:null, staffForm:{name:'',pin:''}, staffAddOpen:false, staffAddForm:{name:'',user:'',pin:'',role:'Coach',phone:''},
       apiKey:this._loadJSON('vx_api_key',''), apiKeyDraft:'', settingsMsg:'',
       tpaceQuery:'', tpaceSwId:null, tpaceType:'1000', tpaceTime:'', tpaceErr:'',
       inbodyForm:{weight:'',fat:'',muscle:''},
@@ -3116,6 +3143,8 @@ class Component extends DCLogic {
     this.persistRosterEdits();
   }
   staffSave(squadId, form){ this.staffOverrides[squadId]={name:form.name.trim(), pin:form.pin.trim()}; this._saveJSON('vx_staff_ovr', this.staffOverrides); const sq=this.squadById[squadId]; if(sq) sq.coach=form.name.trim(); this.setState({staffEditId:null}); }
+  staffAddCreate(){ const f=this.state.staffAddForm||{}; const name=(f.name||'').trim(); const user=(f.user||'').trim().toLowerCase(); const pin=(f.pin||'').trim(); if(!name||!user||!pin){ return; } const id='st_'+Date.now(); const rec={id:id, name:name, user:user, pin:pin, role:f.role||'Coach', phone:(f.phone||'').trim()}; this.customStaff.push(rec); this._saveJSON('vx_staff_accounts', this.customStaff); this.accounts.push({id:id, user:user, label:name, role:rec.role, pin:pin, accent:'#2733D6', photo:'', initials:name.slice(0,2).toUpperCase()}); this.setState({staffAddOpen:false, staffAddForm:{name:'',user:'',pin:'',role:'Coach',phone:''}}); }
+  staffAddDelete(id){ this.customStaff=this.customStaff.filter(function(a){return a.id!==id;}); this._saveJSON('vx_staff_accounts', this.customStaff); this.accounts=this.accounts.filter(function(a){return a.id!==id;}); this.setState({}); }
   settingsSaveKey(){ this._saveJSON('vx_api_key', this.state.apiKeyDraft); this.setState({apiKey:this.state.apiKeyDraft, settingsMsg:'API key saved ✓'}); }
   tpaceCompute(type, sec){ return type==='1000' ? sec/10 : (sec*2.5)/10; }
   tpaceLog(swId){ const S=this.state; const sec=this.parseTimeStr(S.tpaceTime);
@@ -5104,6 +5133,16 @@ class Component extends DCLogic {
       onMeetImportPreview:()=>this.meetImportPreview(), meetImportHasPreview, meetImportSummary, onMeetImportConfirm:()=>this.meetImportConfirm(),
       meetRows,
       staffRows,
+      staffAddOpen: S.staffAddOpen,
+      staffForm: S.staffAddForm||{name:'',user:'',pin:'',role:'Coach',phone:''},
+      onStaffAddToggle:()=>this.setState({staffAddOpen:!S.staffAddOpen}),
+      onStaffName:(e)=>this.setState({staffAddForm:{...(this.state.staffAddForm||{}), name:e.target.value}}),
+      onStaffUser:(e)=>this.setState({staffAddForm:{...(this.state.staffAddForm||{}), user:e.target.value}}),
+      onStaffPin:(e)=>this.setState({staffAddForm:{...(this.state.staffAddForm||{}), pin:e.target.value}}),
+      onStaffRole:(e)=>this.setState({staffAddForm:{...(this.state.staffAddForm||{}), role:e.target.value}}),
+      onStaffPhone:(e)=>this.setState({staffAddForm:{...(this.state.staffAddForm||{}), phone:e.target.value}}),
+      onStaffCreate:()=>this.staffAddCreate(),
+      customStaffRows: this.customStaff.map((a)=>({id:a.id, name:a.name, sub:(a.role||'')+(a.phone?(' · '+a.phone):'')+(a.user?(' · @'+a.user):''), initials:(a.name||'?').slice(0,2).toUpperCase(), onDelete:()=>this.staffAddDelete(a.id)})),
       apiKeyDraft: S.apiKeyDraft || S.apiKey, onApiKeyDraft:(e)=>this.setState({apiKeyDraft:e.target.value}), onApiKeySave:()=>this.settingsSaveKey(),
       settingsMsg:S.settingsMsg, settingsMsgColor, settingsMsgShow:!!S.settingsMsg, swimmerTotal, meetTotal:this.allMeets().length, onSettingsReset:()=>this.settingsReset(),
       // tool overlay
