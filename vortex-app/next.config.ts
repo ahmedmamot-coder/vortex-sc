@@ -10,6 +10,19 @@ const nextConfig: NextConfig = {
       fallback: [],
     };
   },
+  // Never let the browser or the Vercel CDN serve a stale copy of the app HTML,
+  // so every deploy (login fixes, new staff, etc.) reflects for everyone immediately.
+  async headers() {
+    const noStore = [
+      { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+      { key: "Pragma", value: "no-cache" },
+      { key: "Expires", value: "0" },
+    ];
+    return [
+      { source: "/", headers: noStore },
+      { source: "/proto.html", headers: noStore },
+    ];
+  },
 };
 
 export default nextConfig;
