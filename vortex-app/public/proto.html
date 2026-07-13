@@ -23,7 +23,7 @@
   var SB_URL = "https://qhrpwiakobgcxfmcoyfg.supabase.co";
   var SB_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFocnB3aWFrb2JnY3hmbWNveWZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4NTgyMzQsImV4cCI6MjA5OTQzNDIzNH0.NVmLPF99O9M6rj-Srp3tP-ZkuhzIea0jSN4r0asW1eI";
   // Club-wide shared keys (NOT the per-device Anthropic API key).
-  var SYNC = ["vx_family","vx_plans","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_staff_accounts","vx_meets_cal","vx_swimmer_goals","vx_squad_goals"];
+  var SYNC = ["vx_family","vx_plans","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_staff_accounts","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta"];
   function boot(){ var s=document.createElement("script"); s.src="assets/support.js"; document.body.appendChild(s); }
   try {
     var sb = window.supabase.createClient(SB_URL, SB_ANON);
@@ -675,11 +675,12 @@
                   </div>
 
                   <div style="padding:14px 15px 24px">
-                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:5px;margin-bottom:14px">
-                      <button onclick="{{ onFamTabPerf }}" style="padding:9px 4px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:11px;background:{{ famTabPerfBg }};color:{{ famTabPerfFg }}">Performance</button>
-                      <button onclick="{{ onFamTabAttend }}" style="padding:9px 4px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:11px;background:{{ famTabAttendBg }};color:{{ famTabAttendFg }}">Attendance</button>
-                      <button onclick="{{ onFamTabResults }}" style="padding:9px 4px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:11px;background:{{ famTabResultsBg }};color:{{ famTabResultsFg }}">Results</button>
-                      <button onclick="{{ onFamTabMeets }}" style="padding:9px 4px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:11px;background:{{ famTabMeetsBg }};color:{{ famTabMeetsFg }}">Meets</button>
+                    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:5px;background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:5px;margin-bottom:14px">
+                      <button onclick="{{ onFamTabPerf }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10.5px;background:{{ famTabPerfBg }};color:{{ famTabPerfFg }}">Performance</button>
+                      <button onclick="{{ onFamTabAttend }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10.5px;background:{{ famTabAttendBg }};color:{{ famTabAttendFg }}">Attendance</button>
+                      <button onclick="{{ onFamTabResults }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10.5px;background:{{ famTabResultsBg }};color:{{ famTabResultsFg }}">Results</button>
+                      <button onclick="{{ onFamTabMeets }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10.5px;background:{{ famTabMeetsBg }};color:{{ famTabMeetsFg }}">Meets</button>
+                      <button onclick="{{ onFamTabDocs }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10.5px;background:{{ famTabDocsBg }};color:{{ famTabDocsFg }}">Documents</button>
                     </div>
 
                     <sc-if value="{{ famShowPerf }}" hint-placeholder-val="{{ true }}">
@@ -794,19 +795,31 @@
                         </div>
                       </sc-if>
 
-                      <p style="margin:16px 2px 8px;font-size:11.5px;font-weight:700;color:#7A8296;text-transform:uppercase;letter-spacing:.04em">Documents on file</p>
-                      <div style="display:flex;flex-direction:column;gap:7px">
+                    </sc-if>
+
+                    <sc-if value="{{ famShowDocs }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:flex;flex-direction:column;gap:9px">
                         <sc-for list="{{ famDocsRows }}" as="d" hint-placeholder-count="3">
                           <input id="{{ d.inputId }}" type="file" accept="application/pdf,image/*" onchange="{{ d.onUpload }}" style="display:none">
-                          <sc-if value="{{ d.missing }}" hint-placeholder-val="{{ true }}">
-                            <button onclick="{{ d.onPick }}" style="display:flex;align-items:center;justify-content:space-between;width:100%;background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:10px 13px;box-shadow:0 1px 4px rgba(11,20,40,.04);cursor:pointer;font-family:inherit"><span style="font-size:12.5px;color:#3A4152;font-weight:600">{{ d.label }}</span><span style="display:flex;align-items:center;gap:5px;background:{{ d.statusBg }};color:{{ d.statusFg }};border-radius:7px;padding:3px 9px;font-size:10.5px;font-weight:700"><i data-lucide="upload" style="width:11px;height:11px"></i>Missing — upload</span></button>
-                          </sc-if>
-                          <sc-if value="{{ d.missing }}" hint-placeholder-val="{{ false }}">
-                            <div style="display:flex;align-items:center;justify-content:space-between;background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:10px 13px;box-shadow:0 1px 4px rgba(11,20,40,.04)"><span style="font-size:12.5px;color:#3A4152;font-weight:600">{{ d.label }}</span><span style="background:{{ d.statusBg }};color:{{ d.statusFg }};border-radius:7px;padding:3px 9px;font-size:10.5px;font-weight:700">{{ d.statusLabel }}</span></div>
-                          </sc-if>
+                          <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                            <div style="display:flex;align-items:center;gap:11px">
+                              <span style="flex:none;width:38px;height:38px;border-radius:11px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);display:flex;align-items:center;justify-content:center"><i data-lucide="{{ d.icon }}" style="width:18px;height:18px"></i></span>
+                              <span style="flex:1;min-width:0"><span style="display:block;font-size:13px;font-weight:700;color:#0C1116">{{ d.label }}</span><span style="display:block;font-size:11px;color:#7A8296;margin-top:1px">{{ d.fileName }}</span></span>
+                              <span style="flex:none;background:{{ d.statusBg }};color:{{ d.statusFg }};border-radius:7px;padding:3px 9px;font-size:10.5px;font-weight:700">{{ d.statusLabel }}</span>
+                            </div>
+                            <div style="display:flex;gap:7px;margin-top:11px">
+                              <sc-if value="{{ d.hasFile }}" hint-placeholder-val="{{ false }}">
+                                <button onclick="{{ d.onView }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;background:var(--vx-blue);color:#fff;border:none;border-radius:10px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer"><i data-lucide="eye" style="width:14px;height:14px"></i>View</button>
+                              </sc-if>
+                              <button onclick="{{ d.onPick }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;background:#F4F6F8;color:#3A4152;border:none;border-radius:10px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer"><i data-lucide="upload" style="width:14px;height:14px"></i>{{ d.uploadLabel }}</button>
+                              <sc-if value="{{ d.hasFile }}" hint-placeholder-val="{{ false }}">
+                                <button onclick="{{ d.onRemove }}" style="flex:none;width:38px;background:#FDECEC;color:#E5484D;border:none;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="trash-2" style="width:14px;height:14px"></i></button>
+                              </sc-if>
+                            </div>
+                          </div>
                         </sc-for>
                       </div>
-                      <p style="margin:8px 2px 0;font-size:10.5px;color:#9AA2B4;line-height:1.4">Tap a missing document to upload a PDF or photo. Uploaded files can only be viewed or replaced by your coach.</p>
+                      <p style="margin:11px 2px 0;font-size:11px;color:#9AA2B4;line-height:1.5">Upload a PDF or photo of each document. You and your child's coach can view them here at any time.</p>
                     </sc-if>
 
                     <sc-if value="{{ famShowAttend }}" hint-placeholder-val="{{ false }}">
@@ -5128,7 +5141,7 @@ class Component extends DCLogic {
       famPortalName: S.familyUser?S.familyUser.name:'',
       famKidsChips:(S.familyUser?S.familyUser.swimmerIds:[]).map((uid,i)=>{ const [sqid,swid]=uid.split('::'); const sw=(this.roster[sqid]||[])[0]&&(this.roster[sqid]||[]).find(x=>x.id===swid); const on=i===S.familyActiveIdx; return {label:sw?sw.name.split(' ')[0]:'?', onClick:()=>this.setState({familyActiveIdx:i}), bg:on?'#fff':'rgba(255,255,255,.08)', fg:on?'#0A0F1A':'#fff', border:on?'#fff':'rgba(255,255,255,.18)'}; }),
       famMultiKids: !!(S.familyUser && S.familyUser.swimmerIds.length>1),
-      ...(()=>{ const fu=S.familyUser; if(!fu) return {famSwName:'',famSwMeta:'',famSwInit:'',famGenIcon:'',famGenBg:'',famAccent:'#067EEA',famPbs:[],famResults:[],famMeetsUpcoming:[],famAttendPct:'—',famAttendHistory:[]};
+      ...(()=>{ const fu=S.familyUser; if(!fu) return {famSwName:'',famSwMeta:'',famSwInit:'',famGenIcon:'',famGenBg:'',famAccent:'#067EEA',famPbs:[],famResults:[],famMeetsUpcoming:[],famAttendPct:'—',famAttendHistory:[],famDocsRows:[]};
         const uid=fu.swimmerIds[Math.min(S.familyActiveIdx, fu.swimmerIds.length-1)]||fu.swimmerIds[0]; const [sqid,swid]=(uid||'::').split('::');
         const sq=this.squadById[sqid]||this.squads[0]; const sw=(this.roster[sqid]||[]).find(x=>x.id===swid) || (this.roster[sqid]||[])[0] || {name:'—',age:'',gender:'',initials:'—',pbs:[],results:[],meetCount:0};
         const gm=this.genMeta(sw.gender);
@@ -5169,20 +5182,25 @@ class Component extends DCLogic {
           })),
           famHasInbody: (meta.inbody||[]).length>0,
           famDocsRows: [
-            {label:'Birth certificate', on: !!meta.docs.birth, kind:'birth'},
-            {label:'ID / passport copy', on: !!meta.docs.id, kind:'id'},
-            {label:'Medical certificate', on: !!meta.docs.medical, kind:'medical'},
-          ].map(d=>({label:d.label, statusLabel: d.on?'On file':'Missing', statusBg: d.on?'#DCF5EA':'#FBE4E4', statusFg: d.on?'#0C7A4F':'#B42318', missing:!d.on,
+            {label:'Birth certificate', doc: meta.docs.birth, kind:'birth', icon:'file-badge'},
+            {label:'ID / passport copy', doc: meta.docs.id, kind:'id', icon:'contact'},
+            {label:'Medical certificate', doc: meta.docs.medical, kind:'medical', icon:'stethoscope'},
+          ].map(d=>{ const on=!!d.doc; const hasFile = on && typeof d.doc==='object' && d.doc.dataUrl;
+            return {label:d.label, icon:d.icon, statusLabel: on?'On file':'Missing', statusBg: on?'#DCF5EA':'#FBE4E4', statusFg: on?'#0C7A4F':'#B42318', missing:!on, hasFile:!!hasFile,
+            fileName: hasFile? (d.doc.name+' · '+d.doc.uploadedAt) : 'Not uploaded yet', uploadedAt: hasFile? d.doc.uploadedAt : '', uploadLabel: on?'Replace':'Upload',
             inputId:'vx-fam-doc-'+d.kind+'-input', onPick:()=>{ const el=document.getElementById('vx-fam-doc-'+d.kind+'-input'); if(el) el.click(); },
-            onUpload:(e)=>this.uploadDoc(e, sw.id, d.kind) })),
+            onView: hasFile? ()=>this.meetsViewPdf(d.doc.dataUrl, d.doc.name||d.label) : null,
+            onRemove: on? ()=>this.removeDoc(sw.id, d.kind) : null,
+            onUpload:(e)=>this.uploadDoc(e, sw.id, d.kind) }; }),
         }; })(),
       onFamLogout:()=>this.famLogout(), famTab:S.famTab||'perf',
       famTabPerfBg:(S.famTab||'perf')==='perf'?'#0A0F1A':'#fff', famTabPerfFg:(S.famTab||'perf')==='perf'?'#fff':'#3A4152',
       famTabAttendBg:S.famTab==='attend'?'#0A0F1A':'#fff', famTabAttendFg:S.famTab==='attend'?'#fff':'#3A4152',
       famTabResultsBg:S.famTab==='results'?'#0A0F1A':'#fff', famTabResultsFg:S.famTab==='results'?'#fff':'#3A4152',
       famTabMeetsBg:S.famTab==='meets'?'#0A0F1A':'#fff', famTabMeetsFg:S.famTab==='meets'?'#fff':'#3A4152',
-      onFamTabPerf:()=>this.setState({famTab:'perf'}), onFamTabAttend:()=>this.setState({famTab:'attend'}), onFamTabResults:()=>this.setState({famTab:'results'}), onFamTabMeets:()=>this.setState({famTab:'meets'}),
-      famShowPerf:(S.famTab||'perf')==='perf', famShowAttend:S.famTab==='attend', famShowResults:S.famTab==='results', famShowMeets:S.famTab==='meets',
+      famTabDocsBg:S.famTab==='docs'?'#0A0F1A':'#fff', famTabDocsFg:S.famTab==='docs'?'#fff':'#3A4152',
+      onFamTabPerf:()=>this.setState({famTab:'perf'}), onFamTabAttend:()=>this.setState({famTab:'attend'}), onFamTabResults:()=>this.setState({famTab:'results'}), onFamTabMeets:()=>this.setState({famTab:'meets'}), onFamTabDocs:()=>this.setState({famTab:'docs'}),
+      famShowPerf:(S.famTab||'perf')==='perf', famShowAttend:S.famTab==='attend', famShowResults:S.famTab==='results', famShowMeets:S.famTab==='meets', famShowDocs:S.famTab==='docs',
       ...(()=>{ const fu=S.familyUser; if(!fu) return {};
         const uid=fu.swimmerIds[Math.min(S.familyActiveIdx, fu.swimmerIds.length-1)]||fu.swimmerIds[0]; const [sqid,swid]=(uid||'::').split('::');
         const sw=(this.roster[sqid]||[]).find(x=>x.id===swid);
