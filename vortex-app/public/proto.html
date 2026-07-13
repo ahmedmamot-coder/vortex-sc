@@ -304,17 +304,12 @@
               <p style="margin:0;color:rgba(255,255,255,.6);font-size:14px;line-height:1.45;max-width:272px">Vortex SC — squad management for the technical team, coaches &amp; families.</p>
 
               <sc-if value="{{ loginAccounts }}" hint-placeholder-val="{{ true }}">
-                <div class="vx-screen" style="margin-top:30px;display:flex;flex-direction:column;gap:9px">
-                  <p style="font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.42);margin:0 0 2px">Choose account</p>
-                  <sc-for list="{{ accountTiles }}" as="a" hint-placeholder-count="4">
-                    <button onclick="{{ a.onClick }}" style="display:flex;align-items:center;gap:13px;width:100%;text-align:left;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:11px 13px;cursor:pointer;color:#fff;backdrop-filter:blur(6px)">
-                      {{ a.avatar }}
-                      <span style="flex:1;min-width:0"><span style="display:block;font-weight:600;font-size:14.5px">{{ a.label }}</span><span style="display:block;font-size:12px;color:rgba(255,255,255,.5)">{{ a.role }}</span></span>
-                      <sc-if value="{{ a.recommended }}" hint-placeholder-val="{{ true }}"><span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:var(--vx-blue);color:#fff;padding:4px 7px;border-radius:999px">You</span></sc-if>
-                      <i data-lucide="chevron-right" style="width:18px;height:18px;opacity:.45"></i>
-                    </button>
-                  </sc-for>
-                  <p style="margin:6px 2px 0;font-size:11.5px;color:rgba(255,255,255,.38);line-height:1.4">Also: 9 squad coaches — each PIN-gated to their own view.</p>
+                <div class="vx-screen" style="margin-top:30px;display:flex;flex-direction:column;gap:12px">
+                  <p style="font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.42);margin:0 0 2px">Staff sign in</p>
+                  <input value="{{ loginUser }}" oninput="{{ onLoginUser }}" placeholder="Username" autocapitalize="off" autocomplete="username" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
+                  <input value="{{ loginPinVal }}" oninput="{{ onLoginPin }}" type="password" placeholder="PIN" autocomplete="current-password" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
+                  <sc-if value="{{ loginErrShow }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:12px;color:#FF8A8D;font-weight:600">{{ loginErr }}</p></sc-if>
+                  <button onclick="{{ onLoginSubmit }}" style="background:var(--vx-blue);color:#fff;border:none;border-radius:13px;padding:13px;font-family:inherit;font-weight:700;font-size:14px;cursor:pointer">Sign in</button>
                   <button onclick="{{ onGoFamily }}" style="margin-top:6px;display:flex;align-items:center;justify-content:center;gap:9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:12px;cursor:pointer;color:#fff;font-family:inherit"><i data-lucide="users" style="width:16px;height:16px"></i><span style="font-size:13px;font-weight:600">Parent or swimmer? Sign in / register</span></button>
                 </div>
               </sc-if>
@@ -2411,7 +2406,7 @@
                         <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:12px 13px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
                           <div style="display:flex;align-items:center;gap:11px">
                             <span style="width:38px;height:38px;flex:none;border-radius:11px;background:{{ s.accent }};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12.5px">{{ s.short }}</span>
-                            <span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:13px;color:#0C1116">{{ s.coach }}</span><span style="display:block;font-size:11px;color:#7A8296">{{ s.squadName }} · PIN {{ s.pin }}</span></span>
+                            <span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:13px;color:#0C1116">{{ s.coach }}</span><span style="display:block;font-size:11px;color:#7A8296">{{ s.squadName }}</span></span>
                             <button onclick="{{ s.onEdit }}" style="flex:none;width:32px;height:32px;border-radius:9px;border:none;background:#F4F6F8;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="pencil" style="width:14px;height:14px"></i></button>
                           </div>
                           <sc-if value="{{ s.editing }}" hint-placeholder-val="{{ false }}">
@@ -2713,8 +2708,17 @@ class Component extends DCLogic {
     const PH = 'assets/logo-mark.png';
     this.PH = PH;
     this.accounts = [
-      {id:'ahmed', label:'Ahmed Mamo', role:'Technical Director · full access', pin:'7777', accent:'#067EEA', photo:'assets/director-ahmed.jpg', initials:'AM', recommended:true},
-      {id:'sameh', label:'Sameh', role:'Administrator · full access', pin:'1234', accent:'#3B23C7', photo:'', initials:'S'},
+      {id:'ahmed', user:'ahmed', label:'Ahmed Mamo', role:'Technical Director · full access', pin:'7777', accent:'#067EEA', photo:'assets/director-ahmed.jpg', initials:'AM', recommended:true},
+      {id:'sameh', user:'sameh', label:'Sameh', role:'Administrator · full access', pin:'1234', accent:'#3B23C7', photo:'', initials:'S'},
+      {id:'fathy', user:'fathy', label:'Coach Fathy', role:'Pre-Team coach', pin:'1111', accent:'#22C1DA', photo:'assets/coach-fathy.jpg', initials:'CF'},
+      {id:'matuze', user:'matuze', label:'Coach Matuze', role:'Advanced B coach', pin:'1111', accent:'#1BA5E6', photo:'', initials:'CM'},
+      {id:'sherif', user:'sherif', label:'Coach Sherif', role:'Advanced A coach', pin:'1111', accent:'#067EEA', photo:'', initials:'CS'},
+      {id:'reda', user:'reda', label:'Coach Reda', role:'Junior coach', pin:'1111', accent:'#2A63E0', photo:'', initials:'CR'},
+      {id:'chafik', user:'chafik', label:'Coach Chafik', role:'Senior B coach', pin:'1111', accent:'#2733D6', photo:'assets/coach-chafik.jpg', initials:'CC'},
+      {id:'baisher', user:'baisher', label:'Coach Baisher', role:'Senior A coach', pin:'1111', accent:'#3B23C7', photo:'', initials:'CB'},
+      {id:'wassim', user:'wassim', label:'Coach Wassim', role:'Vortex B coach', pin:'1111', accent:'#5D22CF', photo:'', initials:'CW'},
+      {id:'mahmoud', user:'mahmoud', label:'Coach Mahmoud', role:'Vortex A coach', pin:'1111', accent:'#8A22D5', photo:'assets/coach-mahmoud.jpg', initials:'CM'},
+      {id:'martin', user:'martin', label:'Coach Martin', role:'Legend coach', pin:'1111', accent:'#1B22E4', photo:'assets/coach-martin.jpg', initials:'CM'},
     ];
     this.squads = [
       {id:'preteam', name:'Pre-Team', ages:'≤6', count:3, coach:'Coach Fathy & Coach Mahady', accent:'#22C1DA', glow:'rgba(34,193,218,.35)', photo:'assets/coach-fathy.jpg', short:'Pre'},
@@ -2837,7 +2841,7 @@ class Component extends DCLogic {
     this.rebuildRoster();
 
     this.state = {
-      screen:'login', loginStage:'accounts', pickedId:'ahmed', pin:'', err:false,
+      screen:'login', loginStage:'accounts', pickedId:'ahmed', pin:'', err:false, loginUser:'', loginPinVal:'', loginErr:'',
       view:'hub', squadId:'seniora', tab:'group', tool:null, toolScopeClub:false, swimmerId:null,
       showSwitcher:false,
       attend:{}, handbookOpen:null,
@@ -4790,9 +4794,13 @@ class Component extends DCLogic {
       showLogin: S.screen==='login', showApp: S.screen==='app',
       loginAccounts: S.loginStage==='accounts', loginPin: S.loginStage==='pin',
       accountTiles, pinDots, padKeys,
+      loginUser: S.loginUser||'', loginPinVal: S.loginPinVal||'', loginErr: S.loginErr||'', loginErrShow: !!S.loginErr,
+      onLoginUser:(e)=>this.setState({loginUser:e.target.value, loginErr:''}),
+      onLoginPin:(e)=>this.setState({loginPinVal:e.target.value, loginErr:''}),
+      onLoginSubmit:()=>{ const u=(this.state.loginUser||'').trim().toLowerCase(); const p=(this.state.loginPinVal||'').trim(); const acct=this.accounts.find(a=>(a.user&&a.user.toLowerCase()===u)||(a.label&&a.label.toLowerCase()===u)); if(acct && acct.pin===p){ this.setState({screen:'app', view:'hub', pickedId:acct.id, loginUser:'', loginPinVal:'', loginErr:''}); } else { this.setState({loginErr:'Wrong username or PIN'}); } },
       pickedAcct:{label:picked.label, avatar:this.av(picked.photo||null, picked.initials, 26, 8, picked.accent, '#fff', 10)},
       onChangeAccount:()=>this.setState({loginStage:'accounts', pin:'', err:false}),
-      pinMsg: S.err ? 'Wrong PIN — try again' : ('Demo PIN · '+picked.pin),
+      pinMsg: S.err ? 'Wrong PIN — try again' : 'Enter your PIN',
       pinMsgColor: S.err ? '#FF8A8D' : 'rgba(255,255,255,.4)',
 
       onGoFamily:()=>this.setState({loginStage:'family', famMode:'login', famErr:''}),
