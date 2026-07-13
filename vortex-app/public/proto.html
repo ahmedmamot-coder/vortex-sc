@@ -38,8 +38,10 @@
     window.__vxsb = sb;
     // Pull shared state into localStorage before the app reads it, then boot.
     sb.from("club_state").select("key,value").in("key", SYNC).then(function(res){
+      var have = {};
       try {
         (res && res.data ? res.data : []).forEach(function(r){
+          have[r.key] = true;
           if (r.value != null) localStorage.setItem(r.key, JSON.stringify(r.value));
         });
       } catch(e){}
@@ -51,6 +53,16 @@
           try { sb.from("club_state").upsert({key:k, value:JSON.parse(v), updated_at:new Date().toISOString()}); } catch(e){}
         }
       };
+      // One-time seed: upload any local data the database doesn't have yet — so data added
+      // on this device before a key was synced still reaches the shared database.
+      try {
+        SYNC.forEach(function(k){
+          if (have[k]) return;
+          var lv = localStorage.getItem(k);
+          if (lv == null) return;
+          try { sb.from("club_state").upsert({key:k, value:JSON.parse(lv), updated_at:new Date().toISOString()}); } catch(e){}
+        });
+      } catch(e){}
       boot();
     }, function(){ boot(); });
   } catch(e) { boot(); }
