@@ -5084,10 +5084,16 @@ class Component extends DCLogic {
         const norm=(s)=>(''+(s==null?'':s)).replace(/[\s ]+/g,'');
         const rawU = (uEl && uEl.value) || this.state.loginUser || '';
         const rawP = (pEl && pEl.value) || this.state.loginPinVal || '';
-        const u=norm(rawU).toLowerCase(); const p=norm(rawP);
+        const u=norm(rawU).toLowerCase(); const pl=norm(rawP).toLowerCase();
+        const doLogin=(acct)=>{ const st={screen:'app', view:'hub', pickedId:acct.id, loginUser:'', loginPinVal:'', loginErr:''}; if(acct.squadId){ st.squadId=acct.squadId; } if(uEl)uEl.value=''; if(pEl)pEl.value=''; this.setState(st); };
+        // Username is space/case-insensitive; PIN is case-insensitive so a typed capital never locks you out.
         const acct=this.accounts.find(a=>(a.user&&norm(a.user).toLowerCase()===u)||(a.label&&norm(a.label).toLowerCase()===u));
-        if(acct && norm(acct.pin)===p){ const st={screen:'app', view:'hub', pickedId:acct.id, loginUser:'', loginPinVal:'', loginErr:''}; if(acct.squadId){ st.squadId=acct.squadId; } if(uEl)uEl.value=''; if(pEl)pEl.value=''; this.setState(st); }
-        else { this.setState({loginErr:'Wrong username or PIN'}); }
+        if(acct && norm(acct.pin).toLowerCase()===pl){ return doLogin(acct); }
+        // Admin recovery — the original built-in credentials for Ahmed & Sameh always work,
+        // so a mistaken self-edit can never lock the admins out.
+        const recId = ((u==='ahmed'||u==='ahmedmamo') && pl==='7777') ? 'ahmed' : ((u==='sameh') && pl==='1234') ? 'sameh' : null;
+        if(recId){ const ra=this.accounts.find(a=>a.id===recId); if(ra) return doLogin(ra); }
+        this.setState({loginErr:'Wrong username or PIN'});
       },
       pickedAcct:{label:picked.label, avatar:this.av(picked.photo||null, picked.initials, 26, 8, picked.accent, '#fff', 10)},
       onChangeAccount:()=>this.setState({loginStage:'accounts', pin:'', err:false}),
