@@ -461,8 +461,9 @@
                           <div style="display:flex;gap:7px">
                             <input value="{{ meetsForm.date }}" oninput="{{ onMeetsDate }}" type="date" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
                             <input value="{{ meetsForm.place }}" oninput="{{ onMeetsPlace }}" placeholder="Place" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
-                            <button onclick="{{ onMeetsAdd }}" style="flex:none;background:var(--vx-blue);color:#fff;border:none;border-radius:9px;padding:0 14px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer">Add</button>
                           </div>
+                          <label style="display:flex;align-items:center;justify-content:center;gap:7px;background:#F8FAFC;border:1px dashed #CDD3E2;border-radius:9px;padding:9px;font-size:12px;font-weight:600;color:#3A4152;cursor:pointer"><i data-lucide="file-up" style="width:14px;height:14px"></i><span>{{ meetsPdfLabel }}</span><input type="file" accept="application/pdf" onchange="{{ onMeetsPdf }}" style="display:none"></label>
+                          <button onclick="{{ onMeetsAdd }}" style="background:var(--vx-blue);color:#fff;border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer">Add meet</button>
                         </div>
                       </sc-if>
                       <div style="display:flex;flex-direction:column;gap:7px">
@@ -470,6 +471,7 @@
                           <div style="display:flex;align-items:center;gap:10px;background:#F8FAFC;border-radius:10px;padding:9px 11px">
                             <span style="flex:none;width:38px;text-align:center"><span style="display:block;font-size:15px;font-weight:800;color:#067EEA;line-height:1">{{ m.day }}</span><span style="display:block;font-size:9px;font-weight:700;text-transform:uppercase;color:#9AA2B4">{{ m.mon }}</span></span>
                             <span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;font-weight:700;color:#0C1116">{{ m.name }}</span><span style="display:block;font-size:11px;color:#7A8296">{{ m.place }}</span></span>
+                            <sc-if value="{{ m.hasPdf }}" hint-placeholder-val="{{ false }}"><button onclick="{{ m.onViewPdf }}" style="flex:none;display:flex;align-items:center;gap:5px;background:var(--vx-blue-tint);color:var(--vx-blue);border:none;border-radius:8px;padding:5px 9px;font-family:inherit;font-size:11px;font-weight:700;cursor:pointer"><i data-lucide="file-text" style="width:13px;height:13px"></i>Details</button></sc-if>
                             <sc-if value="{{ isAdminUser }}" hint-placeholder-val="{{ true }}"><button onclick="{{ m.onDelete }}" style="flex:none;background:none;border:none;color:#C7CDDA;cursor:pointer"><i data-lucide="x" style="width:15px;height:15px"></i></button></sc-if>
                           </div>
                         </sc-for>
@@ -3170,7 +3172,8 @@ class Component extends DCLogic {
   staffSave(squadId, form){ this.staffOverrides[squadId]={name:form.name.trim(), pin:form.pin.trim()}; this._saveJSON('vx_staff_ovr', this.staffOverrides); const sq=this.squadById[squadId]; if(sq) sq.coach=form.name.trim(); this.setState({staffEditId:null}); }
   staffAddCreate(){ const f=this.state.staffAddForm||{}; const name=(f.name||'').trim(); const user=(f.user||'').trim().toLowerCase(); const pin=(f.pin||'').trim(); if(!name||!user||!pin){ return; } const id='st_'+Date.now(); const rec={id:id, name:name, user:user, pin:pin, role:f.role||'Coach', phone:(f.phone||'').trim()}; this.customStaff.push(rec); this._saveJSON('vx_staff_accounts', this.customStaff); this.accounts.push({id:id, user:user, label:name, role:rec.role, pin:pin, accent:'#2733D6', photo:'', initials:name.slice(0,2).toUpperCase()}); this.setState({staffAddOpen:false, staffAddForm:{name:'',user:'',pin:'',role:'Coach',phone:''}}); }
   staffAddDelete(id){ this.customStaff=this.customStaff.filter(function(a){return a.id!==id;}); this._saveJSON('vx_staff_accounts', this.customStaff); this.accounts=this.accounts.filter(function(a){return a.id!==id;}); this.setState({}); }
-  meetsCalAdd(){ const f=this.state.meetsCalForm||{}; const name=(f.name||'').trim(); const date=(f.date||'').trim(); if(!name||!date) return; this.meetsCal.push({id:'mc_'+Date.now(), name:name, date:date, place:(f.place||'').trim()}); this.meetsCal.sort(function(a,b){return (a.date||'').localeCompare(b.date||'');}); this._saveJSON('vx_meets_cal', this.meetsCal); this.setState({meetsCalForm:{name:'',date:'',place:''}}); }
+  meetsCalAdd(){ const f=this.state.meetsCalForm||{}; const name=(f.name||'').trim(); const date=(f.date||'').trim(); if(!name||!date) return; this.meetsCal.push({id:'mc_'+Date.now(), name:name, date:date, place:(f.place||'').trim(), pdf:f.pdf||'', pdfName:f.pdfName||''}); this.meetsCal.sort(function(a,b){return (a.date||'').localeCompare(b.date||'');}); this._saveJSON('vx_meets_cal', this.meetsCal); this.setState({meetsCalForm:{name:'',date:'',place:'',pdf:'',pdfName:''}}); }
+  meetsViewPdf(pdf, title){ if(!pdf) return; const w=window.open('', '_blank'); if(!w) return; w.document.title=title||'Meet details'; w.document.body.style.margin='0'; const ifr=w.document.createElement('iframe'); ifr.src=pdf; ifr.style.cssText='border:0;width:100vw;height:100vh'; w.document.body.appendChild(ifr); }
   meetsCalDelete(id){ this.meetsCal=this.meetsCal.filter(function(m){return m.id!==id;}); this._saveJSON('vx_meets_cal', this.meetsCal); this.setState({}); }
   settingsSaveKey(){ this._saveJSON('vx_api_key', this.state.apiKeyDraft); this.setState({apiKey:this.state.apiKeyDraft, settingsMsg:'API key saved ✓'}); }
   tpaceCompute(type, sec){ return type==='1000' ? sec/10 : (sec*2.5)/10; }
@@ -5175,9 +5178,11 @@ class Component extends DCLogic {
       onMeetsName:(e)=>this.setState({meetsCalForm:{...(this.state.meetsCalForm||{}), name:e.target.value}}),
       onMeetsDate:(e)=>this.setState({meetsCalForm:{...(this.state.meetsCalForm||{}), date:e.target.value}}),
       onMeetsPlace:(e)=>this.setState({meetsCalForm:{...(this.state.meetsCalForm||{}), place:e.target.value}}),
+      onMeetsPdf:(e)=>{ const file=e.target.files&&e.target.files[0]; if(!file) return; const r=new FileReader(); r.onload=()=>this.setState({meetsCalForm:{...(this.state.meetsCalForm||{}), pdf:r.result, pdfName:file.name}}); r.readAsDataURL(file); },
+      meetsPdfLabel: (S.meetsCalForm&&S.meetsCalForm.pdfName) ? S.meetsCalForm.pdfName : 'Attach info PDF (optional)',
       onMeetsAdd:()=>this.meetsCalAdd(),
       meetsCalEmpty: this.meetsCal.length===0,
-      meetsCalRows: this.meetsCal.map((m)=>{ const d=m.date? new Date(m.date+'T00:00:00'):null; const mon=d?['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][d.getMonth()]:''; return {id:m.id, name:m.name, place:m.place||'', day:d?String(d.getDate()):'', mon:mon, onDelete:()=>this.meetsCalDelete(m.id)}; }),
+      meetsCalRows: this.meetsCal.map((m)=>{ const d=m.date? new Date(m.date+'T00:00:00'):null; const mon=d?['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][d.getMonth()]:''; return {id:m.id, name:m.name, place:m.place||'', day:d?String(d.getDate()):'', mon:mon, hasPdf:!!m.pdf, onViewPdf:()=>this.meetsViewPdf(m.pdf, m.name), onDelete:()=>this.meetsCalDelete(m.id)}; }),
       apiKeyDraft: S.apiKeyDraft || S.apiKey, onApiKeyDraft:(e)=>this.setState({apiKeyDraft:e.target.value}), onApiKeySave:()=>this.settingsSaveKey(),
       settingsMsg:S.settingsMsg, settingsMsgColor, settingsMsgShow:!!S.settingsMsg, swimmerTotal, meetTotal:this.allMeets().length, onSettingsReset:()=>this.settingsReset(),
       // tool overlay
