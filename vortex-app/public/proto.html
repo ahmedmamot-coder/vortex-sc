@@ -481,7 +481,7 @@
 
                     <div>
                       <div style="display:flex;align-items:baseline;justify-content:space-between;margin:0 4px 10px">
-                        <h2 style="font-size:11.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#7A8296;margin:0">The 9 squads</h2>
+                        <h2 style="font-size:11.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#7A8296;margin:0">{{ squadsHeading }}</h2>
                         <span style="font-size:11.5px;color:#9AA2B4">Tap to coach</span>
                       </div>
                       <div style="display:flex;flex-direction:column;gap:8px">
@@ -2456,6 +2456,9 @@
                           <select value="{{ staffForm.role }}" onchange="{{ onStaffRole }}" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
                             <option>Aquatic Director</option><option>Technical Manager</option><option>Head Coach</option><option>Manager</option><option>Admin</option><option>Coach</option><option>Assistant Coach</option><option>Fitness Coach</option>
                           </select>
+                          <select value="{{ staffForm.squadId }}" onchange="{{ onStaffSquad }}" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                            <option value="">Full access — all squads (managers/directors)</option><option value="preteam">Locked to Pre-Team</option><option value="advb">Locked to Advanced B</option><option value="adva">Locked to Advanced A</option><option value="junior">Locked to Junior</option><option value="seniorb">Locked to Senior B</option><option value="seniora">Locked to Senior A</option><option value="vortexb">Locked to Vortex B</option><option value="vortexa">Locked to Vortex A</option><option value="legend">Locked to Legend</option>
+                          </select>
                           <input value="{{ staffForm.phone }}" oninput="{{ onStaffPhone }}" placeholder="Phone / WhatsApp (optional)" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
                           <button onclick="{{ onStaffCreate }}" style="background:var(--vx-blue);color:#fff;border:none;border-radius:10px;padding:10px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer">Create account</button>
                         </div>
@@ -2775,18 +2778,18 @@ class Component extends DCLogic {
     this.accounts = [
       {id:'ahmed', user:'ahmed', label:'Ahmed Mamo', role:'Technical Director · full access', pin:'7777', accent:'#067EEA', photo:'assets/director-ahmed.jpg', initials:'AM', recommended:true},
       {id:'sameh', user:'sameh', label:'Sameh', role:'Administrator · full access', pin:'1234', accent:'#3B23C7', photo:'', initials:'S'},
-      {id:'fathy', user:'fathy', label:'Coach Fathy', role:'Pre-Team coach', pin:'1111', accent:'#22C1DA', photo:'assets/coach-fathy.jpg', initials:'CF'},
-      {id:'matuze', user:'matuze', label:'Coach Matuze', role:'Advanced B coach', pin:'1111', accent:'#1BA5E6', photo:'', initials:'CM'},
-      {id:'sherif', user:'sherif', label:'Coach Sherif', role:'Advanced A coach', pin:'1111', accent:'#067EEA', photo:'', initials:'CS'},
-      {id:'reda', user:'reda', label:'Coach Reda', role:'Junior coach', pin:'1111', accent:'#2A63E0', photo:'', initials:'CR'},
-      {id:'chafik', user:'chafik', label:'Coach Chafik', role:'Senior B coach', pin:'1111', accent:'#2733D6', photo:'assets/coach-chafik.jpg', initials:'CC'},
-      {id:'baisher', user:'baisher', label:'Coach Baisher', role:'Senior A coach', pin:'1111', accent:'#3B23C7', photo:'', initials:'CB'},
-      {id:'wassim', user:'wassim', label:'Coach Wassim', role:'Vortex B coach', pin:'1111', accent:'#5D22CF', photo:'', initials:'CW'},
-      {id:'mahmoud', user:'mahmoud', label:'Coach Mahmoud', role:'Vortex A coach', pin:'1111', accent:'#8A22D5', photo:'assets/coach-mahmoud.jpg', initials:'CM'},
-      {id:'martin', user:'martin', label:'Coach Martin', role:'Legend coach', pin:'1111', accent:'#1B22E4', photo:'assets/coach-martin.jpg', initials:'CM'},
+      {id:'fathy', user:'fathy', label:'Coach Fathy', role:'Pre-Team coach', pin:'1111', accent:'#22C1DA', photo:'assets/coach-fathy.jpg', initials:'CF', squadId:'preteam'},
+      {id:'matuze', user:'matuze', label:'Coach Matuze', role:'Advanced B coach', pin:'1111', accent:'#1BA5E6', photo:'', initials:'CM', squadId:'advb'},
+      {id:'sherif', user:'sherif', label:'Coach Sherif', role:'Advanced A coach', pin:'1111', accent:'#067EEA', photo:'', initials:'CS', squadId:'adva'},
+      {id:'reda', user:'reda', label:'Coach Reda', role:'Junior coach', pin:'1111', accent:'#2A63E0', photo:'', initials:'CR', squadId:'junior'},
+      {id:'chafik', user:'chafik', label:'Coach Chafik', role:'Senior B coach', pin:'1111', accent:'#2733D6', photo:'assets/coach-chafik.jpg', initials:'CC', squadId:'seniorb'},
+      {id:'baisher', user:'baisher', label:'Coach Baisher', role:'Senior A coach', pin:'1111', accent:'#3B23C7', photo:'', initials:'CB', squadId:'seniora'},
+      {id:'wassim', user:'wassim', label:'Coach Wassim', role:'Vortex B coach', pin:'1111', accent:'#5D22CF', photo:'', initials:'CW', squadId:'vortexb'},
+      {id:'mahmoud', user:'mahmoud', label:'Coach Mahmoud', role:'Vortex A coach', pin:'1111', accent:'#8A22D5', photo:'assets/coach-mahmoud.jpg', initials:'CM', squadId:'vortexa'},
+      {id:'martin', user:'martin', label:'Coach Martin', role:'Legend coach', pin:'1111', accent:'#1B22E4', photo:'assets/coach-martin.jpg', initials:'CM', squadId:'legend'},
     ];
     try { this.customStaff = JSON.parse(localStorage.getItem('vx_staff_accounts')||'[]'); } catch(e){ this.customStaff = []; }
-    for (var _si=0; _si<this.customStaff.length; _si++){ var _sa=this.customStaff[_si]; this.accounts.push({id:_sa.id, user:_sa.user, label:_sa.name, role:_sa.role, pin:_sa.pin, accent:'#2733D6', photo:'', initials:(_sa.name||'?').slice(0,2).toUpperCase()}); }
+    for (var _si=0; _si<this.customStaff.length; _si++){ var _sa=this.customStaff[_si]; this.accounts.push({id:_sa.id, user:_sa.user, label:_sa.name, role:_sa.role, pin:_sa.pin, accent:'#2733D6', photo:'', initials:(_sa.name||'?').slice(0,2).toUpperCase(), squadId:_sa.squadId||''}); }
     try { this.meetsCal = JSON.parse(localStorage.getItem('vx_meets_cal')||'[]'); } catch(e){ this.meetsCal = []; }
     this.squads = [
       {id:'preteam', name:'Pre-Team', ages:'≤6', count:3, coach:'Coach Fathy & Coach Mahady', accent:'#22C1DA', glow:'rgba(34,193,218,.35)', photo:'assets/coach-fathy.jpg', short:'Pre'},
@@ -2927,7 +2930,7 @@ class Component extends DCLogic {
       showVortexId:false,
       compBuildOpen:false, compName:'', compLocation:'', compDate:'', compCourse:'LCM', compEvents:[], compErr:'',
       printPreviewOpen:false,
-      staffEditId:null, staffForm:{name:'',pin:''}, staffAddOpen:false, staffAddForm:{name:'',user:'',pin:'',role:'Coach',phone:''}, meetsCalForm:{name:'',date:'',place:''},
+      staffEditId:null, staffForm:{name:'',pin:''}, staffAddOpen:false, staffAddForm:{name:'',user:'',pin:'',role:'Coach',phone:'',squadId:''}, meetsCalForm:{name:'',date:'',place:''},
       apiKey:this._loadJSON('vx_api_key',''), apiKeyDraft:'', settingsMsg:'',
       tpaceQuery:'', tpaceSwId:null, tpaceType:'1000', tpaceTime:'', tpaceErr:'',
       inbodyForm:{weight:'',fat:'',muscle:''},
@@ -3184,7 +3187,7 @@ class Component extends DCLogic {
     this.persistRosterEdits();
   }
   staffSave(squadId, form){ this.staffOverrides[squadId]={name:form.name.trim(), pin:form.pin.trim()}; this._saveJSON('vx_staff_ovr', this.staffOverrides); const sq=this.squadById[squadId]; if(sq) sq.coach=form.name.trim(); this.setState({staffEditId:null}); }
-  staffAddCreate(){ const f=this.state.staffAddForm||{}; const name=(f.name||'').trim(); const user=(f.user||'').trim().toLowerCase(); const pin=(f.pin||'').trim(); if(!name||!user||!pin){ return; } const id='st_'+Date.now(); const rec={id:id, name:name, user:user, pin:pin, role:f.role||'Coach', phone:(f.phone||'').trim()}; this.customStaff.push(rec); this._saveJSON('vx_staff_accounts', this.customStaff); this.accounts.push({id:id, user:user, label:name, role:rec.role, pin:pin, accent:'#2733D6', photo:'', initials:name.slice(0,2).toUpperCase()}); this.setState({staffAddOpen:false, staffAddForm:{name:'',user:'',pin:'',role:'Coach',phone:''}}); }
+  staffAddCreate(){ const f=this.state.staffAddForm||{}; const name=(f.name||'').trim(); const user=(f.user||'').trim().toLowerCase(); const pin=(f.pin||'').trim(); if(!name||!user||!pin){ return; } const id='st_'+Date.now(); const rec={id:id, name:name, user:user, pin:pin, role:f.role||'Coach', phone:(f.phone||'').trim(), squadId:(f.squadId||'').trim()}; this.customStaff.push(rec); this._saveJSON('vx_staff_accounts', this.customStaff); this.accounts.push({id:id, user:user, label:name, role:rec.role, pin:pin, accent:'#2733D6', photo:'', initials:name.slice(0,2).toUpperCase(), squadId:rec.squadId}); this.setState({staffAddOpen:false, staffAddForm:{name:'',user:'',pin:'',role:'Coach',phone:'',squadId:''}}); }
   staffAddDelete(id){ this.customStaff=this.customStaff.filter(function(a){return a.id!==id;}); this._saveJSON('vx_staff_accounts', this.customStaff); this.accounts=this.accounts.filter(function(a){return a.id!==id;}); this.setState({}); }
   meetsCalAdd(){ const f=this.state.meetsCalForm||{}; const name=(f.name||'').trim(); const date=(f.date||'').trim(); if(!name||!date) return; this.meetsCal.push({id:'mc_'+Date.now(), name:name, date:date, place:(f.place||'').trim(), pdf:f.pdf||'', pdfName:f.pdfName||''}); this.meetsCal.sort(function(a,b){return (a.date||'').localeCompare(b.date||'');}); this._saveJSON('vx_meets_cal', this.meetsCal); this.setState({meetsCalForm:{name:'',date:'',place:'',pdf:'',pdfName:''}}); }
   meetsViewPdf(pdf, title){ if(!pdf) return; const w=window.open('', '_blank'); if(!w) return; w.document.title=title||'Meet details'; w.document.body.style.margin='0'; const ifr=w.document.createElement('iframe'); ifr.src=pdf; ifr.style.cssText='border:0;width:100vw;height:100vh'; w.document.body.appendChild(ifr); }
@@ -4135,12 +4138,15 @@ class Component extends DCLogic {
 
     // ---- squads ----
     const badgeOf=(sq)=>{ const w=sq.coach.replace('Coach ','').trim(); return w.slice(0,2).toUpperCase(); };
-    const squadCards = this.squads.map(sq=>({
+    const _acct = this.accounts.find(a=>a.id===S.pickedId);
+    const _lockSquad = (_acct && _acct.squadId) ? _acct.squadId : null;
+    const _visibleSquads = _lockSquad ? this.squads.filter(sq=>sq.id===_lockSquad) : this.squads;
+    const squadCards = _visibleSquads.map(sq=>({
       name:sq.name, ages:sq.ages, coach:sq.coach, count:sq.count, accent:sq.accent, glow:sq.glow,
       avatar:this.av(sq.photo||null, badgeOf(sq), 38, 11, sq.accent, '#fff', 12),
       onClick:()=>this.openSquad(sq.id),
     }));
-    const switcherList = this.squads.map(sq=>({
+    const switcherList = _visibleSquads.map(sq=>({
       name:sq.name, ages:sq.ages, count:sq.count, accent:sq.accent,
       avatar:this.av(sq.photo||null, badgeOf(sq), 36, 10, sq.accent, '#fff', 11),
       current: sq.id===S.squadId, rowBg: sq.id===S.squadId?'#F4F6F8':'#fff', rowBorder: sq.id===S.squadId?sq.accent:'#E5E9F0',
@@ -4870,7 +4876,7 @@ class Component extends DCLogic {
       loginUser: S.loginUser||'', loginPinVal: S.loginPinVal||'', loginErr: S.loginErr||'', loginErrShow: !!S.loginErr,
       onLoginUser:(e)=>this.setState({loginUser:e.target.value, loginErr:''}),
       onLoginPin:(e)=>this.setState({loginPinVal:e.target.value, loginErr:''}),
-      onLoginSubmit:()=>{ const u=(this.state.loginUser||'').trim().toLowerCase(); const p=(this.state.loginPinVal||'').trim(); const acct=this.accounts.find(a=>(a.user&&a.user.toLowerCase()===u)||(a.label&&a.label.toLowerCase()===u)); if(acct && acct.pin===p){ this.setState({screen:'app', view:'hub', pickedId:acct.id, loginUser:'', loginPinVal:'', loginErr:''}); } else { this.setState({loginErr:'Wrong username or PIN'}); } },
+      onLoginSubmit:()=>{ const u=(this.state.loginUser||'').trim().toLowerCase(); const p=(this.state.loginPinVal||'').trim(); const acct=this.accounts.find(a=>(a.user&&a.user.toLowerCase()===u)||(a.label&&a.label.toLowerCase()===u)); if(acct && acct.pin===p){ const st={screen:'app', view:'hub', pickedId:acct.id, loginUser:'', loginPinVal:'', loginErr:''}; if(acct.squadId){ st.squadId=acct.squadId; } this.setState(st); } else { this.setState({loginErr:'Wrong username or PIN'}); } },
       pickedAcct:{label:picked.label, avatar:this.av(picked.photo||null, picked.initials, 26, 8, picked.accent, '#fff', 10)},
       onChangeAccount:()=>this.setState({loginStage:'accounts', pin:'', err:false}),
       pinMsg: S.err ? 'Wrong PIN — try again' : 'Enter your PIN',
@@ -4955,6 +4961,7 @@ class Component extends DCLogic {
       trialNotes:acadTrialForm.notes, onTrialNotes:(e)=>this.setState({trialForm:{...acadTrialForm, notes:e.target.value}}),
       onTrialSubmit:()=>this.trialSubmit(), trialSubmitted:!!S.trialSubmitted,
       squadCards, switcherList,
+      squadsHeading: _lockSquad ? 'Your squad' : 'The 9 squads',
       adminStats, squadBars, attendRing, adminLoadBars:loadBarsAdmin, adminRows,
       moveQuery:S.moveQuery, onMoveQuery:(e)=>this.setState({moveQuery:e.target.value}), onAutoAssign,
       moveCountLine: moveRows.length+' swimmers · pick a squad or auto-assign by age', moveRows,
@@ -5185,8 +5192,9 @@ class Component extends DCLogic {
       onStaffPin:(e)=>this.setState({staffAddForm:{...(this.state.staffAddForm||{}), pin:e.target.value}}),
       onStaffRole:(e)=>this.setState({staffAddForm:{...(this.state.staffAddForm||{}), role:e.target.value}}),
       onStaffPhone:(e)=>this.setState({staffAddForm:{...(this.state.staffAddForm||{}), phone:e.target.value}}),
+      onStaffSquad:(e)=>this.setState({staffAddForm:{...(this.state.staffAddForm||{}), squadId:e.target.value}}),
       onStaffCreate:()=>this.staffAddCreate(),
-      customStaffRows: this.customStaff.map((a)=>({id:a.id, name:a.name, sub:(a.role||'')+(a.phone?(' · '+a.phone):'')+(a.user?(' · @'+a.user):''), initials:(a.name||'?').slice(0,2).toUpperCase(), onDelete:()=>this.staffAddDelete(a.id)})),
+      customStaffRows: this.customStaff.map((a)=>({id:a.id, name:a.name, sub:(a.role||'')+(a.squadId&&this.squadById[a.squadId]?(' · '+this.squadById[a.squadId].name+' only'):'')+(a.phone?(' · '+a.phone):'')+(a.user?(' · @'+a.user):''), initials:(a.name||'?').slice(0,2).toUpperCase(), onDelete:()=>this.staffAddDelete(a.id)})),
       isAdminUser: (()=>{ const acc=this.accounts.find(a=>a.id===S.pickedId); return !!(acc && (acc.id==='ahmed'||acc.id==='sameh')); })(),
       meetsForm: S.meetsCalForm||{name:'',date:'',place:''},
       onMeetsName:(e)=>this.setState({meetsCalForm:{...(this.state.meetsCalForm||{}), name:e.target.value}}),
