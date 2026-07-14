@@ -3090,6 +3090,11 @@ class Component extends DCLogic {
     };
     // Vortex Lounge feed — shared & synced. Use the stored feed if present, else the seed above.
     try { var _fd=JSON.parse(localStorage.getItem('vx_feed')||'null'); if(_fd && _fd.length){ this.state.feed=_fd; } else { this._saveJSON('vx_feed', this.state.feed); } } catch(e){}
+    // Keep the user signed in across a page refresh (per-device session — NOT synced).
+    try { var _sess=JSON.parse(localStorage.getItem('vx_session')||'null');
+      if(_sess && _sess.type==='staff' && _sess.id){ var _a=this.accounts.find(function(x){return x.id===_sess.id;}); if(_a){ this.state.screen='app'; this.state.view='hub'; this.state.pickedId=_a.id; if(_a.squadId) this.state.squadId=_a.squadId; } }
+      else if(_sess && _sess.type==='family' && _sess.email){ var _f=(this.state.family||[]).find(function(x){return (x.email||'').toLowerCase()===(''+_sess.email).toLowerCase();}); if(_f){ this.state.screen='app'; this.state.view='family'; this.state.familyUser=_f; this.state.familyActiveIdx=0; } }
+    } catch(e){}
   }
   rng(seed){ let t = seed>>>0; return ()=>{ t += 0x6D2B79F5; let r = Math.imul(t ^ (t>>>15), 1|t); r ^= r + Math.imul(r ^ (r>>>7), 61|r); return ((r ^ (r>>>14))>>>0)/4294967296; }; }
   fmt(sec){ if(sec<60) return sec.toFixed(2); const m=Math.floor(sec/60); const s=(sec-m*60); return m+':' + (s<10?'0':'') + s.toFixed(2); }
@@ -3374,8 +3379,10 @@ class Component extends DCLogic {
   _esc(s){ return (''+(s==null?'':s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   _openPrintDoc(title, inner){ const w=window.open('', '_blank'); if(!w) return;
     const club=(this.brandConfig&&this.brandConfig.clubName)||'Vortex Swimming Club';
+    const logo=(location.origin||'')+'/assets/b798adf9.png';
+    const header='<div style="display:flex;align-items:center;gap:12px;border-bottom:3px solid #067EEA;padding-bottom:14px;margin-bottom:18px"><img src="'+logo+'" alt="" style="width:44px;height:44px"><div style="flex:1"><div style="font-weight:800;font-size:20px;color:#0C1116;letter-spacing:-.02em">'+this._esc(club)+'</div><div style="font-size:11px;color:#7A8296;font-weight:700;letter-spacing:.06em;text-transform:uppercase">Vortex SC coaching app</div></div></div>';
     const css='body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;margin:0;padding:0;color:#0C1116}.wrap{padding:16px 24px 40px}h1{font-size:20px;margin:0 0 2px;letter-spacing:-.01em}.sub{color:#7A8296;font-size:12px;margin:0 0 16px}table{width:100%;border-collapse:collapse;font-size:12.5px}th,td{text-align:left;padding:7px 9px;border-bottom:1px solid #E5E9F0}th{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:#9AA2B4}.r{text-align:right}.mono{font-family:ui-monospace,Menlo,monospace;font-weight:700}.tot{font-weight:700}.brand{margin-top:22px;padding-top:12px;border-top:1px solid #EEF1F5;color:#0C1116;font-weight:700;font-size:12px}.topbar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top) + 10px) 16px 10px;background:#0A0F1A}.backbtn{display:flex;align-items:center;gap:7px;background:rgba(255,255,255,.12);color:#fff;border:none;border-radius:11px;padding:9px 14px 9px 11px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}.printbtn{margin-left:auto;background:#067EEA;color:#fff;border:none;border-radius:11px;padding:9px 16px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}@media print{.noprint{display:none}}';
-    const doc='<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>'+this._esc(title)+'</title><style>'+css+'</style></head><body><div class="topbar noprint"><button class="backbtn" onclick="if(window.opener){window.close();}else{history.back();}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:17px;height:17px"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>Close</button><button class="printbtn" onclick="window.print()">Save as PDF / Print</button></div><div class="wrap">'+inner+'<div class="brand">'+this._esc(club)+'</div></div></body></html>';
+    const doc='<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>'+this._esc(title)+'</title><style>'+css+'</style></head><body><div class="topbar noprint"><button class="backbtn" onclick="if(window.opener){window.close();}else{history.back();}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:17px;height:17px"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>Close</button><button class="printbtn" onclick="window.print()">Save as PDF / Print</button></div><div class="wrap">'+header+inner+'<div class="brand">'+this._esc(club)+'</div></div></body></html>';
     w.document.open(); w.document.write(doc); w.document.close();
   }
   exportAttendancePdf(squadId){ const sq=this.squadById[squadId]||{name:'Squad',coach:''}; const now=new Date();
@@ -4056,6 +4063,7 @@ class Component extends DCLogic {
       const waText=encodeURIComponent('Welcome to Vortex SC, '+S.famName.trim()+'! \ud83c\udfca Your account is set up \u2014 you can now check performance, attendance, results and meets any time in the app.');
       window.open('https://wa.me/'+waNum+'?text='+waText, '_blank');
     }catch(e){}
+    try{ localStorage.setItem('vx_session', JSON.stringify({type:'family', email:rec.email})); }catch(e){}
     this.setState({familyUser:rec, familyActiveIdx:0, screen:'app', view:'family', famErr:''});
   }
   async famLogin(){ this.setState({famErr:''});
@@ -4065,9 +4073,10 @@ class Component extends DCLogic {
     const list=this.family||this.state.family||[];
     const rec=list.find(f=>(f.email||'').trim().toLowerCase()===email && (''+(f.pass||'')).trim()===pass);
     if(!rec) return this.setState({famErr:'No match \u2014 check email & password, or register below.'});
+    try{ localStorage.setItem('vx_session', JSON.stringify({type:'family', email:rec.email})); }catch(e){}
     this.setState({family:list, familyUser:rec, familyActiveIdx:0, screen:'app', view:'family', famErr:''});
   }
-  famLogout(){ this.setState({familyUser:null, screen:'login', loginStage:'accounts', famMode:'login', famName:'', famEmail:'', famPass:'', famPass2:'', famPicked:[], famSearch:'', famErr:''}); }
+  famLogout(){ try{ localStorage.removeItem('vx_session'); }catch(e){} this.setState({familyUser:null, screen:'login', loginStage:'accounts', famMode:'login', famName:'', famEmail:'', famPass:'', famPass2:'', famPicked:[], famSearch:'', famErr:''}); }
   makeDefaultPlan(){ const t=this.planTemplate; const migrate=(sec)=>({id:this._uid(sec.key[0]||'s'), title:sec.title, sets:sec.sets.map(s=>({id:this._uid(sec.key[0]||'s'), dist:s.dist, txt:s.txt, equip:[...(s.equip||[])], types:[...(s.types||[])], rest:s.rest||''}))}); return {title:t.title, zone:t.zone, sections:t.sections.map(migrate)}; }
   _migratePlan(p){
     if(p && p.sections) return p;
@@ -5026,8 +5035,8 @@ class Component extends DCLogic {
     const composeTagDefs=[{id:'set',label:'Set'},{id:'win',label:'Win'},{id:'q',label:'Question'},{id:'notice',label:'Notice'}];
     const composeTags=composeTagDefs.map(t=>{ const on=S.composeTag===t.id; return {label:t.label, onClick:()=>this.setState({composeTag:t.id}), bg:on?squad.accent:'#F4F6F8', fg:on?'#fff':'#7A8296', border:on?squad.accent:'#E5E9F0'}; });
     const feed=S.feed.map(p=>{ const [tb,tf]=tagStyle[p.tag]||['#EEF1F5','#5A657E']; return {author:p.author, role:p.role, avatar:this.av(p.photo||null, p.initials, 38, 11, squad.accent, '#fff', 12), imageEl: p.image? window.React.createElement('img',{src:p.image, alt:'', style:{width:'100%',borderRadius:11,marginTop:10}}) : null, tag:p.tag, tagBg:tb, tagFg:tf, text:p.text, likes:p.likes, comments:p.comments, time: p.ts? this.notifTimeAgo(new Date(p.ts).toISOString()) : (p.time||''), avBg:squad.accent, likeColor:p.liked?'#E5484D':'#9AA2B4', onLike:()=>{ const list=(this.state.feed||[]).map(x=>x.id===p.id?{...x, liked:!x.liked, likes:x.likes+(x.liked?-1:1)}:x); this._saveJSON('vx_feed', list); this.setState({feed:list}); } }; });
-    const onPost=()=>{ const txt=(S.compose||'').trim(); const img=S.composeImage||''; if(!txt && !img) return; const tagName={set:'Set',win:'Win',q:'Question',notice:'Notice'}[S.composeTag];
-      const acct=this.accounts.find(a=>a.id===S.pickedId)||{label:'Staff', role:'', initials:'?', photo:''};
+    const onPost=()=>{ const txt=((this.state.compose)||'').trim(); const img=this.state.composeImage||''; if(!txt && !img) return; const tagName={set:'Set',win:'Win',q:'Question',notice:'Notice'}[this.state.composeTag||'set'];
+      const acct=this.accounts.find(a=>a.id===this.state.pickedId)||{label:'Staff', role:'', initials:'?', photo:''};
       const np={id:'f'+Date.now(), author:acct.label, role:acct.role||'Staff', initials:acct.initials||(acct.label||'?').slice(0,2).toUpperCase(), photo:acct.photo||'', tag:tagName, text:txt, image:img, likes:0, comments:0, time:'now', ts:Date.now(), liked:false};
       const list=[np, ...(this.state.feed||[])]; this._saveJSON('vx_feed', list); this.setState({feed:list, compose:'', composeImage:'', composeEmojiOpen:false});
       this.notify('coach', 'megaphone', acct.label+' posted in the Lounge', '['+tagName+'] '+(txt||'📷 Photo').slice(0,90)); };
@@ -5270,7 +5279,7 @@ class Component extends DCLogic {
         const rawU = (uEl && uEl.value) || this.state.loginUser || '';
         const rawP = (pEl && pEl.value) || this.state.loginPinVal || '';
         const u=norm(rawU).toLowerCase(); const pl=norm(rawP).toLowerCase();
-        const doLogin=(acct)=>{ const st={screen:'app', view:'hub', pickedId:acct.id, loginUser:'', loginPinVal:'', loginErr:''}; if(acct.squadId){ st.squadId=acct.squadId; } if(uEl)uEl.value=''; if(pEl)pEl.value=''; this.setState(st); };
+        const doLogin=(acct)=>{ const st={screen:'app', view:'hub', pickedId:acct.id, loginUser:'', loginPinVal:'', loginErr:''}; if(acct.squadId){ st.squadId=acct.squadId; } if(uEl)uEl.value=''; if(pEl)pEl.value=''; try{ localStorage.setItem('vx_session', JSON.stringify({type:'staff', id:acct.id})); }catch(e){} this.setState(st); };
         // Username is space/case-insensitive; PIN is case-insensitive so a typed capital never locks you out.
         const acct=this.accounts.find(a=>(a.user&&norm(a.user).toLowerCase()===u)||(a.label&&norm(a.label).toLowerCase()===u));
         if(acct && norm(acct.pin).toLowerCase()===pl){ return doLogin(acct); }
@@ -5329,7 +5338,7 @@ class Component extends DCLogic {
         };
       })(),
       onGoAdmin:()=>this.setState({view:'admin'}), onGoTools:()=>{ const a=this.accounts.find(x=>x.id===S.pickedId)||{}; const adm=!!(a.id==='ahmed'||a.id==='sameh'); this.setState({view:'tools', toolScopeClub:adm}); }, onGoMove:()=>this.setState({view:'move'}),
-      onGoHub:()=>this.setState({view:'hub', showSwitcher:false}), onLogout:()=>this.setState({screen:'login', loginStage:'accounts', pin:'', view:'hub'}),
+      onGoHub:()=>this.setState({view:'hub', showSwitcher:false}), onLogout:()=>{ try{ localStorage.removeItem('vx_session'); }catch(e){} this.setState({screen:'login', loginStage:'accounts', pin:'', view:'hub'}); },
       onGoHandbook:()=>this.setState({view:'handbook'}), handbookCards:this.handbook.map(c=>({icon:c.icon, title:c.title, summary:c.summary, expanded:S.handbookOpen===c.id, chevron:S.handbookOpen===c.id?'chevron-up':'chevron-down', onToggle:()=>this.setState({handbookOpen:S.handbookOpen===c.id?null:c.id}), sections:c.sections.map(s=>({h:s.h, lead:s.lead||'', hasLead:!!s.lead, bullets:s.bullets||[]}))})),
       ...(()=>{
         const famCtx = S.familyUser ? {swimmerIds:S.familyUser.swimmerIds} : null;
