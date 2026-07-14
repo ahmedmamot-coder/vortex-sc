@@ -15,56 +15,50 @@
 <script src="assets/react-dom.js"></script>
 <script src="assets/vx-photos.js"></script>
 <script src="assets/roster.js"></script>
-<!-- Real shared-database sync: mirrors club data to Supabase so every device
-     shares the same plans, roster edits, staff, meets & family accounts.
+<!-- Real shared-database sync via the Supabase REST API using the browser's built-in
+     fetch() — NO external library/CDN, so it can't be broken by a blocked script.
      Fail-safe: if the database is unreachable it boots normally (per-device). -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 (function(){
   var SB_URL = "https://qhrpwiakobgcxfmcoyfg.supabase.co";
   var SB_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFocnB3aWFrb2JnY3hmbWNveWZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4NTgyMzQsImV4cCI6MjA5OTQzNDIzNH0.NVmLPF99O9M6rj-Srp3tP-ZkuhzIea0jSN4r0asW1eI";
-  // Club-wide shared keys (NOT the per-device Anthropic API key).
-  // Every shared data type the club edits. The only key deliberately kept per-device
-  // is vx_api_key (each device holds its own private Anthropic key).
+  var REST = SB_URL + "/rest/v1/club_state";
+  var HEAD = { "apikey": SB_ANON, "Authorization": "Bearer " + SB_ANON, "Content-Type": "application/json" };
+  // Every shared data type the club edits. The only key kept per-device is vx_api_key.
   var SYNC = ["vx_family","vx_plans","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_staff_accounts","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_account_ovr","vx_attend_log","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_plans","vx_videos","vx_saved_plans"];
+  window.__VX_SYNC = SYNC;
+  window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
+  function pushKey(k, v){
+    if (SYNC.indexOf(k) === -1) return;
+    var val; try { val = JSON.parse(v); } catch(e){ return; }
+    try {
+      fetch(REST, { method:"POST", headers: Object.assign({}, HEAD, {"Prefer":"resolution=merge-duplicates,return=minimal"}),
+        body: JSON.stringify([{ key:k, value:val, updated_at:new Date().toISOString() }]) })
+      .then(function(r){ window.__vxSyncOk = r.ok; if(!r.ok){ r.text().then(function(t){ try{ console.warn("vx sync HTTP "+r.status+" on "+k+": "+t); }catch(e){} }); } })
+      .catch(function(e){ window.__vxSyncOk=false; try{ console.warn("vx sync network error on "+k, e); }catch(x){} });
+    } catch(e){}
+  }
+  function pull(keys){
+    var url = REST + "?select=key,value&key=in.(" + keys.join(",") + ")";
+    return fetch(url, { headers: HEAD }).then(function(r){ return r.ok ? r.json() : []; }).catch(function(){ return []; });
+  }
+  window.__vxpush = pushKey;
+  window.__vxpull = pull;
+  // Install write-through sync UP FRONT so every write reaches the database.
+  var origSet = localStorage.setItem.bind(localStorage);
+  localStorage.setItem = function(k,v){ origSet(k,v); pushKey(k,v); };
   var booted = false;
   function hideSplash(){ setTimeout(function(){ var el=document.getElementById("vx-splash"); if(el){ el.style.opacity="0"; setTimeout(function(){ if(el.parentNode) el.parentNode.removeChild(el); }, 380); } }, 220); }
   function boot(){ if(booted) return; booted=true; var s=document.createElement("script"); s.src="assets/support.js"; s.onload=hideSplash; document.body.appendChild(s); }
-  // Boot no matter what: if the database is slow/unreachable, don't hang on the splash.
-  setTimeout(boot, 2200);
+  setTimeout(boot, 2500);
   setTimeout(function(){ hideSplash(); }, 6000);
-  try {
-    var sb = window.supabase.createClient(SB_URL, SB_ANON);
-    window.__vxsb = sb;
-    var origSet = localStorage.setItem.bind(localStorage);
-    // NOTE: a supabase-js query only actually sends when .then() is called — a bare
-    // upsert() never fires. That's why writes weren't reaching the database. Always .then().
-    function pushKey(k, v){ if (sb && SYNC.indexOf(k) !== -1){ try { sb.from("club_state").upsert({key:k, value:JSON.parse(v), updated_at:new Date().toISOString()}, {onConflict:"key"}).then(function(res){ if(res && res.error){ try{ console.warn("vx sync error", k, res.error.message); }catch(e){} } }, function(){}); } catch(e){} } }
-    window.__vxpush = pushKey;
-    // Install write-through sync UP FRONT so every future write reaches the database,
-    // even if the initial read below fails or is slow. This is the key reliability fix.
-    localStorage.setItem = function(k,v){ origSet(k,v); pushKey(k,v); };
-    // Pull shared state into localStorage before the app reads it, then boot.
-    sb.from("club_state").select("key,value").in("key", SYNC).then(function(res){
-      var have = {};
-      try {
-        (res && res.data ? res.data : []).forEach(function(r){
-          have[r.key] = true;
-          if (r.value != null) origSet(r.key, JSON.stringify(r.value)); // origSet: don't echo pulled data back
-        });
-      } catch(e){}
-      // One-time seed: upload any local data the database doesn't have yet — so data added
-      // on this device before a key was synced still reaches the shared database.
-      try {
-        SYNC.forEach(function(k){
-          if (have[k]) return;
-          var lv = localStorage.getItem(k);
-          if (lv != null) pushKey(k, lv);
-        });
-      } catch(e){}
-      boot();
-    }, function(){ boot(); });
-  } catch(e) { boot(); }
+  pull(SYNC).then(function(rows){
+    var have = {};
+    try { (rows||[]).forEach(function(r){ have[r.key]=true; if(r.value!=null) origSet(r.key, JSON.stringify(r.value)); }); } catch(e){}
+    // Seed: upload any local data the database doesn't have yet.
+    try { SYNC.forEach(function(k){ if(have[k]) return; var lv=localStorage.getItem(k); if(lv!=null) pushKey(k, lv); }); } catch(e){}
+    boot();
+  });
 })();
 </script>
 </head>
@@ -2640,6 +2634,12 @@
                         <p style="margin:8px 2px 0;font-size:11px;color:{{ settingsMsgColor }};font-weight:600;height:14px">{{ settingsMsg }}</p>
                       </div>
                       <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:15px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                        <p style="margin:0 0 4px;font-size:13px;font-weight:700;color:#0C1116">Database sync</p>
+                        <p style="margin:0 0 10px;font-size:11.5px;color:#7A8296;line-height:1.4">Push everything on this device to the shared Supabase database now. Use this once from the device that has your data, then it stays in sync automatically.</p>
+                        <button onclick="{{ onForceSync }}" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:#0A0F1A;color:#fff;border:none;border-radius:10px;padding:11px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer"><i data-lucide="cloud-upload" style="width:16px;height:16px"></i>Sync now to database</button>
+                        <sc-if value="{{ syncMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:9px 2px 0;font-size:11.5px;font-weight:600;color:{{ syncMsgColor }}">{{ syncMsg }}</p></sc-if>
+                      </div>
+                      <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:15px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
                         <p style="margin:0 0 4px;font-size:13px;font-weight:700;color:#0C1116">About this club</p>
                         <p style="margin:0;font-size:12px;color:#3A4152;line-height:1.7">Vortex SC · 9 squads · {{ swimmerTotal }} swimmers · {{ meetTotal }} meets on record</p>
                       </div>
@@ -3317,10 +3317,10 @@ class Component extends DCLogic {
   async _refreshAccountsFromDb(){
     // Pull the newest staff & family straight from the shared DB so people added on another
     // device can sign in immediately, without waiting for a full app restart.
-    const sb=window.__vxsb; if(!sb) return;
+    if(!window.__vxpull) return;
     try {
-      const res=await sb.from('club_state').select('key,value').in('key',['vx_staff_accounts','vx_account_ovr','vx_family']);
-      const rows=(res&&res.data)||[]; let touchedFamily=false;
+      const rows=await window.__vxpull(['vx_staff_accounts','vx_account_ovr','vx_family']);
+      let touchedFamily=false;
       rows.forEach(r=>{ if(r.value==null) return;
         if(r.key==='vx_staff_accounts'){ this.customStaff=r.value; try{localStorage.setItem('vx_staff_accounts',JSON.stringify(r.value));}catch(e){} }
         else if(r.key==='vx_account_ovr'){ this.accountOvr=r.value; try{localStorage.setItem('vx_account_ovr',JSON.stringify(r.value));}catch(e){} }
@@ -3380,6 +3380,14 @@ class Component extends DCLogic {
   }
   meetsCalDelete(id){ this.meetsCal=this.meetsCal.filter(function(m){return m.id!==id;}); this._saveJSON('vx_meets_cal', this.meetsCal); this.setState({}); }
   settingsSaveKey(){ this._saveJSON('vx_api_key', this.state.apiKeyDraft); this.setState({apiKey:this.state.apiKeyDraft, settingsMsg:'API key saved ✓'}); }
+  forceSyncNow(){
+    const keys=window.__VX_SYNC||[]; const push=window.__vxpush;
+    if(!push){ this.setState({syncMsg:'Sync unavailable — reload the app and try again.', syncMsgColor:'#B42318'}); return; }
+    let n=0;
+    keys.forEach(k=>{ const v=localStorage.getItem(k); if(v!=null){ push(k, v); n++; } });
+    this.setState({syncMsg:'Uploading '+n+' data sets to the database…', syncMsgColor:'#0C7A4F'});
+    setTimeout(()=>{ const ok=window.__vxSyncOk; this.setState({ syncMsg: ok===false ? 'Some writes were rejected — check the browser console for “vx sync HTTP …”.' : ('Synced '+n+' data sets to the database ✓ — check Supabase → club_state.'), syncMsgColor: ok===false ? '#B42318' : '#0C7A4F' }); }, 2500);
+  }
   tpaceCompute(type, sec){ return type==='1000' ? sec/10 : (sec*2.5)/10; }
   tpaceLog(swId){ const S=this.state; const sec=this.parseTimeStr(S.tpaceTime);
     if(!swId) return this.setState({tpaceErr:'Pick a swimmer first.'});
@@ -5522,6 +5530,7 @@ class Component extends DCLogic {
       meetsCalRows: this.meetsCal.map((m)=>{ const d=m.date? new Date(m.date+'T00:00:00'):null; const mon=d?['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][d.getMonth()]:''; return {id:m.id, name:m.name, place:m.place||'', day:d?String(d.getDate()):'', mon:mon, hasPdf:!!m.pdf, onViewPdf:()=>this.meetsViewPdf(m.pdf, m.name), onDelete:()=>this.meetsCalDelete(m.id)}; }),
       apiKeyDraft: S.apiKeyDraft || S.apiKey, onApiKeyDraft:(e)=>this.setState({apiKeyDraft:e.target.value}), onApiKeySave:()=>this.settingsSaveKey(),
       settingsMsg:S.settingsMsg, settingsMsgColor, settingsMsgShow:!!S.settingsMsg, swimmerTotal, meetTotal:this.allMeets().length, onSettingsReset:()=>this.settingsReset(),
+      onForceSync:()=>this.forceSyncNow(), syncMsg:S.syncMsg||'', syncMsgShow:!!S.syncMsg, syncMsgColor:S.syncMsgColor||'#0C7A4F',
       // tool overlay
       toolOpen: !!S.tool, onCloseTool:()=>this.setState({tool:null}),
       toolTitle: toolTitleMap[S.tool]||'', toolScope,
