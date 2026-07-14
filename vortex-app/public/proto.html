@@ -44,6 +44,7 @@
   }
   window.__vxpush = pushKey;
   window.__vxpull = pull;
+  window.__VX_SB = { url: SB_URL, anon: SB_ANON, head: HEAD };
   // Generic table helpers — used by the Lounge chat, where each message is its own row
   // (append-only INSERT), so posts can never overwrite each other.
   window.__vxInsert = function(table, rows){ return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: Object.assign({}, HEAD, {"Prefer":"return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(!r.ok){ r.text().then(function(t){ try{console.warn("vx insert "+table+" HTTP "+r.status+": "+t);}catch(e){} }); } return r.ok; }).catch(function(){ return false; }); };
@@ -2660,6 +2661,8 @@
                       <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:15px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
                         <p style="margin:0 0 4px;font-size:13px;font-weight:700;color:#0C1116">Database sync</p>
                         <p style="margin:0 0 10px;font-size:11.5px;color:#7A8296;line-height:1.4">Push everything on this device to the shared Supabase database now. Use this once from the device that has your data, then it stays in sync automatically.</p>
+                        <button onclick="{{ onDbTest }}" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--vx-blue);color:#fff;border:none;border-radius:10px;padding:11px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer;margin-bottom:8px"><i data-lucide="plug-zap" style="width:16px;height:16px"></i>Test database connection</button>
+                        <sc-if value="{{ dbTestShow }}" hint-placeholder-val="{{ false }}"><p style="margin:0 2px 10px;font-size:11.5px;font-weight:600;line-height:1.45;color:{{ dbTestColor }}">{{ dbTestMsg }}</p></sc-if>
                         <button onclick="{{ onForceSync }}" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:#0A0F1A;color:#fff;border:none;border-radius:10px;padding:11px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer"><i data-lucide="cloud-upload" style="width:16px;height:16px"></i>Sync now to database</button>
                         <sc-if value="{{ syncMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:9px 2px 0;font-size:11.5px;font-weight:600;color:{{ syncMsgColor }}">{{ syncMsg }}</p></sc-if>
                       </div>
@@ -3416,6 +3419,23 @@ class Component extends DCLogic {
   }
   meetsCalDelete(id){ this.meetsCal=this.meetsCal.filter(function(m){return m.id!==id;}); this._saveJSON('vx_meets_cal', this.meetsCal); this.setState({}); }
   settingsSaveKey(){ this._saveJSON('vx_api_key', this.state.apiKeyDraft); this.setState({apiKey:this.state.apiKeyDraft, settingsMsg:'API key saved ✓'}); }
+  async dbSelfTest(){
+    const sb=window.__VX_SB;
+    if(!sb){ this.setState({dbTestMsg:'Sync layer not loaded — hard-refresh the app and try again.', dbTestColor:'#B42318'}); return; }
+    this.setState({dbTestMsg:'Testing database connection…', dbTestColor:'#7A8296'});
+    const REST=sb.url+'/rest/v1/club_state';
+    try {
+      const wr=await fetch(REST, { method:'POST', headers:Object.assign({}, sb.head, {'Prefer':'resolution=merge-duplicates,return=minimal'}), body:JSON.stringify([{key:'vx_selftest', value:{t:Date.now()}, updated_at:new Date().toISOString()}]) });
+      if(!wr.ok){ const t=await wr.text(); this.setState({dbTestMsg:'✗ WRITE blocked — HTTP '+wr.status+': '+(t||'(no message)').slice(0,180)+(wr.status===401?'  → the API key is wrong/expired.':(wr.status===403?'  → run the GRANT + policy SQL.':(wr.status===404?'  → the club_state table is missing.':''))), dbTestColor:'#B42318'}); return; }
+      const rd=await fetch(REST+'?select=value,updated_at&key=eq.vx_selftest', { headers: sb.head });
+      if(!rd.ok){ const t=await rd.text(); this.setState({dbTestMsg:'Write OK but READ blocked — HTTP '+rd.status+': '+(t||'').slice(0,150), dbTestColor:'#9A6206'}); return; }
+      const rows=await rd.json();
+      if(rows && rows.length){ this.setState({dbTestMsg:'✓ Connected — read & write both work. Sync is live. (updated_at '+((rows[0].updated_at||'').replace('T',' ').slice(0,19))+')', dbTestColor:'#0C7A4F'}); }
+      else { this.setState({dbTestMsg:'Wrote a row but read back nothing — the SELECT policy is blocking reads. Re-run the club_state policy SQL.', dbTestColor:'#9A6206'}); }
+    } catch(e){
+      this.setState({dbTestMsg:'✗ Cannot reach the database at all. Most likely the Supabase project is PAUSED (free projects pause after ~1 week idle) — open supabase.com/dashboard and click Resume/Restore. ('+((e&&e.message)||e)+')', dbTestColor:'#B42318'});
+    }
+  }
   forceSyncNow(){
     const keys=window.__VX_SYNC||[]; const push=window.__vxpush;
     if(!push){ this.setState({syncMsg:'Sync unavailable — reload the app and try again.', syncMsgColor:'#B42318'}); return; }
@@ -5663,6 +5683,7 @@ class Component extends DCLogic {
       apiKeyDraft: S.apiKeyDraft || S.apiKey, onApiKeyDraft:(e)=>this.setState({apiKeyDraft:e.target.value}), onApiKeySave:()=>this.settingsSaveKey(),
       settingsMsg:S.settingsMsg, settingsMsgColor, settingsMsgShow:!!S.settingsMsg, swimmerTotal, meetTotal:this.allMeets().length, onSettingsReset:()=>this.settingsReset(),
       onForceSync:()=>this.forceSyncNow(), syncMsg:S.syncMsg||'', syncMsgShow:!!S.syncMsg, syncMsgColor:S.syncMsgColor||'#0C7A4F',
+      onDbTest:()=>this.dbSelfTest(), dbTestMsg:S.dbTestMsg||'', dbTestShow:!!S.dbTestMsg, dbTestColor:S.dbTestColor||'#7A8296',
       // tool overlay
       toolOpen: !!S.tool, onCloseTool:()=>this.setState({tool:null}),
       toolTitle: toolTitleMap[S.tool]||'', toolScope,
