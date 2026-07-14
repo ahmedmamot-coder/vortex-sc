@@ -2216,7 +2216,7 @@
                   <sc-if value="{{ toolLounge }}" hint-placeholder-val="{{ true }}">
                     <div>
                       <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05);margin-bottom:12px">
-                        <textarea value="{{ composeText }}" oninput="{{ onComposeChange }}" placeholder="Share a set, a win, a question…" style="width:100%;border:none;outline:none;resize:none;font-family:inherit;font-size:13.5px;color:#0C1116;background:none;min-height:44px;line-height:1.4"></textarea>
+                        <textarea id="vx-lounge-compose" value="{{ composeText }}" oninput="{{ onComposeChange }}" placeholder="Share a set, a win, a question…" style="width:100%;border:none;outline:none;resize:none;font-family:inherit;font-size:13.5px;color:#0C1116;background:none;min-height:44px;line-height:1.4"></textarea>
                         <input id="vx-lounge-photo" type="file" accept="image/*" onchange="{{ onComposePhoto }}" style="display:none">
                         <sc-if value="{{ composeHasImage }}" hint-placeholder-val="{{ false }}">
                           <div style="position:relative;margin-top:4px">{{ composeImageEl }}<button onclick="{{ onComposeRemovePhoto }}" style="position:absolute;top:14px;right:8px;width:28px;height:28px;border-radius:50%;background:rgba(10,15,26,.7);color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:15px;height:15px"></i></button></div>
@@ -5031,14 +5031,14 @@ class Component extends DCLogic {
       return {hasScans:true, insights, recs, scanCount:scans.length};
     })();
     // lounge
-    const tagStyle={Win:['#DCF5EA','#0C7A4F'],Set:['#E5F0FE','#0959B4'],Notice:['#FCEFD6','#9A6206'],Question:['#EDE7FB','#5A22B0']};
-    const composeTagDefs=[{id:'set',label:'Set'},{id:'win',label:'Win'},{id:'q',label:'Question'},{id:'notice',label:'Notice'}];
+    const tagStyle={Win:['#DCF5EA','#0C7A4F'],Set:['#E5F0FE','#0959B4'],Notice:['#FCEFD6','#9A6206'],Question:['#EDE7FB','#5A22B0'],Chat:['#E4F1F3','#0B6E7A']};
+    const composeTagDefs=[{id:'chat',label:'Chat'},{id:'set',label:'Set'},{id:'win',label:'Win'},{id:'q',label:'Question'},{id:'notice',label:'Notice'}];
     const composeTags=composeTagDefs.map(t=>{ const on=S.composeTag===t.id; return {label:t.label, onClick:()=>this.setState({composeTag:t.id}), bg:on?squad.accent:'#F4F6F8', fg:on?'#fff':'#7A8296', border:on?squad.accent:'#E5E9F0'}; });
     const feed=S.feed.map(p=>{ const [tb,tf]=tagStyle[p.tag]||['#EEF1F5','#5A657E']; return {author:p.author, role:p.role, avatar:this.av(p.photo||null, p.initials, 38, 11, squad.accent, '#fff', 12), imageEl: p.image? window.React.createElement('img',{src:p.image, alt:'', style:{width:'100%',borderRadius:11,marginTop:10}}) : null, tag:p.tag, tagBg:tb, tagFg:tf, text:p.text, likes:p.likes, comments:p.comments, time: p.ts? this.notifTimeAgo(new Date(p.ts).toISOString()) : (p.time||''), avBg:squad.accent, likeColor:p.liked?'#E5484D':'#9AA2B4', onLike:()=>{ const list=(this.state.feed||[]).map(x=>x.id===p.id?{...x, liked:!x.liked, likes:x.likes+(x.liked?-1:1)}:x); this._saveJSON('vx_feed', list); this.setState({feed:list}); } }; });
-    const onPost=()=>{ const txt=((this.state.compose)||'').trim(); const img=this.state.composeImage||''; if(!txt && !img) return; const tagName={set:'Set',win:'Win',q:'Question',notice:'Notice'}[this.state.composeTag||'set'];
+    const onPost=()=>{ const el=document.getElementById('vx-lounge-compose'); const domTxt=el?el.value:''; const txt=((this.state.compose||domTxt||'')).trim(); const img=this.state.composeImage||''; if(!txt && !img) return; const tagName={chat:'Chat',set:'Set',win:'Win',q:'Question',notice:'Notice'}[this.state.composeTag||'chat']||'Chat';
       const acct=this.accounts.find(a=>a.id===this.state.pickedId)||{label:'Staff', role:'', initials:'?', photo:''};
       const np={id:'f'+Date.now(), author:acct.label, role:acct.role||'Staff', initials:acct.initials||(acct.label||'?').slice(0,2).toUpperCase(), photo:acct.photo||'', tag:tagName, text:txt, image:img, likes:0, comments:0, time:'now', ts:Date.now(), liked:false};
-      const list=[np, ...(this.state.feed||[])]; this._saveJSON('vx_feed', list); this.setState({feed:list, compose:'', composeImage:'', composeEmojiOpen:false});
+      const list=[np, ...(this.state.feed||[])]; this._saveJSON('vx_feed', list); if(el) el.value=''; this.setState({feed:list, compose:'', composeImage:'', composeEmojiOpen:false});
       this.notify('coach', 'megaphone', acct.label+' posted in the Lounge', '['+tagName+'] '+(txt||'📷 Photo').slice(0,90)); };
     const composeEmojis=['🏊','🔥','💪','🏆','🥇','⏱️','👏','✅','🎯','📣','😀','😅','🙌','❤️','🎉','👍','🚀','💧','🌊','⭐'];
     const composeEmojiChips=composeEmojis.map(e=>({e, onClick:()=>{ this.setState({compose:(this.state.compose||'')+e}); }}));
