@@ -25,7 +25,7 @@
   var REST = SB_URL + "/rest/v1/club_state";
   var HEAD = { "apikey": SB_ANON, "Authorization": "Bearer " + SB_ANON, "Content-Type": "application/json" };
   // Every shared data type the club edits. The only key kept per-device is vx_api_key.
-  var SYNC = ["vx_family","vx_plans","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_staff_accounts","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_account_ovr","vx_attend_log","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_plans","vx_videos","vx_saved_plans","vx_feed"];
+  var SYNC = ["vx_family","vx_plans","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_staff_accounts","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_account_ovr","vx_attend_log","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_plans","vx_videos","vx_saved_plans"];
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
   function pushKey(k, v){
@@ -44,6 +44,10 @@
   }
   window.__vxpush = pushKey;
   window.__vxpull = pull;
+  // Generic table helpers — used by the Lounge chat, where each message is its own row
+  // (append-only INSERT), so posts can never overwrite each other.
+  window.__vxInsert = function(table, rows){ return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: Object.assign({}, HEAD, {"Prefer":"return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(!r.ok){ r.text().then(function(t){ try{console.warn("vx insert "+table+" HTTP "+r.status+": "+t);}catch(e){} }); } return r.ok; }).catch(function(){ return false; }); };
+  window.__vxSelect = function(table, qs){ return fetch(SB_URL+"/rest/v1/"+table+(qs?("?"+qs):""), { headers: HEAD }).then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; }); };
   // Install write-through sync UP FRONT so every write reaches the database.
   var origSet = localStorage.setItem.bind(localStorage);
   window.__vxsetlocal = origSet; // write locally WITHOUT re-pushing (used by background pull)
@@ -3088,10 +3092,8 @@ class Component extends DCLogic {
       ],
       aiKind:'season', aiPrompt:'', aiOut:null, aiLoading:false,
     };
-    // Vortex Lounge feed — shared & synced. Use the stored feed if present; otherwise keep the
-    // seed only in local state. Do NOT push it to the database here: on a slow initial sync the
-    // pull may not have finished, and pushing would clobber posts other devices already made.
-    try { var _fd=JSON.parse(localStorage.getItem('vx_feed')||'null'); if(_fd && _fd.length){ this.state.feed=_fd; } } catch(e){}
+    // Vortex Lounge chat is backed by its own table (lounge_posts), loaded via _loungeFetch().
+    // The seed posts in state.feed only show until the first real fetch replaces them.
     // Keep the user signed in across a page refresh (per-device session — NOT synced).
     try { var _sess=JSON.parse(localStorage.getItem('vx_session')||'null');
       if(_sess && _sess.type==='staff' && _sess.id){ var _a=this.accounts.find(function(x){return x.id===_sess.id;}); if(_a){ this.state.screen='app'; this.state.view='hub'; this.state.pickedId=_a.id; if(_a.squadId) this.state.squadId=_a.squadId; } }
@@ -3152,7 +3154,7 @@ class Component extends DCLogic {
   go(patch){ this.setState(patch); }
   openSquad(id){ this.setState({view:'squad', squadId:id, tab:'group', swimmerId:null, showSwitcher:false, tool:null}); }
   openSwimmer(id){ this.setState({view:'profile', swimmerId:id, profileEvent:null}); }
-  openTool(t, club){ const patch={tool:t, toolScopeClub:!!club, aiOut:null, aiLoading:false}; if(t==='clock'){ const seq=this.clockSeq(); patch.clockRunning=false; patch.clockSetIdx=0; patch.clockRep=1; patch.clockRemain=seq[0]?seq[0].interval:0; } this.setState(patch); }
+  openTool(t, club){ const patch={tool:t, toolScopeClub:!!club, aiOut:null, aiLoading:false}; if(t==='clock'){ const seq=this.clockSeq(); patch.clockRunning=false; patch.clockSetIdx=0; patch.clockRep=1; patch.clockRemain=seq[0]?seq[0].interval:0; } this.setState(patch); if(t==='lounge'){ try{ this._loungeFetch(); }catch(e){} } }
 
   todayISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
   curAttendDate(){ return this.state.attendDateISO || this.todayISO(); }
@@ -3617,6 +3619,15 @@ class Component extends DCLogic {
         rec.event+' at '+rec.meetName+' \u2014 '+(status==='approved'?'you\u2019re entered.':'not approved this time.'));
     }
     this.forceUpdate();
+  }
+  async _loungeFetch(){
+    if(!window.__vxSelect) return;
+    const rows=await window.__vxSelect('lounge_posts', 'select=*&order=ts.desc&limit=200');
+    if(rows==null) return; // null = table missing / network error → keep current feed
+    const cur={}; (this.state.feed||[]).forEach(p=>{ cur[p.id]=p; });
+    const feed=rows.map(r=>({ id:r.id, author:r.author, role:r.role, initials:r.initials||'?', photo:r.photo||'', tag:r.tag||'Chat', text:r.body||'', image:r.image||'', ts:r.ts,
+      time:'now', likes:(cur[r.id]?cur[r.id].likes:0), liked:(cur[r.id]?cur[r.id].liked:false), comments:0 }));
+    this.setState({feed});
   }
   notify(audience, icon, title, body){
     const rec={id:this._uid('notif'), audience, icon, title, body, at:new Date().toISOString(), read:false};
@@ -4323,8 +4334,11 @@ class Component extends DCLogic {
     // is refocused), so parents/swimmers/coaches/staff always see the newest data with no button.
     this._autoSyncTick();
     this._syncInt=setInterval(()=>this._autoSyncTick(), 20000);
-    this._onVis=()=>{ if(document.visibilityState==='visible') this._autoSyncTick(); };
+    this._onVis=()=>{ if(document.visibilityState==='visible'){ this._autoSyncTick(); this._loungeFetch(); } };
     document.addEventListener('visibilitychange', this._onVis);
+    // Lounge chat: load now, and poll fast while the Lounge is open so messages arrive live.
+    this._loungeFetch();
+    this._loungeInt=setInterval(()=>{ if(this.state.tool==='lounge') this._loungeFetch(); }, 6000);
   }
   async _autoSyncTick(){
     if(!window.__vxpull || this._syncBusy) return; this._syncBusy=true;
@@ -4385,7 +4399,7 @@ class Component extends DCLogic {
     const v=this._activeVideo();
     if((v?v.id:null) !== this._lastActiveVideoId) this._rebuildPlayer();
   }
-  componentWillUnmount(){ clearInterval(this._clock); clearTimeout(this._t); clearInterval(this._statusInt); clearInterval(this._syncInt); try{ document.removeEventListener('visibilitychange', this._onVis); }catch(e){} window.removeEventListener('beforeprint', this._onBeforePrint); window.removeEventListener('afterprint', this._onAfterPrint); window.removeEventListener('online', this._onStatusEvt); window.removeEventListener('offline', this._onStatusEvt); if(this._battery){ try{ this._battery.removeEventListener('levelchange', this._onStatusEvt); this._battery.removeEventListener('chargingchange', this._onStatusEvt); }catch(e){} } }
+  componentWillUnmount(){ clearInterval(this._clock); clearTimeout(this._t); clearInterval(this._statusInt); clearInterval(this._syncInt); clearInterval(this._loungeInt); try{ document.removeEventListener('visibilitychange', this._onVis); }catch(e){} window.removeEventListener('beforeprint', this._onBeforePrint); window.removeEventListener('afterprint', this._onAfterPrint); window.removeEventListener('online', this._onStatusEvt); window.removeEventListener('offline', this._onStatusEvt); if(this._battery){ try{ this._battery.removeEventListener('levelchange', this._onStatusEvt); this._battery.removeEventListener('chargingchange', this._onStatusEvt); }catch(e){} } }
   _icons(){ clearTimeout(this._t); this._t=setTimeout(()=>{ try{ window.lucide && window.lucide.createIcons(); }catch(e){} }, 30); }
 
   parseSet(txt, dist){ txt=String(txt||''); let reps=1; const rm=txt.match(/(\d+)\s*[\u00d7xX]\s*(\d+)/); if(rm) reps=parseInt(rm[1])||1; let interval=null; const im=txt.match(/@\s*(\d+):(\d{2})/); if(im) interval=parseInt(im[1])*60+parseInt(im[2]); else { const im2=txt.match(/@\s*:(\d{2})/); if(im2) interval=parseInt(im2[1]); } if(!interval){ const per = reps>1 ? Math.round((+dist||100)/reps) : (+dist||100); interval = Math.max(20, Math.round(per*1.6)); } return {reps, interval}; }
@@ -5036,18 +5050,15 @@ class Component extends DCLogic {
     const tagStyle={Win:['#DCF5EA','#0C7A4F'],Set:['#E5F0FE','#0959B4'],Notice:['#FCEFD6','#9A6206'],Question:['#EDE7FB','#5A22B0'],Chat:['#E4F1F3','#0B6E7A']};
     const composeTagDefs=[{id:'chat',label:'Chat'},{id:'set',label:'Set'},{id:'win',label:'Win'},{id:'q',label:'Question'},{id:'notice',label:'Notice'}];
     const composeTags=composeTagDefs.map(t=>{ const on=S.composeTag===t.id; return {label:t.label, onClick:()=>this.setState({composeTag:t.id}), bg:on?squad.accent:'#F4F6F8', fg:on?'#fff':'#7A8296', border:on?squad.accent:'#E5E9F0'}; });
-    const feed=S.feed.map(p=>{ const [tb,tf]=tagStyle[p.tag]||['#EEF1F5','#5A657E']; return {author:p.author, role:p.role, avatar:this.av(p.photo||null, p.initials, 38, 11, squad.accent, '#fff', 12), imageEl: p.image? window.React.createElement('img',{src:p.image, alt:'', style:{width:'100%',borderRadius:11,marginTop:10}}) : null, tag:p.tag, tagBg:tb, tagFg:tf, text:p.text, likes:p.likes, comments:p.comments, time: p.ts? this.notifTimeAgo(new Date(p.ts).toISOString()) : (p.time||''), avBg:squad.accent, likeColor:p.liked?'#E5484D':'#9AA2B4', onLike:()=>{ const list=(this.state.feed||[]).map(x=>x.id===p.id?{...x, liked:!x.liked, likes:x.likes+(x.liked?-1:1)}:x); this._saveJSON('vx_feed', list); this.setState({feed:list}); } }; });
+    const feed=S.feed.map(p=>{ const [tb,tf]=tagStyle[p.tag]||['#EEF1F5','#5A657E']; return {author:p.author, role:p.role, avatar:this.av(p.photo||null, p.initials, 38, 11, squad.accent, '#fff', 12), imageEl: p.image? window.React.createElement('img',{src:p.image, alt:'', style:{width:'100%',borderRadius:11,marginTop:10}}) : null, tag:p.tag, tagBg:tb, tagFg:tf, text:p.text, likes:p.likes, comments:p.comments, time: p.ts? this.notifTimeAgo(new Date(p.ts).toISOString()) : (p.time||''), avBg:squad.accent, likeColor:p.liked?'#E5484D':'#9AA2B4', onLike:()=>{ const list=(this.state.feed||[]).map(x=>x.id===p.id?{...x, liked:!x.liked, likes:x.likes+(x.liked?-1:1)}:x); this.setState({feed:list}); } }; });
     const onPost=async()=>{ const el=document.getElementById('vx-lounge-compose'); const domTxt=el?el.value:''; const txt=((this.state.compose||domTxt||'')).trim(); const img=this.state.composeImage||''; if(!txt && !img) return; const tagName={chat:'Chat',set:'Set',win:'Win',q:'Question',notice:'Notice'}[this.state.composeTag||'chat']||'Chat';
       const acct=this.accounts.find(a=>a.id===this.state.pickedId)||{label:'Staff', role:'', initials:'?', photo:''};
       const np={id:'f'+Date.now()+'_'+Math.random().toString(36).slice(2,6), author:acct.label, role:acct.role||'Staff', initials:acct.initials||(acct.label||'?').slice(0,2).toUpperCase(), photo:acct.photo||'', tag:tagName, text:txt, image:img, likes:0, comments:0, time:'now', ts:Date.now(), liked:false};
-      // Optimistic display
+      // Optimistic display, then INSERT one message row (append — can never overwrite others).
       if(el) el.value=''; this.setState({feed:[np, ...(this.state.feed||[])], compose:'', composeImage:'', composeEmojiOpen:false});
       this.notify('coach', 'megaphone', acct.label+' posted in the Lounge', '['+tagName+'] '+(txt||'📷 Photo').slice(0,90));
-      // Merge with the freshest DB feed BEFORE saving, so we never overwrite another device's posts.
-      let base=this.state.feed||[];
-      try{ if(window.__vxpull){ const rows=await window.__vxpull(['vx_feed']); const r=(rows||[]).find(x=>x.key==='vx_feed'); if(r && Array.isArray(r.value)){ const byId={}; r.value.forEach(p=>{ byId[p.id]=p; }); byId[np.id]=np; base.forEach(p=>{ if(!byId[p.id]) byId[p.id]=p; }); base=Object.values(byId).sort((a,b)=>(b.ts||0)-(a.ts||0)); } } }catch(e){}
-      if(!base.find(p=>p.id===np.id)) base=[np, ...base];
-      this._saveJSON('vx_feed', base); this.setState({feed:base}); };
+      const row={id:np.id, author:np.author, role:np.role, initials:np.initials, photo:np.photo, tag:np.tag, body:np.text, image:np.image, ts:np.ts};
+      try{ if(window.__vxInsert){ const ok=await window.__vxInsert('lounge_posts', [row]); if(ok) await this._loungeFetch(); } }catch(e){} };
     const composeEmojis=['🏊','🔥','💪','🏆','🥇','⏱️','👏','✅','🎯','📣','😀','😅','🙌','❤️','🎉','👍','🚀','💧','🌊','⭐'];
     const composeEmojiChips=composeEmojis.map(e=>({e, onClick:()=>{ this.setState({compose:(this.state.compose||'')+e}); }}));
     const onComposeEmojiToggle=()=>this.setState({composeEmojiOpen:!this.state.composeEmojiOpen});
