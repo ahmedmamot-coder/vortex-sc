@@ -2622,7 +2622,7 @@
                           <p style="margin:0 0 7px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#9AA2B4;font-weight:700">Training zone method</p>
                           <div style="display:flex;gap:7px">
                             <button onclick="{{ brandView.onZone6 }}" style="flex:1;padding:10px;border-radius:10px;border:1px solid var(--vx-blue);cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;background:{{ brandView.zone6Bg }};color:{{ brandView.zone6Fg }}">6-zone (EN1–3, SP1–3)</button>
-                            <button onclick="{{ brandView.onZone5 }}" style="flex:1;padding:10px;border-radius:10px;border:1px solid var(--vx-blue);cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;background:{{ brandView.zone5Bg }};color:{{ brandView.zone5Fg }}">5-zone (EN1–3, SP1–2)</button>
+                            <button onclick="{{ brandView.onZone5 }}" style="flex:1;padding:10px;border-radius:10px;border:1px solid var(--vx-blue);cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;background:{{ brandView.zone5Bg }};color:{{ brandView.zone5Fg }}">5-zone (Zone 1–5)</button>
                           </div>
                           <p style="margin:8px 2px 0;font-size:11px;color:#9AA2B4">Current ruleset: {{ brandView.ruleset }} · {{ brandView.squadCount }} squads</p>
                         </div>
@@ -5335,7 +5335,7 @@ class Component extends DCLogic {
       locale:bd.locale, onLocale:(e)=>this.setState({brandDraft:{...bd, locale:e.target.value}}),
       currency:bd.currency, onCurrency:(e)=>this.setState({brandDraft:{...bd, currency:e.target.value}}),
       onSave:()=>this.brandSave(),
-      squadCount:this.squads.length, ruleset: bd.zoneMethod==='6'?'6-zone (EN1–EN3, SP1–SP3)':'5-zone (EN1–EN3, SP1–SP2)',
+      squadCount:this.squads.length, ruleset: bd.zoneMethod==='6'?'6-zone (EN1–EN3, SP1–SP3)':'5-zone (Zone 1 – Zone 5)',
     };
 
     return {
