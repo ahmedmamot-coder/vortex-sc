@@ -26,7 +26,7 @@
   // Club-wide shared keys (NOT the per-device Anthropic API key).
   // Every shared data type the club edits. The only key deliberately kept per-device
   // is vx_api_key (each device holds its own private Anthropic key).
-  var SYNC = ["vx_family","vx_plans","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_staff_accounts","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_account_ovr","vx_attend_log","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_plans","vx_videos"];
+  var SYNC = ["vx_family","vx_plans","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_staff_accounts","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_account_ovr","vx_attend_log","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_plans","vx_videos","vx_saved_plans"];
   var booted = false;
   function hideSplash(){ setTimeout(function(){ var el=document.getElementById("vx-splash"); if(el){ el.style.opacity="0"; setTimeout(function(){ if(el.parentNode) el.parentNode.removeChild(el); }, 380); } }, 220); }
   function boot(){ if(booted) return; booted=true; var s=document.createElement("script"); s.src="assets/support.js"; s.onload=hideSplash; document.body.appendChild(s); }
@@ -36,31 +36,28 @@
   try {
     var sb = window.supabase.createClient(SB_URL, SB_ANON);
     window.__vxsb = sb;
+    var origSet = localStorage.setItem.bind(localStorage);
+    function pushKey(k, v){ if (sb && SYNC.indexOf(k) !== -1){ try { sb.from("club_state").upsert({key:k, value:JSON.parse(v), updated_at:new Date().toISOString()}); } catch(e){} } }
+    window.__vxpush = pushKey;
+    // Install write-through sync UP FRONT so every future write reaches the database,
+    // even if the initial read below fails or is slow. This is the key reliability fix.
+    localStorage.setItem = function(k,v){ origSet(k,v); pushKey(k,v); };
     // Pull shared state into localStorage before the app reads it, then boot.
     sb.from("club_state").select("key,value").in("key", SYNC).then(function(res){
       var have = {};
       try {
         (res && res.data ? res.data : []).forEach(function(r){
           have[r.key] = true;
-          if (r.value != null) localStorage.setItem(r.key, JSON.stringify(r.value));
+          if (r.value != null) origSet(r.key, JSON.stringify(r.value)); // origSet: don't echo pulled data back
         });
       } catch(e){}
-      // Push future local writes to the shared database (fire-and-forget).
-      var orig = localStorage.setItem.bind(localStorage);
-      localStorage.setItem = function(k,v){
-        orig(k,v);
-        if (SYNC.indexOf(k) !== -1) {
-          try { sb.from("club_state").upsert({key:k, value:JSON.parse(v), updated_at:new Date().toISOString()}); } catch(e){}
-        }
-      };
       // One-time seed: upload any local data the database doesn't have yet — so data added
       // on this device before a key was synced still reaches the shared database.
       try {
         SYNC.forEach(function(k){
           if (have[k]) return;
           var lv = localStorage.getItem(k);
-          if (lv == null) return;
-          try { sb.from("club_state").upsert({key:k, value:JSON.parse(lv), updated_at:new Date().toISOString()}); } catch(e){}
+          if (lv != null) pushKey(k, lv);
         });
       } catch(e){}
       boot();
@@ -1141,13 +1138,34 @@
                         </div>
                       </sc-for>
                       <button onclick="{{ onAddSection }}" style="display:flex;align-items:center;justify-content:center;gap:6px;background:none;border:1.5px dashed #CDD3E0;border-radius:12px;padding:10px;cursor:pointer;color:#3A4152;font-family:inherit;font-size:12.5px;font-weight:700;margin-bottom:4px"><i data-lucide="plus-circle" style="width:15px;height:15px"></i> Add section</button>
-                      <div style="display:flex;gap:8px;margin-top:14px">
+                      <button onclick="{{ onSavePlan }}" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-top:14px;background:#0A0F1A;color:#fff;border:none;border-radius:12px;height:48px;font-family:inherit;font-weight:700;font-size:14px;cursor:pointer"><i data-lucide="save" style="width:18px;height:18px"></i> Save session to training log</button>
+                      <sc-if value="{{ savedPlanMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:8px 2px 0;font-size:11.5px;font-weight:600;color:#0C7A4F">{{ savedPlanMsg }}</p></sc-if>
+                      <div style="display:flex;gap:8px;margin-top:10px">
                         <button onclick="{{ onSubmitPlanReview }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:7px;background:{{ squad.accent }};color:#fff;border:none;border-radius:12px;height:46px;font-family:inherit;font-weight:700;font-size:14px;cursor:pointer;box-shadow:0 8px 20px {{ squad.glow }}"><i data-lucide="shield-check" style="width:17px;height:17px"></i> Submit for AI Review</button>
                         <button onclick="{{ onShareWhatsapp }}" style="flex:none;width:46px;height:46px;background:#fff;border:1px solid #E5E9F0;border-radius:12px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#0C1116" title="Share to squad"><i data-lucide="send" style="width:17px;height:17px"></i></button>
                         <button onclick="{{ onPrintPlan }}" style="flex:none;width:46px;height:46px;background:#fff;border:1px solid #E5E9F0;border-radius:12px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#0C1116"><i data-lucide="printer" style="width:18px;height:18px"></i></button>
                         <button onclick="{{ onResetPlan }}" style="flex:none;width:46px;height:46px;background:#fff;border:1px solid #E5E9F0;border-radius:12px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#7A8296" title="Reset to template"><i data-lucide="rotate-ccw" style="width:18px;height:18px"></i></button>
                       </div>
                       <p style="margin:8px 2px 0;font-size:11px;color:{{ shareNoteColor }};height:14px;font-weight:600">{{ shareNote }}</p>
+
+                      <div style="margin-top:18px">
+                        <div style="display:flex;align-items:center;gap:7px;margin:0 2px 10px"><i data-lucide="history" style="width:16px;height:16px;color:{{ squad.accent }}"></i><h3 style="margin:0;font-size:13px;font-weight:700;color:#0C1116">Training log &amp; load</h3></div>
+                        <div style="display:flex;gap:8px;margin-bottom:11px">
+                          <div style="flex:1;background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:12px;text-align:center;box-shadow:0 1px 4px rgba(11,20,40,.04)"><span style="display:block;font-size:19px;font-weight:800;color:{{ squad.accent }}">{{ savedPlanWeekM }}<span style="font-size:11px;color:#9AA2B4;font-weight:700">m</span></span><span style="display:block;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4;margin-top:2px">This week · {{ savedPlanWeekN }} sessions</span></div>
+                          <div style="flex:1;background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:12px;text-align:center;box-shadow:0 1px 4px rgba(11,20,40,.04)"><span style="display:block;font-size:19px;font-weight:800;color:#0C1116">{{ savedPlanSeasonM }}<span style="font-size:11px;color:#9AA2B4;font-weight:700">m</span></span><span style="display:block;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4;margin-top:2px">Season · {{ savedPlanSeasonN }} sessions</span></div>
+                        </div>
+                        <sc-if value="{{ savedPlansEmpty }}" hint-placeholder-val="{{ true }}"><p style="margin:0 2px;font-size:11.5px;color:#9AA2B4">No saved sessions yet — build a plan above and tap “Save session”.</p></sc-if>
+                        <div style="display:flex;flex-direction:column;gap:7px">
+                          <sc-for list="{{ savedPlanRows }}" as="sp" hint-placeholder-count="0">
+                            <div style="display:flex;align-items:center;gap:11px;background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:10px 12px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
+                              <span style="flex:none;text-align:center;min-width:52px"><span style="display:block;font-family:var(--font-mono);font-size:14px;font-weight:800;color:{{ squad.accent }}">{{ sp.totalM }}</span><span style="display:block;font-size:9px;font-weight:700;text-transform:uppercase;color:#9AA2B4">metres</span></span>
+                              <span style="flex:1;min-width:0"><span style="display:block;font-size:13px;font-weight:700;color:#0C1116">{{ sp.title }}</span><span style="display:block;font-size:11px;color:#7A8296">{{ sp.dateLabel }} · Zone {{ sp.zone }}</span></span>
+                              <button onclick="{{ sp.onEdit }}" style="flex:none;width:32px;height:32px;border-radius:9px;border:none;background:#F4F6F8;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center" title="Load &amp; edit"><i data-lucide="pencil" style="width:14px;height:14px"></i></button>
+                              <button onclick="{{ sp.onDelete }}" style="flex:none;width:32px;height:32px;border-radius:9px;border:none;background:#FDECEC;color:#E5484D;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="trash-2" style="width:14px;height:14px"></i></button>
+                            </div>
+                          </sc-for>
+                        </div>
+                      </div>
                     </div>
                   </sc-if>
 
@@ -2972,6 +2990,7 @@ class Component extends DCLogic {
       {k:'100 IM',b:68},{k:'200 IM',b:138},{k:'400 IM',b:295}
     ];
     this.planSubmissions=this._loadJSON('vx_plan_submissions', {});
+    this.savedPlans=this._loadJSON('vx_saved_plans', {});
     this.notifications=this._loadJSON('vx_notifications', [
       {id:'seed1', audience:'all', icon:'calendar-plus', title:'New meet added', body:'Nautilus Invitational Swim Meet 2026 is open for entries.', at:new Date(Date.now()-86400000*2).toISOString(), read:false},
     ]);
@@ -4048,6 +4067,13 @@ class Component extends DCLogic {
   renameSection(id, secId, title){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); if(sec) sec.title=title; }); }
   setPlanMeta(id, field, val){ this.mutatePlan(id, p=>{ p[field]=val; }); }
   resetPlan(id){ const d=this.makeDefaultPlan(); this.mutatePlan(id, p=>{ p.title=d.title; p.zone=d.zone; p.sections=d.sections; }); }
+  planMetres(plan){ let t=0; (plan&&plan.sections||[]).forEach(sec=>{ (sec.sets||[]).forEach(s=>{ t+=(Number(s.dist)||0)*(Number(s.reps)||1); }); }); return t; }
+  savePlanSnapshot(squadId){ const plan=this.getPlan(squadId); const rec={ id:this._uid('sp'), date:this.todayISO(), title:plan.title||'Session', zone:plan.zone||'', totalM:this.planMetres(plan), plan:JSON.parse(JSON.stringify(plan)) };
+    const list=(this.savedPlans[squadId]||[]).slice(); list.unshift(rec); this.savedPlans={...this.savedPlans, [squadId]:list}; this._saveJSON('vx_saved_plans', this.savedPlans);
+    this.setState({savedPlanMsg:'Session saved to the training log ✓'});
+  }
+  loadPlanSnapshot(squadId, id){ const rec=(this.savedPlans[squadId]||[]).find(r=>r.id===id); if(!rec) return; this.mutatePlan(squadId, p=>{ p.title=rec.plan.title; p.zone=rec.plan.zone; p.sections=JSON.parse(JSON.stringify(rec.plan.sections)); }); this.setState({savedPlanMsg:'Loaded into the editor — edit and Save again to log an update.'}); }
+  deletePlanSnapshot(squadId, id){ const list=(this.savedPlans[squadId]||[]).filter(r=>r.id!==id); this.savedPlans={...this.savedPlans, [squadId]:list}; this._saveJSON('vx_saved_plans', this.savedPlans); this.forceUpdate(); }
   async handlePdfImport(e, squadId){
     const file = e.target.files && e.target.files[0];
     e.target.value='';
@@ -5251,6 +5277,15 @@ class Component extends DCLogic {
       attendYearLabel, attendYearAvgPct, attendYearBars, onAttendYearPrev, onAttendYearNext,
       rosterQuery:S.rosterQuery, onRosterQuery:(e)=>this.setState({rosterQuery:e.target.value}), rosterCountLine, roster, navItems,
       planTotal:planTotalN.toLocaleString(), zoneOptions, planSections, onAddSection, sessionTitle, onSessionTitle, onResetPlan,
+      onSavePlan:()=>this.savePlanSnapshot(S.squadId), savedPlanMsg:S.savedPlanMsg||'', savedPlanMsgShow:!!S.savedPlanMsg,
+      ...(()=>{ const sp=(this.savedPlans[S.squadId]||[]); const iso=(d)=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+        const now=new Date(); const weekIso=iso(new Date(now.getTime()-6*86400000)); const yIso=now.getFullYear()+'-01-01';
+        let weekM=0,seasonM=0,weekN=0,seasonN=0; sp.forEach(r=>{ if(r.date>=yIso){seasonM+=r.totalM;seasonN++;} if(r.date>=weekIso){weekM+=r.totalM;weekN++;} });
+        const rows=sp.map(r=>({ id:r.id, title:r.title||'Session', zone:r.zone||'', totalM:(r.totalM||0).toLocaleString(),
+          dateLabel:new Date(r.date+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}),
+          onEdit:()=>this.loadPlanSnapshot(S.squadId, r.id), onDelete:()=>this.deletePlanSnapshot(S.squadId, r.id) }));
+        return { savedPlanRows:rows, savedPlansHasAny:rows.length>0, savedPlansEmpty:rows.length===0,
+          savedPlanWeekM:weekM.toLocaleString(), savedPlanWeekN:weekN, savedPlanSeasonM:seasonM.toLocaleString(), savedPlanSeasonN:seasonN }; })(),
       onShareWhatsapp:()=>this.setState({shareNote:'Shared to '+squad.name+' WhatsApp group ✓'}), onPrintPlan:()=>this.setState({printPreviewOpen:true}),
       onSubmitPlanReview:()=>this.submitPlanForReview(S.squadId, squad.name),
       onClosePrintPreview:()=>this.setState({printPreviewOpen:false}), onConfirmPrint:()=>{ this._printEscape(); setTimeout(()=>window.print(), 30); }, printPreviewOpen:S.printPreviewOpen,
