@@ -46,6 +46,7 @@
   window.__vxpull = pull;
   // Install write-through sync UP FRONT so every write reaches the database.
   var origSet = localStorage.setItem.bind(localStorage);
+  window.__vxsetlocal = origSet; // write locally WITHOUT re-pushing (used by background pull)
   localStorage.setItem = function(k,v){ origSet(k,v); pushKey(k,v); };
   var booted = false;
   function hideSplash(){ setTimeout(function(){ var el=document.getElementById("vx-splash"); if(el){ el.style.opacity="0"; setTimeout(function(){ if(el.parentNode) el.parentNode.removeChild(el); }, 380); } }, 220); }
@@ -4267,6 +4268,48 @@ class Component extends DCLogic {
     window.addEventListener('online', this._onStatusEvt); window.addEventListener('offline', this._onStatusEvt);
     if(navigator.getBattery){ navigator.getBattery().then(bat=>{ this._battery=bat; this._tickStatusBar();
       bat.addEventListener('levelchange', this._onStatusEvt); bat.addEventListener('chargingchange', this._onStatusEvt); }).catch(()=>{}); }
+    // Live shared sync: automatically pull everyone's latest data every 20s (and when the app
+    // is refocused), so parents/swimmers/coaches/staff always see the newest data with no button.
+    this._autoSyncTick();
+    this._syncInt=setInterval(()=>this._autoSyncTick(), 20000);
+    this._onVis=()=>{ if(document.visibilityState==='visible') this._autoSyncTick(); };
+    document.addEventListener('visibilitychange', this._onVis);
+  }
+  async _autoSyncTick(){
+    if(!window.__vxpull || this._syncBusy) return; this._syncBusy=true;
+    try {
+      const keys=window.__VX_SYNC||[]; const rows=await window.__vxpull(keys);
+      const setLocal=window.__vxsetlocal || ((k,v)=>localStorage.setItem(k,v));
+      let changed=false;
+      (rows||[]).forEach(r=>{ if(r.value==null) return; const s=JSON.stringify(r.value); if(localStorage.getItem(r.key)!==s){ setLocal(r.key, s); changed=true; } });
+      if(changed) this._hydrateShared();
+    } catch(e){} finally { this._syncBusy=false; }
+  }
+  _hydrateShared(){
+    // Re-read shared stores from localStorage (freshly pulled) and re-render. We intentionally do
+    // NOT touch the plan currently open in the editor (this.state.plans) to avoid clobbering an edit.
+    const J=(k,d)=>{ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return d; } };
+    const g=(k,d)=>{ const v=J(k,undefined); return v==null?d:v; };
+    this.customStaff=g('vx_staff_accounts', this.customStaff);
+    this.accountOvr=g('vx_account_ovr', this.accountOvr);
+    this._rebuildAccounts();
+    this.family=g('vx_family', this.family);
+    this.meetsCal=g('vx_meets_cal', this.meetsCal);
+    this.savedPlans=g('vx_saved_plans', this.savedPlans);
+    this.attendLog=g('vx_attend_log', this.attendLog);
+    this.swimmerGoals=g('vx_swimmer_goals', this.swimmerGoals);
+    this.squadGoals=g('vx_squad_goals', this.squadGoals);
+    this.swimmerMeta=g('vx_sw_meta', this.swimmerMeta);
+    this.swimmerPhotos=g('vx_sw_photos', this.swimmerPhotos);
+    this.staffOverrides=g('vx_staff_ovr', this.staffOverrides);
+    this.meetStatus=g('vx_meet_status', this.meetStatus); this.meetEntries=g('vx_meet_entries', this.meetEntries);
+    this.customMeets=g('vx_custom_meets', this.customMeets); this.eventRequests=g('vx_event_requests', this.eventRequests);
+    this.academyTrials=g('vx_academy_trials', this.academyTrials); this.academyFees=g('vx_academy_fees', this.academyFees); this.invoices=g('vx_invoices', this.invoices);
+    this.brandConfig=g('vx_brand', this.brandConfig); this.notifications=g('vx_notifications', this.notifications);
+    this.tpaceTests=g('vx_tpace', this.tpaceTests); this.fitnessTests=g('vx_fitness_tests', this.fitnessTests);
+    this.fitnessPlans=g('vx_fitness_plans', this.fitnessPlans); this.promoStore=g('vx_promo', this.promoStore); this.aiSuggOverrides=g('vx_ai_sugg_ovr', this.aiSuggOverrides);
+    this.rosterEdits=g('vx_roster_edits', this.rosterEdits); try{ this.rebuildRoster(); }catch(e){}
+    try{ this.setState({family:this.family}); }catch(e){ this.forceUpdate(); }
   }
   _tickStatusBar(){
     const now=new Date();
@@ -4281,7 +4324,7 @@ class Component extends DCLogic {
     const v=this._activeVideo();
     if((v?v.id:null) !== this._lastActiveVideoId) this._rebuildPlayer();
   }
-  componentWillUnmount(){ clearInterval(this._clock); clearTimeout(this._t); clearInterval(this._statusInt); window.removeEventListener('beforeprint', this._onBeforePrint); window.removeEventListener('afterprint', this._onAfterPrint); window.removeEventListener('online', this._onStatusEvt); window.removeEventListener('offline', this._onStatusEvt); if(this._battery){ try{ this._battery.removeEventListener('levelchange', this._onStatusEvt); this._battery.removeEventListener('chargingchange', this._onStatusEvt); }catch(e){} } }
+  componentWillUnmount(){ clearInterval(this._clock); clearTimeout(this._t); clearInterval(this._statusInt); clearInterval(this._syncInt); try{ document.removeEventListener('visibilitychange', this._onVis); }catch(e){} window.removeEventListener('beforeprint', this._onBeforePrint); window.removeEventListener('afterprint', this._onAfterPrint); window.removeEventListener('online', this._onStatusEvt); window.removeEventListener('offline', this._onStatusEvt); if(this._battery){ try{ this._battery.removeEventListener('levelchange', this._onStatusEvt); this._battery.removeEventListener('chargingchange', this._onStatusEvt); }catch(e){} } }
   _icons(){ clearTimeout(this._t); this._t=setTimeout(()=>{ try{ window.lucide && window.lucide.createIcons(); }catch(e){} }, 30); }
 
   parseSet(txt, dist){ txt=String(txt||''); let reps=1; const rm=txt.match(/(\d+)\s*[\u00d7xX]\s*(\d+)/); if(rm) reps=parseInt(rm[1])||1; let interval=null; const im=txt.match(/@\s*(\d+):(\d{2})/); if(im) interval=parseInt(im[1])*60+parseInt(im[2]); else { const im2=txt.match(/@\s*:(\d{2})/); if(im2) interval=parseInt(im2[1]); } if(!interval){ const per = reps>1 ? Math.round((+dist||100)/reps) : (+dist||100); interval = Math.max(20, Math.round(per*1.6)); } return {reps, interval}; }
