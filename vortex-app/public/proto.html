@@ -1102,6 +1102,12 @@
                                   </sc-for>
                                 </div>
                                 <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:5px">
+                                  <span style="font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#B9C0CC;align-self:center;margin-right:2px">Stroke</span>
+                                  <sc-for list="{{ st.strokes }}" as="sk" hint-placeholder-count="5">
+                                    <button onclick="{{ sk.onToggle }}" style="background:{{ sk.bg }};color:{{ sk.fg }};border:1px solid {{ sk.border }};border-radius:7px;padding:3px 9px;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:.02em;cursor:pointer">{{ sk.label }}</button>
+                                  </sc-for>
+                                </div>
+                                <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:5px">
                                   <span style="font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#B9C0CC;align-self:center;margin-right:2px">Tools</span>
                                   <sc-for list="{{ st.equip }}" as="g" hint-placeholder-count="6">
                                     <button onclick="{{ g.onToggle }}" style="background:{{ g.bg }};color:{{ g.fg }};border:1px solid {{ g.border }};border-radius:7px;padding:3px 9px;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:.02em;cursor:pointer">{{ g.label }}</button>
@@ -1157,6 +1163,7 @@
                             <div style="display:flex;align-items:center;gap:11px;background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:10px 12px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
                               <span style="flex:none;text-align:center;min-width:52px"><span style="display:block;font-family:var(--font-mono);font-size:14px;font-weight:800;color:{{ squad.accent }}">{{ sp.totalM }}</span><span style="display:block;font-size:9px;font-weight:700;text-transform:uppercase;color:#9AA2B4">metres</span></span>
                               <span style="flex:1;min-width:0"><span style="display:block;font-size:13px;font-weight:700;color:#0C1116">{{ sp.title }}</span><span style="display:block;font-size:11px;color:#7A8296">{{ sp.dateLabel }} · Zone {{ sp.zone }}</span></span>
+                              <button onclick="{{ sp.onView }}" style="flex:none;width:32px;height:32px;border-radius:9px;border:none;background:var(--vx-blue-tint);color:var(--vx-blue-dark);cursor:pointer;display:flex;align-items:center;justify-content:center" title="View as PDF"><i data-lucide="file-text" style="width:14px;height:14px"></i></button>
                               <button onclick="{{ sp.onEdit }}" style="flex:none;width:32px;height:32px;border-radius:9px;border:none;background:#F4F6F8;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center" title="Load &amp; edit"><i data-lucide="pencil" style="width:14px;height:14px"></i></button>
                               <button onclick="{{ sp.onDelete }}" style="flex:none;width:32px;height:32px;border-radius:9px;border:none;background:#FDECEC;color:#E5484D;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="trash-2" style="width:14px;height:14px"></i></button>
                             </div>
@@ -2685,6 +2692,7 @@
                               <td style="padding:7px 8px 7px 0;font-family:monospace;font-weight:700;color:{{ printSheet.accent }};width:56px;vertical-align:top">{{ pvset.dist }}m<sc-if value="{{ pvset.zoneCode }}" hint-placeholder-val="{{ false }}"><br><span style="font-size:9px;color:#9AA2B4;font-weight:700">{{ pvset.zoneCode }}</span></sc-if></td>
                               <td style="padding:7px 0;color:#3A4152;font-size:13px;vertical-align:top">
                                 {{ pvset.txt }}
+                                <sc-if value="{{ pvset.hasStrokes }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#067EEA;font-weight:700;margin-top:2px">Stroke: {{ pvset.strokesStr }}</div></sc-if>
                                 <sc-if value="{{ pvset.hasTypes }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#0A0F1A;font-weight:700;margin-top:2px">Type: {{ pvset.typesStr }}</div></sc-if>
                                 <sc-if value="{{ pvset.hasEquip }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#3B2FD6;font-weight:600;margin-top:2px">Tools: {{ pvset.equipStr }}</div></sc-if>
                                 <sc-if value="{{ pvset.hasRest }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#9A6206;font-weight:700;margin-top:2px">Rest: {{ pvset.restStr }}</div></sc-if>
@@ -2823,6 +2831,7 @@
               <td style="padding:7px 8px 7px 0;font-family:monospace;font-weight:700;color:{{ printSheet.accent }};width:56px;vertical-align:top">{{ pset.dist }}m<sc-if value="{{ pset.zoneCode }}" hint-placeholder-val="{{ false }}"><br><span style="font-size:9px;color:#9AA2B4;font-weight:700">{{ pset.zoneCode }}</span></sc-if></td>
               <td style="padding:7px 0;color:#3A4152;font-size:13px;vertical-align:top">
                 {{ pset.txt }}
+                <sc-if value="{{ pset.hasStrokes }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#067EEA;font-weight:700;margin-top:2px">Stroke: {{ pset.strokesStr }}</div></sc-if>
                 <sc-if value="{{ pset.hasTypes }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#0A0F1A;font-weight:700;margin-top:2px">Type: {{ pset.typesStr }}</div></sc-if>
                 <sc-if value="{{ pset.hasEquip }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#3B2FD6;font-weight:600;margin-top:2px">Tools: {{ pset.equipStr }}</div></sc-if>
                 <sc-if value="{{ pset.hasRest }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#9A6206;font-weight:700;margin-top:2px">Rest: {{ pset.restStr }}</div></sc-if>
@@ -2957,6 +2966,7 @@ class Component extends DCLogic {
     this.typeCatalog=['Swim','Drill','Kick','Pull','Scull'];
     this.restCatalog=['None',':10',':15',':20',':30',':45','1:00','1:30','2:00'];
     this.hrCatalog=['—','140','150','160','170','180','Max'];
+    this.strokeCatalog=['FREE','FLY','BK','BR','IM'];
     this._pid=0;
     this.planTemplate={
       title:'Aerobic Threshold', zone:'EN2',
@@ -4055,11 +4065,12 @@ class Component extends DCLogic {
   getPlan(id){ const raw=(this.state.plans||{})[id]; return raw ? this._migratePlan(raw) : this.makeDefaultPlan(); }
   mutatePlan(id, fn){ const plans={...(this.state.plans||{})}; const cur=this._migratePlan(plans[id]?JSON.parse(JSON.stringify(plans[id])):this.makeDefaultPlan()); fn(cur); plans[id]=cur; this.setState({plans}); try{ localStorage.setItem('vx_plans', JSON.stringify(plans)); }catch(e){} }
   setSetField(id, secId, setId, field, val){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); const s=sec&&(sec.sets||[]).find(x=>x.id===setId); if(s) s[field]=val; }); }
-  addPlanSet(id, secId){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); if(sec) sec.sets.push({id:this._uid('s'), reps:1, dist:100, txt:'New set', equip:[], types:[], rest:'', hr:''}); }); }
+  addPlanSet(id, secId){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); if(sec) sec.sets.push({id:this._uid('s'), reps:1, dist:100, txt:'New set', equip:[], types:[], strokes:[], rest:'', hr:''}); }); }
   stepSetField(id, secId, setId, field, delta, min, step){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); const s=sec&&(sec.sets||[]).find(x=>x.id===setId); if(!s)return; const cur=Number(s[field])|| (field==='reps'?1:0); s[field]=Math.max(min, cur+delta*step); }); }
   removePlanSet(id, secId, setId){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); if(sec) sec.sets=(sec.sets||[]).filter(x=>x.id!==setId); }); }
   toggleEquip(id, secId, setId, gear){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); const s=sec&&(sec.sets||[]).find(x=>x.id===setId); if(!s)return; s.equip=s.equip||[]; const i=s.equip.indexOf(gear); if(i>=0) s.equip.splice(i,1); else s.equip.push(gear); }); }
   toggleType(id, secId, setId, ty){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); const s=sec&&(sec.sets||[]).find(x=>x.id===setId); if(!s)return; s.types=s.types||[]; const i=s.types.indexOf(ty); if(i>=0) s.types.splice(i,1); else s.types.push(ty); }); }
+  toggleStroke(id, secId, setId, st){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); const s=sec&&(sec.sets||[]).find(x=>x.id===setId); if(!s)return; s.strokes=s.strokes||[]; const i=s.strokes.indexOf(st); if(i>=0) s.strokes.splice(i,1); else s.strokes.push(st); }); }
   setSetRest(id, secId, setId, val){ this.setSetField(id, secId, setId, 'rest', val); }
   setAdvice(s, planZone){
     const zone = s.zone || planZone;
@@ -4085,6 +4096,21 @@ class Component extends DCLogic {
   }
   loadPlanSnapshot(squadId, id){ const rec=(this.savedPlans[squadId]||[]).find(r=>r.id===id); if(!rec) return; this.mutatePlan(squadId, p=>{ p.title=rec.plan.title; p.zone=rec.plan.zone; p.sections=JSON.parse(JSON.stringify(rec.plan.sections)); }); this.setState({savedPlanMsg:'Loaded into the editor — edit and Save again to log an update.'}); }
   deletePlanSnapshot(squadId, id){ const list=(this.savedPlans[squadId]||[]).filter(r=>r.id!==id); this.savedPlans={...this.savedPlans, [squadId]:list}; this._saveJSON('vx_saved_plans', this.savedPlans); this.forceUpdate(); }
+  viewPlanSnapshotPdf(squadId, id){
+    const rec=(this.savedPlans[squadId]||[]).find(r=>r.id===id); if(!rec) return;
+    const sq=this.squadById[squadId]||{name:'',accent:'#067EEA'}; const plan=rec.plan||{};
+    const dl=new Date(rec.date+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+    let body='<h1>'+this._esc(rec.title||'Session')+'</h1><p class="sub">'+this._esc(sq.name)+' · '+dl+' · '+(rec.totalM||0).toLocaleString()+'m total · Zone '+this._esc(rec.zone||'')+'</p>';
+    (plan.sections||[]).forEach(sec=>{ let sub=0; (sec.sets||[]).forEach(s=>sub+=(Number(s.dist)||0)*(Number(s.reps)||1));
+      body+='<div style="margin-top:15px"><div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid '+sq.accent+';padding-bottom:5px;margin-bottom:6px"><span style="font-weight:800;text-transform:uppercase;font-size:12px;letter-spacing:.06em;color:#0C1116">'+this._esc(sec.title||'Section')+'</span><span class="mono" style="color:#7A8296;font-weight:700">'+sub+'m</span></div><table><tbody>';
+      (sec.sets||[]).forEach(s=>{ const reps=Number(s.reps)||1; const dist=Number(s.dist)||0; const distLabel=(reps>1?(reps+'×'+dist):(''+dist))+'m';
+        const tags=[]; if((s.strokes||[]).length) tags.push((s.strokes).join('/')); if((s.types||[]).length) tags.push((s.types).join(', ')); if((s.equip||[]).length) tags.push('Tools: '+(s.equip).join(', ')); if(s.rest) tags.push('Rest '+s.rest); if(s.hr) tags.push('HR '+s.hr); if(s.zone) tags.push(s.zone);
+        body+='<tr><td class="mono" style="width:84px;font-weight:700;color:'+sq.accent+';vertical-align:top">'+this._esc(distLabel)+'</td><td>'+this._esc(s.txt||'')+(tags.length?('<div style="font-size:11px;color:#7A8296;margin-top:2px">'+this._esc(tags.join(' · '))+'</div>'):'')+'</td></tr>';
+      });
+      body+='</tbody></table></div>';
+    });
+    this._openPrintDoc((rec.title||'Session')+' — '+sq.name, body);
+  }
   async handlePdfImport(e, squadId){
     const file = e.target.files && e.target.files[0];
     e.target.value='';
@@ -4485,6 +4511,7 @@ class Component extends DCLogic {
           id:s.id, dist:dist, reps:reps, txt:s.txt, rest:s.rest||'', hr:s.hr||'', setMetres:(reps*dist),
           equip:this.equipCatalog.map(g=>{ const on=(s.equip||[]).includes(g); return {label:g, on, onToggle:()=>this.toggleEquip(S.squadId,sm.id,s.id,g), bg:on?squad.accent:'#fff', fg:on?'#fff':'#7A8296', border:on?squad.accent:'#E5E9F0'}; }),
           types:this.typeCatalog.map(g=>{ const on=(s.types||[]).includes(g); return {label:g, on, onToggle:()=>this.toggleType(S.squadId,sm.id,s.id,g), bg:on?'#0A0F1A':'#fff', fg:on?'#fff':'#7A8296', border:on?'#0A0F1A':'#E5E9F0'}; }),
+          strokes:this.strokeCatalog.map(g=>{ const on=(s.strokes||[]).includes(g); const col={FREE:'#067EEA',FLY:'#8A22D5',BK:'#12A0AE',BR:'#2733D6',IM:'#0C7A4F'}[g]||'#0A0F1A'; return {label:g, on, onToggle:()=>this.toggleStroke(S.squadId,sm.id,s.id,g), bg:on?col:'#fff', fg:on?'#fff':'#7A8296', border:on?col:'#E5E9F0'}; }),
           zoneChips:['EN1','EN2','EN3','SP1','SP2','SP3'].map(z=>{ const on=(s.zone||plan.zone)===z; return {label:z, on, onToggle:()=>this.setSetField(S.squadId,sm.id,s.id,'zone',z), bg:on?squad.accent:'#F8FAFC', fg:on?'#fff':'#7A8296'}; }),
           restChips:this.restCatalog.map(r=>{ const val=(r==='None'?'':r); const on=(s.rest||'')===val; return {label:r, on, onToggle:()=>this.setSetRest(S.squadId,sm.id,s.id,val), bg:on?'#9A6206':'#F8FAFC', fg:on?'#fff':'#7A8296', border:on?'#9A6206':'#EEE4CE'}; }),
           hrChips:this.hrCatalog.map(h=>{ const val=(h==='—'?'':h); const on=(s.hr||'')===val; return {label:h, on, onToggle:()=>this.setSetField(S.squadId,sm.id,s.id,'hr',val), bg:on?'#C81E4B':'#F8FAFC', fg:on?'#fff':'#7A8296', border:on?'#C81E4B':'#F3D4DC'}; }),
@@ -5336,14 +5363,14 @@ class Component extends DCLogic {
         let weekM=0,seasonM=0,weekN=0,seasonN=0; sp.forEach(r=>{ if(r.date>=yIso){seasonM+=r.totalM;seasonN++;} if(r.date>=weekIso){weekM+=r.totalM;weekN++;} });
         const rows=sp.map(r=>({ id:r.id, title:r.title||'Session', zone:r.zone||'', totalM:(r.totalM||0).toLocaleString(),
           dateLabel:new Date(r.date+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}),
-          onEdit:()=>this.loadPlanSnapshot(S.squadId, r.id), onDelete:()=>this.deletePlanSnapshot(S.squadId, r.id) }));
+          onView:()=>this.viewPlanSnapshotPdf(S.squadId, r.id), onEdit:()=>this.loadPlanSnapshot(S.squadId, r.id), onDelete:()=>this.deletePlanSnapshot(S.squadId, r.id) }));
         return { savedPlanRows:rows, savedPlansHasAny:rows.length>0, savedPlansEmpty:rows.length===0,
           savedPlanWeekM:weekM.toLocaleString(), savedPlanWeekN:weekN, savedPlanSeasonM:seasonM.toLocaleString(), savedPlanSeasonN:seasonN }; })(),
       onShareWhatsapp:()=>this.setState({shareNote:'Shared to '+squad.name+' WhatsApp group ✓'}), onPrintPlan:()=>this.setState({printPreviewOpen:true}),
       onSubmitPlanReview:()=>this.submitPlanForReview(S.squadId, squad.name),
       onClosePrintPreview:()=>this.setState({printPreviewOpen:false}), onConfirmPrint:()=>{ this._printEscape(); setTimeout(()=>window.print(), 30); }, printPreviewOpen:S.printPreviewOpen,
       printSheet:{ accent:squad.accent, clubName:this.brandConfig.clubName||'Vortex Swimming Club', squadName:squad.name, printDate:new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}), zoneLabel:(zoneRows[zi]?zoneRows[zi].code+' \u00b7 '+zoneRows[zi].name:zName), title:sessionTitle||'Session', coach:squad.coach, total:planTotalN.toLocaleString(),
-        sections: planSections.map(ps=>({ title:ps.title, dot:ps.dot, subtotal:ps.subtotal, sets: ps.sets.map(st=>{ const onEquip=(st.equip||[]).filter(e=>e.on).map(e=>e.label); const onTypes=(st.types||[]).filter(e=>e.on).map(e=>e.label); return {dist:(st.reps>1?(st.reps+'×'+st.dist):st.dist), txt:st.txt, hasTypes:onTypes.length>0, typesStr:onTypes.join(', '), hasEquip:onEquip.length>0, equipStr:onEquip.join(', '), hasRest:!!st.rest, restStr:st.rest||'', hasHr:!!st.hr, hrStr:st.hr?('HR '+st.hr):'', zoneCode:st.zone||''}; }) })) },
+        sections: planSections.map(ps=>({ title:ps.title, dot:ps.dot, subtotal:ps.subtotal, sets: ps.sets.map(st=>{ const onEquip=(st.equip||[]).filter(e=>e.on).map(e=>e.label); const onTypes=(st.types||[]).filter(e=>e.on).map(e=>e.label); const onStrokes=(st.strokes||[]).filter(e=>e.on).map(e=>e.label); return {dist:(st.reps>1?(st.reps+'×'+st.dist):st.dist), txt:st.txt, hasStrokes:onStrokes.length>0, strokesStr:onStrokes.join('/'), hasTypes:onTypes.length>0, typesStr:onTypes.join(', '), hasEquip:onEquip.length>0, equipStr:onEquip.join(', '), hasRest:!!st.rest, restStr:st.rest||'', hasHr:!!st.hr, hrStr:st.hr?('HR '+st.hr):'', zoneCode:st.zone||''}; }) })) },
       onImportPdfClick:()=>{ const el=document.getElementById('vx-pdf-input'); if(el) el.click(); },
       pdfImportBusy:S.pdfImportBusy, pdfImportMsg:S.pdfImportMsg, pdfImportMsgColor: S.pdfImportOk?'#0C7A4F':'#B42318',
       onPdfFileChange:(e)=>this.handlePdfImport(e, S.squadId),
