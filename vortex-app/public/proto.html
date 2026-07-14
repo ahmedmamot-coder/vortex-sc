@@ -25,7 +25,7 @@
   var REST = SB_URL + "/rest/v1/club_state";
   var HEAD = { "apikey": SB_ANON, "Authorization": "Bearer " + SB_ANON, "Content-Type": "application/json" };
   // Every shared data type the club edits. The only key kept per-device is vx_api_key.
-  var SYNC = ["vx_family","vx_plans","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_staff_accounts","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_account_ovr","vx_attend_log","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_plans","vx_videos","vx_saved_plans"];
+  var SYNC = ["vx_family","vx_plans","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_staff_accounts","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_account_ovr","vx_attend_log","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_plans","vx_videos","vx_saved_plans","vx_feed"];
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
   function pushKey(k, v){
@@ -3076,6 +3076,8 @@ class Component extends DCLogic {
       ],
       aiKind:'season', aiPrompt:'', aiOut:null, aiLoading:false,
     };
+    // Vortex Lounge feed — shared & synced. Use the stored feed if present, else the seed above.
+    try { var _fd=JSON.parse(localStorage.getItem('vx_feed')||'null'); if(_fd && _fd.length){ this.state.feed=_fd; } else { this._saveJSON('vx_feed', this.state.feed); } } catch(e){}
   }
   rng(seed){ let t = seed>>>0; return ()=>{ t += 0x6D2B79F5; let r = Math.imul(t ^ (t>>>15), 1|t); r ^= r + Math.imul(r ^ (r>>>7), 61|r); return ((r ^ (r>>>14))>>>0)/4294967296; }; }
   fmt(sec){ if(sec<60) return sec.toFixed(2); const m=Math.floor(sec/60); const s=(sec-m*60); return m+':' + (s<10?'0':'') + s.toFixed(2); }
@@ -4335,7 +4337,8 @@ class Component extends DCLogic {
     this.tpaceTests=g('vx_tpace', this.tpaceTests); this.fitnessTests=g('vx_fitness_tests', this.fitnessTests);
     this.fitnessPlans=g('vx_fitness_plans', this.fitnessPlans); this.promoStore=g('vx_promo', this.promoStore); this.aiSuggOverrides=g('vx_ai_sugg_ovr', this.aiSuggOverrides);
     this.rosterEdits=g('vx_roster_edits', this.rosterEdits); try{ this.rebuildRoster(); }catch(e){}
-    try{ this.setState({family:this.family}); }catch(e){ this.forceUpdate(); }
+    const _fd=J('vx_feed', undefined);
+    try{ this.setState(_fd!=null ? {family:this.family, feed:_fd} : {family:this.family}); }catch(e){ this.forceUpdate(); }
   }
   _tickStatusBar(){
     const now=new Date();
@@ -5001,8 +5004,12 @@ class Component extends DCLogic {
     const tagStyle={Win:['#DCF5EA','#0C7A4F'],Set:['#E5F0FE','#0959B4'],Notice:['#FCEFD6','#9A6206'],Question:['#EDE7FB','#5A22B0']};
     const composeTagDefs=[{id:'set',label:'Set'},{id:'win',label:'Win'},{id:'q',label:'Question'},{id:'notice',label:'Notice'}];
     const composeTags=composeTagDefs.map(t=>{ const on=S.composeTag===t.id; return {label:t.label, onClick:()=>this.setState({composeTag:t.id}), bg:on?squad.accent:'#F4F6F8', fg:on?'#fff':'#7A8296', border:on?squad.accent:'#E5E9F0'}; });
-    const feed=S.feed.map(p=>{ const [tb,tf]=tagStyle[p.tag]||['#EEF1F5','#5A657E']; return {author:p.author, role:p.role, avatar:this.av(p.photo||null, p.initials, 38, 11, squad.accent, '#fff', 12), imageEl: p.image? window.React.createElement('img',{src:p.image, alt:'', style:{width:'100%',borderRadius:11,marginTop:10}}) : null, tag:p.tag, tagBg:tb, tagFg:tf, text:p.text, likes:p.likes, comments:p.comments, time:p.time, avBg:squad.accent, likeColor:p.liked?'#E5484D':'#9AA2B4', onLike:()=>{ this.setState({feed:S.feed.map(x=>x.id===p.id?{...x, liked:!x.liked, likes:x.likes+(x.liked?-1:1)}:x)}); } }; });
-    const onPost=()=>{ const txt=(S.compose||'').trim(); if(!txt) return; const tagName={set:'Set',win:'Win',q:'Question',notice:'Notice'}[S.composeTag]; const np={id:'f'+Date.now(), author:'Ahmed Mamo', role:'Technical Director', initials:'AM', photo:'assets/director-ahmed.jpg', tag:tagName, text:txt, image:'', likes:0, comments:0, time:'now', liked:false}; this.setState({feed:[np,...S.feed], compose:''}); };
+    const feed=S.feed.map(p=>{ const [tb,tf]=tagStyle[p.tag]||['#EEF1F5','#5A657E']; return {author:p.author, role:p.role, avatar:this.av(p.photo||null, p.initials, 38, 11, squad.accent, '#fff', 12), imageEl: p.image? window.React.createElement('img',{src:p.image, alt:'', style:{width:'100%',borderRadius:11,marginTop:10}}) : null, tag:p.tag, tagBg:tb, tagFg:tf, text:p.text, likes:p.likes, comments:p.comments, time: p.ts? this.notifTimeAgo(new Date(p.ts).toISOString()) : (p.time||''), avBg:squad.accent, likeColor:p.liked?'#E5484D':'#9AA2B4', onLike:()=>{ const list=(this.state.feed||[]).map(x=>x.id===p.id?{...x, liked:!x.liked, likes:x.likes+(x.liked?-1:1)}:x); this._saveJSON('vx_feed', list); this.setState({feed:list}); } }; });
+    const onPost=()=>{ const txt=(S.compose||'').trim(); if(!txt) return; const tagName={set:'Set',win:'Win',q:'Question',notice:'Notice'}[S.composeTag];
+      const acct=this.accounts.find(a=>a.id===S.pickedId)||{label:'Staff', role:'', initials:'?', photo:''};
+      const np={id:'f'+Date.now(), author:acct.label, role:acct.role||'Staff', initials:acct.initials||(acct.label||'?').slice(0,2).toUpperCase(), photo:acct.photo||'', tag:tagName, text:txt, image:'', likes:0, comments:0, time:'now', ts:Date.now(), liked:false};
+      const list=[np, ...(this.state.feed||[])]; this._saveJSON('vx_feed', list); this.setState({feed:list, compose:''});
+      this.notify('coach', 'megaphone', acct.label+' posted in the Lounge', '['+tagName+'] '+txt.slice(0,90)); };
     // goals — per-swimmer, editable, AI-assisted
     const goalsPool = S.toolScopeClub ? this.allSwimmersFlat() : (this.roster[S.squadId]||[]).map(sw=>({...sw, squadId:S.squadId, squadName:squad.name}));
     const goalsSwQ=(S.goalsSwQuery||'').trim().toLowerCase();
