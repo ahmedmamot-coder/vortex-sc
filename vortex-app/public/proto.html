@@ -25,7 +25,7 @@
   var REST = SB_URL + "/rest/v1/club_state";
   var HEAD = { "apikey": SB_ANON, "Authorization": "Bearer " + SB_ANON, "Content-Type": "application/json" };
   // Every shared data type the club edits. The only key kept per-device is vx_api_key.
-  var SYNC = ["vx_family","vx_plans","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_attend_log","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_plans","vx_videos"];
+  var SYNC = ["vx_plans","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_attend_log","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_plans","vx_videos"];
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
   window.__vxWriteTs = {};   // last time THIS device wrote each key (ms) — guards against stale pulls
@@ -3203,7 +3203,11 @@ class Component extends DCLogic {
   _uid(pfx){ this._pid=(this._pid||0)+1; return (pfx||'s')+Date.now().toString(36)+'_'+this._pid; }
   _loadPlans(){ try{ return JSON.parse(localStorage.getItem('vx_plans')||'{}')||{}; }catch(e){ return {}; } }
   _loadFamily(){ try{ return JSON.parse(localStorage.getItem('vx_family')||'[]')||[]; }catch(e){ return []; } }
-  _saveFamily(list){ this.family=list; try{ localStorage.setItem('vx_family', JSON.stringify(list)); }catch(e){} this.setState({family:list}); }
+  _saveFamily(list){ this.family=list; try{ this._saveLocalOnly('vx_family', list); }catch(e){} this.setState({family:list}); }
+  async _familyFetch(){ if(!window.__vxSelect) return; const rows=await window.__vxSelect('family_accounts', 'select=*&limit=2000'); if(rows==null) return;
+    const list=rows.map(r=>({ id:r.id, name:r.name||'', email:r.email||'', phone:r.phone||'', pass:r.pass||'', role:r.role||'parent', swimmerIds:r.swimmer_ids||[] }));
+    this.family=list; try{ this._saveLocalOnly('vx_family', list); }catch(e){} this.setState({family:list});
+  }
   _loadJSON(key, fallback){ try{ const v=localStorage.getItem(key); return v==null?fallback:JSON.parse(v); }catch(e){ return fallback; } }
   _saveJSON(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){} }
   _saveLocalOnly(key, val){ try{ (window.__vxsetlocal||localStorage.setItem.bind(localStorage))(key, JSON.stringify(val)); }catch(e){} }
@@ -3377,13 +3381,9 @@ class Component extends DCLogic {
     this.accounts.forEach(a=>{ const o=ovr[a.id]; if(o){ if(o.label){ a.label=o.label; a.initials=(o.label||'?').slice(0,2).toUpperCase(); } if(o.user) a.user=o.user; if(o.pin) a.pin=o.pin; if(o.role) a.role=o.role; if(o.squadId!=null) a.squadId=o.squadId; if(o.photo) a.photo=o.photo; if(o.phone!=null) a.phone=o.phone; if(o.email!=null) a.email=o.email; if(o.bio!=null) a.bio=o.bio; } });
   }
   async _refreshAccountsFromDb(){
-    // Newest staff comes from the staff_accounts table; family is still a club_state key.
+    // Newest staff & family come from their own tables.
     try { await this._staffFetch(); } catch(e){}
-    if(window.__vxpull){ try {
-      const rows=await window.__vxpull(['vx_family']);
-      const r=(rows||[]).find(x=>x.key==='vx_family');
-      if(r && r.value!=null){ this.family=r.value; this._saveLocalOnly('vx_family', r.value); this.setState({family:this.family}); }
-    } catch(e){} }
+    try { await this._familyFetch(); } catch(e){}
   }
   staffAccOpen(id){ const a=this.accounts.find(x=>x.id===id); if(!a) return; this.setState({staffEditId:id, staffAccDraft:{label:a.label||'', user:a.user||'', pin:a.pin||'', role:a.role||'Coach', squadId:a.squadId||'', photo:a.photo||'', phone:a.phone||'', email:a.email||'', bio:a.bio||''}}); }
   staffAccChange(field, val){ this.setState({staffAccDraft:{...(this.state.staffAccDraft||{}), [field]:val}}); }
@@ -4103,12 +4103,14 @@ class Component extends DCLogic {
     if((S.famPass||'').length<4) return this.setState({famErr:'Password must be at least 4 characters.'});
     if(S.famPass!==S.famPass2) return this.setState({famErr:'Passwords don\u2019t match.'});
     if(!S.famPicked.length) return this.setState({famErr: S.famRole==='swimmer' ? 'Search and select your swimmer profile.' : 'Search and link at least one swimmer.'});
-    // Merge into the latest shared list so we never overwrite families registered on other devices.
-    try { await this._refreshAccountsFromDb(); } catch(e){}
+    // Pull the latest family list from its table (concurrent registrations are separate rows).
+    try { await this._familyFetch(); } catch(e){}
     const existing=this.family||this.state.family||[];
     if(existing.find(f=>(f.email||'').trim().toLowerCase()===email)) return this.setState({famErr:'An account with this email already exists \u2014 sign in instead.'});
-    const rec={id:this._uid('fam'), name:S.famName.trim(), email, phone:phoneDigits, pass:S.famPass, role:S.famRole, swimmerIds:S.famPicked.slice()};
+    const rec={id:this._uid('fam')+'_'+Math.random().toString(36).slice(2,5), name:S.famName.trim(), email, phone:phoneDigits, pass:S.famPass, role:S.famRole, swimmerIds:S.famPicked.slice()};
     const list=[...existing, rec]; this._saveFamily(list);
+    // Append one row (never overwrites another parent's registration).
+    if(window.__vxInsert){ window.__vxInsert('family_accounts', [{id:rec.id, name:rec.name, email:rec.email, phone:rec.phone, pass:rec.pass, role:rec.role, swimmer_ids:rec.swimmerIds, ts:Date.now()}]).then(ok=>{ if(ok) this._familyFetch(); }); }
     const firstSwId=(S.famPicked[0]||'').split('::')[1];
     if(firstSwId) this.notify('family_sw:'+firstSwId, 'party-popper', 'Welcome to Vortex SC!', 'Hi '+S.famName.trim()+', your account is ready \u2014 a confirmation would be emailed to '+email+' in the live app. Explore performance, attendance, results and meets any time.');
     try{
@@ -4120,8 +4122,8 @@ class Component extends DCLogic {
     this.setState({familyUser:rec, familyActiveIdx:0, screen:'app', view:'family', famErr:''});
   }
   async famLogin(){ this.setState({famErr:''});
-    // Refresh from the shared DB so a parent/swimmer who registered on another device can sign in now.
-    try { await this._refreshAccountsFromDb(); } catch(e){}
+    // Refresh the family list from its table so a parent who registered on another device can sign in now.
+    try { await this._familyFetch(); } catch(e){}
     const S=this.state; const email=(S.famEmail||'').trim().toLowerCase(); const pass=(S.famPass||'').trim();
     const list=this.family||this.state.family||[];
     const rec=list.find(f=>(f.email||'').trim().toLowerCase()===email && (''+(f.pass||'')).trim()===pass);
@@ -4397,6 +4399,8 @@ class Component extends DCLogic {
     // Staff accounts live in their own table (staff_accounts).
     this._staffFetch();
     this._staffInt=setInterval(()=>{ if(this.state.view==='admin' && this.state.adminSection==='staff') this._staffFetch(); }, 12000);
+    // Family/parent accounts live in their own table too.
+    this._familyFetch();
   }
   async _autoSyncTick(){
     if(!window.__vxpull || this._syncBusy) return; this._syncBusy=true;
