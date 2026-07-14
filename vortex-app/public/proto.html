@@ -4148,8 +4148,16 @@ class Component extends DCLogic {
   setPlanMeta(id, field, val){ this.mutatePlan(id, p=>{ p[field]=val; }); }
   resetPlan(id){ const d=this.makeDefaultPlan(); this.mutatePlan(id, p=>{ p.title=d.title; p.zone=d.zone; p.sections=d.sections; }); }
   planMetres(plan){ let t=0; (plan&&plan.sections||[]).forEach(sec=>{ (sec.sets||[]).forEach(s=>{ t+=(Number(s.dist)||0)*(Number(s.reps)||1); }); }); return t; }
-  savePlanSnapshot(squadId){ const plan=this.getPlan(squadId); const rec={ id:this._uid('sp'), date:this.todayISO(), title:plan.title||'Session', zone:plan.zone||'', totalM:this.planMetres(plan), plan:JSON.parse(JSON.stringify(plan)) };
-    const list=(this.savedPlans[squadId]||[]).slice(); list.unshift(rec); this.savedPlans={...this.savedPlans, [squadId]:list}; this._saveJSON('vx_saved_plans', this.savedPlans);
+  _mergeSavedPlans(a, b){ const out={}; const keys={}; Object.keys(a||{}).forEach(k=>keys[k]=1); Object.keys(b||{}).forEach(k=>keys[k]=1);
+    Object.keys(keys).forEach(sq=>{ const byId={}; ((a&&a[sq])||[]).forEach(r=>{ byId[r.id]=r; }); ((b&&b[sq])||[]).forEach(r=>{ if(!byId[r.id]) byId[r.id]=r; });
+      out[sq]=Object.values(byId).sort((x,y)=> (''+(y.date||'')).localeCompare(''+(x.date||'')) || ((''+y.id)>(''+x.id)?1:-1)); });
+    return out;
+  }
+  async savePlanSnapshot(squadId){ const plan=this.getPlan(squadId); const rec={ id:this._uid('sp')+'_'+Math.random().toString(36).slice(2,6), date:this.todayISO(), title:plan.title||'Session', zone:plan.zone||'', totalM:this.planMetres(plan), plan:JSON.parse(JSON.stringify(plan)) };
+    // Merge with the freshest DB copy first, so a save never wipes sessions saved on other devices.
+    let store=this.savedPlans||{};
+    try{ if(window.__vxpull){ const rows=await window.__vxpull(['vx_saved_plans']); const r=(rows||[]).find(x=>x.key==='vx_saved_plans'); if(r && r.value){ store=this._mergeSavedPlans(r.value, store); } } }catch(e){}
+    const list=(store[squadId]||[]).slice(); list.unshift(rec); this.savedPlans={...store, [squadId]:list}; this._saveJSON('vx_saved_plans', this.savedPlans);
     this.setState({savedPlanMsg:'Session saved to the training log ✓'});
   }
   loadPlanSnapshot(squadId, id){ const rec=(this.savedPlans[squadId]||[]).find(r=>r.id===id); if(!rec) return; this.mutatePlan(squadId, p=>{ p.title=rec.plan.title; p.zone=rec.plan.zone; p.sections=JSON.parse(JSON.stringify(rec.plan.sections)); }); this.setState({savedPlanMsg:'Loaded into the editor — edit and Save again to log an update.'}); }
@@ -4370,17 +4378,17 @@ class Component extends DCLogic {
       let changed=false;
       const writeTs=window.__vxWriteTs||{};
       (rows||[]).forEach(r=>{ if(r.value==null) return;
+        // Mergeable collection: union saved training-log sessions so no device's session is lost.
+        if(r.key==='vx_saved_plans'){
+          const lTs=writeTs['vx_saved_plans']||0; const rTs=r.updated_at?Date.parse(r.updated_at):0;
+          if(lTs && rTs && rTs < lTs + 2500) return; // just saved/deleted here — let it settle before merging a possibly-stale copy
+          const merged=this._mergeSavedPlans(r.value||{}, this.savedPlans||{}); const ms=JSON.stringify(merged);
+          if(localStorage.getItem('vx_saved_plans')!==ms){ setLocal('vx_saved_plans', ms); this.savedPlans=merged; changed=true; if(JSON.stringify(r.value||{})!==ms){ try{ window.__vxpush && window.__vxpush('vx_saved_plans', ms); }catch(e){} } }
+          return;
+        }
         // Guard: never let a stale pull revert a change this device just made.
         const remoteTs=r.updated_at? Date.parse(r.updated_at) : 0; const localTs=writeTs[r.key]||0;
         if(localTs && remoteTs && remoteTs < localTs + 1500) return; // local wrote as-recently-or-newer → keep local
-        if(r.key==='vx_feed'){
-          // MERGE feed by id so a just-posted local message is never dropped by a stale pull.
-          const remote=Array.isArray(r.value)?r.value:[]; const local=this.state.feed||[];
-          const byId={}; remote.forEach(p=>{ byId[p.id]=p; }); local.forEach(p=>{ if(byId[p.id]){ byId[p.id]={...byId[p.id], liked:p.liked}; } else { byId[p.id]=p; } });
-          const merged=Object.values(byId).sort((a,b)=>(b.ts||0)-(a.ts||0)); const ms=JSON.stringify(merged);
-          if(localStorage.getItem('vx_feed')!==ms){ setLocal('vx_feed', ms); if(merged.length>remote.length){ try{ window.__vxpush && window.__vxpush('vx_feed', ms); }catch(e){} } this.setState({feed:merged}); }
-          return;
-        }
         const s=JSON.stringify(r.value); if(localStorage.getItem(r.key)!==s){ setLocal(r.key, s); changed=true; }
       });
       if(changed) this._hydrateShared();
