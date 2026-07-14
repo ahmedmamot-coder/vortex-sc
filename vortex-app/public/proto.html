@@ -3088,8 +3088,10 @@ class Component extends DCLogic {
       ],
       aiKind:'season', aiPrompt:'', aiOut:null, aiLoading:false,
     };
-    // Vortex Lounge feed — shared & synced. Use the stored feed if present, else the seed above.
-    try { var _fd=JSON.parse(localStorage.getItem('vx_feed')||'null'); if(_fd && _fd.length){ this.state.feed=_fd; } else { this._saveJSON('vx_feed', this.state.feed); } } catch(e){}
+    // Vortex Lounge feed — shared & synced. Use the stored feed if present; otherwise keep the
+    // seed only in local state. Do NOT push it to the database here: on a slow initial sync the
+    // pull may not have finished, and pushing would clobber posts other devices already made.
+    try { var _fd=JSON.parse(localStorage.getItem('vx_feed')||'null'); if(_fd && _fd.length){ this.state.feed=_fd; } } catch(e){}
     // Keep the user signed in across a page refresh (per-device session — NOT synced).
     try { var _sess=JSON.parse(localStorage.getItem('vx_session')||'null');
       if(_sess && _sess.type==='staff' && _sess.id){ var _a=this.accounts.find(function(x){return x.id===_sess.id;}); if(_a){ this.state.screen='app'; this.state.view='hub'; this.state.pickedId=_a.id; if(_a.squadId) this.state.squadId=_a.squadId; } }
@@ -5035,11 +5037,17 @@ class Component extends DCLogic {
     const composeTagDefs=[{id:'chat',label:'Chat'},{id:'set',label:'Set'},{id:'win',label:'Win'},{id:'q',label:'Question'},{id:'notice',label:'Notice'}];
     const composeTags=composeTagDefs.map(t=>{ const on=S.composeTag===t.id; return {label:t.label, onClick:()=>this.setState({composeTag:t.id}), bg:on?squad.accent:'#F4F6F8', fg:on?'#fff':'#7A8296', border:on?squad.accent:'#E5E9F0'}; });
     const feed=S.feed.map(p=>{ const [tb,tf]=tagStyle[p.tag]||['#EEF1F5','#5A657E']; return {author:p.author, role:p.role, avatar:this.av(p.photo||null, p.initials, 38, 11, squad.accent, '#fff', 12), imageEl: p.image? window.React.createElement('img',{src:p.image, alt:'', style:{width:'100%',borderRadius:11,marginTop:10}}) : null, tag:p.tag, tagBg:tb, tagFg:tf, text:p.text, likes:p.likes, comments:p.comments, time: p.ts? this.notifTimeAgo(new Date(p.ts).toISOString()) : (p.time||''), avBg:squad.accent, likeColor:p.liked?'#E5484D':'#9AA2B4', onLike:()=>{ const list=(this.state.feed||[]).map(x=>x.id===p.id?{...x, liked:!x.liked, likes:x.likes+(x.liked?-1:1)}:x); this._saveJSON('vx_feed', list); this.setState({feed:list}); } }; });
-    const onPost=()=>{ const el=document.getElementById('vx-lounge-compose'); const domTxt=el?el.value:''; const txt=((this.state.compose||domTxt||'')).trim(); const img=this.state.composeImage||''; if(!txt && !img) return; const tagName={chat:'Chat',set:'Set',win:'Win',q:'Question',notice:'Notice'}[this.state.composeTag||'chat']||'Chat';
+    const onPost=async()=>{ const el=document.getElementById('vx-lounge-compose'); const domTxt=el?el.value:''; const txt=((this.state.compose||domTxt||'')).trim(); const img=this.state.composeImage||''; if(!txt && !img) return; const tagName={chat:'Chat',set:'Set',win:'Win',q:'Question',notice:'Notice'}[this.state.composeTag||'chat']||'Chat';
       const acct=this.accounts.find(a=>a.id===this.state.pickedId)||{label:'Staff', role:'', initials:'?', photo:''};
-      const np={id:'f'+Date.now(), author:acct.label, role:acct.role||'Staff', initials:acct.initials||(acct.label||'?').slice(0,2).toUpperCase(), photo:acct.photo||'', tag:tagName, text:txt, image:img, likes:0, comments:0, time:'now', ts:Date.now(), liked:false};
-      const list=[np, ...(this.state.feed||[])]; this._saveJSON('vx_feed', list); if(el) el.value=''; this.setState({feed:list, compose:'', composeImage:'', composeEmojiOpen:false});
-      this.notify('coach', 'megaphone', acct.label+' posted in the Lounge', '['+tagName+'] '+(txt||'📷 Photo').slice(0,90)); };
+      const np={id:'f'+Date.now()+'_'+Math.random().toString(36).slice(2,6), author:acct.label, role:acct.role||'Staff', initials:acct.initials||(acct.label||'?').slice(0,2).toUpperCase(), photo:acct.photo||'', tag:tagName, text:txt, image:img, likes:0, comments:0, time:'now', ts:Date.now(), liked:false};
+      // Optimistic display
+      if(el) el.value=''; this.setState({feed:[np, ...(this.state.feed||[])], compose:'', composeImage:'', composeEmojiOpen:false});
+      this.notify('coach', 'megaphone', acct.label+' posted in the Lounge', '['+tagName+'] '+(txt||'📷 Photo').slice(0,90));
+      // Merge with the freshest DB feed BEFORE saving, so we never overwrite another device's posts.
+      let base=this.state.feed||[];
+      try{ if(window.__vxpull){ const rows=await window.__vxpull(['vx_feed']); const r=(rows||[]).find(x=>x.key==='vx_feed'); if(r && Array.isArray(r.value)){ const byId={}; r.value.forEach(p=>{ byId[p.id]=p; }); byId[np.id]=np; base.forEach(p=>{ if(!byId[p.id]) byId[p.id]=p; }); base=Object.values(byId).sort((a,b)=>(b.ts||0)-(a.ts||0)); } } }catch(e){}
+      if(!base.find(p=>p.id===np.id)) base=[np, ...base];
+      this._saveJSON('vx_feed', base); this.setState({feed:base}); };
     const composeEmojis=['🏊','🔥','💪','🏆','🥇','⏱️','👏','✅','🎯','📣','😀','😅','🙌','❤️','🎉','👍','🚀','💧','🌊','⭐'];
     const composeEmojiChips=composeEmojis.map(e=>({e, onClick:()=>{ this.setState({compose:(this.state.compose||'')+e}); }}));
     const onComposeEmojiToggle=()=>this.setState({composeEmojiOpen:!this.state.composeEmojiOpen});
