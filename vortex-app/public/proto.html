@@ -333,7 +333,7 @@
           <div class="vx-screen" data-screen-label="Login" style="height:100%;display:flex;flex-direction:column;background:#0A0F1A;color:#fff;position:relative;overflow:hidden">
             <img src="assets/a4d3e396.jpg" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">
             <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,15,26,.55) 0%,rgba(10,15,26,.35) 22%,rgba(10,15,26,.55) 55%,#0A0F1A 88%)"></div>
-            <div style="position:relative;padding:66px 26px 24px;display:flex;flex-direction:column;height:100%">
+            <div class="vx-scroll" style="position:relative;padding:calc(max(env(safe-area-inset-top), 40px) + 20px) 26px calc(env(safe-area-inset-bottom) + 40px);display:flex;flex-direction:column;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch">
               <img src="assets/b798adf9.png" alt="" style="width:52px;height:52px">
               <h1 style="font-size:31px;font-weight:700;letter-spacing:-.02em;margin:18px 0 4px;line-height:1.04">Welcome back.</h1>
               <p style="margin:0;color:rgba(255,255,255,.6);font-size:14px;line-height:1.45;max-width:272px">Vortex SC — squad management for the technical team, coaches &amp; families.</p>
@@ -5521,7 +5521,7 @@ class Component extends DCLogic {
           sponsorOn, sponsorBg: sponsorOn?'linear-gradient(135deg,#7A5A12,#C89B3C)':'#EEF1F5', sponsorFg: sponsorOn?'#fff':'#7A8296', sponsorLabel: sponsorOn?'VIP Sponsored athlete':'Mark as sponsored',
           onToggleSponsor:()=>this.toggleSponsor(swObj.id),
           isSponsored: sponsorOn,
-          onOpenVortexId:()=>this.setState({showVortexId:true}), vortexIdBtnTop: sponsorOn?'46px':'14px',
+          onOpenVortexId:()=>this.setState({showVortexId:true}), vortexIdBtnTop: sponsorOn?'calc(max(env(safe-area-inset-top), 44px) + 36px)':'calc(max(env(safe-area-inset-top), 44px) + 4px)',
           vortexIdCard:{
             name:swObj.name, initials:swObj.initials, avatarEl: this.av(this.swimmerPhotos[swObj.id]||null, swObj.initials, 72, 20, 'rgba(255,255,255,.18)', '#fff', 22, 'rgba(255,255,255,.3)'),
             squadName:squad.name, age:swObj.age, gender:swObj.gender, genIcon:this.genMeta(swObj.gender).icon, genBg:this.genMeta(swObj.gender).bg,
