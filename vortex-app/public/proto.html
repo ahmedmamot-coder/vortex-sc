@@ -37,7 +37,9 @@
     var sb = window.supabase.createClient(SB_URL, SB_ANON);
     window.__vxsb = sb;
     var origSet = localStorage.setItem.bind(localStorage);
-    function pushKey(k, v){ if (sb && SYNC.indexOf(k) !== -1){ try { sb.from("club_state").upsert({key:k, value:JSON.parse(v), updated_at:new Date().toISOString()}); } catch(e){} } }
+    // NOTE: a supabase-js query only actually sends when .then() is called — a bare
+    // upsert() never fires. That's why writes weren't reaching the database. Always .then().
+    function pushKey(k, v){ if (sb && SYNC.indexOf(k) !== -1){ try { sb.from("club_state").upsert({key:k, value:JSON.parse(v), updated_at:new Date().toISOString()}, {onConflict:"key"}).then(function(res){ if(res && res.error){ try{ console.warn("vx sync error", k, res.error.message); }catch(e){} } }, function(){}); } catch(e){} } }
     window.__vxpush = pushKey;
     // Install write-through sync UP FRONT so every future write reaches the database,
     // even if the initial read below fails or is slow. This is the key reliability fix.
