@@ -696,7 +696,8 @@
                     <p style="position:relative;margin:16px 0 0;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:600">Welcome, {{ famPortalName }}</p>
                     <div style="position:relative;display:flex;align-items:center;gap:12px;margin-top:8px">
                       <span style="position:relative;flex:none"><span style="width:50px;height:50px;border-radius:14px;background:{{ famAccent }};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px;color:#fff">{{ famSwInit }}</span><span style="position:absolute;bottom:-3px;right:-3px;width:20px;height:20px;border-radius:50%;background:{{ famGenBg }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;border:2px solid #0A0F1A">{{ famGenIcon }}</span></span>
-                      <div><h1 style="font-size:20px;font-weight:700;letter-spacing:-.02em;margin:0">{{ famSwName }}</h1><p style="margin:2px 0 0;font-size:12.5px;color:rgba(255,255,255,.6)">{{ famSwMeta }}</p></div>
+                      <div style="flex:1;min-width:0"><h1 style="font-size:20px;font-weight:700;letter-spacing:-.02em;margin:0">{{ famSwName }}</h1><p style="margin:2px 0 0;font-size:12.5px;color:rgba(255,255,255,.6)">{{ famSwMeta }}</p></div>
+                      <button onclick="{{ onOpenVortexId }}" style="flex:none;align-self:flex-start;display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.22);border-radius:11px;padding:7px 11px;cursor:pointer;color:#fff"><i data-lucide="badge-check" style="width:15px;height:15px"></i><span style="font-size:11.5px;font-weight:700">Vortex ID</span></button>
                     </div>
                     <sc-if value="{{ famMultiKids }}" hint-placeholder-val="{{ false }}">
                       <div class="vx-scroll" style="position:relative;display:flex;gap:7px;overflow-x:auto;margin-top:14px">
@@ -856,20 +857,81 @@
                     </sc-if>
 
                     <sc-if value="{{ famShowAttend }}" hint-placeholder-val="{{ false }}">
-                      <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:16px;box-shadow:0 2px 7px rgba(11,20,40,.05);text-align:center">
-                        <p style="margin:0;font-size:34px;font-weight:700;color:{{ famAccent }}">{{ famAttendPct }}</p>
-                        <p style="margin:2px 0 16px;font-size:11.5px;color:#7A8296;font-weight:600;letter-spacing:.04em;text-transform:uppercase">Season attendance</p>
-                        <div style="display:flex;justify-content:space-between;gap:6px">
-                          <sc-for list="{{ famAttendHistory }}" as="h" hint-placeholder-count="6">
-                            <span style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px"><span style="width:100%;height:34px;border-radius:9px;background:{{ h.bg }};color:{{ h.color }};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px">{{ h.ltr }}</span><span style="font-size:9.5px;color:#9AA2B4;font-weight:600">{{ h.label }}</span></span>
-                          </sc-for>
-                        </div>
+                      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:5px;margin-bottom:13px">
+                        <button onclick="{{ onFamAttViewDay }}" style="padding:9px 4px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:12px;background:{{ famAttViewDayBg }};color:{{ famAttViewDayFg }}">Day</button>
+                        <button onclick="{{ onFamAttViewMonth }}" style="padding:9px 4px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:12px;background:{{ famAttViewMonthBg }};color:{{ famAttViewMonthFg }}">Month</button>
+                        <button onclick="{{ onFamAttViewYear }}" style="padding:9px 4px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:12px;background:{{ famAttViewYearBg }};color:{{ famAttViewYearFg }}">Year</button>
                       </div>
+
+                      <sc-if value="{{ famAttShowDay }}" hint-placeholder-val="{{ false }}">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin:0 2px 12px">
+                          <button onclick="{{ onFamAttDayPrev }}" style="width:30px;height:30px;flex:none;border-radius:9px;border:1px solid #E5E9F0;background:#fff;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="chevron-left" style="width:16px;height:16px"></i></button>
+                          <h2 style="font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296;margin:0">{{ famAttDayLabel }}</h2>
+                          <button onclick="{{ onFamAttDayNext }}" style="width:30px;height:30px;flex:none;border-radius:9px;border:1px solid #E5E9F0;background:#fff;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="chevron-right" style="width:16px;height:16px"></i></button>
+                        </div>
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:26px 16px;box-shadow:0 2px 7px rgba(11,20,40,.05);display:flex;flex-direction:column;align-items:center;gap:12px">
+                          <span style="width:78px;height:78px;border-radius:50%;background:{{ famAttDayStatusBg }};color:{{ famAttDayStatusColor }};display:flex;align-items:center;justify-content:center">
+                            <sc-if value="{{ famAttDayIsPresent }}" hint-placeholder-val="{{ true }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:34px;height:34px"><polyline points="20 6 9 17 4 12"></polyline></svg></sc-if>
+                            <sc-if value="{{ famAttDayIsAbsent }}" hint-placeholder-val="{{ false }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:34px;height:34px"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></sc-if>
+                            <sc-if value="{{ famAttDayIsLate }}" hint-placeholder-val="{{ false }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:34px;height:34px"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></sc-if>
+                          </span>
+                          <span style="font-size:20px;font-weight:700;color:{{ famAttDayStatusColor }}">{{ famAttDayStatusLabel }}</span>
+                          <p style="margin:0;font-size:11.5px;color:#9AA2B4;text-align:center">Attendance recorded by the coach for this session.</p>
+                        </div>
+                      </sc-if>
+
+                      <sc-if value="{{ famAttShowMonth }}" hint-placeholder-val="{{ true }}">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                          <button onclick="{{ onFamAttMonthPrev }}" style="width:30px;height:30px;flex:none;border-radius:9px;border:1px solid #E5E9F0;background:#fff;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="chevron-left" style="width:16px;height:16px"></i></button>
+                          <h2 style="font-size:14px;font-weight:700;color:#0C1116;margin:0">{{ famAttMonthLabel }}</h2>
+                          <button onclick="{{ onFamAttMonthNext }}" style="width:30px;height:30px;flex:none;border-radius:9px;border:1px solid #E5E9F0;background:#fff;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="chevron-right" style="width:16px;height:16px"></i></button>
+                        </div>
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:12px;text-align:center;box-shadow:0 2px 7px rgba(11,20,40,.05);margin-bottom:13px"><span style="display:block;font-size:24px;font-weight:700;color:{{ famAccent }}">{{ famAttMonthPct }}</span><span style="display:block;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4;margin-top:1px">Present this month</span></div>
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                          <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px">
+                            <sc-for list="{{ famAttWeekdayLabels }}" as="w" hint-placeholder-count="7"><span style="text-align:center;font-size:10px;font-weight:700;color:#9AA2B4">{{ w }}</span></sc-for>
+                          </div>
+                          <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">
+                            <sc-for list="{{ famAttMonthCells }}" as="d" hint-placeholder-count="35">
+                              <button onclick="{{ d.onClick }}" style="aspect-ratio:1;border-radius:9px;border:none;cursor:pointer;font-family:inherit;background:{{ d.bg }};color:{{ d.fg }};opacity:{{ d.opacity }};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:0"><span style="font-size:11px;font-weight:700">{{ d.day }}</span><span style="font-size:8px;font-weight:700">{{ d.ltr }}</span></button>
+                            </sc-for>
+                          </div>
+                        </div>
+                        <div style="display:flex;gap:12px;justify-content:center;margin-top:11px">
+                          <span style="display:flex;align-items:center;gap:5px;font-size:11px;color:#7A8296"><span style="width:11px;height:11px;border-radius:3px;background:#0C7A4F"></span>Present</span>
+                          <span style="display:flex;align-items:center;gap:5px;font-size:11px;color:#7A8296"><span style="width:11px;height:11px;border-radius:3px;background:#F5A623"></span>Late</span>
+                          <span style="display:flex;align-items:center;gap:5px;font-size:11px;color:#7A8296"><span style="width:11px;height:11px;border-radius:3px;background:#E5484D"></span>Absent</span>
+                        </div>
+                      </sc-if>
+
+                      <sc-if value="{{ famAttShowYear }}" hint-placeholder-val="{{ false }}">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                          <button onclick="{{ onFamAttYearPrev }}" style="width:30px;height:30px;flex:none;border-radius:9px;border:1px solid #E5E9F0;background:#fff;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="chevron-left" style="width:16px;height:16px"></i></button>
+                          <h2 style="font-size:14px;font-weight:700;color:#0C1116;margin:0">{{ famAttYearLabel }}</h2>
+                          <button onclick="{{ onFamAttYearNext }}" style="width:30px;height:30px;flex:none;border-radius:9px;border:1px solid #E5E9F0;background:#fff;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="chevron-right" style="width:16px;height:16px"></i></button>
+                        </div>
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:15px;box-shadow:0 2px 7px rgba(11,20,40,.05);text-align:center;margin-bottom:13px">
+                          <p style="margin:0;font-size:32px;font-weight:700;color:{{ famAccent }}">{{ famAttYearPct }}</p>
+                          <p style="margin:2px 0 0;font-size:11.5px;color:#7A8296;font-weight:600;letter-spacing:.04em;text-transform:uppercase">Yearly average</p>
+                        </div>
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:15px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                          <div style="display:flex;align-items:flex-end;gap:6px;height:120px">
+                            <sc-for list="{{ famAttYearBars }}" as="m" hint-placeholder-count="12">
+                              <button onclick="{{ m.onClick }}" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;height:100%;justify-content:flex-end;background:none;border:none;cursor:pointer;font-family:inherit;padding:0">
+                                <span style="font-size:9px;font-weight:700;color:{{ famAccent }}">{{ m.pctLabel }}</span>
+                                <div class="vx-bar" style="width:100%;height:{{ m.h }}px;background:{{ m.fill }};border-radius:4px"></div>
+                                <span style="font-size:9px;color:#9AA2B4">{{ m.label }}</span>
+                              </button>
+                            </sc-for>
+                          </div>
+                        </div>
+                      </sc-if>
                     </sc-if>
 
                     <sc-if value="{{ famShowResults }}" hint-placeholder-val="{{ false }}">
                       <sc-if value="{{ famHasResults }}" hint-placeholder-val="{{ true }}">
-                        <div style="display:flex;flex-direction:column;gap:8px">
+                        <p style="margin:0 2px 8px;font-size:11.5px;font-weight:700;color:#7A8296;text-transform:uppercase;letter-spacing:.04em">{{ famSwName }} · all results</p>
+                        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px">
                           <sc-for list="{{ famResults }}" as="r" hint-placeholder-count="6">
                             <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:11px 14px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
                               <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:13px;font-weight:700;color:#0C1116">{{ r.event }}</span><span style="font-family:var(--font-mono);font-weight:700;font-size:13px;color:{{ famAccent }}">{{ r.time }}</span></div>
@@ -877,6 +939,31 @@
                             </div>
                           </sc-for>
                         </div>
+                      </sc-if>
+
+                      <p style="margin:0 2px 8px;font-size:11.5px;font-weight:700;color:#7A8296;text-transform:uppercase;letter-spacing:.04em">All meet results</p>
+                      <div class="vx-scroll" style="display:flex;gap:7px;overflow-x:auto;margin:0 -15px 12px;padding:0 15px">
+                        <sc-for list="{{ famMeetChips }}" as="m" hint-placeholder-count="4">
+                          <button onclick="{{ m.onClick }}" style="flex:none;background:{{ m.bg }};color:{{ m.fg }};border:1px solid {{ m.border }};border-radius:999px;padding:8px 14px;font-family:inherit;font-weight:600;font-size:12.5px;cursor:pointer;white-space:nowrap">{{ m.label }}</button>
+                        </sc-for>
+                      </div>
+                      <div style="background:#fff;border:1px solid #E5E9F0;border-radius:15px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05);margin-bottom:11px">
+                        <p style="margin:0;font-size:16px;font-weight:700;color:#0C1116;letter-spacing:-.01em">{{ famMeetSelInfo.name }}</p>
+                        <p style="margin:3px 0 0;font-size:12px;color:#7A8296">{{ famMeetSelInfo.meta }}</p>
+                      </div>
+                      <sc-if value="{{ famMeetHasResults }}" hint-placeholder-val="{{ true }}">
+                        <div style="display:flex;flex-direction:column;gap:7px">
+                          <sc-for list="{{ famMeetResultRows }}" as="r" hint-placeholder-count="8">
+                            <div style="display:flex;align-items:center;gap:11px;background:{{ r.rowBg }};border:1px solid {{ r.rowBorder }};border-radius:13px;padding:10px 12px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
+                              <span style="width:28px;height:28px;flex:none;border-radius:8px;background:{{ r.medalBg }};color:{{ r.medalFg }};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px">{{ r.place }}</span>
+                              <span style="flex:1;min-width:0"><span style="display:block;font-weight:600;font-size:13.5px;color:#0C1116">{{ r.name }}</span><span style="display:block;font-size:11px;color:#7A8296">{{ r.event }} · {{ r.squadName }}</span></span>
+                              <span style="flex:none;font-family:var(--font-mono);font-weight:700;font-size:13.5px;color:#0C1116">{{ r.time }}</span>
+                            </div>
+                          </sc-for>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ famMeetNoResults }}" hint-placeholder-val="{{ false }}">
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:14px;box-shadow:0 1px 4px rgba(11,20,40,.04);display:flex;align-items:center;gap:10px"><i data-lucide="waves" style="width:17px;height:17px;color:#9AA2B4"></i><span style="font-size:12px;color:#7A8296">No results recorded for this meet yet.</span></div>
                       </sc-if>
                     </sc-if>
 
@@ -3082,6 +3169,7 @@ class Component extends DCLogic {
       entriesMeetIdx:0, entriesSwId:'', entriesEvent:'50 Free', entriesHeat:'', entriesLane:'', entriesQuery:'', printMode:'plan', entriesEventsSel:[],
       entryNewOpen:false, entryNewName:'', entryNewDob:'', entryNewSeed:'', entryNewErr:'',
       famReqEvent:'50 Free', famReqMeetIdx:0,
+      famAttView:'month', famAttDateISO:null, famAttCalY:null, famAttCalM:null, famAttYearSel:null, famMeetSel:0,
       goalsSwId:null, goalsSwQuery:'', goalEditEvent:null, goalEditVal:'', goalMsg:'',
       academyTab:'trials', trialForm:{childName:'',age:'',parentName:'',phone:'',notes:''}, trialSubmitted:false,
       feesDraft:{},
@@ -5584,16 +5672,75 @@ class Component extends DCLogic {
       famPortalName: S.familyUser?S.familyUser.name:'',
       famKidsChips:(S.familyUser?S.familyUser.swimmerIds:[]).map((uid,i)=>{ const [sqid,swid]=uid.split('::'); const sw=(this.roster[sqid]||[])[0]&&(this.roster[sqid]||[]).find(x=>x.id===swid); const on=i===S.familyActiveIdx; return {label:sw?sw.name.split(' ')[0]:'?', onClick:()=>this.setState({familyActiveIdx:i}), bg:on?'#fff':'rgba(255,255,255,.08)', fg:on?'#0A0F1A':'#fff', border:on?'#fff':'rgba(255,255,255,.18)'}; }),
       famMultiKids: !!(S.familyUser && S.familyUser.swimmerIds.length>1),
-      ...(()=>{ const fu=S.familyUser; if(!fu) return {famSwName:'',famSwMeta:'',famSwInit:'',famGenIcon:'',famGenBg:'',famAccent:'#067EEA',famPbs:[],famResults:[],famMeetsUpcoming:[],famAttendPct:'—',famAttendHistory:[],famDocsRows:[]};
+      ...(()=>{ const fu=S.familyUser; if(!fu) return {famSwName:'',famSwMeta:'',famSwInit:'',famGenIcon:'',famGenBg:'',famAccent:'#067EEA',famPbs:[],famResults:[],famMeetsUpcoming:[],famAttendPct:'—',famAttendHistory:[],famDocsRows:[],famAttMonthCells:[],famAttYearBars:[],famMeetChips:[],famMeetResultRows:[]};
         const uid=fu.swimmerIds[Math.min(S.familyActiveIdx, fu.swimmerIds.length-1)]||fu.swimmerIds[0]; const [sqid,swid]=(uid||'::').split('::');
         const sq=this.squadById[sqid]||this.squads[0]; const sw=(this.roster[sqid]||[]).find(x=>x.id===swid) || (this.roster[sqid]||[])[0] || {name:'—',age:'',gender:'',initials:'—',pbs:[],results:[],meetCount:0};
         const gm=this.genMeta(sw.gender);
+        const swIdx=(this.roster[sqid]||[]).findIndex(x=>x.id===sw.id); const swIdxSafe=swIdx<0?0:swIdx;
+        const today=this.todayISO();
         const famPbs=(sw.pbs||[]).slice(0,8).map(p=>({event:p.event, time:p.time, drop:p.drop}));
-        const famResults=(sw.results||[]).slice(0,8).map((r,i)=>({event:r.event, meet:r.meet, date:this.shortDate(r.date), time:r.time, place:r.place||(i+1)}));
+        const famResults=(sw.results||[]).slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))).map((r,i)=>({event:r.event, meet:r.meet, date:this.shortDate(r.date), time:r.time, place:r.place||(i+1)}));
         const upcoming=this.meetsMeta.slice(0,3).map(m=>({name:m.name, meta:(m.course||'LCM')+' · '+(m.date||'')}));
-        const seedN=(swid||'x').split('').reduce((a,c)=>a+c.charCodeAt(0),0);
-        const pct= 78 + (seedN%16);
-        const attendHistory=[0,1,2,3,4,5].map(i=>{ const v=(seedN*7+i*13)%10; const st= v<1?'absent':(v<2?'late':'present'); const sm={present:{c:'#0C7A4F',bg:'#DCF5EA',l:'P'},absent:{c:'#A52A2E',bg:'#FBE2E3',l:'A'},late:{c:'#9A6206',bg:'#FCEFD6',l:'L'}}[st]; return {label:'Wk '+(6-i), color:sm.c, bg:sm.bg, ltr:sm.l}; }).reverse();
+
+        // ==== real attendance for this swimmer: day / month / year (mirrors coach dashboard) ====
+        const famAttView = S.famAttView||'month';
+        const attSm={present:{label:'Present',c:'#0C7A4F',bg:'#DCF5EA'},absent:{label:'Absent',c:'#A52A2E',bg:'#FBE2E3'},late:{label:'Late',c:'#9A6206',bg:'#FCEFD6'}};
+        const famAttCurISO = S.famAttDateISO || today;
+        const famAttDateObj = new Date(famAttCurISO+'T00:00:00');
+        const dowNamesF=['SUN','MON','TUE','WED','THU','FRI','SAT'];
+        const famAttDaySt = this.getAttendStatus(sqid, famAttCurISO, sw.id, swIdxSafe);
+        const famAttDaySm = attSm[famAttDaySt]||attSm.present;
+        const famAttDayLabel = dowNamesF[famAttDateObj.getDay()]+' · '+famAttDateObj.toLocaleDateString('en-GB',{day:'numeric',month:'short'})+(famAttCurISO===today?' · Today':'');
+        const onFamAttDayPrev=()=>this.setState({famAttDateISO:this.shiftDate(famAttCurISO,-1)});
+        const onFamAttDayNext=()=>this.setState({famAttDateISO:this.shiftDate(famAttCurISO,1)});
+        const famAttCalY = S.famAttCalY!=null ? S.famAttCalY : famAttDateObj.getFullYear();
+        const famAttCalM = S.famAttCalM!=null ? S.famAttCalM : famAttDateObj.getMonth();
+        const famAttMonthLabel = new Date(famAttCalY, famAttCalM, 1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
+        const famAttWeekdayLabels=['M','T','W','T','F','S','S'];
+        const famDim = new Date(famAttCalY, famAttCalM+1, 0).getDate();
+        const famFirstDow = (new Date(famAttCalY, famAttCalM, 1).getDay()+6)%7;
+        const famAttMonthCells=[];
+        for(let i=0;i<famFirstDow;i++) famAttMonthCells.push({day:'', ltr:'', bg:'transparent', fg:'transparent', opacity:'0', onClick:()=>{}});
+        let famPres=0, famLate=0, famAbs=0, famSess=0;
+        for(let d=1; d<=famDim; d++){
+          const dISO = famAttCalY+'-'+String(famAttCalM+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+          const isFuture = dISO>today; let bg='#F4F6F8', fg='#B9C0CC', opacity='1', ltr='';
+          if(!isFuture){ const st=this.getAttendStatus(sqid, dISO, sw.id, swIdxSafe); famSess++;
+            if(st==='present'){famPres++; bg='#0C7A4F'; ltr='P';} else if(st==='late'){famLate++; bg='#F5A623'; ltr='L';} else {famAbs++; bg='#E5484D'; ltr='A';}
+            fg='#fff';
+          } else { opacity='.45'; }
+          const isToday = dISO===today;
+          famAttMonthCells.push({ day:d, ltr:isFuture?'':ltr, bg: isToday? sq.accent : bg, fg, opacity, onClick:()=>this.setState({famAttDateISO:dISO, famAttView:'day'}) });
+        }
+        const famAttMonthPct = famSess? Math.round((famPres/famSess)*100)+'%' : '—';
+        const onFamAttMonthPrev=()=>{ let m=famAttCalM-1,y=famAttCalY; if(m<0){m=11;y--;} this.setState({famAttCalM:m, famAttCalY:y}); };
+        const onFamAttMonthNext=()=>{ let m=famAttCalM+1,y=famAttCalY; if(m>11){m=0;y++;} this.setState({famAttCalM:m, famAttCalY:y}); };
+        const famAttYearSel = S.famAttYearSel!=null ? S.famAttYearSel : famAttDateObj.getFullYear();
+        const monNamesF=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        let famYSum=0, famYMonths=0;
+        const famYearRaw = monNamesF.map((mn,mi)=>{
+          const dim=new Date(famAttYearSel, mi+1, 0).getDate(); let p=0,n=0;
+          for(let d=1; d<=dim; d++){ const dISO=famAttYearSel+'-'+String(mi+1).padStart(2,'0')+'-'+String(d).padStart(2,'0'); if(dISO>today) continue; if(this.getAttendStatus(sqid,dISO,sw.id,swIdxSafe)==='present')p++; n++; }
+          const pct = n? Math.round((p/n)*100) : null; if(pct!=null){ famYSum+=pct; famYMonths++; } return {label:mn, pct, mi};
+        });
+        const famMaxY=Math.max(1, ...famYearRaw.map(m=>m.pct||0));
+        const famAttYearBars = famYearRaw.map(m=>({ label:m.label, pctLabel: m.pct!=null?(m.pct+'%'):'—',
+          h: m.pct!=null ? Math.max(6, Math.round((m.pct/famMaxY)*100)) : 4, fill: m.pct!=null ? sq.accent : '#EEF1F5',
+          onClick:()=>this.setState({famAttCalY:famAttYearSel, famAttCalM:m.mi, famAttView:'month'}) }));
+        const famAttYearPct = famYMonths ? Math.round(famYSum/famYMonths)+'%' : '—';
+
+        // ==== all meets + full results across every squad (like coaches) ====
+        const famMeetSel = Math.min(S.famMeetSel||0, Math.max(0, this.meetsList.length-1));
+        const famMeetChips = this.meetsList.map((m,i)=>({label:m, onClick:()=>this.setState({famMeetSel:i}),
+          bg: i===famMeetSel?sq.accent:'#fff', fg: i===famMeetSel?'#fff':'#3A4152', border: i===famMeetSel?sq.accent:'#E5E9F0'}));
+        const famMeetName = this.meetsList[famMeetSel]||'';
+        const famMeetMetaObj = this.meetsMeta[famMeetSel]||{course:'LCM',date:''};
+        let famAllRes=[];
+        this.squads.forEach(sqx=>{ (this.roster[sqx.id]||[]).forEach(swx=>{ (swx.results||[]).forEach(r=>{ if(r.meet===famMeetName) famAllRes.push({name:swx.name, squadName:sqx.name, event:r.event, time:r.time, sec:r.sec, place:r.place, mine: swx.id===sw.id}); }); }); });
+        famAllRes.sort((a,b)=> ((a.place||999)-(b.place||999)) || ((a.sec||9999)-(b.sec||9999)));
+        const famMeetSelInfo={name:famMeetName||'—', meta:(famMeetMetaObj.course||'LCM')+' · '+(famMeetMetaObj.date||'')+' · '+famAllRes.length+' swims'};
+        const famMeetResultRows=famAllRes.slice(0,80).map((r,i)=>{ const place=r.place||(i+1); const [mb,mf]=this.medal(place); return {name:r.name, squadName:r.squadName, event:r.event, place, time:r.time, medalBg:mb, medalFg:mf, rowBg: r.mine?'#EFF6FF':'#fff', rowBorder: r.mine?'#BBD9FF':'#E5E9F0'}; });
+
         // -- progression, KPIs, fitness (same data coaches see, read-only) --
         const swEvents=(sw.pbs||[]).map(p=>p.event);
         const selEvent=(S.famProfileEvent && swEvents.includes(S.famProfileEvent)) ? S.famProfileEvent : (swEvents[0]||null);
@@ -5609,7 +5756,25 @@ class Component extends DCLogic {
         const famFitRows=this._fitTests(sw.id).slice(0,6).map(r=>({
           dateLabel:this.shortDate(r.date.split('-').reverse().join('/')),
           summary:[r.pushups!=null?(r.pushups+' push-ups'):null, r.plankSec!=null?(r.plankSec+'s plank'):null, r.vjump!=null?(r.vjump+'cm jump'):null, r.sitreach!=null?(r.sitreach+'cm reach'):null].filter(Boolean).join(' · ') }));
-        return {famSwName:sw.name, famSwMeta:sq.name+' · Age '+sw.age+' · '+sq.coach, famSwInit:sw.initials, famGenIcon:gm.icon, famGenBg:gm.bg, famAccent:sq.accent, famPbs, famResults, famMeetsUpcoming:upcoming, famAttendPct:pct+'%', famAttendHistory:attendHistory, famHasPbs:famPbs.length>0, famHasResults:famResults.length>0,
+        return {famSwName:sw.name, famSwMeta:sq.name+' · Age '+sw.age+' · '+sq.coach, famSwInit:sw.initials, famGenIcon:gm.icon, famGenBg:gm.bg, famAccent:sq.accent, famPbs, famResults, famMeetsUpcoming:upcoming, famHasPbs:famPbs.length>0, famHasResults:famResults.length>0,
+          // -- attendance (day/month/year) --
+          famAttView, famAttShowDay:famAttView==='day', famAttShowMonth:famAttView==='month', famAttShowYear:famAttView==='year',
+          famAttViewDayBg: famAttView==='day'?'#0A0F1A':'transparent', famAttViewDayFg: famAttView==='day'?'#fff':'#7A8296',
+          famAttViewMonthBg: famAttView==='month'?'#0A0F1A':'transparent', famAttViewMonthFg: famAttView==='month'?'#fff':'#7A8296',
+          famAttViewYearBg: famAttView==='year'?'#0A0F1A':'transparent', famAttViewYearFg: famAttView==='year'?'#fff':'#7A8296',
+          onFamAttViewDay:()=>this.setState({famAttView:'day'}), onFamAttViewMonth:()=>this.setState({famAttView:'month'}), onFamAttViewYear:()=>this.setState({famAttView:'year'}),
+          famAttDayLabel, famAttDayStatusLabel:famAttDaySm.label, famAttDayStatusColor:famAttDaySm.c, famAttDayStatusBg:famAttDaySm.bg,
+          famAttDayIsPresent:famAttDaySt==='present', famAttDayIsAbsent:famAttDaySt==='absent', famAttDayIsLate:famAttDaySt==='late',
+          onFamAttDayPrev, onFamAttDayNext,
+          famAttMonthLabel, famAttWeekdayLabels, famAttMonthCells, famAttMonthPct, onFamAttMonthPrev, onFamAttMonthNext,
+          famAttYearLabel:String(famAttYearSel), famAttYearPct, famAttYearBars, onFamAttYearPrev:()=>this.setState({famAttYearSel:famAttYearSel-1}), onFamAttYearNext:()=>this.setState({famAttYearSel:famAttYearSel+1}),
+          // -- all meets + full results --
+          famMeetChips, famMeetSelInfo, famMeetResultRows, famMeetHasResults:famMeetResultRows.length>0, famMeetNoResults:famMeetResultRows.length===0,
+          // -- vortex id card for this swimmer --
+          onOpenVortexId:()=>this.setState({showVortexId:true}),
+          vortexIdCard:{ name:sw.name, initials:sw.initials, avatarEl: this.av(this.swimmerPhotos[sw.id]||null, sw.initials, 72, 20, 'rgba(255,255,255,.18)', '#fff', 22, 'rgba(255,255,255,.3)'),
+            squadName:sq.name, age:sw.age, gender:sw.gender, genIcon:gm.icon, genBg:gm.bg, accent:sq.accent, glow:sq.glow, isSponsored:!!meta.sponsored,
+            dob:this.dobFromAge(sw.age), idNumber:this.vortexIdNumber(sw.id), season:'2025 / 2026' },
           famEventChips, famProgEvent:selEvent||'—', famHasEvents:famEventChips.length>0,
           famCourseLcmBg: famCourse==='lcm'?sq.accent:'#fff', famCourseLcmFg: famCourse==='lcm'?'#fff':'#3A4152',
           famCourseScmBg: famCourse==='scm'?sq.accent:'#fff', famCourseScmFg: famCourse==='scm'?'#fff':'#3A4152',
