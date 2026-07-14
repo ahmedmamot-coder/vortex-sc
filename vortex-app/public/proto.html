@@ -2217,11 +2217,23 @@
                     <div>
                       <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05);margin-bottom:12px">
                         <textarea value="{{ composeText }}" oninput="{{ onComposeChange }}" placeholder="Share a set, a win, a question…" style="width:100%;border:none;outline:none;resize:none;font-family:inherit;font-size:13.5px;color:#0C1116;background:none;min-height:44px;line-height:1.4"></textarea>
-                        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;border-top:1px solid #EEF1F5;padding-top:10px">
-                          <div style="display:flex;gap:6px">
-                            <sc-for list="{{ composeTags }}" as="t" hint-placeholder-count="4"><button onclick="{{ t.onClick }}" style="background:{{ t.bg }};color:{{ t.fg }};border:1px solid {{ t.border }};border-radius:999px;padding:5px 10px;font-family:inherit;font-weight:700;font-size:10.5px;cursor:pointer">{{ t.label }}</button></sc-for>
+                        <input id="vx-lounge-photo" type="file" accept="image/*" onchange="{{ onComposePhoto }}" style="display:none">
+                        <sc-if value="{{ composeHasImage }}" hint-placeholder-val="{{ false }}">
+                          <div style="position:relative;margin-top:4px">{{ composeImageEl }}<button onclick="{{ onComposeRemovePhoto }}" style="position:absolute;top:14px;right:8px;width:28px;height:28px;border-radius:50%;background:rgba(10,15,26,.7);color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:15px;height:15px"></i></button></div>
+                        </sc-if>
+                        <sc-if value="{{ composeEmojiOpen }}" hint-placeholder-val="{{ false }}">
+                          <div class="vx-scroll" style="display:flex;gap:4px;overflow-x:auto;margin-top:8px;padding-bottom:2px">
+                            <sc-for list="{{ composeEmojiChips }}" as="em" hint-placeholder-count="12"><button onclick="{{ em.onClick }}" style="flex:none;width:34px;height:34px;border-radius:9px;border:1px solid #EEF1F5;background:#F8FAFC;font-size:18px;cursor:pointer;line-height:1">{{ em.e }}</button></sc-for>
                           </div>
-                          <button onclick="{{ onPost }}" style="width:36px;height:36px;border-radius:11px;background:var(--vx-blue);border:none;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center"><i data-lucide="send" style="width:17px;height:17px"></i></button>
+                        </sc-if>
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;border-top:1px solid #EEF1F5;padding-top:10px">
+                          <div class="vx-scroll" style="display:flex;gap:6px;align-items:center;overflow-x:auto">
+                            <button onclick="{{ onComposeEmojiToggle }}" style="flex:none;width:32px;height:32px;border-radius:9px;border:1px solid #E5E9F0;background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#7A8296" title="Emoji"><i data-lucide="smile" style="width:16px;height:16px"></i></button>
+                            <button onclick="{{ onComposePickPhoto }}" style="flex:none;width:32px;height:32px;border-radius:9px;border:1px solid #E5E9F0;background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#7A8296" title="Photo / GIF"><i data-lucide="image" style="width:16px;height:16px"></i></button>
+                            <span style="flex:none;width:1px;height:20px;background:#EEF1F5;margin:0 2px"></span>
+                            <sc-for list="{{ composeTags }}" as="t" hint-placeholder-count="4"><button onclick="{{ t.onClick }}" style="flex:none;background:{{ t.bg }};color:{{ t.fg }};border:1px solid {{ t.border }};border-radius:999px;padding:5px 10px;font-family:inherit;font-weight:700;font-size:10.5px;cursor:pointer">{{ t.label }}</button></sc-for>
+                          </div>
+                          <button onclick="{{ onPost }}" style="flex:none;margin-left:8px;width:36px;height:36px;border-radius:11px;background:var(--vx-blue);border:none;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center"><i data-lucide="send" style="width:17px;height:17px"></i></button>
                         </div>
                       </div>
                       <div style="display:flex;flex-direction:column;gap:10px">
@@ -3068,7 +3080,7 @@ class Component extends DCLogic {
       moveOverride:{}, moveQuery:'',
       rosterQuery:'', meetSel:0, boardSel:0,
       videoPlaying:false,
-      compose:'', composeTag:'set',
+      compose:'', composeTag:'set', composeImage:'', composeEmojiOpen:false,
       feed:[
         {id:'f1', author:'Coach Baisher', role:'Senior A', initials:'CB', photo:'', tag:'Win', text:'Senior A crushed the 4×100 free relay this morning — new squad best by 2.1s. Proud of the effort.', image:'assets/photo-competition.jpg', likes:24, comments:6, time:'2h', liked:false},
         {id:'f2', author:'Coach Mahmoud', role:'Vortex A', initials:'CM', photo:'assets/coach-mahmoud.jpg', tag:'Set', text:'Tonight: 3×(8×50 @ :45) descend 1-4, 5-8. EN2 → SP1. Bring your fast legs.', image:'', likes:11, comments:3, time:'5h', liked:false},
@@ -4309,7 +4321,17 @@ class Component extends DCLogic {
       const keys=window.__VX_SYNC||[]; const rows=await window.__vxpull(keys);
       const setLocal=window.__vxsetlocal || ((k,v)=>localStorage.setItem(k,v));
       let changed=false;
-      (rows||[]).forEach(r=>{ if(r.value==null) return; const s=JSON.stringify(r.value); if(localStorage.getItem(r.key)!==s){ setLocal(r.key, s); changed=true; } });
+      (rows||[]).forEach(r=>{ if(r.value==null) return;
+        if(r.key==='vx_feed'){
+          // MERGE feed by id so a just-posted local message is never dropped by a stale pull.
+          const remote=Array.isArray(r.value)?r.value:[]; const local=this.state.feed||[];
+          const byId={}; remote.forEach(p=>{ byId[p.id]=p; }); local.forEach(p=>{ if(byId[p.id]){ byId[p.id]={...byId[p.id], liked:p.liked}; } else { byId[p.id]=p; } });
+          const merged=Object.values(byId).sort((a,b)=>(b.ts||0)-(a.ts||0)); const ms=JSON.stringify(merged);
+          if(localStorage.getItem('vx_feed')!==ms){ setLocal('vx_feed', ms); if(merged.length>remote.length){ try{ window.__vxpush && window.__vxpush('vx_feed', ms); }catch(e){} } this.setState({feed:merged}); }
+          return;
+        }
+        const s=JSON.stringify(r.value); if(localStorage.getItem(r.key)!==s){ setLocal(r.key, s); changed=true; }
+      });
       if(changed) this._hydrateShared();
     } catch(e){} finally { this._syncBusy=false; }
   }
@@ -4337,8 +4359,7 @@ class Component extends DCLogic {
     this.tpaceTests=g('vx_tpace', this.tpaceTests); this.fitnessTests=g('vx_fitness_tests', this.fitnessTests);
     this.fitnessPlans=g('vx_fitness_plans', this.fitnessPlans); this.promoStore=g('vx_promo', this.promoStore); this.aiSuggOverrides=g('vx_ai_sugg_ovr', this.aiSuggOverrides);
     this.rosterEdits=g('vx_roster_edits', this.rosterEdits); try{ this.rebuildRoster(); }catch(e){}
-    const _fd=J('vx_feed', undefined);
-    try{ this.setState(_fd!=null ? {family:this.family, feed:_fd} : {family:this.family}); }catch(e){ this.forceUpdate(); }
+    try{ this.setState({family:this.family}); }catch(e){ this.forceUpdate(); }
   }
   _tickStatusBar(){
     const now=new Date();
@@ -5005,11 +5026,17 @@ class Component extends DCLogic {
     const composeTagDefs=[{id:'set',label:'Set'},{id:'win',label:'Win'},{id:'q',label:'Question'},{id:'notice',label:'Notice'}];
     const composeTags=composeTagDefs.map(t=>{ const on=S.composeTag===t.id; return {label:t.label, onClick:()=>this.setState({composeTag:t.id}), bg:on?squad.accent:'#F4F6F8', fg:on?'#fff':'#7A8296', border:on?squad.accent:'#E5E9F0'}; });
     const feed=S.feed.map(p=>{ const [tb,tf]=tagStyle[p.tag]||['#EEF1F5','#5A657E']; return {author:p.author, role:p.role, avatar:this.av(p.photo||null, p.initials, 38, 11, squad.accent, '#fff', 12), imageEl: p.image? window.React.createElement('img',{src:p.image, alt:'', style:{width:'100%',borderRadius:11,marginTop:10}}) : null, tag:p.tag, tagBg:tb, tagFg:tf, text:p.text, likes:p.likes, comments:p.comments, time: p.ts? this.notifTimeAgo(new Date(p.ts).toISOString()) : (p.time||''), avBg:squad.accent, likeColor:p.liked?'#E5484D':'#9AA2B4', onLike:()=>{ const list=(this.state.feed||[]).map(x=>x.id===p.id?{...x, liked:!x.liked, likes:x.likes+(x.liked?-1:1)}:x); this._saveJSON('vx_feed', list); this.setState({feed:list}); } }; });
-    const onPost=()=>{ const txt=(S.compose||'').trim(); if(!txt) return; const tagName={set:'Set',win:'Win',q:'Question',notice:'Notice'}[S.composeTag];
+    const onPost=()=>{ const txt=(S.compose||'').trim(); const img=S.composeImage||''; if(!txt && !img) return; const tagName={set:'Set',win:'Win',q:'Question',notice:'Notice'}[S.composeTag];
       const acct=this.accounts.find(a=>a.id===S.pickedId)||{label:'Staff', role:'', initials:'?', photo:''};
-      const np={id:'f'+Date.now(), author:acct.label, role:acct.role||'Staff', initials:acct.initials||(acct.label||'?').slice(0,2).toUpperCase(), photo:acct.photo||'', tag:tagName, text:txt, image:'', likes:0, comments:0, time:'now', ts:Date.now(), liked:false};
-      const list=[np, ...(this.state.feed||[])]; this._saveJSON('vx_feed', list); this.setState({feed:list, compose:''});
-      this.notify('coach', 'megaphone', acct.label+' posted in the Lounge', '['+tagName+'] '+txt.slice(0,90)); };
+      const np={id:'f'+Date.now(), author:acct.label, role:acct.role||'Staff', initials:acct.initials||(acct.label||'?').slice(0,2).toUpperCase(), photo:acct.photo||'', tag:tagName, text:txt, image:img, likes:0, comments:0, time:'now', ts:Date.now(), liked:false};
+      const list=[np, ...(this.state.feed||[])]; this._saveJSON('vx_feed', list); this.setState({feed:list, compose:'', composeImage:'', composeEmojiOpen:false});
+      this.notify('coach', 'megaphone', acct.label+' posted in the Lounge', '['+tagName+'] '+(txt||'📷 Photo').slice(0,90)); };
+    const composeEmojis=['🏊','🔥','💪','🏆','🥇','⏱️','👏','✅','🎯','📣','😀','😅','🙌','❤️','🎉','👍','🚀','💧','🌊','⭐'];
+    const composeEmojiChips=composeEmojis.map(e=>({e, onClick:()=>{ this.setState({compose:(this.state.compose||'')+e}); }}));
+    const onComposeEmojiToggle=()=>this.setState({composeEmojiOpen:!this.state.composeEmojiOpen});
+    const onComposePickPhoto=()=>{ const el=document.getElementById('vx-lounge-photo'); if(el) el.click(); };
+    const onComposePhoto=async(ev)=>{ const file=ev.target.files&&ev.target.files[0]; ev.target.value=''; if(!file) return; const reader=new FileReader(); const dataUrl=await new Promise((res,rej)=>{ reader.onload=()=>res(reader.result); reader.onerror=rej; reader.readAsDataURL(file); }); this.setState({composeImage:dataUrl}); };
+    const onComposeRemovePhoto=()=>this.setState({composeImage:''});
     // goals — per-swimmer, editable, AI-assisted
     const goalsPool = S.toolScopeClub ? this.allSwimmersFlat() : (this.roster[S.squadId]||[]).map(sw=>({...sw, squadId:S.squadId, squadName:squad.name}));
     const goalsSwQ=(S.goalsSwQuery||'').trim().toLowerCase();
@@ -5693,6 +5720,8 @@ class Component extends DCLogic {
       onVideoAddSave:()=>this.videoAdd(), onVideoDeleteActive: activeVid?()=>this.videoDelete(activeVid.id):null,
       videoLibEmpty: this.videoLib.length===0,
       composeText:S.compose, onComposeChange:(e)=>this.setState({compose:e.target.value}), composeTags, onPost, feed,
+      composeEmojiChips, composeEmojiOpen:!!S.composeEmojiOpen, onComposeEmojiToggle, onComposePickPhoto, onComposePhoto, onComposeRemovePhoto,
+      composeHasImage:!!S.composeImage, composeImageEl: S.composeImage? window.React.createElement('img',{src:S.composeImage, alt:'', style:{width:'100%',maxHeight:180,objectFit:'cover',borderRadius:10,marginTop:8}}) : null,
       goalRows,
       goalsHasSwimmer, goalsSwLabel, goalsSquadName: squad.name, goalsSwQuery:S.goalsSwQuery||'', onGoalsSwQuery:(e)=>this.setState({goalsSwQuery:e.target.value}),
       goalsSwResults, onGoalsClear:()=>this.clearGoalsSwimmer(), goalMsg, goalMsgShow:!!goalMsg,
