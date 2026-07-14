@@ -28,9 +28,11 @@
   var SYNC = ["vx_family","vx_plans","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_staff_accounts","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_account_ovr","vx_attend_log","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_plans","vx_videos","vx_saved_plans"];
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
+  window.__vxWriteTs = {};   // last time THIS device wrote each key (ms) — guards against stale pulls
   function pushKey(k, v){
     if (SYNC.indexOf(k) === -1) return;
     var val; try { val = JSON.parse(v); } catch(e){ return; }
+    window.__vxWriteTs[k] = Date.now();
     try {
       fetch(REST, { method:"POST", headers: Object.assign({}, HEAD, {"Prefer":"resolution=merge-duplicates,return=minimal"}),
         body: JSON.stringify([{ key:k, value:val, updated_at:new Date().toISOString() }]) })
@@ -39,7 +41,7 @@
     } catch(e){}
   }
   function pull(keys){
-    var url = REST + "?select=key,value&key=in.(" + keys.join(",") + ")";
+    var url = REST + "?select=key,value,updated_at&key=in.(" + keys.join(",") + ")";
     return fetch(url, { headers: HEAD }).then(function(r){ return r.ok ? r.json() : []; }).catch(function(){ return []; });
   }
   window.__vxpush = pushKey;
@@ -4366,7 +4368,11 @@ class Component extends DCLogic {
       const keys=window.__VX_SYNC||[]; const rows=await window.__vxpull(keys);
       const setLocal=window.__vxsetlocal || ((k,v)=>localStorage.setItem(k,v));
       let changed=false;
+      const writeTs=window.__vxWriteTs||{};
       (rows||[]).forEach(r=>{ if(r.value==null) return;
+        // Guard: never let a stale pull revert a change this device just made.
+        const remoteTs=r.updated_at? Date.parse(r.updated_at) : 0; const localTs=writeTs[r.key]||0;
+        if(localTs && remoteTs && remoteTs < localTs + 1500) return; // local wrote as-recently-or-newer → keep local
         if(r.key==='vx_feed'){
           // MERGE feed by id so a just-posted local message is never dropped by a stale pull.
           const remote=Array.isArray(r.value)?r.value:[]; const local=this.state.feed||[];
