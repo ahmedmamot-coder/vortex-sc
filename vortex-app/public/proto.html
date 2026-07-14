@@ -25,7 +25,7 @@
   var REST = SB_URL + "/rest/v1/club_state";
   var HEAD = { "apikey": SB_ANON, "Authorization": "Bearer " + SB_ANON, "Content-Type": "application/json" };
   // Every shared data type the club edits. The only key kept per-device is vx_api_key.
-  var SYNC = ["vx_family","vx_plans","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_staff_accounts","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_account_ovr","vx_attend_log","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_plans","vx_videos"];
+  var SYNC = ["vx_family","vx_plans","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_attend_log","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_plans","vx_videos"];
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
   window.__vxWriteTs = {};   // last time THIS device wrote each key (ms) — guards against stale pulls
@@ -52,6 +52,7 @@
   window.__vxInsert = function(table, rows){ return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: Object.assign({}, HEAD, {"Prefer":"return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(!r.ok){ r.text().then(function(t){ try{console.warn("vx insert "+table+" HTTP "+r.status+": "+t);}catch(e){} }); } return r.ok; }).catch(function(){ return false; }); };
   window.__vxSelect = function(table, qs){ return fetch(SB_URL+"/rest/v1/"+table+(qs?("?"+qs):""), { headers: HEAD }).then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; }); };
   window.__vxDelete = function(table, qs){ return fetch(SB_URL+"/rest/v1/"+table+"?"+qs, { method:"DELETE", headers: HEAD }).then(function(r){ return r.ok; }).catch(function(){ return false; }); };
+  window.__vxUpsert = function(table, rows){ return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: Object.assign({}, HEAD, {"Prefer":"resolution=merge-duplicates,return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(!r.ok){ r.text().then(function(t){ try{console.warn("vx upsert "+table+" HTTP "+r.status+": "+t);}catch(e){} }); } return r.ok; }).catch(function(){ return false; }); };
   // Install write-through sync UP FRONT so every write reaches the database.
   var origSet = localStorage.setItem.bind(localStorage);
   window.__vxsetlocal = origSet; // write locally WITHOUT re-pushing (used by background pull)
@@ -3205,6 +3206,7 @@ class Component extends DCLogic {
   _saveFamily(list){ this.family=list; try{ localStorage.setItem('vx_family', JSON.stringify(list)); }catch(e){} this.setState({family:list}); }
   _loadJSON(key, fallback){ try{ const v=localStorage.getItem(key); return v==null?fallback:JSON.parse(v); }catch(e){ return fallback; } }
   _saveJSON(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){} }
+  _saveLocalOnly(key, val){ try{ (window.__vxsetlocal||localStorage.setItem.bind(localStorage))(key, JSON.stringify(val)); }catch(e){} }
 
   rebuildRoster(){
     const base = window.VX_ROSTER || {};
@@ -3345,8 +3347,28 @@ class Component extends DCLogic {
     this.persistRosterEdits();
   }
   staffSave(squadId, form){ this.staffOverrides[squadId]={name:form.name.trim(), pin:form.pin.trim()}; this._saveJSON('vx_staff_ovr', this.staffOverrides); const sq=this.squadById[squadId]; if(sq) sq.coach=form.name.trim(); this.setState({staffEditId:null}); }
-  staffAddCreate(){ const f=this.state.staffAddForm||{}; const name=(f.name||'').trim(); const user=(f.user||'').trim().toLowerCase(); const pin=(f.pin||'').trim(); if(!name||!user||!pin){ return; } const id='st_'+Date.now(); const rec={id:id, name:name, user:user, pin:pin, role:f.role||'Coach', phone:(f.phone||'').trim(), squadId:(f.squadId||'').trim()}; this.customStaff.push(rec); this._saveJSON('vx_staff_accounts', this.customStaff); this.accounts.push({id:id, user:user, label:name, role:rec.role, pin:pin, accent:'#2733D6', photo:'', initials:name.slice(0,2).toUpperCase(), squadId:rec.squadId}); this.setState({staffAddOpen:false, staffAddForm:{name:'',user:'',pin:'',role:'Coach',phone:'',squadId:''}}); }
-  staffAddDelete(id){ this.customStaff=this.customStaff.filter(function(a){return a.id!==id;}); this._saveJSON('vx_staff_accounts', this.customStaff); if(this.accountOvr[id]){ delete this.accountOvr[id]; this._saveJSON('vx_account_ovr', this.accountOvr); } this.accounts=this.accounts.filter(function(a){return a.id!==id;}); this.setState({staffEditId:null}); }
+  async _staffFetch(){
+    if(!window.__vxSelect) return;
+    const rows=await window.__vxSelect('staff_accounts', 'select=*&limit=1000');
+    if(rows==null) return; // table missing / offline → keep current
+    const custom=[]; const ovr={};
+    rows.forEach(r=>{ ovr[r.id]={label:r.name||'', user:r.username||'', pin:r.pin||'', role:r.role||'', squadId:r.squad_id||'', photo:r.photo||'', phone:r.phone||'', email:r.email||'', bio:r.bio||''};
+      if(r.is_custom){ custom.push({id:r.id, name:r.name||'', user:r.username||'', pin:r.pin||'', role:r.role||'Coach', squadId:r.squad_id||'', phone:r.phone||'', email:r.email||'', bio:r.bio||''}); } });
+    this.customStaff=custom; this.accountOvr=ovr;
+    try{ this._saveLocalOnly('vx_staff_accounts', custom); this._saveLocalOnly('vx_account_ovr', ovr); }catch(e){}
+    this._rebuildAccounts(); this.setState({});
+  }
+  _staffRow(id, o, isCustom){ return {id:id, name:o.label||o.name||'', username:(o.user||'').toLowerCase(), pin:o.pin||'', role:o.role||'Coach', squad_id:o.squadId||'', phone:o.phone||'', email:o.email||'', bio:o.bio||'', photo:o.photo||'', is_custom:!!isCustom, ts:Date.now()}; }
+  staffAddCreate(){ const f=this.state.staffAddForm||{}; const name=(f.name||'').trim(); const user=(f.user||'').trim().toLowerCase(); const pin=(f.pin||'').trim(); if(!name||!user||!pin){ return; }
+    const id='st_'+Date.now()+'_'+Math.random().toString(36).slice(2,5);
+    const o={label:name, user:user, pin:pin, role:f.role||'Coach', squadId:(f.squadId||'').trim(), photo:'', phone:(f.phone||'').trim(), email:'', bio:''};
+    this.customStaff.push({id:id, name:name, user:user, pin:pin, role:o.role, squadId:o.squadId, phone:o.phone, email:'', bio:''}); this.accountOvr[id]=o; this._rebuildAccounts();
+    this.setState({staffAddOpen:false, staffAddForm:{name:'',user:'',pin:'',role:'Coach',phone:'',squadId:''}});
+    if(window.__vxUpsert){ window.__vxUpsert('staff_accounts', [this._staffRow(id, o, true)]).then(ok=>{ if(ok) this._staffFetch(); }); }
+  }
+  staffAddDelete(id){ this.customStaff=this.customStaff.filter(function(a){return a.id!==id;}); if(this.accountOvr[id]){ delete this.accountOvr[id]; } this._rebuildAccounts(); this.setState({staffEditId:null});
+    if(window.__vxDelete){ window.__vxDelete('staff_accounts', 'id=eq.'+encodeURIComponent(id)).then(ok=>{ if(ok) this._staffFetch(); }); }
+  }
   _rebuildAccounts(){
     // Rebuild this.accounts from the base staff + synced custom staff + per-account overrides.
     this.accounts = this._baseAccounts.map(a=>({...a}));
@@ -3355,20 +3377,13 @@ class Component extends DCLogic {
     this.accounts.forEach(a=>{ const o=ovr[a.id]; if(o){ if(o.label){ a.label=o.label; a.initials=(o.label||'?').slice(0,2).toUpperCase(); } if(o.user) a.user=o.user; if(o.pin) a.pin=o.pin; if(o.role) a.role=o.role; if(o.squadId!=null) a.squadId=o.squadId; if(o.photo) a.photo=o.photo; if(o.phone!=null) a.phone=o.phone; if(o.email!=null) a.email=o.email; if(o.bio!=null) a.bio=o.bio; } });
   }
   async _refreshAccountsFromDb(){
-    // Pull the newest staff & family straight from the shared DB so people added on another
-    // device can sign in immediately, without waiting for a full app restart.
-    if(!window.__vxpull) return;
-    try {
-      const rows=await window.__vxpull(['vx_staff_accounts','vx_account_ovr','vx_family']);
-      let touchedFamily=false;
-      rows.forEach(r=>{ if(r.value==null) return;
-        if(r.key==='vx_staff_accounts'){ this.customStaff=r.value; try{localStorage.setItem('vx_staff_accounts',JSON.stringify(r.value));}catch(e){} }
-        else if(r.key==='vx_account_ovr'){ this.accountOvr=r.value; try{localStorage.setItem('vx_account_ovr',JSON.stringify(r.value));}catch(e){} }
-        else if(r.key==='vx_family'){ try{localStorage.setItem('vx_family',JSON.stringify(r.value));}catch(e){} this.family=r.value; touchedFamily=true; }
-      });
-      this._rebuildAccounts();
-      if(touchedFamily) this.setState({family:this.family});
-    } catch(e){}
+    // Newest staff comes from the staff_accounts table; family is still a club_state key.
+    try { await this._staffFetch(); } catch(e){}
+    if(window.__vxpull){ try {
+      const rows=await window.__vxpull(['vx_family']);
+      const r=(rows||[]).find(x=>x.key==='vx_family');
+      if(r && r.value!=null){ this.family=r.value; this._saveLocalOnly('vx_family', r.value); this.setState({family:this.family}); }
+    } catch(e){} }
   }
   staffAccOpen(id){ const a=this.accounts.find(x=>x.id===id); if(!a) return; this.setState({staffEditId:id, staffAccDraft:{label:a.label||'', user:a.user||'', pin:a.pin||'', role:a.role||'Coach', squadId:a.squadId||'', photo:a.photo||'', phone:a.phone||'', email:a.email||'', bio:a.bio||''}}); }
   staffAccChange(field, val){ this.setState({staffAccDraft:{...(this.state.staffAccDraft||{}), [field]:val}}); }
@@ -3378,11 +3393,13 @@ class Component extends DCLogic {
     const label=(d.label||'').trim(), user=(d.user||'').trim().toLowerCase(), pin=(d.pin||'').trim();
     if(!label||!user||!pin){ return; }
     const role=(d.role||'Coach'), squadId=(d.squadId||''), photo=(d.photo||''), phone=(d.phone||'').trim(), email=(d.email||'').trim(), bio=(d.bio||'').trim();
-    this.accountOvr[id]={label:label, user:user, pin:pin, role:role, squadId:squadId, photo:photo, phone:phone, email:email, bio:bio}; this._saveJSON('vx_account_ovr', this.accountOvr);
-    a.label=label; a.user=user; a.pin=pin; a.initials=label.slice(0,2).toUpperCase(); a.role=role; a.squadId=squadId; a.photo=photo; a.phone=phone; a.email=email; a.bio=bio;
+    const o={label:label, user:user, pin:pin, role:role, squadId:squadId, photo:photo, phone:phone, email:email, bio:bio};
+    this.accountOvr[id]=o;
     const isCustom=(''+id).indexOf('st_')===0;
-    if(isCustom){ this.customStaff=this.customStaff.map(function(c){ return c.id===id? {...c, name:label, user:user, pin:pin, role:role, squadId:squadId, phone:phone}:c; }); this._saveJSON('vx_staff_accounts', this.customStaff); }
-    this.setState({staffEditId:null, staffAccDraft:null});
+    if(isCustom){ this.customStaff=this.customStaff.map(function(c){ return c.id===id? {...c, name:label, user:user, pin:pin, role:role, squadId:squadId, phone:phone, email:email, bio:bio}:c; }); }
+    this._rebuildAccounts(); this.setState({staffEditId:null, staffAccDraft:null});
+    // One row per account (id = account id) — upsert never clobbers other accounts.
+    if(window.__vxUpsert){ window.__vxUpsert('staff_accounts', [this._staffRow(id, o, isCustom)]).then(ok=>{ if(ok) this._staffFetch(); }); }
   }
   meetsCalAdd(){ const f=this.state.meetsCalForm||{}; const name=(f.name||'').trim(); const date=(f.date||'').trim(); if(!name||!date) return; this.meetsCal.push({id:'mc_'+Date.now(), name:name, date:date, place:(f.place||'').trim(), pdf:f.pdf||'', pdfName:f.pdfName||''}); this.meetsCal.sort(function(a,b){return (a.date||'').localeCompare(b.date||'');}); this._saveJSON('vx_meets_cal', this.meetsCal); this.setState({meetsCalForm:{name:'',date:'',place:'',pdf:'',pdfName:''}}); }
   meetsViewPdf(pdf, title){ if(!pdf) return; const w=window.open('', '_blank'); if(!w) return; w.document.title=title||'Meet details'; w.document.body.style.margin='0'; const ifr=w.document.createElement('iframe'); ifr.src=pdf; ifr.style.cssText='border:0;width:100vw;height:100vh'; w.document.body.appendChild(ifr); }
@@ -4369,7 +4386,7 @@ class Component extends DCLogic {
     // is refocused), so parents/swimmers/coaches/staff always see the newest data with no button.
     this._autoSyncTick();
     this._syncInt=setInterval(()=>this._autoSyncTick(), 20000);
-    this._onVis=()=>{ if(document.visibilityState==='visible'){ this._autoSyncTick(); this._loungeFetch(); this._plansFetch(); } };
+    this._onVis=()=>{ if(document.visibilityState==='visible'){ this._autoSyncTick(); this._loungeFetch(); this._plansFetch(); this._staffFetch(); } };
     document.addEventListener('visibilitychange', this._onVis);
     // Lounge chat: load now, and poll fast while the Lounge is open so messages arrive live.
     this._loungeFetch();
@@ -4377,6 +4394,9 @@ class Component extends DCLogic {
     // Saved training-log sessions live in their own table too.
     this._plansFetch();
     this._plansInt=setInterval(()=>{ if(this.state.view==='squad' && this.state.tab==='plans') this._plansFetch(); }, 10000);
+    // Staff accounts live in their own table (staff_accounts).
+    this._staffFetch();
+    this._staffInt=setInterval(()=>{ if(this.state.view==='admin' && this.state.adminSection==='staff') this._staffFetch(); }, 12000);
   }
   async _autoSyncTick(){
     if(!window.__vxpull || this._syncBusy) return; this._syncBusy=true;
@@ -4433,7 +4453,7 @@ class Component extends DCLogic {
     const v=this._activeVideo();
     if((v?v.id:null) !== this._lastActiveVideoId) this._rebuildPlayer();
   }
-  componentWillUnmount(){ clearInterval(this._clock); clearTimeout(this._t); clearInterval(this._statusInt); clearInterval(this._syncInt); clearInterval(this._loungeInt); clearInterval(this._plansInt); try{ document.removeEventListener('visibilitychange', this._onVis); }catch(e){} window.removeEventListener('beforeprint', this._onBeforePrint); window.removeEventListener('afterprint', this._onAfterPrint); window.removeEventListener('online', this._onStatusEvt); window.removeEventListener('offline', this._onStatusEvt); if(this._battery){ try{ this._battery.removeEventListener('levelchange', this._onStatusEvt); this._battery.removeEventListener('chargingchange', this._onStatusEvt); }catch(e){} } }
+  componentWillUnmount(){ clearInterval(this._clock); clearTimeout(this._t); clearInterval(this._statusInt); clearInterval(this._syncInt); clearInterval(this._loungeInt); clearInterval(this._plansInt); clearInterval(this._staffInt); try{ document.removeEventListener('visibilitychange', this._onVis); }catch(e){} window.removeEventListener('beforeprint', this._onBeforePrint); window.removeEventListener('afterprint', this._onAfterPrint); window.removeEventListener('online', this._onStatusEvt); window.removeEventListener('offline', this._onStatusEvt); if(this._battery){ try{ this._battery.removeEventListener('levelchange', this._onStatusEvt); this._battery.removeEventListener('chargingchange', this._onStatusEvt); }catch(e){} } }
   _icons(){ clearTimeout(this._t); this._t=setTimeout(()=>{ try{ window.lucide && window.lucide.createIcons(); }catch(e){} }, 30); }
 
   parseSet(txt, dist){ txt=String(txt||''); let reps=1; const rm=txt.match(/(\d+)\s*[\u00d7xX]\s*(\d+)/); if(rm) reps=parseInt(rm[1])||1; let interval=null; const im=txt.match(/@\s*(\d+):(\d{2})/); if(im) interval=parseInt(im[1])*60+parseInt(im[2]); else { const im2=txt.match(/@\s*:(\d{2})/); if(im2) interval=parseInt(im2[1]); } if(!interval){ const per = reps>1 ? Math.round((+dist||100)/reps) : (+dist||100); interval = Math.max(20, Math.round(per*1.6)); } return {reps, interval}; }
