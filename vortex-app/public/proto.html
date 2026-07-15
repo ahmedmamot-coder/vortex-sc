@@ -1307,13 +1307,34 @@
                           </div>
                           <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">
                             <sc-for list="{{ planCalCells }}" as="d" hint-placeholder-count="35">
-                              <button onclick="{{ d.onClick }}" style="aspect-ratio:1;border:1px solid {{ d.border }};border-radius:8px;background:{{ d.bg }};color:{{ d.fg }};cursor:pointer;font-family:inherit;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:0"><span style="font-size:11px;font-weight:700">{{ d.day }}</span><span style="display:flex;gap:2px;height:5px"><sc-if value="{{ d.hasAm }}" hint-placeholder-val="{{ false }}"><span style="width:5px;height:5px;border-radius:50%;background:#0C6CE0"></span></sc-if><sc-if value="{{ d.hasPm }}" hint-placeholder-val="{{ false }}"><span style="width:5px;height:5px;border-radius:50%;background:#6D28D9"></span></sc-if></span></button>
+                              <button onclick="{{ d.onClick }}" style="aspect-ratio:1;border:1px solid {{ d.border }};border-radius:8px;background:{{ d.bg }};color:{{ d.fg }};cursor:pointer;font-family:inherit;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:0"><span style="font-size:11px;font-weight:700">{{ d.day }}</span><span style="font-size:8px;font-weight:800;color:{{ d.kmFg }};line-height:1;font-family:var(--font-mono)">{{ d.kmLabel }}</span><span style="display:flex;gap:2px;height:5px"><sc-if value="{{ d.hasAm }}" hint-placeholder-val="{{ false }}"><span style="width:5px;height:5px;border-radius:50%;background:#0C6CE0"></span></sc-if><sc-if value="{{ d.hasPm }}" hint-placeholder-val="{{ false }}"><span style="width:5px;height:5px;border-radius:50%;background:#6D28D9"></span></sc-if></span></button>
                             </sc-for>
                           </div>
                           <div style="display:flex;align-items:center;justify-content:space-between;margin-top:9px">
                             <span style="display:flex;gap:11px;font-size:10px;color:#7A8296"><span style="display:flex;align-items:center;gap:4px"><span style="width:7px;height:7px;border-radius:50%;background:#0C6CE0"></span>Morning</span><span style="display:flex;align-items:center;gap:4px"><span style="width:7px;height:7px;border-radius:50%;background:#6D28D9"></span>Evening</span></span>
                             <sc-if value="{{ planCalDaySel }}" hint-placeholder-val="{{ false }}"><button onclick="{{ onPlanCalClearDay }}" style="background:none;border:none;color:{{ squad.accent }};font-family:inherit;font-size:11px;font-weight:700;cursor:pointer">{{ planCalSelLabel }} · clear</button></sc-if>
                           </div>
+                          <sc-if value="{{ planCalDaySel }}" hint-placeholder-val="{{ false }}">
+                            <div style="margin-top:11px;padding-top:11px;border-top:1px solid #EEF1F5">
+                              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;font-weight:700;color:#0C1116">{{ planCalSelLabel }}</span><span style="font-family:var(--font-mono);font-size:12px;font-weight:800;color:{{ squad.accent }}">{{ planCalDayKm }} km</span></div>
+                              <sc-if value="{{ planCalDayHasSessions }}" hint-placeholder-val="{{ true }}">
+                                <div style="display:flex;flex-direction:column;gap:6px">
+                                  <sc-for list="{{ planCalDaySessions }}" as="ds" hint-placeholder-count="2">
+                                    <div style="display:flex;align-items:center;gap:9px;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:10px;padding:8px 10px">
+                                      <span style="flex:none;background:{{ ds.slotBg }};color:{{ ds.slotFg }};border-radius:6px;padding:2px 7px;font-size:9.5px;font-weight:800">{{ ds.slotLabel }}</span>
+                                      <span style="flex:1;min-width:0;font-size:12.5px;font-weight:700;color:#0C1116;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ds.title }}</span>
+                                      <span style="flex:none;font-family:var(--font-mono);font-size:11.5px;font-weight:700;color:#7A8296">{{ ds.totalM }}m</span>
+                                      <button onclick="{{ ds.onView }}" style="flex:none;width:28px;height:28px;border-radius:8px;border:none;background:var(--vx-blue-tint);color:var(--vx-blue-dark);cursor:pointer;display:flex;align-items:center;justify-content:center" title="View PDF"><i data-lucide="file-text" style="width:13px;height:13px"></i></button>
+                                      <button onclick="{{ ds.onEdit }}" style="flex:none;width:28px;height:28px;border-radius:8px;border:none;background:#EEF1F5;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center" title="Load &amp; edit"><i data-lucide="pencil" style="width:13px;height:13px"></i></button>
+                                    </div>
+                                  </sc-for>
+                                </div>
+                              </sc-if>
+                              <sc-if value="{{ planCalDayHasSessions }}" hint-placeholder-val="{{ false }}">
+                                <p style="margin:0;font-size:11.5px;color:#9AA2B4">No session on this day yet — build a plan above with this date set and tap “Save session”.</p>
+                              </sc-if>
+                            </div>
+                          </sc-if>
                         </div>
                         <sc-if value="{{ savedPlansEmpty }}" hint-placeholder-val="{{ true }}"><p style="margin:0 2px;font-size:11.5px;color:#9AA2B4">No sessions saved for this view yet — build a plan above, set its date + AM/PM, and tap “Save session”.</p></sc-if>
                         <div style="display:flex;flex-direction:column;gap:7px">
@@ -6172,17 +6193,20 @@ class Component extends DCLogic {
         const calY=S.planCalY!=null?S.planCalY:calObj.getFullYear(); const calM=S.planCalM!=null?S.planCalM:calObj.getMonth();
         const monthLabel=new Date(calY,calM,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
         const dim=new Date(calY,calM+1,0).getDate(); const firstDow=(new Date(calY,calM,1).getDay()+6)%7;
-        const byDay={}; sp.forEach(r=>{ if(!r.date) return; (byDay[r.date]=byDay[r.date]||{am:0,pm:0}); if(r.slot==='PM') byDay[r.date].pm++; else byDay[r.date].am++; });
-        const cells=[]; for(let i=0;i<firstDow;i++) cells.push({day:'', blank:true, hasAm:false, hasPm:false, bg:'transparent', fg:'transparent', border:'transparent', onClick:()=>{}});
-        for(let d=1; d<=dim; d++){ const dISO=calY+'-'+String(calM+1).padStart(2,'0')+'-'+String(d).padStart(2,'0'); const info=byDay[dISO]||{am:0,pm:0}; const sel=dISO===daySel; const isToday=dISO===this.todayISO();
-          cells.push({day:d, blank:false, hasAm:info.am>0, hasPm:info.pm>0, bg: sel?squad.accent:(isToday?'#EEF1F5':'#fff'), fg: sel?'#fff':'#0C1116', border: sel?squad.accent:'#EEF1F5', onClick:()=>this.setState({planCalDay: daySel===dISO?null:dISO, planSessDate:dISO}) }); }
+        const byDay={}; sp.forEach(r=>{ if(!r.date) return; (byDay[r.date]=byDay[r.date]||{am:0,pm:0,m:0}); if(r.slot==='PM') byDay[r.date].pm++; else byDay[r.date].am++; byDay[r.date].m+=(r.totalM||0); });
+        const cells=[]; for(let i=0;i<firstDow;i++) cells.push({day:'', blank:true, hasAm:false, hasPm:false, kmLabel:'', bg:'transparent', fg:'transparent', border:'transparent', onClick:()=>{}});
+        for(let d=1; d<=dim; d++){ const dISO=calY+'-'+String(calM+1).padStart(2,'0')+'-'+String(d).padStart(2,'0'); const info=byDay[dISO]||{am:0,pm:0,m:0}; const sel=dISO===daySel; const isToday=dISO===this.todayISO();
+          cells.push({day:d, blank:false, hasAm:info.am>0, hasPm:info.pm>0, kmLabel: info.m>0?((info.m/1000).toFixed(1)+'km'):'', kmFg: sel?'#fff':squad.accent, bg: sel?squad.accent:(isToday?'#EEF1F5':'#fff'), fg: sel?'#fff':'#0C1116', border: sel?squad.accent:'#EEF1F5', onClick:()=>this.setState({planCalDay: daySel===dISO?null:dISO, planSessDate:dISO}) }); }
         const selLabel = daySel? new Date(daySel+'T00:00:00').toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'short'}) : '';
+        const daySessions = daySel? sp.filter(r=>r.date===daySel).slice().sort((a,b)=>(a.slot==='PM'?1:0)-(b.slot==='PM'?1:0)).map(r=>{ const sm=slotMeta(r.slot); return {id:r.id, title:r.title||'Session', slotLabel:sm.label+(r.time?(' · '+r.time):''), slotBg:sm.bg, slotFg:sm.fg, totalM:(r.totalM||0).toLocaleString(), onView:()=>this.viewPlanSnapshotPdf(S.squadId,r.id), onEdit:()=>this.loadPlanSnapshot(S.squadId,r.id), onDelete:()=>this.deletePlanSnapshot(S.squadId,r.id)}; }) : [];
+        const daySelKm = daySel? (((byDay[daySel]&&byDay[daySel].m)||0)/1000).toFixed(1) : '0';
         return { savedPlanRows:rows, savedPlansHasAny:rows.length>0, savedPlansEmpty:rows.length===0,
           savedPlanWeekM:weekM.toLocaleString(), savedPlanWeekN:weekN, savedPlanSeasonM:seasonM.toLocaleString(), savedPlanSeasonN:seasonN,
           planCalLabel:monthLabel, planCalCells:cells, planCalWeekdayLabels:['M','T','W','T','F','S','S'],
           onPlanCalPrev:()=>{ let m=calM-1,y=calY; if(m<0){m=11;y--;} this.setState({planCalM:m,planCalY:y}); },
           onPlanCalNext:()=>{ let m=calM+1,y=calY; if(m>11){m=0;y++;} this.setState({planCalM:m,planCalY:y}); },
-          planCalDaySel:!!daySel, planCalSelLabel:selLabel, onPlanCalClearDay:()=>this.setState({planCalDay:null}) }; })(),
+          planCalDaySel:!!daySel, planCalSelLabel:selLabel, onPlanCalClearDay:()=>this.setState({planCalDay:null}),
+          planCalDaySessions:daySessions, planCalDayHasSessions:daySessions.length>0, planCalDayKm:daySelKm }; })(),
       onShareWhatsapp:()=>this.setState({shareNote:'Shared to '+squad.name+' WhatsApp group ✓'}), onPrintPlan:()=>this.setState({printPreviewOpen:true}),
       onSubmitPlanReview:()=>this.submitPlanForReview(S.squadId, squad.name),
       onClosePrintPreview:()=>this.setState({printPreviewOpen:false}), onConfirmPrint:()=>{ this._printEscape(); setTimeout(()=>window.print(), 30); }, printPreviewOpen:S.printPreviewOpen,
