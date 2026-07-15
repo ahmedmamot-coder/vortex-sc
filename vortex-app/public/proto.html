@@ -25,7 +25,7 @@
   var REST = SB_URL + "/rest/v1/club_state";
   var HEAD = { "apikey": SB_ANON, "Authorization": "Bearer " + SB_ANON, "Content-Type": "application/json" };
   // Every shared data type the club edits. The only key kept per-device is vx_api_key.
-  var SYNC = ["vx_plans","vx_plan_custom","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_attend_log","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_plans","vx_videos"];
+  var SYNC = ["vx_plans","vx_plan_custom","vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_attend_log","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_plans","vx_videos"];
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
   window.__vxWriteTs = {};   // last time THIS device wrote each key (ms) — guards against stale pulls
@@ -2318,14 +2318,14 @@
                             <p style="margin:0 2px 6px;font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#9AA2B4">Medley relay</p>
                             <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;box-shadow:0 2px 7px rgba(11,20,40,.05);overflow:hidden;margin-bottom:11px">
                               <sc-for list="{{ grp.medleyRows }}" as="m" hint-placeholder-count="4">
-                                <div style="display:flex;align-items:center;gap:11px;padding:11px 13px;border-bottom:1px solid #EEF1F5"><span style="flex:none;min-width:44px;height:26px;padding:0 7px;border-radius:8px;background:{{ m.badgeBg }};color:{{ m.badgeFg }};display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:800">{{ m.stroke }}</span><span style="flex:1;min-width:0;font-size:13px;font-weight:600;color:#0C1116;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ m.name }}</span><span style="flex:none;font-family:var(--font-mono);font-size:12.5px;color:#7A8296">{{ m.time }}</span></div>
+                                <button onclick="{{ m.onEdit }}" style="display:flex;align-items:center;gap:11px;padding:11px 13px;border:none;border-bottom:1px solid #EEF1F5;background:none;width:100%;text-align:left;cursor:pointer;font-family:inherit"><span style="flex:none;min-width:44px;height:26px;padding:0 7px;border-radius:8px;background:{{ m.badgeBg }};color:{{ m.badgeFg }};display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:800">{{ m.stroke }}</span><span style="flex:1;min-width:0;font-size:13px;font-weight:600;color:#0C1116;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ m.name }}</span><span style="flex:none;font-family:var(--font-mono);font-size:12.5px;color:#7A8296">{{ m.time }}</span><i data-lucide="pencil" style="width:13px;height:13px;color:#C7CDDA;flex:none"></i></button>
                               </sc-for>
                             </div>
                             <p style="margin:0 2px 6px;font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#9AA2B4">Freestyle relay</p>
                             <sc-if value="{{ grp.hasFree }}" hint-placeholder-val="{{ true }}">
                               <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;box-shadow:0 2px 7px rgba(11,20,40,.05);overflow:hidden;margin-bottom:16px">
                                 <sc-for list="{{ grp.freeRelayRows }}" as="f" hint-placeholder-count="4">
-                                  <div style="display:flex;align-items:center;gap:11px;padding:11px 13px;border-bottom:1px solid #EEF1F5"><span style="flex:none;width:30px;height:26px;border-radius:8px;background:{{ f.badgeBg }};color:{{ f.badgeFg }};display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:800">L{{ f.leg }}</span><span style="flex:1;min-width:0;font-size:13px;font-weight:600;color:#0C1116;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ f.name }}</span><span style="flex:none;font-family:var(--font-mono);font-size:12.5px;color:#7A8296">{{ f.time }}</span></div>
+                                  <button onclick="{{ f.onEdit }}" style="display:flex;align-items:center;gap:11px;padding:11px 13px;border:none;border-bottom:1px solid #EEF1F5;background:none;width:100%;text-align:left;cursor:pointer;font-family:inherit"><span style="flex:none;width:30px;height:26px;border-radius:8px;background:{{ f.badgeBg }};color:{{ f.badgeFg }};display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:800">L{{ f.leg }}</span><span style="flex:1;min-width:0;font-size:13px;font-weight:600;color:#0C1116;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ f.name }}</span><span style="flex:none;font-family:var(--font-mono);font-size:12.5px;color:#7A8296">{{ f.time }}</span><i data-lucide="pencil" style="width:13px;height:13px;color:#C7CDDA;flex:none"></i></button>
                                 </sc-for>
                               </div>
                             </sc-if>
@@ -3021,6 +3021,30 @@
               </div>
             </sc-if>
 
+            <!-- RELAY LEG PICKER -->
+            <sc-if value="{{ relayPickerOpen }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;inset:0;z-index:50;display:flex;flex-direction:column;justify-content:flex-end">
+                <div onclick="{{ onRelayPickerClose }}" style="position:absolute;inset:0;background:rgba(6,10,18,.5);backdrop-filter:blur(2px)"></div>
+                <div class="vx-sheet" style="position:relative;background:#fff;border-radius:26px 26px 0 0;padding:16px 15px 26px;max-height:82%;display:flex;flex-direction:column">
+                  <div style="width:38px;height:4px;border-radius:2px;background:#DCE0EA;margin:0 auto 14px"></div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin:0 3px 12px"><div><h2 style="margin:0;font-size:17px;font-weight:700;color:#0C1116">{{ relayPickerTitle }}</h2><p style="margin:2px 0 0;font-size:11.5px;color:#7A8296">{{ relayPickerSub }}</p></div><button onclick="{{ onRelayPickerClose }}" style="width:32px;height:32px;border-radius:9px;border:none;background:#F4F6F8;color:#9AA2B4;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:16px;height:16px"></i></button></div>
+                  <sc-if value="{{ relayPickerHasOverride }}" hint-placeholder-val="{{ false }}">
+                    <button onclick="{{ onRelayPickerAuto }}" style="display:flex;align-items:center;justify-content:center;gap:7px;width:100%;background:#0A0F1A;color:#fff;border:none;border-radius:11px;padding:11px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer;margin-bottom:10px"><i data-lucide="wand-2" style="width:15px;height:15px"></i>Use fastest automatically</button>
+                  </sc-if>
+                  <div class="vx-scroll" style="overflow-y:auto;display:flex;flex-direction:column;gap:7px">
+                    <sc-for list="{{ relayPickerList }}" as="c" hint-placeholder-count="8">
+                      <button onclick="{{ c.onPick }}" style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:{{ c.rowBg }};border:1px solid {{ c.rowBorder }};border-radius:13px;padding:11px 12px;cursor:pointer;font-family:inherit">
+                        <span style="flex:1;min-width:0;font-size:14px;font-weight:600;color:#0C1116;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ c.name }}</span>
+                        <span style="flex:none;font-family:var(--font-mono);font-size:13px;font-weight:700;color:#7A8296">{{ c.time }}</span>
+                        <sc-if value="{{ c.on }}" hint-placeholder-val="{{ false }}"><span style="flex:none;width:22px;height:22px;border-radius:50%;background:#0C6CE0;color:#fff;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px"><polyline points="20 6 9 17 4 12"></polyline></svg></span></sc-if>
+                      </button>
+                    </sc-for>
+                    <sc-if value="{{ relayPickerEmpty }}" hint-placeholder-val="{{ false }}"><p style="margin:8px 3px;font-size:12.5px;color:#9AA2B4;text-align:center">No swimmers in this group have a PB for this stroke.</p></sc-if>
+                  </div>
+                </div>
+              </div>
+            </sc-if>
+
             <!-- SET SWIMMER PICKER -->
             <sc-if value="{{ swPickerOpen }}" hint-placeholder-val="{{ false }}">
               <div style="position:absolute;inset:0;z-index:50;display:flex;flex-direction:column;justify-content:flex-end">
@@ -3230,6 +3254,7 @@ class Component extends DCLogic {
     this.hrCatalog=['—','140','150','160','170','180','Max'];
     this.strokeCatalog=['FREE','FLY','BK','BR','IM'];
     this.labelCatalog=['Descend','Ascend','Build up','1 up / 2 down','3-5-7-9-11-11-9-7-5-3','DPS','Vertical','Underwater','Stroke count'];
+    this.relayOverrides=this._loadJSON('vx_relay_ovr', {}); if(!this.relayOverrides||typeof this.relayOverrides!=='object') this.relayOverrides={};
     // coach-added custom options for the plan set editor (shared across the whole club, synced)
     this.planCustom=this._loadJSON('vx_plan_custom', {type:[],stroke:[],tools:[],zone:[],label:[]});
     if(!this.planCustom || typeof this.planCustom!=='object') this.planCustom={type:[],stroke:[],tools:[],zone:[],label:[]};
@@ -3330,6 +3355,7 @@ class Component extends DCLogic {
       ladderOpen:false, ladderSecId:null, ladderShape:'up', ladderRungs:5, ladderStart:100, ladderStep:100, ladderReps:1, ladderPaceSec:60, ladderNotes:'',
       ladderTab:'auto', manReps:1, manDist:50, manPaceSec:45, manStroke:'', manList:[],
       swPickerOpen:false, swPickerSecId:null, swPickerSetId:null, swPickerQuery:'',
+      relayPickerOpen:false, relayPickerKey:null, relayPickerGender:null, relayPickerBand:null, relayPickerLegId:null, relayPickerStroke:null, relayPickerKind:null,
       goalsSwId:null, goalsSwQuery:'', goalEditEvent:null, goalEditVal:'', goalMsg:'',
       academyTab:'trials', trialForm:{childName:'',age:'',parentName:'',phone:'',notes:''}, trialSubmitted:false,
       feesDraft:{},
@@ -4287,6 +4313,30 @@ class Component extends DCLogic {
     this.setState({calName:'', calLocation:'', calDate:'', calCourse:'LCM', calErr:'', calOpen:false});
   }
   allSwimmersFlat(){ const out=[]; this.squads.forEach(sq=>{ (this.roster[sq.id]||[]).forEach(sw=>out.push({...sw, squadId:sq.id, squadName:sq.name})); }); return out; }
+  // ---- Relay Builder helpers (distinct swimmers per leg + editable overrides) ----
+  _relayStrokeOf(ev){ return /free/i.test(ev)?'Free':/back/i.test(ev)?'Back':/breast/i.test(ev)?'Breast':/fly/i.test(ev)?'Fly':null; }
+  _relayT2s(t){ if(!t) return Infinity; const s=String(t); return s.includes(':') ? (()=>{const[m,sec]=s.split(':'); return parseInt(m,10)*60+parseFloat(sec);})() : parseFloat(s); }
+  _relayBest(pool){ const best={}; pool.forEach(sw=>{ (sw.pbs||[]).forEach(pb=>{ const st=this._relayStrokeOf(pb.event); if(!st) return; const sec=this._relayT2s(pb.time); best[sw.id]=best[sw.id]||{name:sw.name, s:{}}; const cur=best[sw.id].s[st]; if(!cur||sec<cur.sec) best[sw.id].s[st]={time:pb.time, sec}; }); }); return best; }
+  buildRelayGroup(pool, groupKey, gender, band, badgeBg, badgeFg){
+    const best=this._relayBest(pool); const ov=(this.relayOverrides&&this.relayOverrides[groupKey])||{};
+    const strokes=['Back','Breast','Fly','Free']; const used=new Set(); const assign={};
+    strokes.forEach(st=>{ const id=ov['M-'+st]; if(id && best[id] && best[id].s[st] && !used.has(id)){ assign[st]={id, name:best[id].name, time:best[id].s[st].time, sec:best[id].s[st].sec}; used.add(id); } });
+    const cand=[]; strokes.forEach(st=>{ if(assign[st]) return; Object.keys(best).forEach(id=>{ if(best[id].s[st]) cand.push({st, id, name:best[id].name, time:best[id].s[st].time, sec:best[id].s[st].sec}); }); });
+    cand.sort((a,b)=>a.sec-b.sec);
+    cand.forEach(c=>{ if(assign[c.st]||used.has(c.id)) return; assign[c.st]={id:c.id, name:c.name, time:c.time, sec:c.sec}; used.add(c.id); });
+    const medleyRows=strokes.map(st=>{ const a=assign[st]; const legId='M-'+st; return {stroke:st, legId, name:a?a.name:'—', time:a?a.time:'—', has:!!a, edited:!!ov['M-'+st], badgeBg, badgeFg, onEdit:()=>this.openRelayPicker(groupKey, gender, band, legId, st, 'medley')}; });
+    // freestyle: distinct swimmers, best free each
+    const freeBest={}; Object.keys(best).forEach(id=>{ if(best[id].s['Free']) freeBest[id]={id, name:best[id].name, time:best[id].s['Free'].time, sec:best[id].s['Free'].sec}; });
+    const legs=[1,2,3,4]; const fUsed=new Set(); const fAssign={};
+    legs.forEach(n=>{ const id=ov['F-'+n]; if(id && freeBest[id] && !fUsed.has(id)){ fAssign[n]=freeBest[id]; fUsed.add(id); } });
+    const fCand=Object.keys(freeBest).map(id=>freeBest[id]).sort((a,b)=>a.sec-b.sec);
+    legs.forEach(n=>{ if(fAssign[n]) return; const pick=fCand.find(c=>!fUsed.has(c.id)); if(pick){ fAssign[n]=pick; fUsed.add(pick.id); } });
+    const freeRelayRows=legs.filter(n=>fAssign[n]).map(n=>({leg:n, legId:'F-'+n, name:fAssign[n].name, time:fAssign[n].time, edited:!!ov['F-'+n], badgeBg, badgeFg, onEdit:()=>this.openRelayPicker(groupKey, gender, band, 'F-'+n, 'Free', 'free')}));
+    return {medleyRows, freeRelayRows, hasFree:freeRelayRows.length>0};
+  }
+  openRelayPicker(groupKey, gender, band, legId, stroke, kind){ this.setState({relayPickerOpen:true, relayPickerKey:groupKey, relayPickerGender:gender, relayPickerBand:band, relayPickerLegId:legId, relayPickerStroke:stroke, relayPickerKind:kind}); }
+  closeRelayPicker(){ this.setState({relayPickerOpen:false}); }
+  setRelayLeg(groupKey, legId, swId){ const all={...(this.relayOverrides||{})}; const grp={...(all[groupKey]||{})}; if(swId){ grp[legId]=swId; } else { delete grp[legId]; } all[groupKey]=grp; this.relayOverrides=all; this._saveJSON('vx_relay_ovr', all); this.setState({relayPickerOpen:false}); }
   exportCsv(filename, rows){
     const esc=v=>{ const s=(v==null?'':String(v)); return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; };
     const csv=rows.map(r=>r.map(esc).join(',')).join('\n');
@@ -4737,6 +4787,7 @@ class Component extends DCLogic {
     this.brandConfig=g('vx_brand', this.brandConfig); this.notifications=g('vx_notifications', this.notifications);
     this.tpaceTests=g('vx_tpace', this.tpaceTests); this.fitnessTests=g('vx_fitness_tests', this.fitnessTests);
     this.fitnessPlans=g('vx_fitness_plans', this.fitnessPlans); this.promoStore=g('vx_promo', this.promoStore); this.aiSuggOverrides=g('vx_ai_sugg_ovr', this.aiSuggOverrides);
+    this.relayOverrides=g('vx_relay_ovr', this.relayOverrides);
     this.planCustom=g('vx_plan_custom', this.planCustom); ['type','stroke','tools','zone','label'].forEach(k=>{ if(!Array.isArray((this.planCustom||{})[k])){ this.planCustom=this.planCustom||{}; this.planCustom[k]=[]; } });
     this.rosterEdits=g('vx_roster_edits', this.rosterEdits); try{ this.rebuildRoster(); }catch(e){}
     try{ this.setState({family:this.family}); }catch(e){ this.forceUpdate(); }
@@ -5076,19 +5127,29 @@ class Component extends DCLogic {
     relayGenders.forEach(g=>{ bandOrder.forEach(band=>{
       const pool=relayPool.filter(sw=>String(sw.gender||'')===g.key && ageBand(sw.age)===band);
       if(!pool.length) return;
-      const best={Back:null,Breast:null,Fly:null,Free:null};
-      pool.forEach(sw=>{ (sw.pbs||[]).forEach(pb=>{ const st=strokeOf(pb.event); if(!st) return; const sec=t2s(pb.time); if(!best[st] || sec<best[st].sec) best[st]={sw, event:pb.event, time:pb.time, sec}; }); });
-      const medleyRows=['Back','Breast','Fly','Free'].map(st=>{ const b=best[st]; return { stroke:st, name:b?b.sw.name:'—', time:b?b.time:'—', has:!!b, badgeBg:g.tint, badgeFg:g.accent }; });
-      const hasMedley=medleyRows.some(r=>r.has);
-      const freeC=[]; pool.forEach(sw=>{ let bf=null; (sw.pbs||[]).forEach(pb=>{ if(strokeOf(pb.event)==='Free'){ const sec=t2s(pb.time); if(!bf||sec<bf.sec) bf={name:sw.name, time:pb.time, sec}; } }); if(bf) freeC.push(bf); });
-      freeC.sort((a,b)=>a.sec-b.sec);
-      const freeRelayRows=freeC.slice(0,4).map((c,i)=>({leg:i+1, name:c.name, time:c.time, badgeBg:g.tint, badgeFg:g.accent}));
-      const hasFree=freeRelayRows.length>0;
-      if(!hasMedley && !hasFree) return;
-      relayGroups.push({ key:g.key+'-'+band, title:g.label+' · '+band, count:pool.length+' swimmers', accent:g.accent,
-        medleyRows, freeRelayRows, hasFree, freeEmpty:!hasFree });
+      const groupKey=g.key+'-'+band;
+      const built=this.buildRelayGroup(pool, groupKey, g.key, band, g.tint, g.accent);
+      const hasMedley=built.medleyRows.some(r=>r.has);
+      if(!hasMedley && !built.hasFree) return;
+      relayGroups.push({ key:groupKey, title:g.label+' · '+band, count:pool.length+' swimmers', accent:g.accent,
+        medleyRows:built.medleyRows, freeRelayRows:built.freeRelayRows, hasFree:built.hasFree, freeEmpty:!built.hasFree });
     }); });
     const relayHasGroups=relayGroups.length>0;
+    // relay leg picker
+    const relayPicker=(()=>{ if(!S.relayPickerOpen) return {relayPickerOpen:false, relayPickerList:[]};
+      const pool=relayPool.filter(sw=>String(sw.gender||'')===S.relayPickerGender && ageBand(sw.age)===S.relayPickerBand);
+      const stroke=S.relayPickerStroke||'Free'; const ov=(this.relayOverrides&&this.relayOverrides[S.relayPickerKey])||{}; const curId=ov[S.relayPickerLegId]||null;
+      const cands=[]; pool.forEach(sw=>{ let bf=null; (sw.pbs||[]).forEach(pb=>{ if(strokeOf(pb.event)===stroke){ const sec=t2s(pb.time); if(!bf||sec<bf.sec) bf={time:pb.time, sec}; } }); if(bf) cands.push({id:sw.id, name:sw.name, time:bf.time, sec:bf.sec}); });
+      cands.sort((a,b)=>a.sec-b.sec);
+      const list=cands.map(c=>({ id:c.id, name:c.name, time:c.time, on:c.id===curId,
+        rowBg:c.id===curId?'#F1F6FF':'#fff', rowBorder:c.id===curId?'#0C6CE0':'#E5E9F0',
+        onPick:()=>this.setRelayLeg(S.relayPickerKey, S.relayPickerLegId, c.id) }));
+      const legName = S.relayPickerKind==='free' ? ('Freestyle · '+S.relayPickerLegId.replace('F-','Leg ')) : (stroke+' leg');
+      return { relayPickerOpen:true, onRelayPickerClose:()=>this.closeRelayPicker(),
+        relayPickerTitle:legName, relayPickerSub:S.relayPickerGender+' · '+S.relayPickerBand+' · '+stroke,
+        relayPickerList:list, relayPickerEmpty:list.length===0, relayPickerHasOverride:!!curId,
+        onRelayPickerAuto:()=>this.setRelayLeg(S.relayPickerKey, S.relayPickerLegId, null) };
+    })();
 
     // ---- Zone Engine (spec ruleset) ----
     const zoneAge = S.zoneAge!=null ? S.zoneAge : 14;
@@ -6173,7 +6234,7 @@ class Component extends DCLogic {
       promoRows, promoEmpty, promoScopeLabel,
       toolEntries:S.tool==='entries', toolFitness:S.tool==='fitness', toolInbody:S.tool==='inbody', toolSponsors:S.tool==='sponsors',
       toolTalent:S.tool==='talent', talentRows, talentEmpty, talentScopeLabel:toolScope,
-      toolRelay:S.tool==='relay', relayGroups, relayHasGroups, relayScopeLabel:toolScope,
+      toolRelay:S.tool==='relay', relayGroups, relayHasGroups, relayScopeLabel:toolScope, ...relayPicker,
       sponsorsRows, sponsorsEmpty: sponsorsRows.length===0, sponsorsScopeLabel,
       fitSections, fitTitle, onFitTitle, onFitAddSection, onFitReset,
       ibModeIsPdf, ibModeIsQr, onIbModePdf:()=>this.setState({inbodyMode:'pdf'}), onIbModeQr:()=>this.setState({inbodyMode:'qr'}),
