@@ -2413,11 +2413,31 @@
                           <div style="flex:1;background:rgba(255,255,255,.12);border-radius:11px;padding:8px 12px;text-align:center"><span style="display:block;font-size:17px;font-weight:800">{{ seasonTotalWeeks }}</span><span style="display:block;font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.65)">weeks</span></div>
                           <div style="flex:1;background:rgba(255,255,255,.12);border-radius:11px;padding:8px 12px;text-align:center"><span style="display:block;font-size:17px;font-weight:800">{{ seasonPhaseCount }}</span><span style="display:block;font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.65)">phases</span></div>
                         </div>
-                        <p style="margin:9px 0 0;font-size:11px;color:rgba(255,255,255,.7)">{{ seasonStartLabel }} → {{ seasonEndLabel }}</p>
+                        <p style="margin:9px 0 0;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">Macrocycle · full season</p>
+                        <p style="margin:2px 0 0;font-size:11px;color:rgba(255,255,255,.7)">{{ seasonStartLabel }} → {{ seasonEndLabel }}</p>
                       </div>
 
                       <div>
-                        <div style="display:flex;align-items:center;justify-content:space-between;margin:0 2px 8px"><h2 style="font-size:11.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#7A8296;margin:0">Phases</h2><button onclick="{{ onSeasonResetPhases }}" style="background:none;border:none;color:#9AA2B4;font-family:inherit;font-size:11px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:4px"><i data-lucide="rotate-ccw" style="width:12px;height:12px"></i>Reset</button></div>
+                        <h2 style="font-size:11.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#7A8296;margin:0 2px 8px">Macro dashboard</h2>
+                        <div style="display:flex;gap:8px;margin-bottom:10px">
+                          <div style="flex:1;background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:11px;text-align:center;box-shadow:0 1px 4px rgba(11,20,40,.04)"><span style="display:block;font-size:18px;font-weight:800;color:#7C4DFF">{{ seasonMacroTotalKm }}<span style="font-size:10px;color:#9AA2B4;font-weight:700">km</span></span><span style="display:block;font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4;margin-top:2px">Planned</span></div>
+                          <div style="flex:1;background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:11px;text-align:center;box-shadow:0 1px 4px rgba(11,20,40,.04)"><span style="display:block;font-size:18px;font-weight:800;color:#0C1116">{{ seasonMacroSessions }}</span><span style="display:block;font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4;margin-top:2px">Sessions</span></div>
+                          <div style="flex:1;background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:11px;text-align:center;box-shadow:0 1px 4px rgba(11,20,40,.04)"><span style="display:block;font-size:18px;font-weight:800;color:#0C1116">{{ seasonMacroAvgKm }}<span style="font-size:10px;color:#9AA2B4;font-weight:700">km</span></span><span style="display:block;font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4;margin-top:2px">Avg / week</span></div>
+                        </div>
+                        <sc-if value="{{ seasonMacroHasData }}" hint-placeholder-val="{{ false }}">
+                          <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:13px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
+                            <p style="margin:0 0 9px;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4">Weekly load progression</p>
+                            <div class="vx-scroll" style="display:flex;align-items:flex-end;gap:3px;height:80px;overflow-x:auto;padding-bottom:2px">
+                              <sc-for list="{{ seasonProgBars }}" as="b" hint-placeholder-count="12">
+                                <button onclick="{{ b.onClick }}" style="flex:none;width:16px;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end;background:none;border:none;cursor:pointer;padding:0"><div style="width:100%;height:{{ b.h }}px;background:{{ b.fill }};border-radius:3px"></div><span style="font-size:7.5px;color:#9AA2B4">{{ b.n }}</span></button>
+                              </sc-for>
+                            </div>
+                          </div>
+                        </sc-if>
+                      </div>
+
+                      <div>
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin:0 2px 8px"><h2 style="font-size:11.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#7A8296;margin:0">Mesocycles · training blocks</h2><button onclick="{{ onSeasonResetPhases }}" style="background:none;border:none;color:#9AA2B4;font-family:inherit;font-size:11px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:4px"><i data-lucide="rotate-ccw" style="width:12px;height:12px"></i>Reset</button></div>
                         <div style="display:flex;flex-direction:column;gap:8px">
                           <sc-for list="{{ seasonPhaseRows }}" as="ph" hint-placeholder-count="5">
                             <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:11px 12px;box-shadow:0 1px 4px rgba(11,20,40,.04);border-left:4px solid {{ ph.color }}">
@@ -2451,7 +2471,7 @@
                       </div>
 
                       <div>
-                        <h2 style="font-size:11.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#7A8296;margin:0 2px 8px">Season timeline</h2>
+                        <h2 style="font-size:11.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#7A8296;margin:0 2px 8px">Microcycles · weeks</h2>
                         <div style="display:flex;flex-direction:column;gap:7px">
                           <sc-for list="{{ seasonWeeks }}" as="w" hint-placeholder-count="8">
                             <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;box-shadow:0 1px 4px rgba(11,20,40,.04);overflow:hidden;border-left:4px solid {{ w.phaseColor }}">
@@ -2479,14 +2499,28 @@
                                 <div style="padding:0 12px 9px 57px"><span style="display:inline-flex;align-items:center;gap:4px;background:#F1ECFF;color:#7C4DFF;border-radius:7px;padding:3px 8px;font-size:10px;font-weight:700"><i data-lucide="trending-down" style="width:11px;height:11px"></i>Taper week — ease load into the meet</span></div>
                               </sc-if>
                               <sc-if value="{{ w.open }}" hint-placeholder-val="{{ false }}">
-                                <div style="padding:2px 12px 11px 57px;display:flex;flex-direction:column;gap:5px">
+                                <div style="padding:2px 12px 12px 57px;display:flex;flex-direction:column;gap:8px">
+                                  <div style="display:flex;gap:6px">
+                                    <div style="flex:1;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:10px;padding:8px;text-align:center"><span style="display:block;font-family:var(--font-mono);font-size:14px;font-weight:800;color:{{ w.phaseColor }}">{{ w.weekKm }}<span style="font-size:9px;color:#9AA2B4">km</span></span><span style="display:block;font-size:8.5px;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4;margin-top:1px">Week total</span></div>
+                                    <div style="flex:1;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:10px;padding:8px;text-align:center"><span style="display:block;font-family:var(--font-mono);font-size:14px;font-weight:800;color:#0C1116">{{ w.sessionCount }}</span><span style="display:block;font-size:8.5px;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4;margin-top:1px">Sessions</span></div>
+                                    <div style="flex:1;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:10px;padding:8px;text-align:center"><span style="display:block;font-family:var(--font-mono);font-size:14px;font-weight:800;color:#0C1116">{{ w.avgKm }}<span style="font-size:9px;color:#9AA2B4">km</span></span><span style="display:block;font-size:8.5px;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4;margin-top:1px">Avg / session</span></div>
+                                  </div>
                                   <sc-if value="{{ w.hasSessions }}" hint-placeholder-val="{{ true }}">
-                                    <sc-for list="{{ w.sessions }}" as="ss" hint-placeholder-count="2">
-                                      <div style="display:flex;align-items:center;gap:8px;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:9px;padding:7px 10px"><i data-lucide="file-text" style="width:13px;height:13px;color:#7C4DFF"></i><span style="flex:1;min-width:0;font-size:12px;font-weight:600;color:#0C1116">{{ ss.title }}</span><span style="flex:none;font-size:10px;color:#9AA2B4">{{ ss.dateLabel }}</span><span style="flex:none;font-family:var(--font-mono);font-size:11.5px;font-weight:700;color:#7C4DFF">{{ ss.m }}m</span></div>
-                                    </sc-for>
+                                    <div style="border:1px solid #EEF1F5;border-radius:10px;overflow:hidden">
+                                      <div style="display:flex;align-items:center;gap:8px;background:#F4F6F8;padding:6px 10px;font-size:8.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4"><span style="width:30px">Day</span><span style="flex:1">Session</span><span style="width:34px;text-align:center">Zone</span><span style="width:44px;text-align:right">Metres</span><span style="width:60px"></span></div>
+                                      <sc-for list="{{ w.sessions }}" as="ss" hint-placeholder-count="2">
+                                        <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-top:1px solid #F4F6F8">
+                                          <span style="width:30px;flex:none"><span style="background:{{ ss.slotBg }};color:{{ ss.slotFg }};border-radius:5px;padding:1px 5px;font-size:8.5px;font-weight:800">{{ ss.slotLabel }}</span></span>
+                                          <span style="flex:1;min-width:0;font-size:12px;font-weight:600;color:#0C1116;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ss.title }}</span>
+                                          <span style="width:34px;text-align:center;font-size:10px;font-weight:700;color:#7A8296">{{ ss.zone }}</span>
+                                          <span style="width:44px;text-align:right;font-family:var(--font-mono);font-size:11.5px;font-weight:700;color:{{ w.phaseColor }}">{{ ss.m }}</span>
+                                          <span style="width:60px;flex:none;display:flex;gap:4px;justify-content:flex-end"><button onclick="{{ ss.onView }}" style="width:26px;height:26px;border-radius:7px;border:none;background:var(--vx-blue-tint);color:var(--vx-blue-dark);cursor:pointer;display:flex;align-items:center;justify-content:center" title="View PDF"><i data-lucide="file-text" style="width:12px;height:12px"></i></button><button onclick="{{ ss.onEdit }}" style="width:26px;height:26px;border-radius:7px;border:none;background:#EEF1F5;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center" title="Load &amp; edit"><i data-lucide="pencil" style="width:12px;height:12px"></i></button></span>
+                                        </div>
+                                      </sc-for>
+                                    </div>
                                   </sc-if>
                                   <sc-if value="{{ w.hasSessions }}" hint-placeholder-val="{{ false }}">
-                                    <p style="margin:0;font-size:11px;color:#9AA2B4">No sessions saved in this week yet. Build a plan in the Plans tab and tap “Save session to training log” on a day in this week.</p>
+                                    <p style="margin:0;font-size:11px;color:#9AA2B4">No sessions saved in this week yet. In the Plans tab, set a session's date within this week and tap “Save session”.</p>
                                   </sc-if>
                                 </div>
                               </sc-if>
@@ -5402,7 +5436,8 @@ class Component extends DCLogic {
           startISO, endISO, dateLabel:this._fmtDMY(startISO)+' – '+this._fmtDMY(endISO),
           meets:wkMeets.map(m=>({name:m.name, target:(season.targets||[]).includes(m.name), bg:(season.targets||[]).includes(m.name)?'#E5484D':'#EEF1F5', fg:(season.targets||[]).includes(m.name)?'#fff':'#5A657E'})), hasMeets:wkMeets.length>0,
           isTarget, sessionCount:sess.length, sessionM:sess.reduce((a,x)=>a+(x.totalM||0),0),
-          hasSessions:sess.length>0, sessions:sess.map(sp=>({title:sp.title, m:sp.totalM, dateLabel:this._fmtDMY(sp.date)})),
+          weekKm:(sess.reduce((a,x)=>a+(x.totalM||0),0)/1000).toFixed(1), avgKm: sess.length? ((sess.reduce((a,x)=>a+(x.totalM||0),0)/sess.length)/1000).toFixed(1) : '0',
+          hasSessions:sess.length>0, sessions:sess.slice().sort((a,b)=>((a.date||'').localeCompare(b.date||''))||((a.slot==='PM'?1:0)-(b.slot==='PM'?1:0))).map(sp=>{ const slm=sp.slot==='PM'?{l:'PM',bg:'#EDE7FF',fg:'#6D28D9'}:{l:'AM',bg:'#E3F0FF',fg:'#0C6CE0'}; return {id:sp.id, title:sp.title||'Session', zone:sp.zone||'—', slotLabel:slm.l, slotBg:slm.bg, slotFg:slm.fg, m:(sp.totalM||0).toLocaleString(), dateLabel:this._fmtDMY(sp.date), onView:()=>this.viewPlanSnapshotPdf(S.squadId,sp.id), onEdit:()=>this.loadPlanSnapshot(S.squadId,sp.id)}; }),
           open:(S.seasonOpenWeek===wn), chevron:(S.seasonOpenWeek===wn)?'chevron-up':'chevron-down', onToggle:()=>this.setState({seasonOpenWeek:S.seasonOpenWeek===wn?null:wn}) });
         wISO=this._addDaysISO(wISO,7); wn++;
       }
@@ -5418,6 +5453,12 @@ class Component extends DCLogic {
       onUp:()=>this.seasonMovePhase(S.squadId,ph.id,-1), onDown:()=>this.seasonMovePhase(S.squadId,ph.id,1),
       onRemove:()=>this.seasonRemovePhase(S.squadId,ph.id) }));
     const seasonTargetChips=seasonMeets.filter((m,i,a)=>a.findIndex(x=>x.name===m.name)===i).sort((a,b)=>a.iso.localeCompare(b.iso)).slice(0,14).map(m=>{ const on=(season.targets||[]).includes(m.name); return {name:m.name, dateLabel:this._fmtDMY(m.iso), on, bg:on?'#E5484D':'#fff', fg:on?'#fff':'#3A4152', border:on?'#E5484D':'#E5E9F0', onClick:()=>this.seasonToggleTarget(S.squadId,m.name)}; });
+    // macro dashboard + weekly (microcycle) progression
+    const seasonSessM=seasonWeeks.reduce((a,w)=>a+(w.sessionM||0),0); const seasonSessN=seasonWeeks.reduce((a,w)=>a+(w.sessionCount||0),0);
+    const weeksWithData=seasonWeeks.filter(w=>w.sessionM>0).length;
+    const seasonMaxWeekM=Math.max(1, ...seasonWeeks.map(w=>w.sessionM||0));
+    const seasonProgBars=seasonWeeks.map(w=>({ n:w.n, h:Math.max(3, Math.round(((w.sessionM||0)/seasonMaxWeekM)*68)), fill: (w.sessionM>0)?w.loadColor:'#EEF1F5', km:w.weekKm, hasData:w.sessionM>0, onClick:()=>this.setState({seasonOpenWeek:w.n}) }));
+    const seasonMacro={ totalKm:(seasonSessM/1000).toFixed(1), sessions:seasonSessN, avgWeekKm: weeksWithData? ((seasonSessM/weeksWithData)/1000).toFixed(1) : '0', hasData:seasonSessM>0 };
 
     // ---- Zone Engine (spec ruleset) ----
     const zoneAge = S.zoneAge!=null ? S.zoneAge : 14;
@@ -6536,6 +6577,7 @@ class Component extends DCLogic {
       seasonEndISO, onSeasonEnd:(e)=>this.setSeasonEnd(S.squadId, e.target.value),
       seasonStartLabel:this._fmtDMY(season.start, true), seasonEndLabel:this._fmtDMY(seasonEndISO, true),
       seasonTotalWeeks, seasonPhaseCount:season.phases.length, seasonWeeks, seasonPhaseRows, seasonTargetChips, seasonHasTargets:(season.targets||[]).length>0,
+      seasonMacroTotalKm:seasonMacro.totalKm, seasonMacroSessions:seasonMacro.sessions, seasonMacroAvgKm:seasonMacro.avgWeekKm, seasonMacroHasData:seasonMacro.hasData, seasonProgBars,
       onSeasonAddPhase:()=>this.seasonAddPhase(S.squadId), onSeasonResetPhases:()=>this.seasonResetPhases(S.squadId),
       onOpenSeason:()=>this.openTool('season', false),
       sponsorsRows, sponsorsEmpty: sponsorsRows.length===0, sponsorsScopeLabel,
