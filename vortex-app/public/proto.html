@@ -56,7 +56,7 @@
   // Install write-through sync UP FRONT so every write reaches the database.
   var origSet = localStorage.setItem.bind(localStorage);
   window.__vxsetlocal = origSet; // write locally WITHOUT re-pushing (used by background pull)
-  localStorage.setItem = function(k,v){ origSet(k,v); pushKey(k,v); };
+  localStorage.setItem = function(k,v){ origSet(k,v); if(SYNC.indexOf(k)>=0){ try{ origSet('__vxts_'+k, String(Date.now())); }catch(e){} } pushKey(k,v); };
   var booted = false;
   function hideSplash(){ setTimeout(function(){ var el=document.getElementById("vx-splash"); if(el){ el.style.opacity="0"; setTimeout(function(){ if(el.parentNode) el.parentNode.removeChild(el); }, 380); } }, 220); }
   function boot(){ if(booted) return; booted=true; var s=document.createElement("script"); s.src="assets/support.js"; s.onload=hideSplash; document.body.appendChild(s); }
@@ -64,7 +64,16 @@
   setTimeout(function(){ hideSplash(); }, 6000);
   pull(SYNC).then(function(rows){
     var have = {};
-    try { (rows||[]).forEach(function(r){ have[r.key]=true; if(r.value!=null) origSet(r.key, JSON.stringify(r.value)); }); } catch(e){}
+    try { (rows||[]).forEach(function(r){ have[r.key]=true; if(r.value==null) return;
+      // Only overwrite local with the server copy when the server is newer than the
+      // last local write — otherwise a page refresh would wipe edits that were made
+      // locally but hadn't finished uploading yet.
+      var localVal=localStorage.getItem(r.key);
+      var localTs=parseInt(localStorage.getItem('__vxts_'+r.key)||'0',10)||0;
+      var remoteTs=r.updated_at? Date.parse(r.updated_at) : 0;
+      if(localVal==null || !localTs || remoteTs>=localTs){ origSet(r.key, JSON.stringify(r.value)); }
+      else { pushKey(r.key, localVal); } // local is newer — push it up so the server catches up
+    }); } catch(e){}
     // Seed: upload any local data the database doesn't have yet.
     try { SYNC.forEach(function(k){ if(have[k]) return; var lv=localStorage.getItem(k); if(lv!=null) pushKey(k, lv); }); } catch(e){}
     boot();
@@ -4439,7 +4448,7 @@ class Component extends DCLogic {
     return {title:p.title, zone:p.zone, sections: sections.length?sections:this.makeDefaultPlan().sections};
   }
   getPlan(id){ const raw=(this.state.plans||{})[id]; return raw ? this._migratePlan(raw) : this.makeDefaultPlan(); }
-  mutatePlan(id, fn){ const plans={...(this.state.plans||{})}; const cur=this._migratePlan(plans[id]?JSON.parse(JSON.stringify(plans[id])):this.makeDefaultPlan()); fn(cur); plans[id]=cur; this.setState({plans}); try{ localStorage.setItem('vx_plans', JSON.stringify(plans)); }catch(e){} }
+  mutatePlan(id, fn){ let disk={}; try{ disk=JSON.parse(localStorage.getItem('vx_plans')||'{}')||{}; }catch(e){} const plans={...(this.state.plans||{}), ...disk}; const cur=this._migratePlan(plans[id]?JSON.parse(JSON.stringify(plans[id])):this.makeDefaultPlan()); fn(cur); plans[id]=cur; this.setState({plans}); try{ localStorage.setItem('vx_plans', JSON.stringify(plans)); }catch(e){} }
   setSetField(id, secId, setId, field, val){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); const s=sec&&(sec.sets||[]).find(x=>x.id===setId); if(s) s[field]=val; }); }
   addPlanSet(id, secId){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); if(sec) sec.sets.push({id:this._uid('s'), reps:1, dist:100, txt:'New set', equip:[], types:[], strokes:[], rest:'', hr:''}); }); }
   stepSetField(id, secId, setId, field, delta, min, step){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); const s=sec&&(sec.sets||[]).find(x=>x.id===setId); if(!s)return; const cur=Number(s[field])|| (field==='reps'?1:0); s[field]=Math.max(min, cur+delta*step); }); }
@@ -4790,7 +4799,11 @@ class Component extends DCLogic {
     this.relayOverrides=g('vx_relay_ovr', this.relayOverrides);
     this.planCustom=g('vx_plan_custom', this.planCustom); ['type','stroke','tools','zone','label'].forEach(k=>{ if(!Array.isArray((this.planCustom||{})[k])){ this.planCustom=this.planCustom||{}; this.planCustom[k]=[]; } });
     this.rosterEdits=g('vx_roster_edits', this.rosterEdits); try{ this.rebuildRoster(); }catch(e){}
-    try{ this.setState({family:this.family}); }catch(e){ this.forceUpdate(); }
+    // Reflect synced plan changes on this device too — but never stomp the plan the
+    // coach currently has open in the editor (that squad keeps its live in-memory copy).
+    let mergedPlans=null;
+    try{ const disk=g('vx_plans', null); if(disk && typeof disk==='object'){ const editing=(this.state.view==='squad' && this.state.tab==='plans') ? this.state.squadId : null; mergedPlans={...disk}; if(editing && this.state.plans && this.state.plans[editing]) mergedPlans[editing]=this.state.plans[editing]; } }catch(e){}
+    try{ this.setState(mergedPlans ? {family:this.family, plans:mergedPlans} : {family:this.family}); }catch(e){ this.forceUpdate(); }
   }
   _tickStatusBar(){
     const now=new Date();
