@@ -25,7 +25,7 @@
   var REST = SB_URL + "/rest/v1/club_state";
   var HEAD = { "apikey": SB_ANON, "Authorization": "Bearer " + SB_ANON, "Content-Type": "application/json" };
   // Every shared data type the club edits. The only key kept per-device is vx_api_key.
-  var SYNC = ["vx_plan_custom","vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_attend_log","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_plans","vx_videos"];
+  var SYNC = ["vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_attend_log","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_plans","vx_videos"];
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
   window.__vxWriteTs = {};   // last time THIS device wrote each key (ms) — guards against stale pulls
@@ -1182,6 +1182,14 @@
                             <button onclick="{{ z.onClick }}" style="border:1px solid {{ z.border }};background:{{ z.bg }};color:{{ z.fg }};border-radius:9px;padding:8px 4px;cursor:pointer;font-family:inherit"><span style="display:block;font-weight:700;font-size:12px">{{ z.id }}</span><span style="display:block;font-size:8.5px;margin-top:1px;opacity:.85">{{ z.label }}</span></button>
                           </sc-for>
                         </div>
+                        <div style="display:flex;gap:7px;margin-top:11px;align-items:center;flex-wrap:wrap">
+                          <span style="display:flex;align-items:center;gap:5px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:6px 9px"><i data-lucide="calendar" style="width:15px;height:15px;color:#7A8296"></i><input value="{{ planSessDate }}" oninput="{{ onPlanSessDate }}" type="date" style="border:none;outline:none;background:none;font-family:var(--font-mono);font-size:12.5px;font-weight:700;color:#0C1116"></span>
+                          <span style="display:flex;gap:3px;background:#EEF1F5;border-radius:10px;padding:3px">
+                            <button onclick="{{ onPlanSlotAM }}" style="padding:6px 12px;border:none;border-radius:8px;background:{{ planSlotAMBg }};color:{{ planSlotAMFg }};font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">AM</button>
+                            <button onclick="{{ onPlanSlotPM }}" style="padding:6px 12px;border:none;border-radius:8px;background:{{ planSlotPMBg }};color:{{ planSlotPMFg }};font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">PM</button>
+                          </span>
+                          <span style="display:flex;align-items:center;gap:5px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:6px 9px;flex:1;min-width:96px"><i data-lucide="clock" style="width:15px;height:15px;color:#7A8296"></i><input value="{{ planSessTime }}" oninput="{{ onPlanSessTime }}" type="time" style="border:none;outline:none;background:none;font-family:var(--font-mono);font-size:12.5px;font-weight:700;color:#0C1116;flex:1;min-width:0"></span>
+                        </div>
                         <input id="vx-pdf-input" type="file" accept="application/pdf" onchange="{{ onPdfFileChange }}" style="display:none">
                         <button onclick="{{ onImportPdfClick }}" style="margin-top:11px;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border:1.5px dashed var(--vx-blue);border-radius:11px;padding:10px;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px"><i data-lucide="file-up" style="width:16px;height:16px"></i> Import plan from PDF</button>
                         <sc-if value="{{ pdfImportMsg }}" hint-placeholder-val="{{ false }}"><p style="margin:8px 2px 0;font-size:11.5px;font-weight:600;color:{{ pdfImportMsgColor }}">{{ pdfImportMsg }}</p></sc-if>
@@ -1288,12 +1296,31 @@
                           <div style="flex:1;background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:12px;text-align:center;box-shadow:0 1px 4px rgba(11,20,40,.04)"><span style="display:block;font-size:19px;font-weight:800;color:{{ squad.accent }}">{{ savedPlanWeekM }}<span style="font-size:11px;color:#9AA2B4;font-weight:700">m</span></span><span style="display:block;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4;margin-top:2px">This week · {{ savedPlanWeekN }} sessions</span></div>
                           <div style="flex:1;background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:12px;text-align:center;box-shadow:0 1px 4px rgba(11,20,40,.04)"><span style="display:block;font-size:19px;font-weight:800;color:#0C1116">{{ savedPlanSeasonM }}<span style="font-size:11px;color:#9AA2B4;font-weight:700">m</span></span><span style="display:block;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4;margin-top:2px">Season · {{ savedPlanSeasonN }} sessions</span></div>
                         </div>
-                        <sc-if value="{{ savedPlansEmpty }}" hint-placeholder-val="{{ true }}"><p style="margin:0 2px;font-size:11.5px;color:#9AA2B4">No saved sessions yet — build a plan above and tap “Save session”.</p></sc-if>
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05);margin-bottom:12px">
+                          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+                            <button onclick="{{ onPlanCalPrev }}" style="width:28px;height:28px;border-radius:8px;border:1px solid #E5E9F0;background:#fff;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="chevron-left" style="width:15px;height:15px"></i></button>
+                            <h4 style="margin:0;font-size:13px;font-weight:700;color:#0C1116">{{ planCalLabel }}</h4>
+                            <button onclick="{{ onPlanCalNext }}" style="width:28px;height:28px;border-radius:8px;border:1px solid #E5E9F0;background:#fff;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="chevron-right" style="width:15px;height:15px"></i></button>
+                          </div>
+                          <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:5px">
+                            <sc-for list="{{ planCalWeekdayLabels }}" as="w" hint-placeholder-count="7"><span style="text-align:center;font-size:9.5px;font-weight:700;color:#9AA2B4">{{ w }}</span></sc-for>
+                          </div>
+                          <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">
+                            <sc-for list="{{ planCalCells }}" as="d" hint-placeholder-count="35">
+                              <button onclick="{{ d.onClick }}" style="aspect-ratio:1;border:1px solid {{ d.border }};border-radius:8px;background:{{ d.bg }};color:{{ d.fg }};cursor:pointer;font-family:inherit;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:0"><span style="font-size:11px;font-weight:700">{{ d.day }}</span><span style="display:flex;gap:2px;height:5px"><sc-if value="{{ d.hasAm }}" hint-placeholder-val="{{ false }}"><span style="width:5px;height:5px;border-radius:50%;background:#0C6CE0"></span></sc-if><sc-if value="{{ d.hasPm }}" hint-placeholder-val="{{ false }}"><span style="width:5px;height:5px;border-radius:50%;background:#6D28D9"></span></sc-if></span></button>
+                            </sc-for>
+                          </div>
+                          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:9px">
+                            <span style="display:flex;gap:11px;font-size:10px;color:#7A8296"><span style="display:flex;align-items:center;gap:4px"><span style="width:7px;height:7px;border-radius:50%;background:#0C6CE0"></span>Morning</span><span style="display:flex;align-items:center;gap:4px"><span style="width:7px;height:7px;border-radius:50%;background:#6D28D9"></span>Evening</span></span>
+                            <sc-if value="{{ planCalDaySel }}" hint-placeholder-val="{{ false }}"><button onclick="{{ onPlanCalClearDay }}" style="background:none;border:none;color:{{ squad.accent }};font-family:inherit;font-size:11px;font-weight:700;cursor:pointer">{{ planCalSelLabel }} · clear</button></sc-if>
+                          </div>
+                        </div>
+                        <sc-if value="{{ savedPlansEmpty }}" hint-placeholder-val="{{ true }}"><p style="margin:0 2px;font-size:11.5px;color:#9AA2B4">No sessions saved for this view yet — build a plan above, set its date + AM/PM, and tap “Save session”.</p></sc-if>
                         <div style="display:flex;flex-direction:column;gap:7px">
                           <sc-for list="{{ savedPlanRows }}" as="sp" hint-placeholder-count="0">
                             <div style="display:flex;align-items:center;gap:11px;background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:10px 12px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
                               <span style="flex:none;text-align:center;min-width:52px"><span style="display:block;font-family:var(--font-mono);font-size:14px;font-weight:800;color:{{ squad.accent }}">{{ sp.totalM }}</span><span style="display:block;font-size:9px;font-weight:700;text-transform:uppercase;color:#9AA2B4">metres</span></span>
-                              <span style="flex:1;min-width:0"><span style="display:block;font-size:13px;font-weight:700;color:#0C1116">{{ sp.title }}</span><span style="display:block;font-size:11px;color:#7A8296">{{ sp.dateLabel }} · Zone {{ sp.zone }}</span></span>
+                              <span style="flex:1;min-width:0"><span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:13px;font-weight:700;color:#0C1116">{{ sp.title }}</span><span style="background:{{ sp.slotBg }};color:{{ sp.slotFg }};border-radius:6px;padding:2px 7px;font-size:9.5px;font-weight:800">{{ sp.slotLabel }}</span></span><span style="display:block;font-size:11px;color:#7A8296;margin-top:2px">{{ sp.dateLabel }} · Zone {{ sp.zone }}</span></span>
                               <button onclick="{{ sp.onView }}" style="flex:none;width:32px;height:32px;border-radius:9px;border:none;background:var(--vx-blue-tint);color:var(--vx-blue-dark);cursor:pointer;display:flex;align-items:center;justify-content:center" title="View as PDF"><i data-lucide="file-text" style="width:14px;height:14px"></i></button>
                               <button onclick="{{ sp.onEdit }}" style="flex:none;width:32px;height:32px;border-radius:9px;border:none;background:#F4F6F8;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center" title="Load &amp; edit"><i data-lucide="pencil" style="width:14px;height:14px"></i></button>
                               <button onclick="{{ sp.onDelete }}" style="flex:none;width:32px;height:32px;border-radius:9px;border:none;background:#FDECEC;color:#E5484D;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="trash-2" style="width:14px;height:14px"></i></button>
@@ -3464,6 +3491,7 @@ class Component extends DCLogic {
       academyTab:'trials', trialForm:{childName:'',age:'',parentName:'',phone:'',notes:''}, trialSubmitted:false,
       feesDraft:{},
       seasonOpenWeek:null,
+      planSessDate:null, planSessSlot:'AM', planSessTime:'', planCalY:null, planCalM:null, planCalDay:null,
       videoActiveId:null, videoUrlDraft:'', videoTitleDraft:'', videoTagDraft:'', videoAddOpen:false, videoRate:1, videoNoteDraft:'', videoCurT:0, videoDur:0,
       fitAddOpen:false, inbodyMode:'pdf', inbodySwId:'', inbodyQuery:'', inbodyPdfBusy:false, inbodyPdfMsg:'', inbodyQrOpen:false, inbodyQrMsg:'', inbodyDraft:null,
       shareNote:'',
@@ -4648,7 +4676,17 @@ class Component extends DCLogic {
   setSetHrField(id, secId, setId, field, txt){ const n=parseInt(String(txt||'').replace(/[^0-9]/g,''),10); this.setSetField(id, secId, setId, field, (n && n>0)?String(n):''); }
   stepSetHrField(id, secId, setId, field, delta){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); const s=sec&&(sec.sets||[]).find(x=>x.id===setId); if(!s)return; const cur=parseInt(String(s[field]||'').replace(/[^0-9]/g,''),10)||0; const nx=Math.max(0, cur+delta); s[field]= nx===0?'':String(nx); }); }
   // ---- coach-added custom Type / Stroke / Tool / Zone chips (shared, synced) ----
-  _savePlanCustom(){ this._saveJSON('vx_plan_custom', this.planCustom); this.forceUpdate(); }
+  _savePlanCustom(){ try{ (window.__vxsetlocal||localStorage.setItem.bind(localStorage))('vx_plan_custom', JSON.stringify(this.planCustom)); }catch(e){} this._planCustomPush(); this.forceUpdate(); }
+  _planCustomPush(){ if(!window.__vxUpsert) return; try{ window.__vxUpsert('club_state', [{key:'vx_plan_custom', value:this.planCustom, updated_at:new Date().toISOString()}]); }catch(e){} }
+  // Custom chips are merged (union) across devices — an add on one device can never
+  // be wiped by an older copy from another; that was why they vanished.
+  async _planCustomFetch(){ if(!window.__vxpull) return; let rows; try{ rows=await window.__vxpull(['vx_plan_custom']); }catch(e){ return; } if(!rows||!rows.length) return;
+    const remote=rows[0] && rows[0].value; if(!remote || typeof remote!=='object') return;
+    let changed=false; const merged={...(this.planCustom||{})};
+    ['type','stroke','tools','zone','label'].forEach(k=>{ const cur=Array.isArray(merged[k])?merged[k]:[]; const rem=Array.isArray(remote[k])?remote[k]:[];
+      const out=cur.slice(); rem.forEach(x=>{ if(!out.some(y=>String(y).toLowerCase()===String(x).toLowerCase())) out.push(x); });
+      if(out.length!==cur.length){ merged[k]=out; changed=true; } else { merged[k]=cur; } });
+    if(changed){ this.planCustom=merged; try{ (window.__vxsetlocal||localStorage.setItem.bind(localStorage))('vx_plan_custom', JSON.stringify(merged)); }catch(e){} this.setState({}); } }
   addCustomOption(kind){ const labels={type:'training type',stroke:'stroke',tools:'tool / equipment',zone:'zone',label:'label / focus'}; const raw=window.prompt('Add a custom '+(labels[kind]||kind)+' — it will appear for every coach:',''); if(raw==null) return; let name=String(raw).trim(); if(!name) return; if(kind==='zone'||kind==='stroke') name=name.toUpperCase(); else name=name.replace(/\s+/g,' '); const maxLen=kind==='label'?28:18; if(name.length>maxLen) name=name.slice(0,maxLen); const builtIn={type:this.typeCatalog,stroke:this.strokeCatalog,tools:this.equipCatalog,zone:['EN1','EN2','EN3','SP1','SP2','SP3'],label:this.labelCatalog}[kind]||[]; this.planCustom[kind]=this.planCustom[kind]||[]; const exists=[...builtIn, ...this.planCustom[kind]].some(x=>String(x).toLowerCase()===name.toLowerCase()); if(exists){ return; } this.planCustom[kind]=[...this.planCustom[kind], name]; this._savePlanCustom(); }
   removeCustomOption(kind, name){ if(!window.confirm('Remove the custom '+kind+' “'+name+'” for everyone?')) return; this.planCustom[kind]=(this.planCustom[kind]||[]).filter(x=>x!==name); this._savePlanCustom(); }
   setAdvice(s, planZone){
@@ -4673,18 +4711,20 @@ class Component extends DCLogic {
     if(!window.__vxSelect) return;
     const rows=await window.__vxSelect('plan_sessions', 'select=*&order=ts.desc&limit=500');
     if(rows==null) return; // table missing / offline → keep current
-    const grouped={}; rows.forEach(r=>{ const sq=r.squad_id||'?'; (grouped[sq]=grouped[sq]||[]).push({ id:r.id, date:r.sday||'', title:r.title||'Session', zone:r.zone||'', totalM:r.total_m||0, plan:r.plan||{} }); });
+    const grouped={}; rows.forEach(r=>{ const sq=r.squad_id||'?'; (grouped[sq]=grouped[sq]||[]).push({ id:r.id, date:r.sday||'', title:r.title||'Session', zone:r.zone||'', totalM:r.total_m||0, slot:(r.plan&&r.plan._slot)||'', time:(r.plan&&r.plan._time)||'', plan:r.plan||{} }); });
     this.savedPlans=grouped; try{ this._saveJSON('vx_saved_plans', grouped); }catch(e){} this.setState({});
   }
-  async savePlanSnapshot(squadId){ const plan=this.getPlan(squadId); const id=this._uid('sp')+'_'+Math.random().toString(36).slice(2,6);
-    const rec={ id, date:this.todayISO(), title:plan.title||'Session', zone:plan.zone||'', totalM:this.planMetres(plan), plan:JSON.parse(JSON.stringify(plan)) };
+  async savePlanSnapshot(squadId){ const S=this.state; const plan=this.getPlan(squadId); const id=this._uid('sp')+'_'+Math.random().toString(36).slice(2,6);
+    const date=S.planSessDate||this.todayISO(); const slot=S.planSessSlot||'AM'; const time=S.planSessTime||'';
+    const planCopy=JSON.parse(JSON.stringify(plan)); planCopy._slot=slot; planCopy._time=time;
+    const rec={ id, date, slot, time, title:plan.title||'Session', zone:plan.zone||'', totalM:this.planMetres(plan), plan:planCopy };
     // Optimistic add
     const list=[rec, ...((this.savedPlans&&this.savedPlans[squadId])||[])]; this.savedPlans={...(this.savedPlans||{}), [squadId]:list};
-    this.setState({savedPlanMsg:'Session saved to the training log ✓'});
+    this.setState({savedPlanMsg:'Session saved for '+this.shortDate(date.split('-').reverse().join('/'))+' · '+slot+(time?(' '+time):'')+' ✓'});
     // Append a row (never overwrites another device's sessions), then refresh from the table.
-    const row={ id, squad_id:squadId, title:rec.title, zone:rec.zone, total_m:rec.totalM, plan:rec.plan, sday:rec.date, ts:Date.now() };
+    const row={ id, squad_id:squadId, title:rec.title, zone:rec.zone, total_m:rec.totalM, plan:planCopy, sday:date, ts:Date.now() };
     try{ if(window.__vxInsert){ const ok=await window.__vxInsert('plan_sessions', [row]); if(ok) await this._plansFetch(); else this.setState({savedPlanMsg:'Saved on this device, but the database rejected it — run the plan_sessions SQL.'}); } }catch(e){} }
-  loadPlanSnapshot(squadId, id){ const rec=((this.savedPlans&&this.savedPlans[squadId])||[]).find(r=>r.id===id); if(!rec) return; this.mutatePlan(squadId, p=>{ p.title=rec.plan.title; p.zone=rec.plan.zone; p.sections=JSON.parse(JSON.stringify(rec.plan.sections)); }); this.setState({savedPlanMsg:'Loaded into the editor — edit and Save again to log an update.'}); }
+  loadPlanSnapshot(squadId, id){ const rec=((this.savedPlans&&this.savedPlans[squadId])||[]).find(r=>r.id===id); if(!rec) return; this.mutatePlan(squadId, p=>{ p.title=rec.plan.title; p.zone=rec.plan.zone; p.sections=JSON.parse(JSON.stringify(rec.plan.sections)); }); this.setState({savedPlanMsg:'Loaded into the editor — change date/time and Save again to reschedule.', planSessDate:rec.date||this.todayISO(), planSessSlot:rec.slot||'AM', planSessTime:rec.time||''}); }
   async deletePlanSnapshot(squadId, id){ const list=((this.savedPlans&&this.savedPlans[squadId])||[]).filter(r=>r.id!==id); this.savedPlans={...(this.savedPlans||{}), [squadId]:list}; this.setState({});
     try{ if(window.__vxDelete){ await window.__vxDelete('plan_sessions', 'id=eq.'+encodeURIComponent(id)); await this._plansFetch(); } }catch(e){} }
   viewPlanSnapshotPdf(squadId, id){
@@ -4898,6 +4938,7 @@ class Component extends DCLogic {
     this._plansFetch();
     this._squadPlansFetch();
     this._seasonFetch();
+    this._planCustomFetch();
     this._plansInt=setInterval(()=>{ if(this.state.view==='squad' && this.state.tab==='plans'){ this._plansFetch(); this._squadPlansFetch(); } }, 8000);
     // Staff accounts live in their own table (staff_accounts).
     this._staffFetch();
@@ -4921,6 +4962,7 @@ class Component extends DCLogic {
       if(changed) this._hydrateShared();
     } catch(e){} finally { this._syncBusy=false; }
     try{ this._squadPlansFetch(); }catch(e){}
+    try{ this._planCustomFetch(); }catch(e){}
   }
   _hydrateShared(){
     // Re-read shared stores from localStorage (freshly pulled) and re-render. We intentionally do
@@ -6102,14 +6144,36 @@ class Component extends DCLogic {
           onSwPickerQuery:(e)=>this.setState({swPickerQuery:e.target.value}), swPickerList:list, swPickerCount:chosen.length,
           swPickerEmpty:list.length===0, swPickerCheckBg:squad.accent };
       })(),
+      planSessDate:S.planSessDate||this.todayISO(), onPlanSessDate:(e)=>this.setState({planSessDate:e.target.value}),
+      planSlotAMBg:(S.planSessSlot||'AM')==='AM'?'#0C6CE0':'#fff', planSlotAMFg:(S.planSessSlot||'AM')==='AM'?'#fff':'#3A4152',
+      planSlotPMBg:S.planSessSlot==='PM'?'#6D28D9':'#fff', planSlotPMFg:S.planSessSlot==='PM'?'#fff':'#3A4152',
+      onPlanSlotAM:()=>this.setState({planSessSlot:'AM'}), onPlanSlotPM:()=>this.setState({planSessSlot:'PM'}),
+      planSessTime:S.planSessTime, onPlanSessTime:(e)=>this.setState({planSessTime:e.target.value}),
       ...(()=>{ const sp=(this.savedPlans[S.squadId]||[]); const iso=(d)=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
         const now=new Date(); const weekIso=iso(new Date(now.getTime()-6*86400000)); const yIso=now.getFullYear()+'-01-01';
         let weekM=0,seasonM=0,weekN=0,seasonN=0; sp.forEach(r=>{ if(r.date>=yIso){seasonM+=r.totalM;seasonN++;} if(r.date>=weekIso){weekM+=r.totalM;weekN++;} });
-        const rows=sp.map(r=>({ id:r.id, title:r.title||'Session', zone:r.zone||'', totalM:(r.totalM||0).toLocaleString(),
+        const slotMeta=(x)=>x==='PM'?{label:'Evening',bg:'#EDE7FF',fg:'#6D28D9'}:{label:'Morning',bg:'#E3F0FF',fg:'#0C6CE0'};
+        const daySel=S.planCalDay;
+        const visible=daySel? sp.filter(r=>r.date===daySel) : sp;
+        const rows=visible.slice().sort((a,b)=>((b.date||'').localeCompare(a.date||''))|| ((a.slot==='PM'?1:0)-(b.slot==='PM'?1:0))).map(r=>{ const sm=slotMeta(r.slot); return { id:r.id, title:r.title||'Session', zone:r.zone||'', totalM:(r.totalM||0).toLocaleString(),
           dateLabel:new Date(r.date+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}),
-          onView:()=>this.viewPlanSnapshotPdf(S.squadId, r.id), onEdit:()=>this.loadPlanSnapshot(S.squadId, r.id), onDelete:()=>this.deletePlanSnapshot(S.squadId, r.id) }));
+          slotLabel:sm.label+(r.time?(' · '+r.time):''), slotBg:sm.bg, slotFg:sm.fg,
+          onView:()=>this.viewPlanSnapshotPdf(S.squadId, r.id), onEdit:()=>this.loadPlanSnapshot(S.squadId, r.id), onDelete:()=>this.deletePlanSnapshot(S.squadId, r.id) }; });
+        const calObj = daySel? new Date(daySel+'T00:00:00') : (S.planSessDate? new Date(S.planSessDate+'T00:00:00') : now);
+        const calY=S.planCalY!=null?S.planCalY:calObj.getFullYear(); const calM=S.planCalM!=null?S.planCalM:calObj.getMonth();
+        const monthLabel=new Date(calY,calM,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
+        const dim=new Date(calY,calM+1,0).getDate(); const firstDow=(new Date(calY,calM,1).getDay()+6)%7;
+        const byDay={}; sp.forEach(r=>{ if(!r.date) return; (byDay[r.date]=byDay[r.date]||{am:0,pm:0}); if(r.slot==='PM') byDay[r.date].pm++; else byDay[r.date].am++; });
+        const cells=[]; for(let i=0;i<firstDow;i++) cells.push({day:'', blank:true, hasAm:false, hasPm:false, bg:'transparent', fg:'transparent', border:'transparent', onClick:()=>{}});
+        for(let d=1; d<=dim; d++){ const dISO=calY+'-'+String(calM+1).padStart(2,'0')+'-'+String(d).padStart(2,'0'); const info=byDay[dISO]||{am:0,pm:0}; const sel=dISO===daySel; const isToday=dISO===this.todayISO();
+          cells.push({day:d, blank:false, hasAm:info.am>0, hasPm:info.pm>0, bg: sel?squad.accent:(isToday?'#EEF1F5':'#fff'), fg: sel?'#fff':'#0C1116', border: sel?squad.accent:'#EEF1F5', onClick:()=>this.setState({planCalDay: daySel===dISO?null:dISO, planSessDate:dISO}) }); }
+        const selLabel = daySel? new Date(daySel+'T00:00:00').toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'short'}) : '';
         return { savedPlanRows:rows, savedPlansHasAny:rows.length>0, savedPlansEmpty:rows.length===0,
-          savedPlanWeekM:weekM.toLocaleString(), savedPlanWeekN:weekN, savedPlanSeasonM:seasonM.toLocaleString(), savedPlanSeasonN:seasonN }; })(),
+          savedPlanWeekM:weekM.toLocaleString(), savedPlanWeekN:weekN, savedPlanSeasonM:seasonM.toLocaleString(), savedPlanSeasonN:seasonN,
+          planCalLabel:monthLabel, planCalCells:cells, planCalWeekdayLabels:['M','T','W','T','F','S','S'],
+          onPlanCalPrev:()=>{ let m=calM-1,y=calY; if(m<0){m=11;y--;} this.setState({planCalM:m,planCalY:y}); },
+          onPlanCalNext:()=>{ let m=calM+1,y=calY; if(m>11){m=0;y++;} this.setState({planCalM:m,planCalY:y}); },
+          planCalDaySel:!!daySel, planCalSelLabel:selLabel, onPlanCalClearDay:()=>this.setState({planCalDay:null}) }; })(),
       onShareWhatsapp:()=>this.setState({shareNote:'Shared to '+squad.name+' WhatsApp group ✓'}), onPrintPlan:()=>this.setState({printPreviewOpen:true}),
       onSubmitPlanReview:()=>this.submitPlanForReview(S.squadId, squad.name),
       onClosePrintPreview:()=>this.setState({printPreviewOpen:false}), onConfirmPrint:()=>{ this._printEscape(); setTimeout(()=>window.print(), 30); }, printPreviewOpen:S.printPreviewOpen,
