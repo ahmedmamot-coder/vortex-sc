@@ -3442,7 +3442,7 @@ class Component extends DCLogic {
 
   // navigation
   go(patch){ this.setState(patch); }
-  openSquad(id){ this.setState({view:'squad', squadId:id, tab:'group', swimmerId:null, showSwitcher:false, tool:null}); try{ this._plansFetch(); }catch(e){} }
+  openSquad(id){ this.setState({view:'squad', squadId:id, tab:'group', swimmerId:null, showSwitcher:false, tool:null}); try{ this._plansFetch(); }catch(e){} try{ this._squadPlansFetch(); }catch(e){} }
   openSwimmer(id){ this.setState({view:'profile', swimmerId:id, profileEvent:null}); }
   openTool(t, club){ const patch={tool:t, toolScopeClub:!!club, aiOut:null, aiLoading:false}; if(t==='clock'){ const seq=this.clockSeq(); patch.clockRunning=false; patch.clockSetIdx=0; patch.clockRep=1; patch.clockRemain=seq[0]?seq[0].interval:0; } this.setState(patch); if(t==='lounge'){ try{ this._loungeFetch(); }catch(e){} } }
 
@@ -4448,7 +4448,29 @@ class Component extends DCLogic {
     return {title:p.title, zone:p.zone, sections: sections.length?sections:this.makeDefaultPlan().sections};
   }
   getPlan(id){ const raw=(this.state.plans||{})[id]; return raw ? this._migratePlan(raw) : this.makeDefaultPlan(); }
-  mutatePlan(id, fn){ let disk={}; try{ disk=JSON.parse(localStorage.getItem('vx_plans')||'{}')||{}; }catch(e){} const plans={...(this.state.plans||{}), ...disk}; const cur=this._migratePlan(plans[id]?JSON.parse(JSON.stringify(plans[id])):this.makeDefaultPlan()); fn(cur); plans[id]=cur; this.setState({plans}); try{ localStorage.setItem('vx_plans', JSON.stringify(plans)); }catch(e){} }
+  mutatePlan(id, fn){ let disk={}; try{ disk=JSON.parse(localStorage.getItem('vx_plans')||'{}')||{}; }catch(e){} const plans={...(this.state.plans||{}), ...disk}; const cur=this._migratePlan(plans[id]?JSON.parse(JSON.stringify(plans[id])):this.makeDefaultPlan()); fn(cur); plans[id]=cur; this.setState({plans}); try{ localStorage.setItem('vx_plans', JSON.stringify(plans)); }catch(e){} this._squadPlanPush(id); }
+  // Each squad's plan is its own row in squad_plans (like the chat/staff tables), so
+  // edits from different squads/devices never overwrite each other. Debounced so a
+  // burst of stepper taps sends one write.
+  _squadPlanPush(id){ if(!window.__vxUpsert || id==null) return; this._spTimers=this._spTimers||{}; clearTimeout(this._spTimers[id]);
+    this._spTimers[id]=setTimeout(()=>{ const plan=(this.state.plans||{})[id]; if(plan==null) return; this._spLocalTs=this._spLocalTs||{}; this._spLocalTs[id]=Date.now();
+      try{ window.__vxUpsert('squad_plans', [{id:String(id), plan:plan, ts:Date.now(), updated_at:new Date().toISOString()}]); }catch(e){} }, 500); }
+  async _squadPlansFetch(){ if(!window.__vxSelect) return;
+    const rows=await window.__vxSelect('squad_plans', 'select=id,plan,ts,updated_at'); if(!rows || !Array.isArray(rows)) return;
+    let disk={}; try{ disk=JSON.parse(localStorage.getItem('vx_plans')||'{}')||{}; }catch(e){}
+    const blobLocalTs=parseInt(localStorage.getItem('__vxts_vx_plans')||'0',10)||0;
+    const editing=(this.state.view==='squad' && this.state.tab==='plans') ? this.state.squadId : null;
+    let changed=false;
+    rows.forEach(r=>{ if(!r || !r.id || r.plan==null) return; if(String(r.id)===String(editing)) return;
+      const remoteTs=r.updated_at? Date.parse(r.updated_at) : (r.ts||0);
+      const justPushed=(this._spLocalTs && this._spLocalTs[r.id])||0; if(remoteTs < justPushed) return;
+      if(disk[r.id] && remoteTs < blobLocalTs) return; // local blob edited more recently — keep it
+      if(JSON.stringify(disk[r.id])!==JSON.stringify(r.plan)){ disk[r.id]=r.plan; changed=true; }
+    });
+    if(changed){ try{ (window.__vxsetlocal||localStorage.setItem.bind(localStorage))('vx_plans', JSON.stringify(disk)); }catch(e){}
+      const merged={...disk}; if(editing && this.state.plans && this.state.plans[editing]) merged[editing]=this.state.plans[editing];
+      try{ this.setState({plans:merged}); }catch(e){} }
+  }
   setSetField(id, secId, setId, field, val){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); const s=sec&&(sec.sets||[]).find(x=>x.id===setId); if(s) s[field]=val; }); }
   addPlanSet(id, secId){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); if(sec) sec.sets.push({id:this._uid('s'), reps:1, dist:100, txt:'New set', equip:[], types:[], strokes:[], rest:'', hr:''}); }); }
   stepSetField(id, secId, setId, field, delta, min, step){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); const s=sec&&(sec.sets||[]).find(x=>x.id===setId); if(!s)return; const cur=Number(s[field])|| (field==='reps'?1:0); s[field]=Math.max(min, cur+delta*step); }); }
@@ -4743,14 +4765,15 @@ class Component extends DCLogic {
     // is refocused), so parents/swimmers/coaches/staff always see the newest data with no button.
     this._autoSyncTick();
     this._syncInt=setInterval(()=>this._autoSyncTick(), 20000);
-    this._onVis=()=>{ if(document.visibilityState==='visible'){ this._autoSyncTick(); this._loungeFetch(); this._plansFetch(); this._staffFetch(); } };
+    this._onVis=()=>{ if(document.visibilityState==='visible'){ this._autoSyncTick(); this._loungeFetch(); this._plansFetch(); this._squadPlansFetch(); this._staffFetch(); } };
     document.addEventListener('visibilitychange', this._onVis);
     // Lounge chat: load now, and poll fast while the Lounge is open so messages arrive live.
     this._loungeFetch();
     this._loungeInt=setInterval(()=>{ if(this.state.tool==='lounge') this._loungeFetch(); }, 6000);
     // Saved training-log sessions live in their own table too.
     this._plansFetch();
-    this._plansInt=setInterval(()=>{ if(this.state.view==='squad' && this.state.tab==='plans') this._plansFetch(); }, 10000);
+    this._squadPlansFetch();
+    this._plansInt=setInterval(()=>{ if(this.state.view==='squad' && this.state.tab==='plans'){ this._plansFetch(); this._squadPlansFetch(); } }, 8000);
     // Staff accounts live in their own table (staff_accounts).
     this._staffFetch();
     this._staffInt=setInterval(()=>{ if(this.state.view==='admin' && this.state.adminSection==='staff') this._staffFetch(); }, 12000);
@@ -4772,6 +4795,7 @@ class Component extends DCLogic {
       });
       if(changed) this._hydrateShared();
     } catch(e){} finally { this._syncBusy=false; }
+    try{ this._squadPlansFetch(); }catch(e){}
   }
   _hydrateShared(){
     // Re-read shared stores from localStorage (freshly pulled) and re-render. We intentionally do
