@@ -25,7 +25,7 @@
   var REST = SB_URL + "/rest/v1/club_state";
   var HEAD = { "apikey": SB_ANON, "Authorization": "Bearer " + SB_ANON, "Content-Type": "application/json" };
   // Every shared data type the club edits. The only key kept per-device is vx_api_key.
-  var SYNC = ["vx_plans","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_attend_log","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_plans","vx_videos"];
+  var SYNC = ["vx_plans","vx_plan_custom","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_attend_log","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_plans","vx_videos"];
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
   window.__vxWriteTs = {};   // last time THIS device wrote each key (ms) — guards against stale pulls
@@ -1196,36 +1196,34 @@
                                   <sc-for list="{{ st.types }}" as="ty" hint-placeholder-count="5">
                                     <button onclick="{{ ty.onToggle }}" style="background:{{ ty.bg }};color:{{ ty.fg }};border:1px solid {{ ty.border }};border-radius:7px;padding:3px 9px;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:.02em;cursor:pointer">{{ ty.label }}</button>
                                   </sc-for>
+                                  <button onclick="{{ st.onAddType }}" title="Add your own type" style="flex:none;width:27px;height:23px;border:1.4px dashed #0C7A4F;background:#E4F3EC;color:#0C7A4F;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0"><i data-lucide="plus" style="width:13px;height:13px"></i></button>
                                 </div>
                                 <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:5px">
                                   <span style="font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#B9C0CC;align-self:center;margin-right:2px">Stroke</span>
                                   <sc-for list="{{ st.strokes }}" as="sk" hint-placeholder-count="5">
                                     <button onclick="{{ sk.onToggle }}" style="background:{{ sk.bg }};color:{{ sk.fg }};border:1px solid {{ sk.border }};border-radius:7px;padding:3px 9px;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:.02em;cursor:pointer">{{ sk.label }}</button>
                                   </sc-for>
+                                  <button onclick="{{ st.onAddStroke }}" title="Add your own stroke" style="flex:none;width:27px;height:23px;border:1.4px dashed #0C7A4F;background:#E4F3EC;color:#0C7A4F;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0"><i data-lucide="plus" style="width:13px;height:13px"></i></button>
                                 </div>
                                 <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:5px">
                                   <span style="font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#B9C0CC;align-self:center;margin-right:2px">Tools</span>
                                   <sc-for list="{{ st.equip }}" as="g" hint-placeholder-count="6">
                                     <button onclick="{{ g.onToggle }}" style="background:{{ g.bg }};color:{{ g.fg }};border:1px solid {{ g.border }};border-radius:7px;padding:3px 9px;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:.02em;cursor:pointer">{{ g.label }}</button>
                                   </sc-for>
+                                  <button onclick="{{ st.onAddTool }}" title="Add your own tool" style="flex:none;width:27px;height:23px;border:1.4px dashed #0C7A4F;background:#E4F3EC;color:#0C7A4F;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0"><i data-lucide="plus" style="width:13px;height:13px"></i></button>
                                 </div>
                                 <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:5px">
                                   <span style="font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#B9C0CC;align-self:center;margin-right:2px">Zone</span>
                                   <sc-for list="{{ st.zoneChips }}" as="z" hint-placeholder-count="6">
                                     <button onclick="{{ z.onToggle }}" style="background:{{ z.bg }};color:{{ z.fg }};border:none;border-radius:7px;padding:3px 8px;font-family:var(--font-mono);font-size:9.5px;font-weight:700;cursor:pointer">{{ z.label }}</button>
                                   </sc-for>
+                                  <button onclick="{{ st.onAddZone }}" title="Add your own zone" style="flex:none;width:27px;height:23px;border:1.4px dashed #0C7A4F;background:#E4F3EC;color:#0C7A4F;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0"><i data-lucide="plus" style="width:13px;height:13px"></i></button>
                                 </div>
-                                <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:5px">
-                                  <span style="font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#B9C0CC;align-self:center;margin-right:2px;display:flex;align-items:center;gap:3px"><i data-lucide="timer" style="width:12px;height:12px"></i>Rest</span>
-                                  <sc-for list="{{ st.restChips }}" as="r" hint-placeholder-count="8">
-                                    <button onclick="{{ r.onToggle }}" style="background:{{ r.bg }};color:{{ r.fg }};border:1px solid {{ r.border }};border-radius:7px;padding:3px 9px;font-family:var(--font-mono);font-size:10px;font-weight:700;cursor:pointer">{{ r.label }}</button>
-                                  </sc-for>
-                                </div>
-                                <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:5px">
-                                  <span style="font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#B9C0CC;align-self:center;margin-right:2px;display:flex;align-items:center;gap:3px"><i data-lucide="heart-pulse" style="width:12px;height:12px"></i>HR</span>
-                                  <sc-for list="{{ st.hrChips }}" as="h" hint-placeholder-count="7">
-                                    <button onclick="{{ h.onToggle }}" style="background:{{ h.bg }};color:{{ h.fg }};border:1px solid {{ h.border }};border-radius:7px;padding:3px 9px;font-family:var(--font-mono);font-size:10px;font-weight:700;cursor:pointer">{{ h.label }}</button>
-                                  </sc-for>
+                                <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+                                  <span style="font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#B9C0CC;display:flex;align-items:center;gap:3px;flex:none"><i data-lucide="timer" style="width:12px;height:12px"></i>Rest</span>
+                                  <span style="display:flex;align-items:center;gap:4px;background:#F8FAFC;border:1px solid #EEE4CE;border-radius:9px;padding:3px 6px;flex:none"><i data-lucide="timer" style="width:15px;height:15px;color:#9A6206"></i><button onclick="{{ st.onRestDec }}" style="width:22px;height:22px;border:none;border-radius:6px;background:#EEF1F5;color:#3A4152;font-size:15px;font-weight:700;cursor:pointer;line-height:1;padding:0">−</button><input value="{{ st.restVal }}" oninput="{{ st.onRestInput }}" placeholder="—" style="width:44px;border:none;text-align:center;font-family:var(--font-mono);font-weight:700;font-size:13px;color:#9A6206;outline:none;background:none;padding:0"><button onclick="{{ st.onRestInc }}" style="width:22px;height:22px;border:none;border-radius:6px;background:#EEF1F5;color:#3A4152;font-size:15px;font-weight:700;cursor:pointer;line-height:1;padding:0">+</button></span>
+                                  <span style="font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#B9C0CC;display:flex;align-items:center;gap:3px;flex:none;margin-left:4px"><i data-lucide="heart-pulse" style="width:12px;height:12px"></i>HR</span>
+                                  <span style="display:flex;align-items:center;gap:4px;background:#F8FAFC;border:1px solid #F3D4DC;border-radius:9px;padding:3px 6px;flex:none"><i data-lucide="heart-pulse" style="width:15px;height:15px;color:#C81E4B"></i><button onclick="{{ st.onHrDec }}" style="width:22px;height:22px;border:none;border-radius:6px;background:#EEF1F5;color:#3A4152;font-size:15px;font-weight:700;cursor:pointer;line-height:1;padding:0">−</button><input value="{{ st.hrVal }}" oninput="{{ st.onHrInput }}" type="number" inputmode="numeric" placeholder="—" style="width:40px;border:none;text-align:center;font-family:var(--font-mono);font-weight:700;font-size:13px;color:#C81E4B;outline:none;background:none;padding:0"><button onclick="{{ st.onHrInc }}" style="width:22px;height:22px;border:none;border-radius:6px;background:#EEF1F5;color:#3A4152;font-size:15px;font-weight:700;cursor:pointer;line-height:1;padding:0">+</button></span>
                                 </div>
                                 <sc-if value="{{ st.hasAdvice }}" hint-placeholder-val="{{ false }}">
                                   <div style="display:flex;gap:6px;align-items:flex-start;margin-top:8px;background:var(--vx-blue-tint);border-radius:8px;padding:7px 9px"><i data-lucide="sparkles" style="width:13px;height:13px;color:var(--vx-blue-dark);flex:none;margin-top:1px"></i><span style="font-size:10.5px;color:var(--vx-blue-dark);line-height:1.4">{{ st.advice }}</span></div>
@@ -3077,6 +3075,10 @@ class Component extends DCLogic {
     this.restCatalog=['None',':10',':15',':20',':30',':45','1:00','1:30','2:00'];
     this.hrCatalog=['—','140','150','160','170','180','Max'];
     this.strokeCatalog=['FREE','FLY','BK','BR','IM'];
+    // coach-added custom options for the plan set editor (shared across the whole club, synced)
+    this.planCustom=this._loadJSON('vx_plan_custom', {type:[],stroke:[],tools:[],zone:[]});
+    if(!this.planCustom || typeof this.planCustom!=='object') this.planCustom={type:[],stroke:[],tools:[],zone:[]};
+    ['type','stroke','tools','zone'].forEach(k=>{ if(!Array.isArray(this.planCustom[k])) this.planCustom[k]=[]; });
     this._pid=0;
     this.planTemplate={
       title:'Aerobic Threshold', zone:'EN2',
@@ -4238,6 +4240,16 @@ class Component extends DCLogic {
   toggleType(id, secId, setId, ty){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); const s=sec&&(sec.sets||[]).find(x=>x.id===setId); if(!s)return; s.types=s.types||[]; const i=s.types.indexOf(ty); if(i>=0) s.types.splice(i,1); else s.types.push(ty); }); }
   toggleStroke(id, secId, setId, st){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); const s=sec&&(sec.sets||[]).find(x=>x.id===setId); if(!s)return; s.strokes=s.strokes||[]; const i=s.strokes.indexOf(st); if(i>=0) s.strokes.splice(i,1); else s.strokes.push(st); }); }
   setSetRest(id, secId, setId, val){ this.setSetField(id, secId, setId, 'rest', val); }
+  // ---- Rest / HR as open steppers (edit freely + nudge) ----
+  _restToSec(r){ r=String(r==null?'':r).trim(); if(!r||r==='None'||r==='—') return 0; var mm=r.match(/(\d+)\s*:\s*(\d+)/); if(mm){ return (parseInt(mm[1],10)||0)*60+(parseInt(mm[2],10)||0); } var only=r.match(/(\d+)/); return only?(parseInt(only[1],10)||0):0; }
+  _secToRest(sec){ sec=Math.max(0, Math.round(sec)); if(sec===0) return ''; if(sec<60) return ':'+String(sec).padStart(2,'0'); var m=Math.floor(sec/60), s=sec%60; return m+':'+String(s).padStart(2,'0'); }
+  stepSetRest(id, secId, setId, deltaSec){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); const s=sec&&(sec.sets||[]).find(x=>x.id===setId); if(!s)return; s.rest=this._secToRest(Math.max(0, this._restToSec(s.rest)+deltaSec)); }); }
+  stepSetHr(id, secId, setId, delta){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); const s=sec&&(sec.sets||[]).find(x=>x.id===setId); if(!s)return; const cur=parseInt(String(s.hr||'').replace(/[^0-9]/g,''),10)||0; const nx=Math.max(0, cur+delta); s.hr = nx===0?'':String(nx); }); }
+  setSetHrRaw(id, secId, setId, txt){ const n=parseInt(String(txt||'').replace(/[^0-9]/g,''),10); this.setSetField(id, secId, setId, 'hr', (n && n>0)?String(n):''); }
+  // ---- coach-added custom Type / Stroke / Tool / Zone chips (shared, synced) ----
+  _savePlanCustom(){ this._saveJSON('vx_plan_custom', this.planCustom); this.forceUpdate(); }
+  addCustomOption(kind){ const labels={type:'training type',stroke:'stroke',tools:'tool / equipment',zone:'zone'}; const raw=window.prompt('Add a custom '+(labels[kind]||kind)+' — it will appear for every coach:',''); if(raw==null) return; let name=String(raw).trim(); if(!name) return; if(kind==='zone'||kind==='stroke') name=name.toUpperCase(); else name=name.replace(/\s+/g,' '); if(name.length>18) name=name.slice(0,18); const builtIn={type:this.typeCatalog,stroke:this.strokeCatalog,tools:this.equipCatalog,zone:['EN1','EN2','EN3','SP1','SP2','SP3']}[kind]||[]; this.planCustom[kind]=this.planCustom[kind]||[]; const exists=[...builtIn, ...this.planCustom[kind]].some(x=>String(x).toLowerCase()===name.toLowerCase()); if(exists){ return; } this.planCustom[kind]=[...this.planCustom[kind], name]; this._savePlanCustom(); }
+  removeCustomOption(kind, name){ if(!window.confirm('Remove the custom '+kind+' “'+name+'” for everyone?')) return; this.planCustom[kind]=(this.planCustom[kind]||[]).filter(x=>x!==name); this._savePlanCustom(); }
   setAdvice(s, planZone){
     const zone = s.zone || planZone;
     const reps = (s.txt.match(/(\d+)\s*[\u00d7x]/i)||[])[1];
@@ -4529,6 +4541,7 @@ class Component extends DCLogic {
     this.brandConfig=g('vx_brand', this.brandConfig); this.notifications=g('vx_notifications', this.notifications);
     this.tpaceTests=g('vx_tpace', this.tpaceTests); this.fitnessTests=g('vx_fitness_tests', this.fitnessTests);
     this.fitnessPlans=g('vx_fitness_plans', this.fitnessPlans); this.promoStore=g('vx_promo', this.promoStore); this.aiSuggOverrides=g('vx_ai_sugg_ovr', this.aiSuggOverrides);
+    this.planCustom=g('vx_plan_custom', this.planCustom); ['type','stroke','tools','zone'].forEach(k=>{ if(!Array.isArray((this.planCustom||{})[k])){ this.planCustom=this.planCustom||{}; this.planCustom[k]=[]; } });
     this.rosterEdits=g('vx_roster_edits', this.rosterEdits); try{ this.rebuildRoster(); }catch(e){}
     try{ this.setState({family:this.family}); }catch(e){ this.forceUpdate(); }
   }
@@ -4704,12 +4717,17 @@ class Component extends DCLogic {
         onRemoveSection:()=>this.removeSection(S.squadId, sm.id),
         sets:sets.map(s=>{ const reps=Number(s.reps)||1; const dist=Number(s.dist)||0; return {
           id:s.id, dist:dist, reps:reps, txt:s.txt, rest:s.rest||'', hr:s.hr||'', setMetres:(reps*dist),
-          equip:this.equipCatalog.map(g=>{ const on=(s.equip||[]).includes(g); return {label:g, on, onToggle:()=>this.toggleEquip(S.squadId,sm.id,s.id,g), bg:on?squad.accent:'#fff', fg:on?'#fff':'#7A8296', border:on?squad.accent:'#E5E9F0'}; }),
-          types:this.typeCatalog.map(g=>{ const on=(s.types||[]).includes(g); return {label:g, on, onToggle:()=>this.toggleType(S.squadId,sm.id,s.id,g), bg:on?'#0A0F1A':'#fff', fg:on?'#fff':'#7A8296', border:on?'#0A0F1A':'#E5E9F0'}; }),
-          strokes:this.strokeCatalog.map(g=>{ const on=(s.strokes||[]).includes(g); const col={FREE:'#067EEA',FLY:'#8A22D5',BK:'#12A0AE',BR:'#2733D6',IM:'#0C7A4F'}[g]||'#0A0F1A'; return {label:g, on, onToggle:()=>this.toggleStroke(S.squadId,sm.id,s.id,g), bg:on?col:'#fff', fg:on?'#fff':'#7A8296', border:on?col:'#E5E9F0'}; }),
-          zoneChips:['EN1','EN2','EN3','SP1','SP2','SP3'].map(z=>{ const on=(s.zone||plan.zone)===z; return {label:z, on, onToggle:()=>this.setSetField(S.squadId,sm.id,s.id,'zone',z), bg:on?squad.accent:'#F8FAFC', fg:on?'#fff':'#7A8296'}; }),
-          restChips:this.restCatalog.map(r=>{ const val=(r==='None'?'':r); const on=(s.rest||'')===val; return {label:r, on, onToggle:()=>this.setSetRest(S.squadId,sm.id,s.id,val), bg:on?'#9A6206':'#F8FAFC', fg:on?'#fff':'#7A8296', border:on?'#9A6206':'#EEE4CE'}; }),
-          hrChips:this.hrCatalog.map(h=>{ const val=(h==='—'?'':h); const on=(s.hr||'')===val; return {label:h, on, onToggle:()=>this.setSetField(S.squadId,sm.id,s.id,'hr',val), bg:on?'#C81E4B':'#F8FAFC', fg:on?'#fff':'#7A8296', border:on?'#C81E4B':'#F3D4DC'}; }),
+          equip:this.equipCatalog.concat(this.planCustom.tools||[]).map(g=>{ const on=(s.equip||[]).includes(g); return {label:g, on, onToggle:()=>this.toggleEquip(S.squadId,sm.id,s.id,g), bg:on?squad.accent:'#fff', fg:on?'#fff':'#7A8296', border:on?squad.accent:'#E5E9F0'}; }),
+          types:this.typeCatalog.concat(this.planCustom.type||[]).map(g=>{ const on=(s.types||[]).includes(g); return {label:g, on, onToggle:()=>this.toggleType(S.squadId,sm.id,s.id,g), bg:on?'#0A0F1A':'#fff', fg:on?'#fff':'#7A8296', border:on?'#0A0F1A':'#E5E9F0'}; }),
+          strokes:this.strokeCatalog.concat(this.planCustom.stroke||[]).map(g=>{ const on=(s.strokes||[]).includes(g); const col={FREE:'#067EEA',FLY:'#8A22D5',BK:'#12A0AE',BR:'#2733D6',IM:'#0C7A4F'}[g]||'#0A0F1A'; return {label:g, on, onToggle:()=>this.toggleStroke(S.squadId,sm.id,s.id,g), bg:on?col:'#fff', fg:on?'#fff':'#7A8296', border:on?col:'#E5E9F0'}; }),
+          zoneChips:['EN1','EN2','EN3','SP1','SP2','SP3'].concat(this.planCustom.zone||[]).map(z=>{ const on=(s.zone||plan.zone)===z; return {label:z, on, onToggle:()=>this.setSetField(S.squadId,sm.id,s.id,'zone',z), bg:on?squad.accent:'#F8FAFC', fg:on?'#fff':'#7A8296'}; }),
+          onAddType:()=>this.addCustomOption('type'), onAddStroke:()=>this.addCustomOption('stroke'), onAddTool:()=>this.addCustomOption('tools'), onAddZone:()=>this.addCustomOption('zone'),
+          restVal:s.rest||'', restShown:(s.rest && String(s.rest).trim())?String(s.rest).trim():'—',
+          onRestDec:()=>this.stepSetRest(S.squadId,sm.id,s.id,-5), onRestInc:()=>this.stepSetRest(S.squadId,sm.id,s.id,5),
+          onRestInput:(e)=>this.setSetRest(S.squadId,sm.id,s.id, e.target.value),
+          hrVal:s.hr||'', hrShown:(s.hr && String(s.hr).trim())?String(s.hr).trim():'—',
+          onHrDec:()=>this.stepSetHr(S.squadId,sm.id,s.id,-5), onHrInc:()=>this.stepSetHr(S.squadId,sm.id,s.id,5),
+          onHrInput:(e)=>this.setSetHrRaw(S.squadId,sm.id,s.id, e.target.value),
           advice: this.setAdvice(s, plan.zone), hasAdvice: !!this.setAdvice(s, plan.zone), hasRest: !!s.rest,
           onRepsDec:()=>this.stepSetField(S.squadId,sm.id,s.id,'reps',-1,1,1), onRepsInc:()=>this.stepSetField(S.squadId,sm.id,s.id,'reps',1,1,1),
           onDistDec:()=>this.stepSetField(S.squadId,sm.id,s.id,'dist',-1,0,25), onDistInc:()=>this.stepSetField(S.squadId,sm.id,s.id,'dist',1,0,25),
