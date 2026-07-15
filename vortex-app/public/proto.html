@@ -2920,6 +2920,12 @@
                   <span style="width:62px"></span>
                 </div>
                 <div class="vx-scroll" style="flex:1;overflow-y:auto;padding:16px 15px 22px;-webkit-overflow-scrolling:touch">
+                  <div style="display:flex;gap:5px;background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:5px;margin:0 auto 15px;max-width:300px">
+                    <button onclick="{{ onLadderTabAuto }}" style="flex:1;padding:9px;border-radius:9px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;background:{{ ladderTabAutoBg }};color:{{ ladderTabAutoFg }}">Auto ladder</button>
+                    <button onclick="{{ onLadderTabMan }}" style="flex:1;padding:9px;border-radius:9px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;background:{{ ladderTabManBg }};color:{{ ladderTabManFg }}">One by one</button>
+                  </div>
+
+                  <sc-if value="{{ ladderIsAuto }}" hint-placeholder-val="{{ true }}">
                   <p style="margin:0 3px 8px;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#9AA2B4">Shape</p>
                   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">
                     <button onclick="{{ onLadderShapeUp }}" style="background:{{ ladderShapeUpBg }};border:1.5px solid {{ ladderShapeUpBorder }};border-radius:14px;padding:13px 6px;cursor:pointer;font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:6px"><i data-lucide="trending-up" style="width:22px;height:22px;color:{{ ladderShapeUpFg }}"></i><span style="font-size:12.5px;font-weight:700;color:{{ ladderShapeUpFg }}">Up</span><span style="font-size:9px;font-weight:700;color:{{ ladderShapeUpSub }}">short → long</span></button>
@@ -2949,6 +2955,40 @@
                       <span style="display:flex;align-items:center;gap:4px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:3px 5px"><button onclick="{{ onLadderPaceDec }}" style="width:26px;height:26px;border:none;border-radius:7px;background:#EEF1F5;color:#3A4152;font-size:17px;font-weight:700;cursor:pointer;line-height:1;padding:0">−</button><span style="min-width:56px;text-align:center;font-family:var(--font-mono);font-weight:700;font-size:15px;color:{{ ladderAccent }}">{{ ladderPaceStr }}</span><button onclick="{{ onLadderPaceInc }}" style="width:26px;height:26px;border:none;border-radius:7px;background:#EEF1F5;color:#3A4152;font-size:17px;font-weight:700;cursor:pointer;line-height:1;padding:0">+</button></span>
                     </div>
                   </div>
+
+                  </sc-if>
+
+                  <sc-if value="{{ ladderIsManual }}" hint-placeholder-val="{{ false }}">
+                    <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:13px 14px;margin-bottom:12px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                      <p style="margin:0 0 11px;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#9AA2B4">Build a rung</p>
+                      <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:10px">
+                        <span style="display:flex;align-items:center;gap:3px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:3px 5px"><button onclick="{{ onManRepsDec }}" style="width:24px;height:24px;border:none;border-radius:7px;background:#EEF1F5;color:#3A4152;font-size:16px;font-weight:700;cursor:pointer;line-height:1;padding:0">−</button><span style="min-width:20px;text-align:center;font-family:var(--font-mono);font-weight:700;font-size:15px;color:#0C1116">{{ manRepsVal }}</span><button onclick="{{ onManRepsInc }}" style="width:24px;height:24px;border:none;border-radius:7px;background:#EEF1F5;color:#3A4152;font-size:16px;font-weight:700;cursor:pointer;line-height:1;padding:0">+</button></span>
+                        <span style="font-size:14px;font-weight:800;color:#B9C0CC">×</span>
+                        <span style="display:flex;align-items:center;gap:3px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:3px 5px"><button onclick="{{ onManDistDec }}" style="width:24px;height:24px;border:none;border-radius:7px;background:#EEF1F5;color:#3A4152;font-size:16px;font-weight:700;cursor:pointer;line-height:1;padding:0">−</button><span style="min-width:44px;text-align:center;font-family:var(--font-mono);font-weight:700;font-size:15px;color:{{ ladderAccent }}">{{ manDistVal }}<span style="font-size:10px;color:#9AA2B4;font-weight:700">m</span></span><button onclick="{{ onManDistInc }}" style="width:24px;height:24px;border:none;border-radius:7px;background:#EEF1F5;color:#3A4152;font-size:16px;font-weight:700;cursor:pointer;line-height:1;padding:0">+</button></span>
+                        <span style="display:flex;align-items:center;gap:4px;background:#F8FAFC;border:1px solid #EEE4CE;border-radius:10px;padding:3px 5px"><i data-lucide="timer" style="width:15px;height:15px;color:#9A6206"></i><button onclick="{{ onManPaceDec }}" style="width:24px;height:24px;border:none;border-radius:7px;background:#EEF1F5;color:#3A4152;font-size:16px;font-weight:700;cursor:pointer;line-height:1;padding:0">−</button><span style="min-width:44px;text-align:center;font-family:var(--font-mono);font-weight:700;font-size:14px;color:#9A6206">{{ manPaceStr }}</span><button onclick="{{ onManPaceInc }}" style="width:24px;height:24px;border:none;border-radius:7px;background:#EEF1F5;color:#3A4152;font-size:16px;font-weight:700;cursor:pointer;line-height:1;padding:0">+</button></span>
+                      </div>
+                      <div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-bottom:12px">
+                        <span style="font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#B9C0CC;margin-right:2px;display:flex;align-items:center;gap:3px"><i data-lucide="waves" style="width:12px;height:12px"></i>Stroke</span>
+                        <sc-for list="{{ manStrokeChips }}" as="sk" hint-placeholder-count="5">
+                          <button onclick="{{ sk.onToggle }}" style="background:{{ sk.bg }};color:{{ sk.fg }};border:1px solid {{ sk.border }};border-radius:7px;padding:4px 10px;font-family:inherit;font-size:10.5px;font-weight:700;letter-spacing:.02em;cursor:pointer">{{ sk.label }}</button>
+                        </sc-for>
+                      </div>
+                      <button onclick="{{ onManAddRung }}" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border:1.5px dashed var(--vx-blue);border-radius:11px;padding:11px;cursor:pointer;font-family:inherit;font-weight:700;font-size:13px"><i data-lucide="plus" style="width:16px;height:16px"></i>Save rung · {{ manDraftLabel }}</button>
+                    </div>
+
+                    <sc-if value="{{ manHasRungs }}" hint-placeholder-val="{{ false }}">
+                      <p style="margin:0 3px 8px;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#9AA2B4">Your ladder · {{ manCount }} rungs</p>
+                      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
+                        <sc-for list="{{ manRungRows }}" as="r" hint-placeholder-count="0">
+                          <div style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #E5E9F0;border-radius:11px;padding:9px 11px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
+                            <span style="flex:none;width:22px;height:22px;border-radius:7px;background:#EEF1F5;color:#7A8296;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-weight:700;font-size:11px">{{ r.num }}</span>
+                            <span style="flex:1;min-width:0;font-family:var(--font-mono);font-weight:700;font-size:13.5px;color:#0C1116">{{ r.label }}</span>
+                            <button onclick="{{ r.onRemove }}" style="flex:none;width:26px;height:26px;border-radius:8px;border:none;background:#FDECEC;color:#E5484D;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="trash-2" style="width:13px;height:13px"></i></button>
+                          </div>
+                        </sc-for>
+                      </div>
+                    </sc-if>
+                  </sc-if>
 
                   <div style="background:#0A0F1A;border-radius:14px;padding:15px 16px;margin-bottom:11px;box-shadow:0 8px 20px {{ ladderGlow }}">
                     <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px"><span style="font-family:var(--font-mono);font-size:22px;font-weight:800;color:#fff">{{ ladderTotal }}<span style="font-size:12px;color:rgba(255,255,255,.6);font-weight:700"> m</span></span><span style="font-size:15px;font-weight:700;color:{{ ladderAccent }}">≈ {{ ladderTimeMin }} mins</span></div>
@@ -3270,6 +3310,7 @@ class Component extends DCLogic {
       famReqEvent:'50 Free', famReqMeetIdx:0,
       famAttView:'month', famAttDateISO:null, famAttCalY:null, famAttCalM:null, famAttYearSel:null, famMeetSel:0,
       ladderOpen:false, ladderSecId:null, ladderShape:'up', ladderRungs:5, ladderStart:100, ladderStep:100, ladderReps:1, ladderPaceSec:60, ladderNotes:'',
+      ladderTab:'auto', manReps:1, manDist:50, manPaceSec:45, manStroke:'', manList:[],
       swPickerOpen:false, swPickerSecId:null, swPickerSetId:null, swPickerQuery:'',
       goalsSwId:null, goalsSwQuery:'', goalEditEvent:null, goalEditVal:'', goalMsg:'',
       academyTab:'trials', trialForm:{childName:'',age:'',parentName:'',phone:'',notes:''}, trialSubmitted:false,
@@ -4347,14 +4388,19 @@ class Component extends DCLogic {
     else if(shape==='pyramid') dists=dists.concat(dists.slice(0,-1).reverse());
     return dists.map(dist=>{ const paceSec=Math.round(dist/50*pace50); return {reps, dist, paceSec, paceStr:this._secToClock(paceSec)}; });
   }
-  ladderPreview(){ const steps=this.ladderSteps(); let total=0, timeSec=0; const parts=steps.map(s=>{ total+=s.reps*s.dist; timeSec+=s.reps*s.paceSec; return s.reps+' x '+s.dist+' @ '+s.paceStr; }); return {steps, total, timeMin:Math.round(timeSec/60), text:parts.join(', '), empty:steps.length===0}; }
-  openLadder(secId){ this.setState({ladderOpen:true, ladderSecId:secId, ladderShape:'up', ladderRungs:5, ladderStart:100, ladderStep:100, ladderReps:1, ladderPaceSec:60, ladderNotes:''}); }
+  manualSteps(){ return (this.state.manList||[]).map(r=>{ const paceSec=Math.max(0,parseInt(r.paceSec,10)||0); return {reps:Math.max(1,parseInt(r.reps,10)||1), dist:Math.max(0,parseInt(r.dist,10)||0), paceSec, paceStr:this._secToClock(paceSec), stroke:r.stroke||''}; }); }
+  ladderPreview(){ const manual=(this.state.ladderTab==='manual'); const steps=manual?this.manualSteps():this.ladderSteps(); let total=0, timeSec=0; const parts=steps.map(s=>{ total+=s.reps*s.dist; timeSec+=s.reps*s.paceSec; return s.reps+' x '+s.dist+(s.stroke?(' '+s.stroke):'')+' @ '+s.paceStr; }); return {steps, total, timeMin:Math.round(timeSec/60), text:parts.join(', '), empty:steps.length===0}; }
+  openLadder(secId){ this.setState({ladderOpen:true, ladderSecId:secId, ladderShape:'up', ladderRungs:5, ladderStart:100, ladderStep:100, ladderReps:1, ladderPaceSec:60, ladderNotes:'', ladderTab:'auto', manReps:1, manDist:50, manPaceSec:45, manStroke:'', manList:[]}); }
   closeLadder(){ this.setState({ladderOpen:false, ladderSecId:null}); }
   stepLadder(field, delta, min, max){ const cur=parseInt(this.state[field],10)||0; let nx=cur+delta; if(min!=null) nx=Math.max(min,nx); if(max!=null) nx=Math.min(max,nx); this.setState({[field]:nx}); }
+  setManStroke(st){ this.setState({manStroke: this.state.manStroke===st ? '' : st}); }
+  manAddRung(){ const S=this.state; const rung={reps:Math.max(1,parseInt(S.manReps,10)||1), dist:Math.max(0,parseInt(S.manDist,10)||0), paceSec:Math.max(0,parseInt(S.manPaceSec,10)||0), stroke:S.manStroke||''}; if(!rung.dist) return; this.setState({manList:[...(S.manList||[]), rung]}); }
+  manRemoveRung(i){ const list=(this.state.manList||[]).slice(); list.splice(i,1); this.setState({manList:list}); }
   addLadderToPlan(){ const S=this.state; const secId=S.ladderSecId; const pv=this.ladderPreview(); if(!secId || pv.empty){ this.closeLadder(); return; }
-    const shape=S.ladderShape||'up'; const label=(shape==='pyramid'?'Pyramid':(shape==='down'?'Ladder down':'Ladder up')); const notes=String(S.ladderNotes||'').trim();
+    const manual=(S.ladderTab==='manual'); const shape=S.ladderShape||'up';
+    const label= manual ? 'Ladder' : (shape==='pyramid'?'Pyramid':(shape==='down'?'Ladder down':'Ladder up')); const notes=String(S.ladderNotes||'').trim();
     this.mutatePlan(this.state.squadId, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); if(!sec)return; sec.sets=sec.sets||[];
-      pv.steps.forEach((st,i)=>{ const head=(i===0?(label+(notes?(' — '+notes):'')+' · ') : ''); sec.sets.push({id:this._uid('s'), reps:st.reps, dist:st.dist, txt:head+'send-off @ '+st.paceStr, equip:[], types:['Swim'], strokes:[], rest:'', hr:'', circuit:1}); });
+      pv.steps.forEach((st,i)=>{ const head=(i===0?(label+(notes?(' — '+notes):'')+' · ') : ''); sec.sets.push({id:this._uid('s'), reps:st.reps, dist:st.dist, txt:head+'send-off @ '+st.paceStr, equip:[], types:['Swim'], strokes:(st.stroke?[st.stroke]:[]), rest:'', hr:'', circuit:1}); });
     });
     this.closeLadder();
   }
@@ -5731,7 +5777,21 @@ class Component extends DCLogic {
           ladderRepsVal:S.ladderReps, onLadderRepsDec:()=>this.stepLadder('ladderReps',-1,1,50), onLadderRepsInc:()=>this.stepLadder('ladderReps',1,1,50),
           ladderPaceStr:paceStr, onLadderPaceDec:()=>this.stepLadder('ladderPaceSec',-5,5,3600), onLadderPaceInc:()=>this.stepLadder('ladderPaceSec',5,5,3600),
           ladderNotesVal:S.ladderNotes, onLadderNotes:(e)=>this.setState({ladderNotes:e.target.value}),
-          ladderTotal:pv.total, ladderTimeMin:pv.timeMin, ladderText:pv.text||'—', ladderHasSteps:!pv.empty };
+          ladderTotal:pv.total, ladderTimeMin:pv.timeMin, ladderText:pv.text||'—', ladderHasSteps:!pv.empty,
+          // -- tab: auto shape vs one-by-one --
+          ladderIsAuto:(S.ladderTab||'auto')!=='manual', ladderIsManual:(S.ladderTab||'auto')==='manual',
+          ladderTabAutoBg:(S.ladderTab||'auto')!=='manual'?'#0A0F1A':'transparent', ladderTabAutoFg:(S.ladderTab||'auto')!=='manual'?'#fff':'#7A8296',
+          ladderTabManBg:(S.ladderTab||'auto')==='manual'?'#0A0F1A':'transparent', ladderTabManFg:(S.ladderTab||'auto')==='manual'?'#fff':'#7A8296',
+          onLadderTabAuto:()=>this.setState({ladderTab:'auto'}), onLadderTabMan:()=>this.setState({ladderTab:'manual'}),
+          // -- manual one-by-one composer --
+          manRepsVal:S.manReps, onManRepsDec:()=>this.stepLadder('manReps',-1,1,50), onManRepsInc:()=>this.stepLadder('manReps',1,1,50),
+          manDistVal:S.manDist, onManDistDec:()=>this.stepLadder('manDist',-25,0,3000), onManDistInc:()=>this.stepLadder('manDist',25,0,3000),
+          manPaceStr:this._secToClock(Math.max(0,parseInt(S.manPaceSec,10)||0)), onManPaceDec:()=>this.stepLadder('manPaceSec',-5,0,3600), onManPaceInc:()=>this.stepLadder('manPaceSec',5,0,3600),
+          manStrokeChips:this.strokeCatalog.concat(this.planCustom.stroke||[]).map(g=>{ const on=S.manStroke===g; const col={FREE:'#067EEA',FLY:'#8A22D5',BK:'#12A0AE',BR:'#2733D6',IM:'#0C7A4F'}[g]||'#0A0F1A'; return {label:g, on, onToggle:()=>this.setManStroke(g), bg:on?col:'#fff', fg:on?'#fff':'#7A8296', border:on?col:'#E5E9F0'}; }),
+          manDraftLabel:(Math.max(1,parseInt(S.manReps,10)||1))+'×'+(Math.max(0,parseInt(S.manDist,10)||0))+(S.manStroke?(' '+S.manStroke):'')+' @ '+this._secToClock(Math.max(0,parseInt(S.manPaceSec,10)||0)),
+          onManAddRung:()=>this.manAddRung(),
+          manRungRows:(S.manList||[]).map((r,i)=>({num:i+1, label:(Math.max(1,parseInt(r.reps,10)||1))+'×'+(Math.max(0,parseInt(r.dist,10)||0))+(r.stroke?(' '+r.stroke):'')+' @ '+this._secToClock(Math.max(0,parseInt(r.paceSec,10)||0)), onRemove:()=>this.manRemoveRung(i)})),
+          manHasRungs:(S.manList||[]).length>0, manCount:(S.manList||[]).length };
       })(),
       // ---- swimmer picker for a set ----
       ...(()=>{ const open=!!S.swPickerOpen; if(!open) return {swPickerOpen:false, swPickerList:[], swPickerCheckBg:squad.accent};
