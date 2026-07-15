@@ -5411,7 +5411,9 @@ class Component extends DCLogic {
     const videoIsVimeo = activeVid && activeVid.kind==='vimeo';
     const videoHasLaps = lapBars.length>0;
     const videoHasNotes = videoNotesV.length>0;
-    const onPlayerMount=(el)=>this.onPlayerMount(el);
+    // stable ref: a fresh arrow each render makes React detach+reattach the ref,
+    // which tears down and rebuilds the player on every state change (video restarts).
+    const onPlayerMount=this._playerMountRef || (this._playerMountRef=(el)=>this.onPlayerMount(el));
     const raceTypeOptions = activeVid ? ['50','100','200','400','800','1500'].map(rt=>({label:rt, onClick:()=>this.videoSetRaceType(rt), on:(activeVid.raceType||'100')===rt, bg:(activeVid.raceType||'100')===rt?squad.accent:'#fff', fg:(activeVid.raceType||'100')===rt?'#fff':'#3A4152'})) : [];
     const nextSplitLabel = activeVid ? (()=>{ const labels=this.videoSplitLabels(activeVid.raceType||'100'); const done=(activeVid.laps||[]).length; return done<labels.length ? labels[done] : null; })() : null;
     const videoSplitsDone = activeVid ? (activeVid.laps||[]).length : 0;
