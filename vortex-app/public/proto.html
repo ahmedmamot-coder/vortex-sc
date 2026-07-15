@@ -2906,54 +2906,54 @@
 
             <!-- LADDER / PYRAMID BUILDER -->
             <sc-if value="{{ ladderOpen }}" hint-placeholder-val="{{ false }}">
-              <div class="vx-screen" style="position:absolute;inset:0;z-index:48;background:#EEF1F5;display:flex;flex-direction:column">
-                <div style="flex:none;display:flex;align-items:center;justify-content:space-between;background:#C9D2F2;padding:calc(max(env(safe-area-inset-top), 44px) + 6px) 16px 14px">
-                  <button onclick="{{ onLadderClose }}" style="background:none;border:none;color:#2733D6;font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;padding:0">Cancel</button>
-                  <span style="font-size:16px;font-weight:700;color:#0C1116">Add Ladder / Pyramid</span>
-                  <span style="width:52px"></span>
+              <div class="vx-screen" style="position:absolute;inset:0;z-index:48;background:#F4F6F8;display:flex;flex-direction:column">
+                <div style="flex:none;display:flex;align-items:center;justify-content:space-between;background:#0A0F1A;padding:calc(max(env(safe-area-inset-top), 44px) + 6px) 16px 14px">
+                  <button onclick="{{ onLadderClose }}" style="background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.18);color:#fff;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;padding:7px 13px;border-radius:10px">Cancel</button>
+                  <span style="font-size:15px;font-weight:700;color:#fff;letter-spacing:-.01em">Add Ladder / Pyramid</span>
+                  <span style="width:62px"></span>
                 </div>
-                <div class="vx-scroll" style="flex:1;overflow-y:auto;padding:16px 15px 20px;-webkit-overflow-scrolling:touch">
-                  <div style="display:flex;gap:6px;background:#E7EAF0;border-radius:11px;padding:4px;margin:0 auto 16px;max-width:260px">
-                    <button onclick="{{ onLadderModeLadder }}" style="flex:1;padding:8px;border-radius:8px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:13px;background:{{ ladderModeLadderBg }};color:{{ ladderModeLadderFg }}">Ladder</button>
-                    <button onclick="{{ onLadderModePyramid }}" style="flex:1;padding:8px;border-radius:8px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:13px;background:{{ ladderModePyramidBg }};color:{{ ladderModePyramidFg }}">Pyramid</button>
+                <div class="vx-scroll" style="flex:1;overflow-y:auto;padding:16px 15px 22px;-webkit-overflow-scrolling:touch">
+                  <div style="display:flex;gap:5px;background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:5px;margin:0 auto 14px;max-width:280px">
+                    <button onclick="{{ onLadderModeLadder }}" style="flex:1;padding:9px;border-radius:9px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:13px;background:{{ ladderModeLadderBg }};color:{{ ladderModeLadderFg }}">Ladder</button>
+                    <button onclick="{{ onLadderModePyramid }}" style="flex:1;padding:9px;border-radius:9px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:13px;background:{{ ladderModePyramidBg }};color:{{ ladderModePyramidFg }}">Pyramid</button>
                   </div>
 
-                  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:12px 14px;margin-bottom:11px">
-                    <span style="display:flex;align-items:center;gap:9px"><span style="font-size:14px;font-weight:600;color:#0C1116">Steps</span><input value="{{ ladderStepsVal }}" oninput="{{ onLadderSteps }}" type="number" inputmode="numeric" style="width:66px;background:#fff;border:1px solid #D7DCE6;border-radius:9px;padding:8px;text-align:center;font-family:var(--font-mono);font-size:15px;font-weight:700;color:#0C1116;outline:none"></span>
-                    <span style="display:flex;align-items:center;gap:9px"><span style="font-size:14px;font-weight:600;color:#0C1116">50 Pace</span><input value="{{ ladderPaceVal }}" oninput="{{ onLadderPace }}" style="width:74px;background:#fff;border:1px solid #D7DCE6;border-radius:9px;padding:8px;text-align:center;font-family:var(--font-mono);font-size:15px;font-weight:700;color:#0C1116;outline:none"></span>
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:12px 14px;margin-bottom:11px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                    <span style="display:flex;align-items:center;gap:9px"><span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">Steps</span><input value="{{ ladderStepsVal }}" oninput="{{ onLadderSteps }}" type="number" inputmode="numeric" style="width:60px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;text-align:center;font-family:var(--font-mono);font-size:15px;font-weight:700;color:#0C1116;outline:none"></span>
+                    <span style="display:flex;align-items:center;gap:9px"><span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">50 Pace</span><input value="{{ ladderPaceVal }}" oninput="{{ onLadderPace }}" style="width:70px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;text-align:center;font-family:var(--font-mono);font-size:15px;font-weight:700;color:{{ ladderAccent }};outline:none"></span>
                   </div>
 
-                  <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:12px 14px;margin-bottom:11px">
-                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:6px;padding-left:74px">
-                      <span style="font-size:11px;font-weight:700;color:#7A8296;text-align:center">Start</span>
-                      <span style="font-size:11px;font-weight:700;color:#7A8296;text-align:center">Direction</span>
-                      <span style="font-size:11px;font-weight:700;color:#7A8296;text-align:center">Step</span>
+                  <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:12px 14px;margin-bottom:11px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:7px;padding-left:70px">
+                      <span style="font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4;text-align:center">Start</span>
+                      <span style="font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4;text-align:center">Direction</span>
+                      <span style="font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4;text-align:center">Step</span>
                     </div>
                     <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
-                      <span style="width:66px;flex:none;font-size:14px;font-weight:600;color:#0C1116">Distance</span>
-                      <input value="{{ ladderDistStartVal }}" oninput="{{ onLadderDistStart }}" type="number" inputmode="numeric" style="flex:1;min-width:0;background:#fff;border:1px solid #D7DCE6;border-radius:9px;padding:8px;text-align:center;font-family:var(--font-mono);font-size:14px;font-weight:700;color:#0C1116;outline:none">
-                      <span style="flex:1;display:flex;gap:3px;background:#E7EAF0;border-radius:9px;padding:3px"><button onclick="{{ onLadderDistPlus }}" style="flex:1;padding:6px;border:none;border-radius:7px;background:{{ ladderDistDirPlusBg }};font-family:inherit;font-weight:800;font-size:14px;color:#0C1116;cursor:pointer">+</button><button onclick="{{ onLadderDistMinus }}" style="flex:1;padding:6px;border:none;border-radius:7px;background:{{ ladderDistDirMinusBg }};font-family:inherit;font-weight:800;font-size:14px;color:#0C1116;cursor:pointer">−</button></span>
-                      <input value="{{ ladderDistStepVal }}" oninput="{{ onLadderDistStep }}" type="number" inputmode="numeric" style="flex:1;min-width:0;background:#fff;border:1px solid #D7DCE6;border-radius:9px;padding:8px;text-align:center;font-family:var(--font-mono);font-size:14px;font-weight:700;color:#0C1116;outline:none">
+                      <span style="width:62px;flex:none;font-size:13px;font-weight:600;color:#0C1116">Distance</span>
+                      <input value="{{ ladderDistStartVal }}" oninput="{{ onLadderDistStart }}" type="number" inputmode="numeric" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;text-align:center;font-family:var(--font-mono);font-size:14px;font-weight:700;color:#0C1116;outline:none">
+                      <span style="flex:1;display:flex;gap:3px;background:#EEF1F5;border-radius:9px;padding:3px"><button onclick="{{ onLadderDistPlus }}" style="flex:1;padding:7px;border:none;border-radius:7px;background:{{ ladderDistDirPlusBg }};font-family:inherit;font-weight:800;font-size:14px;color:{{ ladderDistDirPlusFg }};cursor:pointer">+</button><button onclick="{{ onLadderDistMinus }}" style="flex:1;padding:7px;border:none;border-radius:7px;background:{{ ladderDistDirMinusBg }};font-family:inherit;font-weight:800;font-size:14px;color:{{ ladderDistDirMinusFg }};cursor:pointer">−</button></span>
+                      <input value="{{ ladderDistStepVal }}" oninput="{{ onLadderDistStep }}" type="number" inputmode="numeric" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;text-align:center;font-family:var(--font-mono);font-size:14px;font-weight:700;color:#0C1116;outline:none">
                     </div>
                     <div style="display:flex;align-items:center;gap:8px">
-                      <span style="width:66px;flex:none;font-size:14px;font-weight:600;color:#0C1116">Repeats</span>
-                      <input value="{{ ladderRepStartVal }}" oninput="{{ onLadderRepStart }}" type="number" inputmode="numeric" style="flex:1;min-width:0;background:#fff;border:1px solid #D7DCE6;border-radius:9px;padding:8px;text-align:center;font-family:var(--font-mono);font-size:14px;font-weight:700;color:#0C1116;outline:none">
-                      <span style="flex:1;display:flex;gap:3px;background:#E7EAF0;border-radius:9px;padding:3px"><button onclick="{{ onLadderRepPlus }}" style="flex:1;padding:6px;border:none;border-radius:7px;background:{{ ladderRepDirPlusBg }};font-family:inherit;font-weight:800;font-size:14px;color:#0C1116;cursor:pointer">+</button><button onclick="{{ onLadderRepMinus }}" style="flex:1;padding:6px;border:none;border-radius:7px;background:{{ ladderRepDirMinusBg }};font-family:inherit;font-weight:800;font-size:14px;color:#0C1116;cursor:pointer">−</button></span>
-                      <input value="{{ ladderRepStepVal }}" oninput="{{ onLadderRepStep }}" type="number" inputmode="numeric" style="flex:1;min-width:0;background:#fff;border:1px solid #D7DCE6;border-radius:9px;padding:8px;text-align:center;font-family:var(--font-mono);font-size:14px;font-weight:700;color:#0C1116;outline:none">
+                      <span style="width:62px;flex:none;font-size:13px;font-weight:600;color:#0C1116">Repeats</span>
+                      <input value="{{ ladderRepStartVal }}" oninput="{{ onLadderRepStart }}" type="number" inputmode="numeric" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;text-align:center;font-family:var(--font-mono);font-size:14px;font-weight:700;color:#0C1116;outline:none">
+                      <span style="flex:1;display:flex;gap:3px;background:#EEF1F5;border-radius:9px;padding:3px"><button onclick="{{ onLadderRepPlus }}" style="flex:1;padding:7px;border:none;border-radius:7px;background:{{ ladderRepDirPlusBg }};font-family:inherit;font-weight:800;font-size:14px;color:{{ ladderRepDirPlusFg }};cursor:pointer">+</button><button onclick="{{ onLadderRepMinus }}" style="flex:1;padding:7px;border:none;border-radius:7px;background:{{ ladderRepDirMinusBg }};font-family:inherit;font-weight:800;font-size:14px;color:{{ ladderRepDirMinusFg }};cursor:pointer">−</button></span>
+                      <input value="{{ ladderRepStepVal }}" oninput="{{ onLadderRepStep }}" type="number" inputmode="numeric" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;text-align:center;font-family:var(--font-mono);font-size:14px;font-weight:700;color:#0C1116;outline:none">
                     </div>
                   </div>
 
-                  <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:14px;margin-bottom:11px;border-top:3px solid #1CB87A">
-                    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px"><span style="font-size:20px;font-weight:800;color:#0C1116">{{ ladderTotal }} m</span><span style="font-size:20px;font-weight:800;color:#0C1116">{{ ladderTimeMin }} mins</span></div>
-                    <p style="margin:0;font-size:13px;color:#3A4152;line-height:1.55">{{ ladderText }}</p>
+                  <div style="background:#0A0F1A;border-radius:14px;padding:15px 16px;margin-bottom:11px;box-shadow:0 8px 20px {{ ladderGlow }}">
+                    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px"><span style="font-family:var(--font-mono);font-size:22px;font-weight:800;color:#fff">{{ ladderTotal }}<span style="font-size:12px;color:rgba(255,255,255,.6);font-weight:700"> m</span></span><span style="font-size:15px;font-weight:700;color:{{ ladderAccent }}">≈ {{ ladderTimeMin }} mins</span></div>
+                    <p style="margin:0;font-size:12.5px;color:rgba(255,255,255,.82);line-height:1.55;font-family:var(--font-mono)">{{ ladderText }}</p>
                   </div>
 
-                  <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:12px 14px;margin-bottom:16px">
-                    <span style="display:block;font-size:13px;font-weight:600;color:#0C1116;margin-bottom:7px">Notes</span>
-                    <textarea value="{{ ladderNotesVal }}" oninput="{{ onLadderNotes }}" placeholder="Optional — e.g. hold EN2, negative split…" style="width:100%;box-sizing:border-box;height:70px;resize:none;background:#fff;border:1px solid #D7DCE6;border-radius:9px;padding:10px;font-family:inherit;font-size:13px;color:#0C1116;outline:none"></textarea>
+                  <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:12px 14px;margin-bottom:16px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                    <span style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296;margin-bottom:7px">Notes</span>
+                    <textarea value="{{ ladderNotesVal }}" oninput="{{ onLadderNotes }}" placeholder="Optional — e.g. hold EN2, negative split…" style="width:100%;box-sizing:border-box;height:66px;resize:none;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:10px;font-family:inherit;font-size:13px;color:#0C1116;outline:none"></textarea>
                   </div>
 
-                  <button onclick="{{ onLadderAdd }}" style="width:100%;background:#4F5DBE;color:#fff;border:none;border-radius:12px;padding:15px;font-family:inherit;font-weight:700;font-size:15px;cursor:pointer">Add to workout</button>
+                  <button onclick="{{ onLadderAdd }}" style="width:100%;background:{{ ladderAccent }};color:#fff;border:none;border-radius:13px;padding:15px;font-family:inherit;font-weight:700;font-size:15px;cursor:pointer;box-shadow:0 8px 20px {{ ladderGlow }}">Add to workout</button>
                 </div>
               </div>
             </sc-if>
@@ -5679,7 +5679,7 @@ class Component extends DCLogic {
       onSavePlan:()=>this.savePlanSnapshot(S.squadId), savedPlanMsg:S.savedPlanMsg||'', savedPlanMsgShow:!!S.savedPlanMsg,
       // ---- ladder / pyramid builder ----
       ...(()=>{ const open=!!S.ladderOpen; const mode=S.ladderMode||'ladder'; const pv=open?this.ladderPreview():{steps:[],total:0,timeMin:0,text:'',empty:true};
-        return { ladderOpen:open, onLadderClose:()=>this.closeLadder(), onLadderAdd:()=>this.addLadderToPlan(),
+        return { ladderOpen:open, onLadderClose:()=>this.closeLadder(), onLadderAdd:()=>this.addLadderToPlan(), ladderAccent:squad.accent, ladderGlow:squad.glow,
           ladderIsLadder:mode==='ladder', ladderIsPyramid:mode==='pyramid',
           ladderModeLadderBg:mode==='ladder'?'#fff':'transparent', ladderModeLadderFg:mode==='ladder'?'#0C1116':'#7A8296',
           ladderModePyramidBg:mode==='pyramid'?'#fff':'transparent', ladderModePyramidFg:mode==='pyramid'?'#0C1116':'#7A8296',
@@ -5689,10 +5689,12 @@ class Component extends DCLogic {
           ladderDistStartVal:S.ladderDistStart, onLadderDistStart:(e)=>this.setState({ladderDistStart:e.target.value}),
           ladderDistStepVal:S.ladderDistStep, onLadderDistStep:(e)=>this.setState({ladderDistStep:e.target.value}),
           ladderDistDirPlusBg:S.ladderDistDir!=='-'?'#fff':'transparent', ladderDistDirMinusBg:S.ladderDistDir==='-'?'#fff':'transparent',
+          ladderDistDirPlusFg:S.ladderDistDir!=='-'?'#0C1116':'#9AA2B4', ladderDistDirMinusFg:S.ladderDistDir==='-'?'#0C1116':'#9AA2B4',
           onLadderDistPlus:()=>this.setState({ladderDistDir:'+'}), onLadderDistMinus:()=>this.setState({ladderDistDir:'-'}),
           ladderRepStartVal:S.ladderRepStart, onLadderRepStart:(e)=>this.setState({ladderRepStart:e.target.value}),
           ladderRepStepVal:S.ladderRepStep, onLadderRepStep:(e)=>this.setState({ladderRepStep:e.target.value}),
           ladderRepDirPlusBg:S.ladderRepDir!=='-'?'#fff':'transparent', ladderRepDirMinusBg:S.ladderRepDir==='-'?'#fff':'transparent',
+          ladderRepDirPlusFg:S.ladderRepDir!=='-'?'#0C1116':'#9AA2B4', ladderRepDirMinusFg:S.ladderRepDir==='-'?'#0C1116':'#9AA2B4',
           onLadderRepPlus:()=>this.setState({ladderRepDir:'+'}), onLadderRepMinus:()=>this.setState({ladderRepDir:'-'}),
           ladderNotesVal:S.ladderNotes, onLadderNotes:(e)=>this.setState({ladderNotes:e.target.value}),
           ladderTotal:pv.total, ladderTimeMin:pv.timeMin, ladderText:pv.text||'—', ladderHasSteps:!pv.empty };
