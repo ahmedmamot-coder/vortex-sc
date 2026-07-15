@@ -2385,9 +2385,12 @@
                       <div style="background:linear-gradient(135deg,#4B2D9E,#7C4DFF);color:#fff;border-radius:16px;padding:15px 16px">
                         <div style="display:flex;align-items:center;gap:11px;margin-bottom:11px"><span style="width:40px;height:40px;flex:none;border-radius:12px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center"><i data-lucide="calendar-range" style="width:21px;height:21px"></i></span><input value="{{ seasonName }}" oninput="{{ onSeasonName }}" style="flex:1;min-width:0;background:none;border:none;outline:none;color:#fff;font-family:inherit;font-size:16px;font-weight:800;padding:0"></div>
                         <div style="display:flex;gap:8px">
-                          <div style="flex:1;background:rgba(255,255,255,.12);border-radius:11px;padding:8px 10px"><span style="display:block;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.65);font-weight:700">Starts (Mon)</span><input value="{{ seasonStart }}" oninput="{{ onSeasonStart }}" type="date" style="width:100%;background:none;border:none;outline:none;color:#fff;font-family:var(--font-mono);font-size:12.5px;font-weight:700;padding:2px 0 0"></div>
-                          <div style="flex:none;background:rgba(255,255,255,.12);border-radius:11px;padding:8px 12px;text-align:center"><span style="display:block;font-size:17px;font-weight:800">{{ seasonTotalWeeks }}</span><span style="display:block;font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.65)">weeks</span></div>
-                          <div style="flex:none;background:rgba(255,255,255,.12);border-radius:11px;padding:8px 12px;text-align:center"><span style="display:block;font-size:17px;font-weight:800">{{ seasonPhaseCount }}</span><span style="display:block;font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.65)">phases</span></div>
+                          <div style="flex:1;background:rgba(255,255,255,.12);border-radius:11px;padding:8px 10px"><span style="display:block;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.65);font-weight:700">From (Mon)</span><input value="{{ seasonStart }}" oninput="{{ onSeasonStart }}" type="date" style="width:100%;background:none;border:none;outline:none;color:#fff;font-family:var(--font-mono);font-size:12.5px;font-weight:700;padding:2px 0 0"></div>
+                          <div style="flex:1;background:rgba(255,255,255,.12);border-radius:11px;padding:8px 10px"><span style="display:block;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.65);font-weight:700">To</span><input value="{{ seasonEndISO }}" oninput="{{ onSeasonEnd }}" type="date" style="width:100%;background:none;border:none;outline:none;color:#fff;font-family:var(--font-mono);font-size:12.5px;font-weight:700;padding:2px 0 0"></div>
+                        </div>
+                        <div style="display:flex;gap:8px;margin-top:8px">
+                          <div style="flex:1;background:rgba(255,255,255,.12);border-radius:11px;padding:8px 12px;text-align:center"><span style="display:block;font-size:17px;font-weight:800">{{ seasonTotalWeeks }}</span><span style="display:block;font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.65)">weeks</span></div>
+                          <div style="flex:1;background:rgba(255,255,255,.12);border-radius:11px;padding:8px 12px;text-align:center"><span style="display:block;font-size:17px;font-weight:800">{{ seasonPhaseCount }}</span><span style="display:block;font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.65)">phases</span></div>
                         </div>
                         <p style="margin:9px 0 0;font-size:11px;color:rgba(255,255,255,.7)">{{ seasonStartLabel }} → {{ seasonEndLabel }}</p>
                       </div>
@@ -2404,10 +2407,11 @@
                                 <button onclick="{{ ph.onDown }}" style="width:24px;height:24px;flex:none;border-radius:7px;border:1px solid #E5E9F0;background:#fff;color:#7A8296;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="chevron-down" style="width:14px;height:14px"></i></button>
                                 <button onclick="{{ ph.onRemove }}" style="width:24px;height:24px;flex:none;border-radius:7px;border:none;background:#FDECEC;color:#E5484D;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="trash-2" style="width:13px;height:13px"></i></button>
                               </div>
-                              <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:9px">
+                              <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:9px;align-items:center">
                                 <sc-for list="{{ ph.loadChips }}" as="lc" hint-placeholder-count="5">
                                   <button onclick="{{ lc.onClick }}" style="background:{{ lc.bg }};color:{{ lc.fg }};border:1px solid {{ lc.border }};border-radius:7px;padding:4px 10px;font-family:inherit;font-size:10.5px;font-weight:700;cursor:pointer">{{ lc.label }}</button>
                                 </sc-for>
+                                <input value="{{ ph.loadLabel }}" oninput="{{ ph.onLoadLabel }}" placeholder="…or write your own" style="flex:1;min-width:110px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:7px;padding:5px 9px;font-family:inherit;font-size:10.5px;font-weight:700;color:#0C1116;outline:none">
                               </div>
                             </div>
                           </sc-for>
@@ -2441,6 +2445,7 @@
                                   <span style="display:block;font-size:10px;font-weight:800;color:{{ w.loadColor }};text-transform:uppercase;letter-spacing:.04em">{{ w.loadLabel }}</span>
                                   <sc-if value="{{ w.hasSessions }}" hint-placeholder-val="{{ false }}"><span style="display:block;font-size:10.5px;color:#7A8296;margin-top:2px">{{ w.sessionCount }} sess · {{ w.sessionM }}m</span></sc-if>
                                 </span>
+                                <i data-lucide="{{ w.chevron }}" style="width:16px;height:16px;color:#C7CDDA;flex:none"></i>
                               </button>
                               <sc-if value="{{ w.hasMeets }}" hint-placeholder-val="{{ false }}">
                                 <div style="display:flex;flex-wrap:wrap;gap:5px;padding:0 12px 9px 57px">
@@ -4601,6 +4606,7 @@ class Component extends DCLogic {
   }
   // ---- Season / periodization planner (per squad, own season_plans table) ----
   _mondayISO(d){ d=d?new Date(d+'T00:00:00'):new Date(); const day=(d.getDay()+6)%7; d.setDate(d.getDate()-day); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  _fmtDMY(iso, withYear){ if(!iso) return ''; const d=new Date(iso+'T00:00:00'); if(isNaN(d)) return ''; return d.toLocaleDateString('en-GB', withYear?{day:'numeric',month:'short',year:'numeric'}:{day:'numeric',month:'short'}); }
   _addDaysISO(iso, n){ const d=new Date(iso+'T00:00:00'); d.setDate(d.getDate()+n); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
   makeDefaultSeason(){ return { name:'2025 / 2026 Season', start:this._mondayISO(), phases:[
     {id:this._uid('ph'), name:'Preparation', weeks:4, load:'medium'},
@@ -4616,6 +4622,8 @@ class Component extends DCLogic {
   seasonAddPhase(squadId){ this.mutateSeason(squadId, s=>{ s.phases.push({id:this._uid('ph'), name:'New phase', weeks:2, load:'medium'}); }); }
   seasonRemovePhase(squadId, pid){ this.mutateSeason(squadId, s=>{ s.phases=s.phases.filter(p=>p.id!==pid); if(!s.phases.length) s.phases=this.makeDefaultSeason().phases; }); }
   seasonPhaseField(squadId, pid, field, val){ this.mutateSeason(squadId, s=>{ const p=s.phases.find(x=>x.id===pid); if(p) p[field]=val; }); }
+  seasonSetLoad(squadId, pid, ld){ this.mutateSeason(squadId, s=>{ const p=s.phases.find(x=>x.id===pid); if(p){ p.load=ld; p.loadLabel=''; } }); }
+  setSeasonEnd(squadId, endISO){ if(!endISO) return; this.mutateSeason(squadId, s=>{ const start=new Date((s.start||this._mondayISO())+'T00:00:00'); const end=new Date(endISO+'T00:00:00'); if(isNaN(end)||end<=start) return; const totalDays=Math.round((end-start)/86400000); const wantWeeks=Math.max(s.phases.length, Math.ceil((totalDays+1)/7)); const cur=s.phases.reduce((a,p)=>a+Math.max(1,parseInt(p.weeks,10)||1),0); const diff=wantWeeks-cur; if(diff!==0){ const last=s.phases[s.phases.length-1]; last.weeks=Math.max(1,(parseInt(last.weeks,10)||1)+diff); } }); }
   seasonPhaseWeeks(squadId, pid, delta){ this.mutateSeason(squadId, s=>{ const p=s.phases.find(x=>x.id===pid); if(p) p.weeks=Math.max(1, Math.min(30,(parseInt(p.weeks,10)||1)+delta)); }); }
   seasonMovePhase(squadId, pid, dir){ this.mutateSeason(squadId, s=>{ const i=s.phases.findIndex(x=>x.id===pid); if(i<0) return; const j=i+dir; if(j<0||j>=s.phases.length) return; const t=s.phases[i]; s.phases[i]=s.phases[j]; s.phases[j]=t; }); }
   seasonResetPhases(squadId){ if(!window.confirm('Reset phases to the default template?')) return; this.mutateSeason(squadId, s=>{ s.phases=this.makeDefaultSeason().phases; }); }
@@ -5369,12 +5377,12 @@ class Component extends DCLogic {
         const wkMeets=seasonMeets.filter(m=>m.iso>=startISO && m.iso<=endISO);
         const sess=seasonSaved.filter(sp=>sp.date && sp.date>=startISO && sp.date<=endISO);
         const isTarget=wkMeets.some(m=>(season.targets||[]).includes(m.name));
-        seasonWeeks.push({ n:wn, phase:ph.name, phaseColor:col, loadLabel:lm.label, loadPct:lm.pct, loadColor:lm.color,
-          startISO, endISO, dateLabel:this.shortDate(startISO.split('-').reverse().join('/'))+' – '+this.shortDate(endISO.split('-').reverse().join('/')),
+        seasonWeeks.push({ n:wn, phase:ph.name, phaseColor:col, loadLabel:(ph.loadLabel&&String(ph.loadLabel).trim())?ph.loadLabel:lm.label, loadPct:lm.pct, loadColor:lm.color,
+          startISO, endISO, dateLabel:this._fmtDMY(startISO)+' – '+this._fmtDMY(endISO),
           meets:wkMeets.map(m=>({name:m.name, target:(season.targets||[]).includes(m.name), bg:(season.targets||[]).includes(m.name)?'#E5484D':'#EEF1F5', fg:(season.targets||[]).includes(m.name)?'#fff':'#5A657E'})), hasMeets:wkMeets.length>0,
           isTarget, sessionCount:sess.length, sessionM:sess.reduce((a,x)=>a+(x.totalM||0),0),
-          hasSessions:sess.length>0, sessions:sess.map(sp=>({title:sp.title, m:sp.totalM, dateLabel:this.shortDate((sp.date||'').split('-').reverse().join('/'))})),
-          open:(S.seasonOpenWeek===wn), onToggle:()=>this.setState({seasonOpenWeek:S.seasonOpenWeek===wn?null:wn}) });
+          hasSessions:sess.length>0, sessions:sess.map(sp=>({title:sp.title, m:sp.totalM, dateLabel:this._fmtDMY(sp.date)})),
+          open:(S.seasonOpenWeek===wn), chevron:(S.seasonOpenWeek===wn)?'chevron-up':'chevron-down', onToggle:()=>this.setState({seasonOpenWeek:S.seasonOpenWeek===wn?null:wn}) });
         wISO=this._addDaysISO(wISO,7); wn++;
       }
     });
@@ -5382,12 +5390,13 @@ class Component extends DCLogic {
     const targetWeekNums=seasonWeeks.filter(w=>w.isTarget).map(w=>w.n);
     seasonWeeks.forEach(w=>{ const taper=targetWeekNums.some(tn=>(tn-w.n)>=1 && (tn-w.n)<=2); w.taperInto=taper; w.raceWeek=w.isTarget; });
     const seasonPhaseRows=season.phases.map((ph,pi)=>({ id:ph.id, name:ph.name, weeks:ph.weeks, color:seasonPhaseColors[pi%seasonPhaseColors.length],
-      loadChips:['easy','medium','high','peak','taper'].map(ld=>{ const on=ph.load===ld; const m=this._seasonLoadMeta(ld); return {label:m.label, on, bg:on?m.color:'#fff', fg:on?'#fff':'#7A8296', border:on?m.color:'#E5E9F0', onClick:()=>this.seasonPhaseField(S.squadId,ph.id,'load',ld)}; }),
+      loadChips:['easy','medium','high','peak','taper'].map(ld=>{ const on=(ph.load===ld && !(ph.loadLabel&&String(ph.loadLabel).trim())); const m=this._seasonLoadMeta(ld); return {label:m.label, on, bg:on?m.color:'#fff', fg:on?'#fff':'#7A8296', border:on?m.color:'#E5E9F0', onClick:()=>this.seasonSetLoad(S.squadId,ph.id,ld)}; }),
+      loadLabel:ph.loadLabel||'', onLoadLabel:(e)=>this.seasonPhaseField(S.squadId,ph.id,'loadLabel',e.target.value),
       onName:(e)=>this.seasonPhaseField(S.squadId,ph.id,'name',e.target.value),
       onWeeksDec:()=>this.seasonPhaseWeeks(S.squadId,ph.id,-1), onWeeksInc:()=>this.seasonPhaseWeeks(S.squadId,ph.id,1),
       onUp:()=>this.seasonMovePhase(S.squadId,ph.id,-1), onDown:()=>this.seasonMovePhase(S.squadId,ph.id,1),
       onRemove:()=>this.seasonRemovePhase(S.squadId,ph.id) }));
-    const seasonTargetChips=seasonMeets.filter((m,i,a)=>a.findIndex(x=>x.name===m.name)===i).sort((a,b)=>a.iso.localeCompare(b.iso)).slice(0,14).map(m=>{ const on=(season.targets||[]).includes(m.name); return {name:m.name, dateLabel:this.shortDate(m.iso.split('-').reverse().join('/')), on, bg:on?'#E5484D':'#fff', fg:on?'#fff':'#3A4152', border:on?'#E5484D':'#E5E9F0', onClick:()=>this.seasonToggleTarget(S.squadId,m.name)}; });
+    const seasonTargetChips=seasonMeets.filter((m,i,a)=>a.findIndex(x=>x.name===m.name)===i).sort((a,b)=>a.iso.localeCompare(b.iso)).slice(0,14).map(m=>{ const on=(season.targets||[]).includes(m.name); return {name:m.name, dateLabel:this._fmtDMY(m.iso), on, bg:on?'#E5484D':'#fff', fg:on?'#fff':'#3A4152', border:on?'#E5484D':'#E5E9F0', onClick:()=>this.seasonToggleTarget(S.squadId,m.name)}; });
 
     // ---- Zone Engine (spec ruleset) ----
     const zoneAge = S.zoneAge!=null ? S.zoneAge : 14;
@@ -6500,7 +6509,8 @@ class Component extends DCLogic {
       toolSeason:S.tool==='season',
       seasonName:season.name, onSeasonName:(e)=>this.setSeasonField(S.squadId,'name',e.target.value),
       seasonStart:season.start, onSeasonStart:(e)=>this.setSeasonField(S.squadId,'start', this._mondayISO(e.target.value)),
-      seasonStartLabel:this.shortDate(season.start.split('-').reverse().join('/')), seasonEndLabel:this.shortDate(seasonEndISO.split('-').reverse().join('/')),
+      seasonEndISO, onSeasonEnd:(e)=>this.setSeasonEnd(S.squadId, e.target.value),
+      seasonStartLabel:this._fmtDMY(season.start, true), seasonEndLabel:this._fmtDMY(seasonEndISO, true),
       seasonTotalWeeks, seasonPhaseCount:season.phases.length, seasonWeeks, seasonPhaseRows, seasonTargetChips, seasonHasTargets:(season.targets||[]).length>0,
       onSeasonAddPhase:()=>this.seasonAddPhase(S.squadId), onSeasonResetPhases:()=>this.seasonResetPhases(S.squadId),
       onOpenSeason:()=>this.openTool('season', false),
