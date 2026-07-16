@@ -376,10 +376,20 @@
                   </sc-if>
 
                   <input value="{{ famEmail }}" oninput="{{ onFamEmail }}" placeholder="Email" type="email" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
-                  <input value="{{ famPass }}" oninput="{{ onFamPass }}" placeholder="Password" type="password" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
+                  <sc-if value="{{ famIsForgot }}" hint-placeholder-val="{{ false }}">
+                    <p style="margin:0;font-size:12px;color:rgba(255,255,255,.65);line-height:1.5">Enter your email and the WhatsApp number you registered with to verify it’s you, then set a new password.</p>
+                    <input value="{{ famPhone }}" oninput="{{ onFamPhone }}" placeholder="WhatsApp number you registered with" type="tel" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
+                  </sc-if>
+                  <input value="{{ famPass }}" oninput="{{ onFamPass }}" placeholder="{{ famPassPlaceholder }}" type="password" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
+                  <sc-if value="{{ famShowConfirm }}" hint-placeholder-val="{{ false }}">
+                    <input value="{{ famPass2 }}" oninput="{{ onFamPass2 }}" placeholder="Confirm password" type="password" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
+                  </sc-if>
+                  <sc-if value="{{ famIsLogin }}" hint-placeholder-val="{{ true }}">
+                    <button onclick="{{ onFamForgot }}" style="align-self:flex-end;background:none;border:none;color:rgba(255,255,255,.6);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;padding:0">Forgot password?</button>
+                  </sc-if>
+                  <sc-if value="{{ famResetOkShow }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:12px;color:#22D7D7;font-weight:600">Password updated — sign in with your new password.</p></sc-if>
 
                   <sc-if value="{{ famIsRegister }}" hint-placeholder-val="{{ false }}">
-                    <input value="{{ famPass2 }}" oninput="{{ onFamPass2 }}" placeholder="Confirm password" type="password" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
                     <div>
                       <p style="margin:0 0 7px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.45)">{{ famLinkLabel }}</p>
                       <input value="{{ famSearch }}" oninput="{{ onFamSearch }}" placeholder="{{ famSearchPlaceholder }}" style="width:100%;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:11px 14px;color:#fff;font-family:inherit;font-size:13px;outline:none;box-sizing:border-box">
@@ -3521,7 +3531,7 @@ class Component extends DCLogic {
       clockRunning:false, clockSetIdx:0, clockRep:1, clockRemain:0, reviewMode:'review',
       plans:_plans,
       family:this._loadFamily(), familyUser:null, familyActiveIdx:0,
-      famMode:'login', famName:'', famEmail:'', famPass:'', famPass2:'', famPhone:'', famRole:'parent', famSearch:'', famPicked:[], famErr:'',
+      famMode:'login', famName:'', famEmail:'', famPass:'', famPass2:'', famPhone:'', famRole:'parent', famSearch:'', famPicked:[], famErr:'', famResetOk:false,
       adminSection:null, swQuery:'', swSquadFilter:'all', swEditId:null, swAddOpen:false, swForm:{name:'',age:'',gender:'Boys',pbs:[]},
       swPbEventSel:'50 Free', swPbTimeDraft:'',
       swEditPbs:[], swEditPbEventSel:'50 Free', swEditPbTimeDraft:'',
@@ -3672,8 +3682,29 @@ class Component extends DCLogic {
   _loadFamily(){ try{ return JSON.parse(localStorage.getItem('vx_family')||'[]')||[]; }catch(e){ return []; } }
   _saveFamily(list){ this.family=list; try{ this._saveLocalOnly('vx_family', list); }catch(e){} this.setState({family:list}); }
   async _familyFetch(){ if(!window.__vxSelect) return; const rows=await window.__vxSelect('family_accounts', 'select=*&limit=2000'); if(rows==null) return;
-    const list=rows.map(r=>({ id:r.id, name:r.name||'', email:r.email||'', phone:r.phone||'', pass:r.pass||'', role:r.role||'parent', swimmerIds:r.swimmer_ids||[] }));
+    const fromTable=rows.map(r=>({ id:r.id, name:r.name||'', email:r.email||'', phone:r.phone||'', pass:r.pass||'', role:r.role||'parent', swimmerIds:r.swimmer_ids||[] }));
+    const have=new Set(fromTable.map(f=>(f.email||'').trim().toLowerCase()));
+    // Self-heal: any account registered locally that never made it into the table
+    // (a failed insert / offline moment) is KEPT and re-uploaded, so it can never vanish.
+    const localOnly=(this.family||[]).filter(f=> f && f.email && !have.has((f.email||'').trim().toLowerCase()));
+    localOnly.forEach(f=>{ if(window.__vxInsert) try{ window.__vxInsert('family_accounts', [{id:f.id||this._uid('fam'), name:f.name, email:f.email, phone:f.phone, pass:f.pass, role:f.role, swimmer_ids:f.swimmerIds||[], ts:Date.now()}]); }catch(e){} });
+    const list=[...fromTable, ...localOnly];
     this.family=list; try{ this._saveLocalOnly('vx_family', list); }catch(e){} this.setState({family:list});
+  }
+  // Reset a family account's password in-app (no email needed): verify by the email
+  // + phone they registered with, then update the row in the family_accounts table.
+  async famResetPassword(){ const S=this.state; const email=(S.famEmail||'').trim().toLowerCase(); const phone=(S.famPhone||'').replace(/[^\d]/g,''); const np=(S.famPass||'');
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return this.setState({famErr:'Enter the email you registered with.'});
+    if(np.length<4) return this.setState({famErr:'New password must be at least 4 characters.'});
+    if(np!==S.famPass2) return this.setState({famErr:'Passwords don’t match.'});
+    try{ await this._familyFetch(); }catch(e){}
+    const rec=(this.family||[]).find(f=>(f.email||'').trim().toLowerCase()===email);
+    if(!rec) return this.setState({famErr:'No account with that email. Register instead.'});
+    if((''+(rec.phone||'')).replace(/[^\d]/g,'')!==phone || phone.length<6) return this.setState({famErr:'Phone number doesn’t match this account — enter the number you registered with to verify it’s you.'});
+    rec.pass=np;
+    const list=(this.family||[]).map(f=>f.id===rec.id?rec:f); this._saveFamily(list);
+    if(window.__vxUpsert) try{ await window.__vxUpsert('family_accounts', [{id:rec.id, name:rec.name, email:rec.email, phone:rec.phone, pass:np, role:rec.role, swimmer_ids:rec.swimmerIds||[], ts:Date.now()}]); }catch(e){}
+    this.setState({famErr:'', famMode:'login', famPass:'', famPass2:'', famPhone:'', settingsMsg:'', famResetOk:true});
   }
   _loadJSON(key, fallback){ try{ const v=localStorage.getItem(key); return v==null?fallback:JSON.parse(v); }catch(e){ return fallback; } }
   _saveJSON(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){} }
@@ -4600,8 +4631,12 @@ class Component extends DCLogic {
     if(existing.find(f=>(f.email||'').trim().toLowerCase()===email)) return this.setState({famErr:'An account with this email already exists \u2014 sign in instead.'});
     const rec={id:this._uid('fam')+'_'+Math.random().toString(36).slice(2,5), name:S.famName.trim(), email, phone:phoneDigits, pass:S.famPass, role:S.famRole, swimmerIds:S.famPicked.slice()};
     const list=[...existing, rec]; this._saveFamily(list);
-    // Append one row (never overwrites another parent's registration).
-    if(window.__vxInsert){ window.__vxInsert('family_accounts', [{id:rec.id, name:rec.name, email:rec.email, phone:rec.phone, pass:rec.pass, role:rec.role, swimmer_ids:rec.swimmerIds, ts:Date.now()}]).then(ok=>{ if(ok) this._familyFetch(); }); }
+    // Append one row (never overwrites another parent's registration). If it fails now,
+    // _familyFetch self-heals by re-uploading it, so the account is never lost.
+    if(window.__vxInsert){ try{ const ok=await window.__vxInsert('family_accounts', [{id:rec.id, name:rec.name, email:rec.email, phone:rec.phone, pass:rec.pass, role:rec.role, swimmer_ids:rec.swimmerIds, ts:Date.now()}]); if(ok) this._familyFetch(); }catch(e){} }
+    // Notify the coaches/admins that a new family signed up.
+    const kidNames=S.famPicked.map(uid=>{ const [sq,sw]=uid.split('::'); const s=(this.roster[sq]||[]).find(x=>x.id===sw); return s?s.name:''; }).filter(Boolean).join(', ');
+    this.notify('coach', 'user-plus', 'New '+(rec.role==='swimmer'?'swimmer':'parent')+' sign-up', rec.name+' registered ('+email+' · '+phoneDigits+')'+(kidNames?(' for '+kidNames):''));
     const firstSwId=(S.famPicked[0]||'').split('::')[1];
     if(firstSwId) this.notify('family_sw:'+firstSwId, 'party-popper', 'Welcome to Vortex SC!', 'Hi '+S.famName.trim()+', your account is ready \u2014 a confirmation would be emailed to '+email+' in the live app. Explore performance, attendance, results and meets any time.');
     try{
@@ -6088,8 +6123,12 @@ class Component extends DCLogic {
       famLinkedMsg: S.famRole==='swimmer' ? 'Profile linked \u2014 tap Create account below.' : (S.famPicked.length===1 ? '1 child linked \u2014 add more or tap Create account below.' : S.famPicked.length+' children linked \u2014 add more or tap Create account below.'),
       famPickedChips:S.famPicked.map(uid=>{ const [sqid,swid]=uid.split('::'); const sw=(this.roster[sqid]||[]).find(x=>x.id===swid); return {uid, label:sw?sw.name:'?', onRemove:()=>this.famToggleSwimmer(uid)}; }),
       famErr:S.famErr, famErrShow:!!S.famErr,
-      onFamSubmit: S.famMode==='login' ? ()=>this.famLogin() : ()=>this.famRegister(),
-      famSubmitLabel: S.famMode==='login' ? 'Sign in' : 'Create account',
+      famIsForgot:S.famMode==='forgot', famShowConfirm:(S.famMode==='register'||S.famMode==='forgot'),
+      famPassPlaceholder:S.famMode==='forgot'?'New password':'Password',
+      onFamForgot:()=>this.setState({famMode:'forgot', famErr:'', famResetOk:false, famPass:'', famPass2:'', famPhone:''}),
+      famResetOkShow:!!S.famResetOk,
+      onFamSubmit: S.famMode==='login' ? ()=>this.famLogin() : (S.famMode==='forgot' ? ()=>this.famResetPassword() : ()=>this.famRegister()),
+      famSubmitLabel: S.famMode==='login' ? 'Sign in' : (S.famMode==='forgot' ? 'Reset password' : 'Create account'),
 
       appTopColor: (S.view==='hub'||S.view==='tools'||S.view==='handbook'||S.view==='family'||S.view==='academy') ? '#0A0F1A' : '#EEF1F5',
       statusInk: (S.view==='hub'||S.view==='tools'||S.view==='handbook'||S.view==='family'||S.view==='academy') ? '#fff' : '#0C1116',
