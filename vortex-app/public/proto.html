@@ -2595,19 +2595,56 @@
                           <button onclick="{{ onPost }}" style="flex:none;margin-left:8px;width:36px;height:36px;border-radius:11px;background:var(--vx-blue);border:none;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center"><i data-lucide="send" style="width:17px;height:17px"></i></button>
                         </div>
                       </div>
+                      <button onclick="{{ onReqToggle }}" style="display:flex;align-items:center;gap:8px;width:100%;background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:11px 13px;box-shadow:0 1px 4px rgba(11,20,40,.04);cursor:pointer;color:#0C1116;font-family:inherit;font-weight:700;font-size:12.5px;margin-bottom:12px"><i data-lucide="inbox" style="width:16px;height:16px;color:var(--vx-blue)"></i>Send a private request to a manager<i data-lucide="chevron-down" style="width:15px;height:15px;color:#9AA2B4;margin-left:auto"></i></button>
+                      <sc-if value="{{ reqOpen }}" hint-placeholder-val="{{ false }}">
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05);margin-bottom:12px">
+                          <p style="margin:0 0 8px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4">Send to</p>
+                          <div class="vx-scroll" style="display:flex;gap:6px;overflow-x:auto;margin-bottom:9px">
+                            <sc-for list="{{ reqChoices }}" as="rc" hint-placeholder-count="2">
+                              <button onclick="{{ rc.onSelect }}" style="flex:none;border:1px solid {{ rc.border }};background:{{ rc.bg }};border-radius:999px;padding:7px 13px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer;color:{{ rc.fg }}">{{ rc.label }}</button>
+                            </sc-for>
+                          </div>
+                          <textarea value="{{ reqText }}" oninput="{{ onReqTextChange }}" placeholder="Describe your request or complaint… (e.g. @Ahmed can we move Senior A to lane 4?)" style="width:100%;border:1px solid #E5E9F0;border-radius:10px;padding:10px;outline:none;resize:none;font-family:inherit;font-size:13px;color:#0C1116;min-height:64px;box-sizing:border-box"></textarea>
+                          <sc-if value="{{ reqMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:7px 2px 0;font-size:11.5px;font-weight:600;color:#B42318">{{ reqMsg }}</p></sc-if>
+                          <button onclick="{{ onReqSend }}" style="margin-top:9px;display:flex;align-items:center;justify-content:center;gap:7px;width:100%;background:var(--vx-blue);color:#fff;border:none;border-radius:11px;padding:11px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer"><i data-lucide="send" style="width:15px;height:15px"></i>Send request</button>
+                        </div>
+                      </sc-if>
                       <div style="display:flex;flex-direction:column;gap:10px">
                         <sc-for list="{{ feed }}" as="p" hint-placeholder-count="4">
                           <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                            <sc-if value="{{ p.isReq }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:6px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border-radius:9px;padding:6px 9px;margin-bottom:9px;font-size:11px;font-weight:700"><i data-lucide="lock" style="width:13px;height:13px"></i>{{ p.reqLabel }}</div></sc-if>
                             <div style="display:flex;align-items:center;gap:10px">
                               {{ p.avatar }}
                               <span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:13.5px;color:#0C1116">{{ p.author }}</span><span style="display:block;font-size:11px;color:#9AA2B4">{{ p.role }} · {{ p.time }}</span></span>
+                              <sc-if value="{{ p.canEdit }}" hint-placeholder-val="{{ false }}"><button onclick="{{ p.onEdit }}" style="flex:none;width:28px;height:28px;border-radius:8px;border:none;background:#F4F6F8;color:#7A8296;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="pencil" style="width:13px;height:13px"></i></button></sc-if>
                               <span style="background:{{ p.tagBg }};color:{{ p.tagFg }};padding:4px 9px;border-radius:999px;font-weight:700;font-size:10px">{{ p.tag }}</span>
                             </div>
-                            <p style="margin:10px 0 0;font-size:13.5px;color:#3A4152;line-height:1.45">{{ p.text }}</p>
-                            {{ p.imageEl }}
+                            <sc-if value="{{ p.editing }}" hint-placeholder-val="{{ false }}">
+                              <textarea value="{{ p.editText }}" oninput="{{ p.onEditChange }}" style="width:100%;margin-top:9px;border:1px solid #E5E9F0;border-radius:10px;padding:9px;outline:none;resize:none;font-family:inherit;font-size:13px;color:#0C1116;min-height:56px;box-sizing:border-box"></textarea>
+                              <div style="display:flex;gap:7px;margin-top:7px">
+                                <button onclick="{{ p.onEditSave }}" style="flex:1;background:var(--vx-blue);color:#fff;border:none;border-radius:9px;padding:8px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">Save</button>
+                                <button onclick="{{ p.onEditCancel }}" style="flex:none;background:#F4F6F8;color:#7A8296;border:none;border-radius:9px;padding:8px 14px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">Cancel</button>
+                              </div>
+                            </sc-if>
+                            <sc-if value="{{ p.editing }}" hint-placeholder-val="{{ true }}">
+                              <p style="margin:10px 0 0;font-size:13.5px;color:#3A4152;line-height:1.45">{{ p.textEl }}<sc-if value="{{ p.edited }}" hint-placeholder-val="{{ false }}"><span style="font-size:10.5px;color:#9AA2B4;font-weight:600"> · edited</span></sc-if></p>
+                              {{ p.imageEl }}
+                            </sc-if>
                             <div style="display:flex;gap:16px;margin-top:11px;border-top:1px solid #EEF1F5;padding-top:9px">
                               <button onclick="{{ p.onLike }}" style="display:flex;align-items:center;gap:6px;background:none;border:none;cursor:pointer;color:{{ p.likeColor }};font-family:inherit;font-weight:600;font-size:12.5px"><i data-lucide="heart" style="width:16px;height:16px"></i>{{ p.likes }}</button>
                               <span style="display:flex;align-items:center;gap:6px;color:#9AA2B4;font-weight:600;font-size:12.5px"><i data-lucide="message-circle" style="width:16px;height:16px"></i>{{ p.comments }}</span>
+                            </div>
+                            <div style="display:flex;flex-direction:column;gap:8px;margin-top:9px">
+                              <sc-for list="{{ p.comments2 }}" as="c" hint-placeholder-count="2">
+                                <div style="display:flex;gap:8px;align-items:flex-start">
+                                  {{ c.avatar }}
+                                  <span style="flex:1;min-width:0;background:#F6F8FB;border-radius:10px;padding:7px 10px"><span style="display:block;font-size:11.5px;font-weight:700;color:#0C1116">{{ c.author }} <span style="font-weight:500;color:#9AA2B4;font-size:10px">· {{ c.time }}</span></span><span style="display:block;font-size:12.5px;color:#3A4152;line-height:1.4;margin-top:1px">{{ c.textEl }}</span></span>
+                                </div>
+                              </sc-for>
+                            </div>
+                            <div style="display:flex;gap:7px;margin-top:9px;align-items:center">
+                              <input value="{{ p.commentDraft }}" oninput="{{ p.onCommentChange }}" placeholder="Write a reply… use @name to mention" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:999px;padding:8px 13px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                              <button onclick="{{ p.onAddComment }}" style="flex:none;width:34px;height:34px;border-radius:50%;background:var(--vx-blue);border:none;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center"><i data-lucide="send" style="width:15px;height:15px"></i></button>
                             </div>
                           </div>
                         </sc-for>
@@ -3574,6 +3611,7 @@ class Component extends DCLogic {
     this._fpid=0;
     this.fitnessPlans=this._loadJSON('vx_fitness_plans', {});
     this.fitnessMedia=this._loadJSON('vx_fitness_media', {});
+    this.loungeComments={};
     this.rebuildRoster();
 
     this.state = {
@@ -3629,6 +3667,7 @@ class Component extends DCLogic {
         {id:'f3', author:'Ahmed Mamo', role:'Technical Director', initials:'AM', photo:'assets/director-ahmed.jpg', tag:'Notice', text:'Entry deadline for the Nautilus Invitational is Thursday. Coaches, confirm your squad lists in Meets.', image:'', likes:38, comments:9, time:'1d', liked:false},
       ],
       aiKind:'season', aiPrompt:'', aiOut:null, aiLoading:false,
+      loungeEditId:null, loungeEditText:'', commentDrafts:{}, reqOpen:false, reqTo:'', reqText:'', reqMsg:'',
     };
     // Vortex Lounge chat is backed by its own table (lounge_posts), loaded via _loungeFetch().
     // The seed posts in state.feed only show until the first real fetch replaces them.
@@ -4252,9 +4291,55 @@ class Component extends DCLogic {
     if(rows==null) return; // null = table missing / network error → keep current feed
     const cur={}; (this.state.feed||[]).forEach(p=>{ cur[p.id]=p; });
     const feed=rows.map(r=>({ id:r.id, author:r.author, role:r.role, initials:r.initials||'?', photo:r.photo||'', tag:r.tag||'Chat', text:r.body||'', image:r.image||'', ts:r.ts,
+      toId:r.to_id||'', toName:r.to_name||'', kind:r.kind||'post',
       time:'now', likes:(cur[r.id]?cur[r.id].likes:0), liked:(cur[r.id]?cur[r.id].liked:false), comments:0 }));
     this.setState({feed});
+    this._loungeCommentsFetch();
   }
+  async _loungeCommentsFetch(){
+    if(!window.__vxSelect) return;
+    const rows=await window.__vxSelect('lounge_comments', 'select=*&order=ts.asc&limit=1000');
+    if(rows==null) return; // table missing → keep current
+    const by={}; rows.forEach(r=>{ (by[r.post_id]=by[r.post_id]||[]).push({id:r.id, author:r.author, role:r.role, initials:r.initials||'?', photo:r.photo||'', body:r.body||'', ts:r.ts}); });
+    this.loungeComments=by; this.forceUpdate();
+  }
+  _me(){ return this.accounts.find(a=>a.id===this.state.pickedId)||{label:'Staff', role:'', initials:'?', photo:''}; }
+  _isAdmin(){ const m=this._me(); return m.id==='ahmed'||m.id==='sameh'; }
+  // Managers a coach can send a private request to.
+  _adminChoices(){ return (this.accounts||[]).filter(a=> a.id==='ahmed'||a.id==='sameh'||/admin|manager|director|head/i.test(a.role||'')); }
+  // People who can be @mentioned — all staff accounts.
+  _mentionTargets(){ return (this.accounts||[]).filter(a=>!!a.label); }
+  _notifyMentions(text, fromLabel){ const t=(text||''); const hits=[]; this._mentionTargets().forEach(a=>{ const first=(a.label||'').split(' ')[0]; if(!first) return;
+    const re=new RegExp('@'+first.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'i'); if(re.test(t)) hits.push(a); });
+    hits.forEach(a=>{ this.notify('coach','at-sign', fromLabel+' mentioned you in the Lounge', t.slice(0,90)); });
+  }
+  loungeStartEdit(post){ this.setState({loungeEditId:post.id, loungeEditText:post.text||''}); }
+  loungeCancelEdit(){ this.setState({loungeEditId:null, loungeEditText:''}); }
+  async loungeSaveEdit(post){ const txt=(this.state.loungeEditText||'').trim(); if(!txt) return;
+    this.setState({feed:(this.state.feed||[]).map(x=>x.id===post.id?{...x, text:txt, edited:true}:x), loungeEditId:null, loungeEditText:''});
+    const row={id:post.id, author:post.author, role:post.role, initials:post.initials, photo:post.photo, tag:post.tag, body:txt, image:post.image||'', ts:post.ts, to_id:post.toId||null, to_name:post.toName||null, kind:post.kind||'post'};
+    try{ if(window.__vxUpsert){ await window.__vxUpsert('lounge_posts', [row]); await this._loungeFetch(); } }catch(e){}
+  }
+  onCommentChange(postId, val){ const d={...(this.state.commentDrafts||{})}; d[postId]=val; this.setState({commentDrafts:d}); }
+  async loungeAddComment(post){ const d=(this.state.commentDrafts||{}); const txt=(d[post.id]||'').trim(); if(!txt) return;
+    const me=this._me(); const c={id:'c'+Date.now()+'_'+Math.random().toString(36).slice(2,6), post_id:post.id, author:me.label, role:me.role||'Staff', initials:me.initials||'?', photo:me.photo||'', body:txt, ts:Date.now()};
+    const by={...(this.loungeComments||{})}; by[post.id]=[...(by[post.id]||[]), {id:c.id, author:c.author, role:c.role, initials:c.initials, photo:c.photo, body:c.body, ts:c.ts}]; this.loungeComments=by;
+    const nd={...d}; nd[post.id]=''; this.setState({commentDrafts:nd});
+    this._notifyMentions(txt, me.label);
+    if(post.author && post.author!==me.label) this.notify('coach','message-circle', me.label+' replied to your post', txt.slice(0,90));
+    try{ if(window.__vxInsert){ const ok=await window.__vxInsert('lounge_comments', [c]); if(ok) await this._loungeCommentsFetch(); } }catch(e){}
+  }
+  async loungeSendRequest(){ const me=this._me(); const toId=this.state.reqTo||''; const txt=(this.state.reqText||'').trim();
+    if(!toId||!txt) return this.setState({reqMsg:'Pick a manager and write your request.'});
+    const to=(this.accounts||[]).find(a=>a.id===toId)||{};
+    const np={id:'r'+Date.now()+'_'+Math.random().toString(36).slice(2,6), author:me.label, role:me.role||'Staff', initials:me.initials||'?', photo:me.photo||'', tag:'Notice', text:txt, image:'', likes:0, comments:0, ts:Date.now(), toId:toId, toName:to.label||'', kind:'request'};
+    this.setState({feed:[np, ...(this.state.feed||[])], reqOpen:false, reqText:'', reqMsg:''});
+    this.notify('coach','inbox', 'New request for '+(to.label||'manager'), me.label+': '+txt.slice(0,80));
+    const row={id:np.id, author:np.author, role:np.role, initials:np.initials, photo:np.photo, tag:np.tag, body:np.text, image:'', ts:np.ts, to_id:toId, to_name:to.label||'', kind:'request'};
+    try{ if(window.__vxInsert){ const ok=await window.__vxInsert('lounge_posts', [row]); if(ok) await this._loungeFetch(); } }catch(e){}
+  }
+  _mentionTextEl(text){ const R=window.React; const parts=String(text||'').split(/(@[\w]+)/g);
+    return R.createElement('span', null, parts.map((seg,i)=> /^@[\w]+$/.test(seg) ? R.createElement('span',{key:i, style:{color:'#067EEA',fontWeight:700}}, seg) : seg )); }
   notify(audience, icon, title, body){
     const rec={id:this._uid('notif'), audience, icon, title, body, at:new Date().toISOString(), read:false};
     this.notifications=[rec, ...this.notifications];
@@ -6018,7 +6103,26 @@ class Component extends DCLogic {
     const tagStyle={Win:['#DCF5EA','#0C7A4F'],Set:['#E5F0FE','#0959B4'],Notice:['#FCEFD6','#9A6206'],Question:['#EDE7FB','#5A22B0'],Chat:['#E4F1F3','#0B6E7A']};
     const composeTagDefs=[{id:'chat',label:'Chat'},{id:'set',label:'Set'},{id:'win',label:'Win'},{id:'q',label:'Question'},{id:'notice',label:'Notice'}];
     const composeTags=composeTagDefs.map(t=>{ const on=S.composeTag===t.id; return {label:t.label, onClick:()=>this.setState({composeTag:t.id}), bg:on?squad.accent:'#F4F6F8', fg:on?'#fff':'#7A8296', border:on?squad.accent:'#E5E9F0'}; });
-    const feed=S.feed.map(p=>{ const [tb,tf]=tagStyle[p.tag]||['#EEF1F5','#5A657E']; return {author:p.author, role:p.role, avatar:this.av(p.photo||null, p.initials, 38, 11, squad.accent, '#fff', 12), imageEl: p.image? window.React.createElement('img',{src:p.image, alt:'', style:{width:'100%',borderRadius:11,marginTop:10}}) : null, tag:p.tag, tagBg:tb, tagFg:tf, text:p.text, likes:p.likes, comments:p.comments, time: p.ts? this.notifTimeAgo(new Date(p.ts).toISOString()) : (p.time||''), avBg:squad.accent, likeColor:p.liked?'#E5484D':'#9AA2B4', onLike:()=>{ const list=(this.state.feed||[]).map(x=>x.id===p.id?{...x, liked:!x.liked, likes:x.likes+(x.liked?-1:1)}:x); this.setState({feed:list}); } }; });
+    const _me=this._me(); const _isAdmin=this._isAdmin();
+    const feed=S.feed.filter(p=>{
+      // Private requests are visible only to the sender, the addressed manager, and club admins.
+      if((p.kind||'post')!=='request') return true;
+      return _isAdmin || p.toId===_me.id || p.author===_me.label;
+    }).map(p=>{ const [tb,tf]=tagStyle[p.tag]||['#EEF1F5','#5A657E'];
+      const isReq=(p.kind||'post')==='request';
+      const canEdit=(p.author===_me.label); const editing=(S.loungeEditId===p.id);
+      const cmts=(this.loungeComments||{})[p.id]||[];
+      const cmtEls=cmts.map(c=>({ id:c.id, author:c.author, avatar:this.av(c.photo||null, c.initials, 26, 8, squad.accent, '#fff', 9), textEl:this._mentionTextEl(c.body), time:c.ts?this.notifTimeAgo(new Date(c.ts).toISOString()):'' }));
+      return {id:p.id, author:p.author, role:p.role, avatar:this.av(p.photo||null, p.initials, 38, 11, squad.accent, '#fff', 12), imageEl: p.image? window.React.createElement('img',{src:p.image, alt:'', style:{width:'100%',borderRadius:11,marginTop:10}}) : null, tag:p.tag, tagBg:tb, tagFg:tf, textEl:this._mentionTextEl(p.text), likes:p.likes, comments:cmts.length, time: p.ts? this.notifTimeAgo(new Date(p.ts).toISOString()) : (p.time||''), edited:!!p.edited,
+        isReq, reqLabel: isReq? ('Private request → '+(p.toName||'manager')) : '',
+        canEdit, editing, editText:S.loungeEditText,
+        onEdit:()=>this.loungeStartEdit(p), onEditChange:(e)=>this.setState({loungeEditText:e.target.value}), onEditSave:()=>this.loungeSaveEdit(p), onEditCancel:()=>this.loungeCancelEdit(),
+        comments2:cmtEls, commentDraft:(S.commentDrafts||{})[p.id]||'', onCommentChange:(e)=>this.onCommentChange(p.id, e.target.value), onAddComment:()=>this.loungeAddComment(p),
+        avBg:squad.accent, likeColor:p.liked?'#E5484D':'#9AA2B4', onLike:()=>{ const list=(this.state.feed||[]).map(x=>x.id===p.id?{...x, liked:!x.liked, likes:x.likes+(x.liked?-1:1)}:x); this.setState({feed:list}); } }; });
+    const reqChoices=this._adminChoices().map(a=>{ const on=S.reqTo===a.id; return { id:a.id, label:a.label, bg:on?squad.accent:'#F4F6F8', fg:on?'#fff':'#3A4152', border:on?squad.accent:'#E5E9F0', onSelect:()=>this.setState({reqTo:a.id}) }; });
+    const onReqToggle=()=>this.setState({reqOpen:!S.reqOpen, reqMsg:''});
+    const onReqTextChange=(e)=>this.setState({reqText:e.target.value});
+    const onReqSend=()=>this.loungeSendRequest();
     const onPost=async()=>{ const el=document.getElementById('vx-lounge-compose'); const domTxt=el?el.value:''; const txt=((this.state.compose||domTxt||'')).trim(); const img=this.state.composeImage||''; if(!txt && !img) return; const tagName={chat:'Chat',set:'Set',win:'Win',q:'Question',notice:'Notice'}[this.state.composeTag||'chat']||'Chat';
       const acct=this.accounts.find(a=>a.id===this.state.pickedId)||{label:'Staff', role:'', initials:'?', photo:''};
       const np={id:'f'+Date.now()+'_'+Math.random().toString(36).slice(2,6), author:acct.label, role:acct.role||'Staff', initials:acct.initials||(acct.label||'?').slice(0,2).toUpperCase(), photo:acct.photo||'', tag:tagName, text:txt, image:img, likes:0, comments:0, time:'now', ts:Date.now(), liked:false};
@@ -6884,6 +6988,7 @@ class Component extends DCLogic {
       composeText:S.compose, onComposeChange:(e)=>this.setState({compose:e.target.value}), composeTags, onPost, feed,
       composeEmojiChips, composeEmojiOpen:!!S.composeEmojiOpen, onComposeEmojiToggle, onComposePickPhoto, onComposePhoto, onComposeRemovePhoto,
       composeHasImage:!!S.composeImage, composeImageEl: S.composeImage? window.React.createElement('img',{src:S.composeImage, alt:'', style:{width:'100%',maxHeight:180,objectFit:'cover',borderRadius:10,marginTop:8}}) : null,
+      reqChoices, reqOpen:!!S.reqOpen, onReqToggle, reqText:S.reqText||'', onReqTextChange, onReqSend, reqMsg:S.reqMsg||'', reqMsgShow:!!S.reqMsg,
       goalRows,
       goalsHasSwimmer, goalsSwLabel, goalsSquadName: squad.name, goalsSwQuery:S.goalsSwQuery||'', onGoalsSwQuery:(e)=>this.setState({goalsSwQuery:e.target.value}),
       goalsSwResults, onGoalsClear:()=>this.clearGoalsSwimmer(), goalMsg, goalMsgShow:!!goalMsg,
