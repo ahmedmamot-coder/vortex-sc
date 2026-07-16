@@ -25,7 +25,7 @@
   var REST = SB_URL + "/rest/v1/club_state";
   var HEAD = { "apikey": SB_ANON, "Authorization": "Bearer " + SB_ANON, "Content-Type": "application/json" };
   // Every shared data type the club edits. The only key kept per-device is vx_api_key.
-  var SYNC = ["vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_attend_log","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_plans","vx_videos"];
+  var SYNC = ["vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_attend_log","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_plans","vx_videos"];
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
   window.__vxWriteTs = {};   // last time THIS device wrote each key (ms) — guards against stale pulls
@@ -1180,7 +1180,7 @@
                       <div style="display:flex;flex-direction:column;gap:8px">
                         <sc-for list="{{ roster }}" as="sw" hint-placeholder-count="10">
                           <button onclick="{{ sw.onClick }}" style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:10px 12px;box-shadow:0 2px 7px rgba(11,20,40,.05);cursor:pointer">
-                            <span style="position:relative;flex:none"><span style="width:40px;height:40px;border-radius:11px;background:{{ sw.avBg }};color:{{ sw.avFg }};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px">{{ sw.initials }}</span><span style="position:absolute;bottom:-3px;right:-3px;width:18px;height:18px;border-radius:50%;background:{{ sw.genBg }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;line-height:1;border:2px solid #fff">{{ sw.genIcon }}</span></span>
+                            <span style="position:relative;flex:none">{{ sw.avatarEl }}<span style="position:absolute;bottom:-3px;right:-3px;width:18px;height:18px;border-radius:50%;background:{{ sw.genBg }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;line-height:1;border:2px solid #fff">{{ sw.genIcon }}</span></span>
                             <span style="flex:1;min-width:0"><span style="display:block;font-weight:600;font-size:14.5px;color:#0C1116">{{ sw.name }}</span><span style="display:block;font-size:11.5px;color:#7A8296">Age {{ sw.age }} · {{ sw.topEvent }}</span></span>
                             <span style="text-align:right;flex:none;margin-right:2px"><span style="display:block;font-family:var(--font-mono);font-weight:700;font-size:14px;color:{{ squad.accent }};line-height:1">{{ sw.topTime }}</span><span style="display:block;font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4;margin-top:3px">{{ sw.bestLabel }}</span></span>
                             <i data-lucide="chevron-right" style="width:16px;height:16px;color:#C7CDDA"></i>
@@ -3483,6 +3483,7 @@ class Component extends DCLogic {
     this.staffOverrides=this._loadJSON('vx_staff_ovr', {});
     this.tpaceTests=this._loadJSON('vx_tpace', {});
     this.swimmerMeta=this._loadJSON('vx_sw_meta', {});
+    this.sponsoredMap=this._loadJSON('vx_sponsored', {});
     this.swimmerPhotos=this._loadJSON('vx_sw_photos', {});
     this.fitnessTests=this._loadJSON('vx_fitness_tests', {});
     this.aiSuggOverrides=this._loadJSON('vx_ai_sugg_ovr', {});
@@ -3987,9 +3988,16 @@ class Component extends DCLogic {
     this.setState({tpaceTime:'', tpaceErr:''});
   }
   tpaceDelete(swId, idx){ const list=(this.tpaceTests[swId]||[]).slice(); list.splice(idx,1); this.tpaceTests={...this.tpaceTests, [swId]:list}; this._saveJSON('vx_tpace', this.tpaceTests); this.forceUpdate(); }
-  _swMeta(swId){ return this.swimmerMeta[swId] || {sponsored:false, docs:{birth:false, id:false, medical:false}, inbody:[]}; }
+  _swMeta(swId){ const base=this.swimmerMeta[swId] || {sponsored:false, docs:{birth:false, id:false, medical:false}, inbody:[]};
+    // Sponsorship lives in its own tiny synced key (vx_sponsored) so it never rides on the
+    // heavy vx_sw_meta blob (which can carry base64 docs/InBody images and hit the storage
+    // quota). Merge the dedicated flag in — reading code keeps using meta.sponsored unchanged.
+    const sp=!!((this.sponsoredMap||{})[swId]) || !!base.sponsored;
+    return {...base, sponsored:sp}; }
   _saveSwMeta(swId, meta){ this.swimmerMeta={...this.swimmerMeta, [swId]:meta}; this._saveJSON('vx_sw_meta', this.swimmerMeta); this.forceUpdate(); }
-  toggleSponsor(swId){ const m=this._swMeta(swId); this._saveSwMeta(swId, {...m, sponsored:!m.sponsored}); }
+  toggleSponsor(swId){ const on=!this._swMeta(swId).sponsored; const m={...(this.sponsoredMap||{})};
+    if(on) m[swId]=true; else delete m[swId];
+    this.sponsoredMap=m; this._saveJSON('vx_sponsored', m); this.forceUpdate(); }
   toggleDoc(swId, key){ const m=this._swMeta(swId); this._saveSwMeta(swId, {...m, docs:{...m.docs, [key]:!m.docs[key]}}); }
   async uploadDoc(e, swId, key){
     const file=e.target.files && e.target.files[0]; e.target.value=''; if(!file) return;
@@ -5086,8 +5094,12 @@ class Component extends DCLogic {
       let changed=false;
       const writeTs=window.__vxWriteTs||{};
       (rows||[]).forEach(r=>{ if(r.value==null) return;
-        // Guard: never let a stale pull revert a change this device just made.
-        const remoteTs=r.updated_at? Date.parse(r.updated_at) : 0; const localTs=writeTs[r.key]||0;
+        // Guard: never let a stale pull revert a change this device just made. Use the max of the
+        // in-memory write time and the persisted __vxts_ stamp so a recent edit is still protected
+        // even after a page reload (when the in-memory map has been reset to empty).
+        const remoteTs=r.updated_at? Date.parse(r.updated_at) : 0;
+        const persistTs=parseInt(localStorage.getItem('__vxts_'+r.key)||'0',10)||0;
+        const localTs=Math.max(writeTs[r.key]||0, persistTs);
         if(localTs && remoteTs && remoteTs < localTs + 1500) return; // local wrote as-recently-or-newer → keep local
         const s=JSON.stringify(r.value); if(localStorage.getItem(r.key)!==s){ setLocal(r.key, s); changed=true; }
       });
@@ -5111,6 +5123,7 @@ class Component extends DCLogic {
     this.swimmerGoals=g('vx_swimmer_goals', this.swimmerGoals);
     this.squadGoals=g('vx_squad_goals', this.squadGoals);
     this.swimmerMeta=g('vx_sw_meta', this.swimmerMeta);
+    this.sponsoredMap=g('vx_sponsored', this.sponsoredMap);
     this.swimmerPhotos=g('vx_sw_photos', this.swimmerPhotos);
     this.staffOverrides=g('vx_staff_ovr', this.staffOverrides);
     this.meetStatus=g('vx_meet_status', this.meetStatus); this.meetEntries=g('vx_meet_entries', this.meetEntries);
@@ -5277,12 +5290,16 @@ class Component extends DCLogic {
     // ---- roster ----
     const rq=(S.rosterQuery||'').toLowerCase();
     const rlist=(this.roster[S.squadId]||[]);
-    const roster=rlist.filter(sw=>!rq||sw.name.toLowerCase().includes(rq)).map((sw,i)=>({
+    const roster=rlist.filter(sw=>!rq||sw.name.toLowerCase().includes(rq)).map((sw,i)=>{
+      const avBg=i<3?squad.accent:'#EEF1F5', avFg=i<3?'#fff':'#5A657E';
+      return {
       name:sw.name, age:sw.age, initials:sw.initials, topEvent:sw.topEvent, topTime:sw.topTime,
-      avBg: i<3?squad.accent:'#EEF1F5', avFg: i<3?'#fff':'#5A657E',
+      avBg, avFg,
+      // Show the uploaded photo (falls back to initials) in the roster name icon.
+      avatarEl:this.av(this.swimmerPhotos[sw.id]||null, sw.initials, 40, 11, avBg, avFg, 13),
       genIcon:this.genMeta(sw.gender).icon, genBg:this.genMeta(sw.gender).bg, bestLabel:'best '+sw.topEvent,
       onClick:()=>this.openSwimmer(sw.id),
-    }));
+    }; });
     const rosterCountLine = rlist.length+' of '+squad.count;
 
     // ---- plans (editable, persisted per squad) ----
