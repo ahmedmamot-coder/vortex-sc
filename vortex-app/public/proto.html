@@ -375,19 +375,26 @@
                     <input value="{{ famPhone }}" oninput="{{ onFamPhone }}" placeholder="WhatsApp number (e.g. +974 5555 1234)" type="tel" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
                   </sc-if>
 
-                  <input value="{{ famEmail }}" oninput="{{ onFamEmail }}" placeholder="Email" type="email" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
-                  <sc-if value="{{ famIsForgot }}" hint-placeholder-val="{{ false }}">
-                    <p style="margin:0;font-size:12px;color:rgba(255,255,255,.65);line-height:1.5">Enter your email and the WhatsApp number you registered with to verify it’s you, then set a new password.</p>
-                    <input value="{{ famPhone }}" oninput="{{ onFamPhone }}" placeholder="WhatsApp number you registered with" type="tel" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
+                  <sc-if value="{{ famShowEmail }}" hint-placeholder-val="{{ true }}">
+                    <input value="{{ famEmail }}" oninput="{{ onFamEmail }}" placeholder="Email" type="email" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
                   </sc-if>
-                  <input value="{{ famPass }}" oninput="{{ onFamPass }}" placeholder="{{ famPassPlaceholder }}" type="password" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
+                  <sc-if value="{{ famIsForgot }}" hint-placeholder-val="{{ false }}">
+                    <p style="margin:0;font-size:12px;color:rgba(255,255,255,.65);line-height:1.5">Enter your email and we'll send you a secure link to reset your password.</p>
+                  </sc-if>
+                  <sc-if value="{{ famIsSetnew }}" hint-placeholder-val="{{ false }}">
+                    <p style="margin:0;font-size:12px;color:rgba(255,255,255,.65);line-height:1.5">Choose a new password for your account below, then tap Set new password.</p>
+                  </sc-if>
+                  <sc-if value="{{ famShowPass }}" hint-placeholder-val="{{ true }}">
+                    <input value="{{ famPass }}" oninput="{{ onFamPass }}" placeholder="{{ famPassPlaceholder }}" type="password" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
+                  </sc-if>
                   <sc-if value="{{ famShowConfirm }}" hint-placeholder-val="{{ false }}">
                     <input value="{{ famPass2 }}" oninput="{{ onFamPass2 }}" placeholder="Confirm password" type="password" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
                   </sc-if>
                   <sc-if value="{{ famIsLogin }}" hint-placeholder-val="{{ true }}">
                     <button onclick="{{ onFamForgot }}" style="align-self:flex-end;background:none;border:none;color:rgba(255,255,255,.6);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;padding:0">Forgot password?</button>
                   </sc-if>
-                  <sc-if value="{{ famResetOkShow }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:12px;color:#22D7D7;font-weight:600">Password updated — sign in with your new password.</p></sc-if>
+                  <sc-if value="{{ famResetOkShow }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:12px;color:#22D7D7;font-weight:600">Check your email — we sent you a link to reset your password.</p></sc-if>
+                  <sc-if value="{{ famRegisteredMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:12px;color:#22D7D7;font-weight:600;line-height:1.5">{{ famRegisteredMsg }}</p></sc-if>
 
                   <sc-if value="{{ famIsRegister }}" hint-placeholder-val="{{ false }}">
                     <div>
@@ -3531,7 +3538,7 @@ class Component extends DCLogic {
       clockRunning:false, clockSetIdx:0, clockRep:1, clockRemain:0, reviewMode:'review',
       plans:_plans,
       family:this._loadFamily(), familyUser:null, familyActiveIdx:0,
-      famMode:'login', famName:'', famEmail:'', famPass:'', famPass2:'', famPhone:'', famRole:'parent', famSearch:'', famPicked:[], famErr:'', famResetOk:false,
+      famMode:'login', famName:'', famEmail:'', famPass:'', famPass2:'', famPhone:'', famRole:'parent', famSearch:'', famPicked:[], famErr:'', famResetOk:false, famBusy:false, famRegisteredMsg:'',
       adminSection:null, swQuery:'', swSquadFilter:'all', swEditId:null, swAddOpen:false, swForm:{name:'',age:'',gender:'Boys',pbs:[]},
       swPbEventSel:'50 Free', swPbTimeDraft:'',
       swEditPbs:[], swEditPbEventSel:'50 Free', swEditPbTimeDraft:'',
@@ -3693,18 +3700,24 @@ class Component extends DCLogic {
   }
   // Reset a family account's password in-app (no email needed): verify by the email
   // + phone they registered with, then update the row in the family_accounts table.
-  async famResetPassword(){ const S=this.state; const email=(S.famEmail||'').trim().toLowerCase(); const phone=(S.famPhone||'').replace(/[^\d]/g,''); const np=(S.famPass||'');
+  // ---- Supabase Auth (GoTrue) helpers: real confirmation + reset emails ----
+  _sbAuthUrl(){ const sb=window.__VX_SB||{}; return (sb.url||'')+'/auth/v1'; }
+  _sbAnon(){ const sb=window.__VX_SB||{}; return sb.anon||''; }
+  async _authPost(path, body){ try{ const r=await fetch(this._sbAuthUrl()+path, {method:'POST', headers:{'apikey':this._sbAnon(),'Authorization':'Bearer '+this._sbAnon(),'Content-Type':'application/json'}, body:JSON.stringify(body||{})}); let j={}; try{ j=await r.json(); }catch(e){} return {ok:r.ok, status:r.status, j}; }catch(e){ return {ok:false, status:0, j:{}, netfail:true}; } }
+  // Forgot password: ask Supabase to email a reset link (opens the app on #type=recovery).
+  async famResetPassword(){ const S=this.state; const email=(S.famEmail||'').trim().toLowerCase();
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return this.setState({famErr:'Enter the email you registered with.'});
-    if(np.length<4) return this.setState({famErr:'New password must be at least 4 characters.'});
-    if(np!==S.famPass2) return this.setState({famErr:'Passwords don’t match.'});
-    try{ await this._familyFetch(); }catch(e){}
-    const rec=(this.family||[]).find(f=>(f.email||'').trim().toLowerCase()===email);
-    if(!rec) return this.setState({famErr:'No account with that email. Register instead.'});
-    if((''+(rec.phone||'')).replace(/[^\d]/g,'')!==phone || phone.length<6) return this.setState({famErr:'Phone number doesn’t match this account — enter the number you registered with to verify it’s you.'});
-    rec.pass=np;
-    const list=(this.family||[]).map(f=>f.id===rec.id?rec:f); this._saveFamily(list);
-    if(window.__vxUpsert) try{ await window.__vxUpsert('family_accounts', [{id:rec.id, name:rec.name, email:rec.email, phone:rec.phone, pass:np, role:rec.role, swimmer_ids:rec.swimmerIds||[], ts:Date.now()}]); }catch(e){}
-    this.setState({famErr:'', famMode:'login', famPass:'', famPass2:'', famPhone:'', settingsMsg:'', famResetOk:true});
+    this.setState({famErr:'', famBusy:true});
+    await this._authPost('/recover?redirect_to='+encodeURIComponent(location.origin+location.pathname), {email});
+    // Always succeed to the user (Supabase hides whether the email exists).
+    this.setState({famBusy:false, famMode:'login', famPass:'', famPass2:'', famResetOk:true});
+  }
+  // The reset link lands back here with #access_token=…&type=recovery — show a "set new password" step.
+  _checkRecoveryHash(){ try{ const h=location.hash||''; if(/type=recovery/.test(h) && /access_token=/.test(h)){ const tok=(h.match(/access_token=([^&]+)/)||[])[1]; if(tok){ this._recoveryToken=decodeURIComponent(tok); try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){} this.setState({screen:'login', loginStage:'family', view:'family', familyUser:null, famMode:'setnew', famPass:'', famPass2:'', famErr:''}); } } }catch(e){} }
+  async famSetNewPassword(){ const S=this.state; const np=(S.famPass||''); if(np.length<4) return this.setState({famErr:'New password must be at least 4 characters.'}); if(np!==S.famPass2) return this.setState({famErr:'Passwords don’t match.'});
+    if(!this._recoveryToken) return this.setState({famErr:'This reset link has expired — request a new one.'});
+    try{ const r=await fetch(this._sbAuthUrl()+'/user', {method:'PUT', headers:{'apikey':this._sbAnon(),'Authorization':'Bearer '+this._recoveryToken,'Content-Type':'application/json'}, body:JSON.stringify({password:np})}); if(!r.ok) return this.setState({famErr:'This reset link has expired — request a new one.'}); }catch(e){ return this.setState({famErr:'Could not reach the server — try again.'}); }
+    this._recoveryToken=null; this.setState({famMode:'login', famPass:'', famPass2:'', famErr:'', famResetOk:true});
   }
   _loadJSON(key, fallback){ try{ const v=localStorage.getItem(key); return v==null?fallback:JSON.parse(v); }catch(e){ return fallback; } }
   _saveJSON(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){} }
@@ -4630,6 +4643,10 @@ class Component extends DCLogic {
     const existing=this.family||this.state.family||[];
     if(existing.find(f=>(f.email||'').trim().toLowerCase()===email)) return this.setState({famErr:'An account with this email already exists \u2014 sign in instead.'});
     const rec={id:this._uid('fam')+'_'+Math.random().toString(36).slice(2,5), name:S.famName.trim(), email, phone:phoneDigits, pass:S.famPass, role:S.famRole, swimmerIds:S.famPicked.slice()};
+    this.setState({famErr:'', famBusy:true});
+    const _authRes=await this._authPost('/signup?redirect_to='+encodeURIComponent(location.origin+location.pathname), {email, password:S.famPass, data:{name:rec.name, phone:phoneDigits, role:rec.role, swimmer_ids:rec.swimmerIds}});
+    if(_authRes.ok===false && !_authRes.netfail){ const _m=(_authRes.j&&(_authRes.j.msg||_authRes.j.error_description||_authRes.j.message))||'Could not create the account.'; if(/registered|already|exists/i.test(_m)) return this.setState({famBusy:false, famErr:'This email is already registered - sign in or reset your password.'}); return this.setState({famBusy:false, famErr:_m}); }
+    this._famRegAuthRes=_authRes;
     const list=[...existing, rec]; this._saveFamily(list);
     // Append one row (never overwrites another parent's registration). If it fails now,
     // _familyFetch self-heals by re-uploading it, so the account is never lost.
@@ -4644,18 +4661,34 @@ class Component extends DCLogic {
       const waText=encodeURIComponent('Welcome to Vortex SC, '+S.famName.trim()+'! \ud83c\udfca Your account is set up \u2014 you can now check performance, attendance, results and meets any time in the app.');
       window.open('https://wa.me/'+waNum+'?text='+waText, '_blank');
     }catch(e){}
-    try{ localStorage.setItem('vx_session', JSON.stringify({type:'family', email:rec.email})); }catch(e){}
-    this.setState({familyUser:rec, familyActiveIdx:0, screen:'app', view:'family', famErr:''});
+    const _ar=this._famRegAuthRes||{}; const _hasSession=_ar.ok && _ar.j && _ar.j.access_token;
+    if(_hasSession || _ar.netfail){ try{ localStorage.setItem('vx_session', JSON.stringify({type:'family', email:rec.email})); }catch(e){}
+      this.setState({familyUser:rec, familyActiveIdx:0, screen:'app', view:'family', famErr:'', famBusy:false}); }
+    else { this.setState({famBusy:false, famMode:'login', famPass:'', famPass2:'', famErr:'', famRegisteredMsg:'Account created! We emailed a confirmation link to '+email+'. Open it, then sign in.'}); }
   }
   async famLogin(){ this.setState({famErr:''});
     // Refresh the family list from its table so a parent who registered on another device can sign in now.
     try { await this._familyFetch(); } catch(e){}
-    const S=this.state; const email=(S.famEmail||'').trim().toLowerCase(); const pass=(S.famPass||'').trim();
-    const list=this.family||this.state.family||[];
-    const rec=list.find(f=>(f.email||'').trim().toLowerCase()===email && (''+(f.pass||'')).trim()===pass);
-    if(!rec) return this.setState({famErr:'No match \u2014 check email & password, or register below.'});
-    try{ localStorage.setItem('vx_session', JSON.stringify({type:'family', email:rec.email})); }catch(e){}
-    this.setState({family:list, familyUser:rec, familyActiveIdx:0, screen:'app', view:'family', famErr:''});
+    const S=this.state; const email=(S.famEmail||'').trim().toLowerCase(); const pass=(S.famPass||'');
+    this.setState({famBusy:true, famRegisteredMsg:''});
+    // 1) Supabase Auth first (this enforces the email confirmation).
+    const res=await this._authPost('/token?grant_type=password', {email, password:pass});
+    if(res.ok && res.j && res.j.access_token){
+      try{ await this._familyFetch(); }catch(e){}
+      let rec=(this.family||[]).find(f=>(f.email||'').trim().toLowerCase()===email);
+      if(!rec){ const u=res.j.user||{}; const md=u.user_metadata||{}; rec={id:u.id||this._uid('fam'), name:md.name||email.split('@')[0], email, phone:md.phone||'', role:md.role||'parent', swimmerIds:md.swimmer_ids||[]};
+        if(window.__vxInsert) try{ window.__vxInsert('family_accounts', [{id:rec.id, name:rec.name, email:rec.email, phone:rec.phone, pass:'', role:rec.role, swimmer_ids:rec.swimmerIds, ts:Date.now()}]); }catch(e){}
+        this._saveFamily([...(this.family||[]), rec]); }
+      try{ localStorage.setItem('vx_session', JSON.stringify({type:'family', email:rec.email})); }catch(e){}
+      return this.setState({familyUser:rec, familyActiveIdx:0, screen:'app', view:'family', famErr:'', famBusy:false});
+    }
+    const emsg=(res.j&&(res.j.error_description||res.j.msg||res.j.message))||'';
+    if(/confirm/i.test(emsg)) return this.setState({famBusy:false, famErr:'Please confirm your email first - open the link we sent to '+email+'.'});
+    // 2) Fallback for legacy accounts created before Auth.
+    try { await this._familyFetch(); } catch(e){}
+    const rec=(this.family||[]).find(f=>(f.email||'').trim().toLowerCase()===email && (''+(f.pass||'')).trim()===(pass||'').trim());
+    if(rec){ try{ localStorage.setItem('vx_session', JSON.stringify({type:'family', email:rec.email})); }catch(e){} return this.setState({familyUser:rec, familyActiveIdx:0, screen:'app', view:'family', famErr:'', famBusy:false}); }
+    return this.setState({famBusy:false, famErr:'Wrong email or password - or reset it below.'});
   }
   famLogout(){ try{ localStorage.removeItem('vx_session'); }catch(e){} this.setState({familyUser:null, screen:'login', loginStage:'accounts', famMode:'login', famName:'', famEmail:'', famPass:'', famPass2:'', famPicked:[], famSearch:'', famErr:''}); }
   makeDefaultPlan(){ const t=this.planTemplate; const migrate=(sec)=>({id:this._uid(sec.key[0]||'s'), title:sec.title, sets:sec.sets.map(s=>({id:this._uid(sec.key[0]||'s'), dist:s.dist, txt:s.txt, equip:[...(s.equip||[])], types:[...(s.types||[])], rest:s.rest||''}))}); return {title:t.title, zone:t.zone, sections:t.sections.map(migrate)}; }
@@ -5017,6 +5050,7 @@ class Component extends DCLogic {
     this._onBeforePrint=()=>this._printEscape(); this._onAfterPrint=()=>this._printRestore();
     window.addEventListener('beforeprint', this._onBeforePrint); window.addEventListener('afterprint', this._onAfterPrint);
     if(location.hash==='#print-preview') this.setState({screen:'app', pickedId:'ahmed', view:'squad', squadId:'seniora', tab:'plans', printPreviewOpen:true});
+    this._checkRecoveryHash();
     this._tickStatusBar();
     this._statusInt=setInterval(()=>this._tickStatusBar(), 15000);
     this._onStatusEvt=()=>this._tickStatusBar();
@@ -6106,7 +6140,7 @@ class Component extends DCLogic {
       famIsLogin: S.famMode==='login', famIsRegister: S.famMode==='register',
       famTabLoginBg: S.famMode==='login'?'var(--vx-blue)':'transparent', famTabLoginFg: S.famMode==='login'?'#fff':'rgba(255,255,255,.6)',
       famTabRegBg: S.famMode==='register'?'var(--vx-blue)':'transparent', famTabRegFg: S.famMode==='register'?'#fff':'rgba(255,255,255,.6)',
-      onFamTabLogin:()=>this.setState({famMode:'login', famErr:''}), onFamTabRegister:()=>this.setState({famMode:'register', famErr:''}),
+      onFamTabLogin:()=>this.setState({famMode:'login', famErr:'', famResetOk:false}), onFamTabRegister:()=>this.setState({famMode:'register', famErr:'', famResetOk:false, famRegisteredMsg:''}),
       famRoleParentBg: S.famRole==='parent'?'var(--vx-blue)':'#fff', famRoleParentFg: S.famRole==='parent'?'#fff':'#3A4152',
       famRoleSwimmerBg: S.famRole==='swimmer'?'var(--vx-blue)':'#fff', famRoleSwimmerFg: S.famRole==='swimmer'?'#fff':'#3A4152',
       onFamRoleParent:()=>this.setState({famRole:'parent', famPicked:[]}), onFamRoleSwimmer:()=>this.setState({famRole:'swimmer', famPicked:S.famPicked.slice(0,1)}),
@@ -6123,12 +6157,16 @@ class Component extends DCLogic {
       famLinkedMsg: S.famRole==='swimmer' ? 'Profile linked \u2014 tap Create account below.' : (S.famPicked.length===1 ? '1 child linked \u2014 add more or tap Create account below.' : S.famPicked.length+' children linked \u2014 add more or tap Create account below.'),
       famPickedChips:S.famPicked.map(uid=>{ const [sqid,swid]=uid.split('::'); const sw=(this.roster[sqid]||[]).find(x=>x.id===swid); return {uid, label:sw?sw.name:'?', onRemove:()=>this.famToggleSwimmer(uid)}; }),
       famErr:S.famErr, famErrShow:!!S.famErr,
-      famIsForgot:S.famMode==='forgot', famShowConfirm:(S.famMode==='register'||S.famMode==='forgot'),
-      famPassPlaceholder:S.famMode==='forgot'?'New password':'Password',
-      onFamForgot:()=>this.setState({famMode:'forgot', famErr:'', famResetOk:false, famPass:'', famPass2:'', famPhone:''}),
+      famIsForgot:S.famMode==='forgot', famIsSetnew:S.famMode==='setnew',
+      famShowConfirm:(S.famMode==='register'||S.famMode==='setnew'),
+      famShowEmail:(S.famMode!=='setnew'),
+      famShowPass:(S.famMode!=='forgot'),
+      famPassPlaceholder:S.famMode==='setnew'?'New password':'Password',
+      onFamForgot:()=>this.setState({famMode:'forgot', famErr:'', famResetOk:false, famRegisteredMsg:'', famPass:'', famPass2:'', famPhone:''}),
       famResetOkShow:!!S.famResetOk,
-      onFamSubmit: S.famMode==='login' ? ()=>this.famLogin() : (S.famMode==='forgot' ? ()=>this.famResetPassword() : ()=>this.famRegister()),
-      famSubmitLabel: S.famMode==='login' ? 'Sign in' : (S.famMode==='forgot' ? 'Reset password' : 'Create account'),
+      famRegisteredMsg:S.famRegisteredMsg||'', famRegisteredMsgShow:!!S.famRegisteredMsg,
+      onFamSubmit: S.famMode==='login' ? ()=>this.famLogin() : (S.famMode==='forgot' ? ()=>this.famResetPassword() : (S.famMode==='setnew' ? ()=>this.famSetNewPassword() : ()=>this.famRegister())),
+      famSubmitLabel: S.famMode==='login' ? (S.famBusy?'Signing in…':'Sign in') : (S.famMode==='forgot' ? (S.famBusy?'Sending…':'Send reset link') : (S.famMode==='setnew' ? (S.famBusy?'Saving…':'Set new password') : (S.famBusy?'Creating…':'Create account'))),
 
       appTopColor: (S.view==='hub'||S.view==='tools'||S.view==='handbook'||S.view==='family'||S.view==='academy') ? '#0A0F1A' : '#EEF1F5',
       statusInk: (S.view==='hub'||S.view==='tools'||S.view==='handbook'||S.view==='family'||S.view==='academy') ? '#fff' : '#0C1116',
