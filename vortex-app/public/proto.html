@@ -2626,7 +2626,7 @@
                                 <button onclick="{{ p.onEditCancel }}" style="flex:none;background:#F4F6F8;color:#7A8296;border:none;border-radius:9px;padding:8px 14px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">Cancel</button>
                               </div>
                             </sc-if>
-                            <sc-if value="{{ p.editing }}" hint-placeholder-val="{{ true }}">
+                            <sc-if value="{{ p.notEditing }}" hint-placeholder-val="{{ true }}">
                               <p style="margin:10px 0 0;font-size:13.5px;color:#3A4152;line-height:1.45">{{ p.textEl }}<sc-if value="{{ p.edited }}" hint-placeholder-val="{{ false }}"><span style="font-size:10.5px;color:#9AA2B4;font-weight:600"> · edited</span></sc-if></p>
                               {{ p.imageEl }}
                             </sc-if>
@@ -6115,7 +6115,7 @@ class Component extends DCLogic {
       const cmtEls=cmts.map(c=>({ id:c.id, author:c.author, avatar:this.av(c.photo||null, c.initials, 26, 8, squad.accent, '#fff', 9), textEl:this._mentionTextEl(c.body), time:c.ts?this.notifTimeAgo(new Date(c.ts).toISOString()):'' }));
       return {id:p.id, author:p.author, role:p.role, avatar:this.av(p.photo||null, p.initials, 38, 11, squad.accent, '#fff', 12), imageEl: p.image? window.React.createElement('img',{src:p.image, alt:'', style:{width:'100%',borderRadius:11,marginTop:10}}) : null, tag:p.tag, tagBg:tb, tagFg:tf, textEl:this._mentionTextEl(p.text), likes:p.likes, comments:cmts.length, time: p.ts? this.notifTimeAgo(new Date(p.ts).toISOString()) : (p.time||''), edited:!!p.edited,
         isReq, reqLabel: isReq? ('Private request → '+(p.toName||'manager')) : '',
-        canEdit, editing, editText:S.loungeEditText,
+        canEdit, editing, notEditing:!editing, editText:S.loungeEditText,
         onEdit:()=>this.loungeStartEdit(p), onEditChange:(e)=>this.setState({loungeEditText:e.target.value}), onEditSave:()=>this.loungeSaveEdit(p), onEditCancel:()=>this.loungeCancelEdit(),
         comments2:cmtEls, commentDraft:(S.commentDrafts||{})[p.id]||'', onCommentChange:(e)=>this.onCommentChange(p.id, e.target.value), onAddComment:()=>this.loungeAddComment(p),
         avBg:squad.accent, likeColor:p.liked?'#E5484D':'#9AA2B4', onLike:()=>{ const list=(this.state.feed||[]).map(x=>x.id===p.id?{...x, liked:!x.liked, likes:x.likes+(x.liked?-1:1)}:x); this.setState({feed:list}); } }; });
