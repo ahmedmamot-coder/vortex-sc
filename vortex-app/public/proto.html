@@ -5456,8 +5456,9 @@ class Component extends DCLogic {
     // macro dashboard + weekly (microcycle) progression
     const seasonSessM=seasonWeeks.reduce((a,w)=>a+(w.sessionM||0),0); const seasonSessN=seasonWeeks.reduce((a,w)=>a+(w.sessionCount||0),0);
     const weeksWithData=seasonWeeks.filter(w=>w.sessionM>0).length;
-    const seasonMaxWeekM=Math.max(1, ...seasonWeeks.map(w=>w.sessionM||0));
-    const seasonProgBars=seasonWeeks.map(w=>({ n:w.n, h:Math.max(3, Math.round(((w.sessionM||0)/seasonMaxWeekM)*68)), fill: (w.sessionM>0)?w.loadColor:'#EEF1F5', km:w.weekKm, hasData:w.sessionM>0, onClick:()=>this.setState({seasonOpenWeek:w.n}) }));
+    // Bars show the INTENDED load shape from the phases (always visible, even before
+    // any session is logged); a dot marks weeks that already have planned sessions.
+    const seasonProgBars=seasonWeeks.map(w=>({ n:w.n, h:Math.max(5, Math.round((w.loadPct/100)*68)), fill:w.loadColor, km:w.weekKm, hasData:w.sessionM>0, onClick:()=>this.setState({seasonOpenWeek:w.n}) }));
     const seasonMacro={ totalKm:(seasonSessM/1000).toFixed(1), sessions:seasonSessN, avgWeekKm: weeksWithData? ((seasonSessM/weeksWithData)/1000).toFixed(1) : '0', hasData:seasonSessM>0 };
 
     // ---- Zone Engine (spec ruleset) ----
