@@ -3730,6 +3730,7 @@ class Component extends DCLogic {
     this.fitnessMedia=this._loadJSON('vx_fitness_media', {});
     this.fitSaved={};
     this.famMessages={};
+    this.signupAlerts=[];
     this.loungeComments={};
     this.rebuildRoster();
 
@@ -4482,16 +4483,29 @@ class Component extends DCLogic {
   }
   notifTimeAgo(iso){ const d=new Date(iso).getTime(); const mins=Math.round((Date.now()-d)/60000);
     if(mins<1) return 'Just now'; if(mins<60) return mins+'m ago'; const hrs=Math.round(mins/60); if(hrs<24) return hrs+'h ago'; const days=Math.round(hrs/24); return days+'d ago'; }
+  _alertRead(){ try{ return JSON.parse(localStorage.getItem('vx_alert_read')||'{}'); }catch(e){ return {}; } }
+  _alertHidden(){ try{ return JSON.parse(localStorage.getItem('vx_alert_hidden')||'{}'); }catch(e){ return {}; } }
+  async _alertsFetch(){ if(!window.__vxSelect) return;
+    const rows=await window.__vxSelect('signup_alerts', 'select=*&order=ts.desc&limit=200'); if(rows==null) return;
+    const hidden=this._alertHidden(); const read=this._alertRead();
+    this.signupAlerts=rows.filter(r=>!hidden[r.id]).map(r=>({ id:r.id, audience:'coach', icon:r.icon||'user-plus', title:r.title||'New sign-up', body:r.body||'', at:new Date(r.ts||Date.now()).toISOString(), read:read[r.id]===true }));
+    this.forceUpdate(); }
   notifsFor(kind, ctx){
-    return this.notifications.filter(n=>{
+    const local=this.notifications.filter(n=>{
       if(n.audience==='all') return true;
       if(kind==='coach') return n.audience==='coach' || (ctx && ctx.squadId && n.audience==='coach:'+ctx.squadId);
       if(kind==='family') return ctx && ctx.swimmerIds && ctx.swimmerIds.some(uid=>n.audience==='family_sw:'+uid.split('::')[1]);
       return false;
     });
+    // Sign-up alerts are for the club admins (you) — shown alongside local notifications.
+    let extra=[];
+    if(kind==='coach' && this._isAdmin()) extra=(this.signupAlerts||[]).slice();
+    return [...extra, ...local].sort((a,b)=> new Date(b.at).getTime()-new Date(a.at).getTime());
   }
-  openNotifs(){ this.setState({notifOpen:true}); const ids=this._notifCtxIds; if(ids && ids.length){ this.notifications=this.notifications.map(n=>ids.includes(n.id)?{...n, read:true}:n); this._saveJSON('vx_notifications', this.notifications); } }
-  clearNotifs(){ const ids=this._notifCtxIds||[]; this.notifications=this.notifications.filter(n=>!ids.includes(n.id)); this._saveJSON('vx_notifications', this.notifications); this.forceUpdate(); }
+  openNotifs(){ this.setState({notifOpen:true}); const ids=this._notifCtxIds; if(ids && ids.length){ this.notifications=this.notifications.map(n=>ids.includes(n.id)?{...n, read:true}:n); this._saveJSON('vx_notifications', this.notifications);
+    const rs=this._alertRead(); ids.forEach(id=>{ rs[id]=true; }); try{ localStorage.setItem('vx_alert_read', JSON.stringify(rs)); }catch(e){} this.signupAlerts=(this.signupAlerts||[]).map(a=>ids.includes(a.id)?{...a, read:true}:a); } }
+  clearNotifs(){ const ids=this._notifCtxIds||[]; this.notifications=this.notifications.filter(n=>!ids.includes(n.id)); this._saveJSON('vx_notifications', this.notifications);
+    const hd=this._alertHidden(); ids.forEach(id=>{ hd[id]=true; }); try{ localStorage.setItem('vx_alert_hidden', JSON.stringify(hd)); }catch(e){} this.signupAlerts=(this.signupAlerts||[]).filter(a=>!ids.includes(a.id)); this.forceUpdate(); }
   trialSubmit(){ const f=this.state.trialForm; if(!f.childName.trim() || !f.parentName.trim()) return;
     const rec={id:this._uid('trial'), ...f, age:parseInt(f.age,10)||0, submittedAt:new Date().toISOString().slice(0,10), squadHint:this.squadForAge(parseInt(f.age,10)||10)};
     this.academyTrials=[rec, ...this.academyTrials]; this._saveJSON('vx_academy_trials', this.academyTrials);
@@ -5035,7 +5049,12 @@ class Component extends DCLogic {
     if(window.__vxInsert){ try{ const ok=await window.__vxInsert('family_accounts', [{id:rec.id, name:rec.name, email:rec.email, phone:rec.phone, pass:rec.pass, role:rec.role, swimmer_ids:rec.swimmerIds, ts:Date.now()}]); if(ok) this._familyFetch(); }catch(e){} }
     // Notify the coaches/admins that a new family signed up.
     const kidNames=S.famPicked.map(uid=>{ const [sq,sw]=uid.split('::'); const s=(this.roster[sq]||[]).find(x=>x.id===sw); return s?s.name:''; }).filter(Boolean).join(', ');
-    this.notify('coach', 'user-plus', 'New '+(rec.role==='swimmer'?'swimmer':'parent')+' sign-up', rec.name+' registered ('+email+' · '+phoneDigits+')'+(kidNames?(' for '+kidNames):''));
+    const _signTitle='New '+(rec.role==='swimmer'?'swimmer':'parent')+' sign-up';
+    const _signBody=rec.name+' registered ('+email+' · '+phoneDigits+')'+(kidNames?(' for '+kidNames):'');
+    this.notify('coach', 'user-plus', _signTitle, _signBody);
+    // Append-only alert row so the admin reliably receives every sign-up, on any device
+    // (a synced blob would get overwritten by whichever device wrote last).
+    if(window.__vxInsert){ try{ window.__vxInsert('signup_alerts', [{ id:'sa'+Date.now()+'_'+Math.random().toString(36).slice(2,6), icon:'user-plus', title:_signTitle, body:_signBody, ts:Date.now() }]); }catch(e){} }
     const firstSwId=(S.famPicked[0]||'').split('::')[1];
     if(firstSwId) this.notify('family_sw:'+firstSwId, 'party-popper', 'Welcome to Vortex SC!', 'Hi '+S.famName.trim()+', your account is ready \u2014 a confirmation would be emailed to '+email+' in the live app. Explore performance, attendance, results and meets any time.');
     try{
@@ -5455,6 +5474,7 @@ class Component extends DCLogic {
     this._seasonFetch();
     this._fitSessFetch();
     this._famMsgFetch();
+    this._alertsFetch();
     this._planCustomFetch();
     this._plansInt=setInterval(()=>{ if(this.state.view==='squad' && this.state.tab==='plans'){ this._plansFetch(); this._squadPlansFetch(); } }, 8000);
     // Staff accounts live in their own table (staff_accounts).
@@ -5485,6 +5505,7 @@ class Component extends DCLogic {
     try{ this._squadPlansFetch(); }catch(e){}
     try{ this._planCustomFetch(); }catch(e){}
     try{ this._famMsgFetch(); }catch(e){}
+    try{ this._alertsFetch(); }catch(e){}
   }
   _hydrateShared(){
     // Re-read shared stores from localStorage (freshly pulled) and re-render. We intentionally do

@@ -136,6 +136,19 @@ drop policy if exists family_messages_insert on public.family_messages;
 create policy family_messages_read   on public.family_messages for select to anon, authenticated using (true);
 create policy family_messages_insert on public.family_messages for insert to anon, authenticated with check (true);
 
+-- ---- 8b) signup_alerts : admin gets every new family sign-up ---------------
+create table if not exists public.signup_alerts (
+  id text primary key, icon text, title text, body text,
+  ts bigint, created_at timestamptz not null default now()
+);
+create index if not exists signup_alerts_ts_idx on public.signup_alerts (ts desc);
+alter table public.signup_alerts enable row level security;
+grant select, insert on public.signup_alerts to anon, authenticated;
+drop policy if exists signup_alerts_read   on public.signup_alerts;
+drop policy if exists signup_alerts_insert on public.signup_alerts;
+create policy signup_alerts_read   on public.signup_alerts for select to anon, authenticated using (true);
+create policy signup_alerts_insert on public.signup_alerts for insert to anon, authenticated with check (true);
+
 -- ---- 9) squad_plans : live per-squad training plan -------------------------
 create table if not exists public.squad_plans (
   id text primary key, plan jsonb, ts bigint,
