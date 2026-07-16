@@ -744,12 +744,13 @@
                   </div>
 
                   <div style="padding:14px 15px 24px">
-                    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:5px;background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:5px;margin-bottom:14px">
-                      <button onclick="{{ onFamTabPerf }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10.5px;background:{{ famTabPerfBg }};color:{{ famTabPerfFg }}">Performance</button>
-                      <button onclick="{{ onFamTabAttend }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10.5px;background:{{ famTabAttendBg }};color:{{ famTabAttendFg }}">Attendance</button>
-                      <button onclick="{{ onFamTabResults }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10.5px;background:{{ famTabResultsBg }};color:{{ famTabResultsFg }}">Results</button>
-                      <button onclick="{{ onFamTabMeets }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10.5px;background:{{ famTabMeetsBg }};color:{{ famTabMeetsFg }}">Meets</button>
-                      <button onclick="{{ onFamTabDocs }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10.5px;background:{{ famTabDocsBg }};color:{{ famTabDocsFg }}">Documents</button>
+                    <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:5px;background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:5px;margin-bottom:14px">
+                      <button onclick="{{ onFamTabPerf }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabPerfBg }};color:{{ famTabPerfFg }}">Performance</button>
+                      <button onclick="{{ onFamTabAttend }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabAttendBg }};color:{{ famTabAttendFg }}">Attendance</button>
+                      <button onclick="{{ onFamTabResults }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabResultsBg }};color:{{ famTabResultsFg }}">Results</button>
+                      <button onclick="{{ onFamTabMeets }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabMeetsBg }};color:{{ famTabMeetsFg }}">Meets</button>
+                      <button onclick="{{ onFamTabDocs }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabDocsBg }};color:{{ famTabDocsFg }}">Documents</button>
+                      <button onclick="{{ onFamTabMsgs }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabMsgsBg }};color:{{ famTabMsgsFg }}">Coach</button>
                     </div>
 
                     <sc-if value="{{ famShowPerf }}" hint-placeholder-val="{{ true }}">
@@ -889,6 +890,32 @@
                         </sc-for>
                       </div>
                       <p style="margin:11px 2px 0;font-size:11px;color:#9AA2B4;line-height:1.5">Upload a PDF or photo of each document. You and your child's coach can view them here at any time.</p>
+                    </sc-if>
+
+                    <sc-if value="{{ famShowMsgs }}" hint-placeholder-val="{{ false }}">
+                      <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                        <p style="margin:0 0 10px;font-size:12px;font-weight:700;color:#0C1116">Private messages with your coach</p>
+                        <sc-if value="{{ famMsgEmpty }}" hint-placeholder-val="{{ true }}"><p style="margin:0 0 9px;font-size:11.5px;color:#9AA2B4;line-height:1.5">No messages yet. Ask a question, send a set to check, or share a video for feedback — your coach replies right here.</p></sc-if>
+                        <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:11px">
+                          <sc-for list="{{ famMsgThread }}" as="mm" hint-placeholder-count="0">
+                            <div style="display:flex;flex-direction:column;align-items:{{ mm.align }}">
+                              <div style="max-width:88%;background:{{ mm.bubbleBg }};color:{{ mm.bubbleFg }};border-radius:14px;padding:9px 12px">
+                                <sc-if value="{{ mm.notMine }}" hint-placeholder-val="{{ false }}"><span style="display:block;font-size:10.5px;font-weight:700;opacity:.7;margin-bottom:2px">{{ mm.name }}</span></sc-if>
+                                <sc-if value="{{ mm.hasBody }}" hint-placeholder-val="{{ true }}"><span style="display:block;font-size:13px;line-height:1.4">{{ mm.body }}</span></sc-if>
+                                <sc-if value="{{ mm.hasSet }}" hint-placeholder-val="{{ false }}"><span style="display:block;margin-top:6px;background:rgba(127,127,127,.16);border-radius:8px;padding:7px 9px;font-family:var(--font-mono);font-size:12px;white-space:pre-wrap">{{ mm.setText }}</span></sc-if>
+                                <sc-if value="{{ mm.hasVideo }}" hint-placeholder-val="{{ false }}"><span style="display:block;margin-top:7px">{{ mm.videoEl }}</span></sc-if>
+                              </div>
+                              <span style="font-size:9.5px;color:#9AA2B4;margin-top:2px">{{ mm.time }}</span>
+                            </div>
+                          </sc-for>
+                        </div>
+                        <textarea value="{{ fmBody }}" oninput="{{ onFmBody }}" placeholder="Write a message to your coach…" style="width:100%;border:1px solid #E5E9F0;border-radius:10px;padding:9px;outline:none;resize:none;font-family:inherit;font-size:13px;color:#0C1116;min-height:48px;box-sizing:border-box"></textarea>
+                        <div style="display:flex;gap:7px;margin-top:7px;align-items:center">
+                          <i data-lucide="video" style="width:15px;height:15px;color:#8A22D5;flex:none"></i>
+                          <input value="{{ fmVideo }}" oninput="{{ onFmVideo }}" placeholder="Video link for feedback (optional)" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12px;color:#3A4152;outline:none">
+                          <button onclick="{{ onFamSendMsg }}" style="flex:none;width:38px;height:38px;border-radius:11px;background:var(--vx-blue);border:none;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center"><i data-lucide="send" style="width:16px;height:16px"></i></button>
+                        </div>
+                      </div>
                     </sc-if>
 
                     <sc-if value="{{ famShowAttend }}" hint-placeholder-val="{{ false }}">
@@ -1594,6 +1621,32 @@
                       <sc-if value="{{ scmChart.noData }}" hint-placeholder-val="{{ false }}">
                         <div style="padding:20px 0;text-align:center;font-size:12px;color:#9AA2B4">No short course swims for this event.</div>
                       </sc-if>
+                    </div>
+                    <div>
+                      <h2 style="font-size:11.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#7A8296;margin:0 2px 9px">Private message to swimmer / parent</h2>
+                      <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                        <sc-if value="{{ profileMsgEmpty }}" hint-placeholder-val="{{ true }}"><p style="margin:0 0 9px;font-size:11.5px;color:#9AA2B4;line-height:1.5">No messages yet. Send a note, a set, or a video to review — the swimmer &amp; parents read it in their portal and can reply here.</p></sc-if>
+                        <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:11px">
+                          <sc-for list="{{ profileMsgThread }}" as="mm" hint-placeholder-count="0">
+                            <div style="display:flex;flex-direction:column;align-items:{{ mm.align }}">
+                              <div style="max-width:88%;background:{{ mm.bubbleBg }};color:{{ mm.bubbleFg }};border-radius:14px;padding:9px 12px">
+                                <sc-if value="{{ mm.notMine }}" hint-placeholder-val="{{ false }}"><span style="display:block;font-size:10.5px;font-weight:700;opacity:.7;margin-bottom:2px">{{ mm.name }}</span></sc-if>
+                                <sc-if value="{{ mm.hasBody }}" hint-placeholder-val="{{ true }}"><span style="display:block;font-size:13px;line-height:1.4">{{ mm.body }}</span></sc-if>
+                                <sc-if value="{{ mm.hasSet }}" hint-placeholder-val="{{ false }}"><span style="display:block;margin-top:6px;background:rgba(127,127,127,.16);border-radius:8px;padding:7px 9px;font-family:var(--font-mono);font-size:12px;white-space:pre-wrap">{{ mm.setText }}</span></sc-if>
+                                <sc-if value="{{ mm.hasVideo }}" hint-placeholder-val="{{ false }}"><span style="display:block;margin-top:7px">{{ mm.videoEl }}</span></sc-if>
+                              </div>
+                              <span style="font-size:9.5px;color:#9AA2B4;margin-top:2px">{{ mm.time }}</span>
+                            </div>
+                          </sc-for>
+                        </div>
+                        <textarea value="{{ fmBody }}" oninput="{{ onFmBody }}" placeholder="Write a message…" style="width:100%;border:1px solid #E5E9F0;border-radius:10px;padding:9px;outline:none;resize:none;font-family:inherit;font-size:13px;color:#0C1116;min-height:46px;box-sizing:border-box"></textarea>
+                        <textarea value="{{ fmSet }}" oninput="{{ onFmSet }}" placeholder="Attach a set / plan (optional) — e.g. 8×50 @0:45 descend" style="width:100%;margin-top:7px;border:1px solid #E5E9F0;border-radius:10px;padding:9px;outline:none;resize:none;font-family:var(--font-mono);font-size:12px;color:#0C1116;min-height:40px;box-sizing:border-box"></textarea>
+                        <div style="display:flex;gap:7px;margin-top:7px;align-items:center">
+                          <i data-lucide="video" style="width:15px;height:15px;color:#8A22D5;flex:none"></i>
+                          <input value="{{ fmVideo }}" oninput="{{ onFmVideo }}" placeholder="Video link to review (optional)" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12px;color:#3A4152;outline:none">
+                          <button onclick="{{ onSendFamMsg }}" style="flex:none;width:38px;height:38px;border-radius:11px;background:var(--vx-blue);border:none;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center"><i data-lucide="send" style="width:16px;height:16px"></i></button>
+                        </div>
+                      </div>
                     </div>
                     <div>
                       <h2 style="font-size:11.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#7A8296;margin:0 2px 9px">Coach notes &amp; wellbeing</h2>
@@ -3676,6 +3729,7 @@ class Component extends DCLogic {
     this.fitnessPlans=this._loadJSON('vx_fitness_plans', {});
     this.fitnessMedia=this._loadJSON('vx_fitness_media', {});
     this.fitSaved={};
+    this.famMessages={};
     this.loungeComments={};
     this.rebuildRoster();
 
@@ -3734,6 +3788,7 @@ class Component extends DCLogic {
       ],
       aiKind:'season', aiPrompt:'', aiOut:null, aiLoading:false,
       loungeEditId:null, loungeEditText:'', commentDrafts:{}, reqOpen:false, reqTo:'', reqText:'', reqMsg:'',
+      fmBody:'', fmSet:'', fmVideo:'',
     };
     // Vortex Lounge chat is backed by its own table (lounge_posts), loaded via _loungeFetch().
     // The seed posts in state.feed only show until the first real fetch replaces them.
@@ -3796,7 +3851,7 @@ class Component extends DCLogic {
   // navigation
   go(patch){ this.setState(patch); }
   openSquad(id){ this.setState({view:'squad', squadId:id, tab:'group', swimmerId:null, showSwitcher:false, tool:null}); try{ this._plansFetch(); }catch(e){} try{ this._squadPlansFetch(); }catch(e){} }
-  openSwimmer(id){ this.setState({view:'profile', swimmerId:id, profileEvent:null}); }
+  openSwimmer(id){ this.setState({view:'profile', swimmerId:id, profileEvent:null}); try{ this._famMsgFetch(); }catch(e){} }
   _fitnessLocked(){ const a=(this.accounts||[]).find(x=>x.id===this.state.pickedId)||{};
     // Locked to the Fitness Plan tool if their role mentions "fitness" OR the account is Coach Nedhal.
     if(a.id==='ahmed'||a.id==='sameh') return false; // club admins always have full access
@@ -4678,6 +4733,29 @@ class Component extends DCLogic {
   loadFitSession(squadId, id){ const rec=((this.fitSaved&&this.fitSaved[squadId])||[]).find(r=>r.id===id); if(!rec) return;
     this.mutateFitPlan(squadId, p=>{ p.title=rec.plan.title; p.sections=JSON.parse(JSON.stringify(rec.plan.sections||[])); });
     this.setState({fitSavedMsg:'Loaded into the editor — change date/time and Save again to reschedule.', fitSessDate:rec.date||this.todayISO(), fitSessSlot:rec.slot||'AM', fitSessTime:rec.time||''}); }
+  // ---- Private staff <-> family messages (per swimmer). Any staff member can message a
+  // swimmer/parent (a note, a set, or a video to review); the family reads and replies in
+  // their portal. One row per message in family_messages, keyed by swimmer id.
+  async _famMsgFetch(){ if(!window.__vxSelect) return;
+    const rows=await window.__vxSelect('family_messages', 'select=*&order=ts.asc&limit=2000'); if(rows==null) return;
+    const by={}; rows.forEach(r=>{ (by[r.swimmer_id]=by[r.swimmer_id]||[]).push({id:r.id, sender:r.sender, fromName:r.from_name, fromPhoto:r.from_photo||'', body:r.body||'', setText:r.set_text||'', video:r.video||'', ts:r.ts}); });
+    this.famMessages=by; this.forceUpdate(); }
+  async sendFamMsg(swimmerId, sender){ if(!swimmerId) return;
+    const body=(this.state.fmBody||'').trim(); const setText=(this.state.fmSet||'').trim(); const video=(this.state.fmVideo||'').trim();
+    if(!body && !setText && !video) return;
+    const me = sender==='staff' ? this._me() : (this.state.familyUser||{}); const fromName=me.label||me.name||(sender==='staff'?'Coach':'Family'); const fromPhoto=me.photo||'';
+    const rec={id:'fm'+Date.now()+'_'+Math.random().toString(36).slice(2,6), swimmer_id:swimmerId, sender, from_name:fromName, from_photo:fromPhoto, body, set_text:setText, video, ts:Date.now()};
+    const by={...(this.famMessages||{})}; by[swimmerId]=[...(by[swimmerId]||[]), {id:rec.id, sender, fromName, fromPhoto, body, setText, video, ts:rec.ts}]; this.famMessages=by;
+    this.setState({fmBody:'', fmSet:'', fmVideo:''});
+    if(sender==='staff') this.notify('family','message-circle', 'New message from '+fromName, (body||setText||'📹 Video to review').slice(0,80));
+    else this.notify('coach','message-circle', fromName+' (family) replied', (body||(video?'📹 sent a video':setText)).slice(0,80));
+    try{ if(window.__vxInsert){ const ok=await window.__vxInsert('family_messages',[rec]); if(ok) await this._famMsgFetch(); } }catch(e){} }
+  _famMsgEls(swimmerId, viewer){ const list=(this.famMessages||{})[swimmerId]||[];
+    return list.map(m=>{ const mine=(viewer==='staff')?(m.sender==='staff'):(m.sender==='family');
+      return { id:m.id, mine, notMine:!mine, align: mine?'flex-end':'flex-start', name:m.fromName, avatar:this.av(m.fromPhoto||null, (m.fromName||'?').slice(0,2).toUpperCase(), 24, 8, mine?'#0A0F1A':'#067EEA', '#fff', 9),
+        bubbleBg: mine?'#0A0F1A':'#F1F4F8', bubbleFg: mine?'#fff':'#0C1116',
+        hasBody:!!m.body, body:m.body, hasSet:!!m.setText, setText:m.setText, hasVideo:!!m.video, videoEl:this._videoEmbedEl(m.video),
+        time: m.ts? this.notifTimeAgo(new Date(m.ts).toISOString()):'' }; }); }
   async deleteFitSession(squadId, id){ const list=((this.fitSaved&&this.fitSaved[squadId])||[]).filter(r=>r.id!==id); this.fitSaved={...(this.fitSaved||{}), [squadId]:list}; this.forceUpdate();
     try{ if(window.__vxDelete){ await window.__vxDelete('fitness_sessions', 'id=eq.'+encodeURIComponent(id)); await this._fitSessFetch(); } }catch(e){} }
   viewFitSessionPdf(squadId, id){ const rec=((this.fitSaved&&this.fitSaved[squadId])||[]).find(r=>r.id===id); if(!rec) return;
@@ -5376,6 +5454,7 @@ class Component extends DCLogic {
     this._squadPlansFetch();
     this._seasonFetch();
     this._fitSessFetch();
+    this._famMsgFetch();
     this._planCustomFetch();
     this._plansInt=setInterval(()=>{ if(this.state.view==='squad' && this.state.tab==='plans'){ this._plansFetch(); this._squadPlansFetch(); } }, 8000);
     // Staff accounts live in their own table (staff_accounts).
@@ -5405,6 +5484,7 @@ class Component extends DCLogic {
     } catch(e){} finally { this._syncBusy=false; }
     try{ this._squadPlansFetch(); }catch(e){}
     try{ this._planCustomFetch(); }catch(e){}
+    try{ this._famMsgFetch(); }catch(e){}
   }
   _hydrateShared(){
     // Re-read shared stores from localStorage (freshly pulled) and re-render. We intentionally do
@@ -6710,6 +6790,8 @@ class Component extends DCLogic {
           sponsorOn, sponsorBg: sponsorOn?'linear-gradient(135deg,#7A5A12,#C89B3C)':'#EEF1F5', sponsorFg: sponsorOn?'#fff':'#7A8296', sponsorLabel: sponsorOn?'VIP Sponsored athlete':'Mark as sponsored',
           onToggleSponsor:()=>this.toggleSponsor(swObj.id),
           isSponsored: sponsorOn,
+          profileMsgThread:this._famMsgEls(swObj.id, 'staff'), profileMsgEmpty:((this.famMessages||{})[swObj.id]||[]).length===0,
+          onSendFamMsg:()=>this.sendFamMsg(swObj.id, 'staff'),
           onOpenVortexId:()=>this.setState({showVortexId:true}), vortexIdBtnTop: sponsorOn?'calc(max(env(safe-area-inset-top), 44px) + 36px)':'calc(max(env(safe-area-inset-top), 44px) + 4px)',
           vortexIdCard:{
             name:swObj.name, initials:swObj.initials, avatarEl: this.av(this.swimmerPhotos[swObj.id]||null, swObj.initials, 72, 20, 'rgba(255,255,255,.18)', '#fff', 22, 'rgba(255,255,255,.3)'),
@@ -6858,6 +6940,7 @@ class Component extends DCLogic {
           dateLabel:this.shortDate(r.date.split('-').reverse().join('/')),
           summary:[r.pushups!=null?(r.pushups+' push-ups'):null, r.plankSec!=null?(r.plankSec+'s plank'):null, r.vjump!=null?(r.vjump+'cm jump'):null, r.sitreach!=null?(r.sitreach+'cm reach'):null].filter(Boolean).join(' · ') }));
         return {famSwName:sw.name, famSwMeta:sq.name+' · Age '+sw.age+' · '+sq.coach, famSwInit:sw.initials, famGenIcon:gm.icon, famGenBg:gm.bg, famAccent:sq.accent, famPbs, famResults, famMeetsUpcoming:upcoming, famHasPbs:famPbs.length>0, famHasResults:famResults.length>0,
+          famMsgThread:this._famMsgEls(sw.id, 'family'), famMsgEmpty:((this.famMessages||{})[sw.id]||[]).length===0, onFamSendMsg:()=>this.sendFamMsg(sw.id, 'family'),
           // -- attendance (day/month/year) --
           famAttView, famAttShowDay:famAttView==='day', famAttShowMonth:famAttView==='month', famAttShowYear:famAttView==='year',
           famAttViewDayBg: famAttView==='day'?'#0A0F1A':'transparent', famAttViewDayFg: famAttView==='day'?'#fff':'#7A8296',
@@ -6902,14 +6985,18 @@ class Component extends DCLogic {
             onRemove: on? ()=>this.removeDoc(sw.id, d.kind) : null,
             onUpload:(e)=>this.uploadDoc(e, sw.id, d.kind) }; }),
         }; })(),
+      fmBody:S.fmBody, onFmBody:(e)=>this.setState({fmBody:e.target.value}),
+      fmSet:S.fmSet, onFmSet:(e)=>this.setState({fmSet:e.target.value}),
+      fmVideo:S.fmVideo, onFmVideo:(e)=>this.setState({fmVideo:e.target.value}),
       onFamLogout:()=>this.famLogout(), famTab:S.famTab||'perf',
       famTabPerfBg:(S.famTab||'perf')==='perf'?'#0A0F1A':'#fff', famTabPerfFg:(S.famTab||'perf')==='perf'?'#fff':'#3A4152',
       famTabAttendBg:S.famTab==='attend'?'#0A0F1A':'#fff', famTabAttendFg:S.famTab==='attend'?'#fff':'#3A4152',
       famTabResultsBg:S.famTab==='results'?'#0A0F1A':'#fff', famTabResultsFg:S.famTab==='results'?'#fff':'#3A4152',
       famTabMeetsBg:S.famTab==='meets'?'#0A0F1A':'#fff', famTabMeetsFg:S.famTab==='meets'?'#fff':'#3A4152',
       famTabDocsBg:S.famTab==='docs'?'#0A0F1A':'#fff', famTabDocsFg:S.famTab==='docs'?'#fff':'#3A4152',
-      onFamTabPerf:()=>this.setState({famTab:'perf'}), onFamTabAttend:()=>this.setState({famTab:'attend'}), onFamTabResults:()=>this.setState({famTab:'results'}), onFamTabMeets:()=>this.setState({famTab:'meets'}), onFamTabDocs:()=>this.setState({famTab:'docs'}),
-      famShowPerf:(S.famTab||'perf')==='perf', famShowAttend:S.famTab==='attend', famShowResults:S.famTab==='results', famShowMeets:S.famTab==='meets', famShowDocs:S.famTab==='docs',
+      famTabMsgsBg:S.famTab==='msgs'?'#0A0F1A':'#fff', famTabMsgsFg:S.famTab==='msgs'?'#fff':'#3A4152',
+      onFamTabPerf:()=>this.setState({famTab:'perf'}), onFamTabAttend:()=>this.setState({famTab:'attend'}), onFamTabResults:()=>this.setState({famTab:'results'}), onFamTabMeets:()=>this.setState({famTab:'meets'}), onFamTabDocs:()=>this.setState({famTab:'docs'}), onFamTabMsgs:()=>{ this.setState({famTab:'msgs'}); try{ this._famMsgFetch(); }catch(e){} },
+      famShowPerf:(S.famTab||'perf')==='perf', famShowAttend:S.famTab==='attend', famShowResults:S.famTab==='results', famShowMeets:S.famTab==='meets', famShowDocs:S.famTab==='docs', famShowMsgs:S.famTab==='msgs',
       ...(()=>{ const fu=S.familyUser; if(!fu) return {};
         const uid=fu.swimmerIds[Math.min(S.familyActiveIdx, fu.swimmerIds.length-1)]||fu.swimmerIds[0]; const [sqid,swid]=(uid||'::').split('::');
         const sw=(this.roster[sqid]||[]).find(x=>x.id===swid);
