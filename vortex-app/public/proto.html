@@ -25,7 +25,7 @@
   var REST = SB_URL + "/rest/v1/club_state";
   var HEAD = { "apikey": SB_ANON, "Authorization": "Bearer " + SB_ANON, "Content-Type": "application/json" };
   // Every shared data type the club edits. The only key kept per-device is vx_api_key.
-  var SYNC = ["vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_attend_log","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_plans","vx_videos"];
+  var SYNC = ["vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_attend_log","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_plans","vx_fitness_media","vx_videos"];
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
   window.__vxWriteTs = {};   // last time THIS device wrote each key (ms) — guards against stale pulls
@@ -2264,6 +2264,17 @@
                                   <input value="{{ ex.reps }}" oninput="{{ ex.onReps }}" placeholder="Reps" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:8px;padding:6px 8px;font-family:inherit;font-size:11.5px;color:#3A4152;outline:none">
                                   <input value="{{ ex.rest }}" oninput="{{ ex.onRest }}" placeholder="Rest" style="width:64px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:8px;padding:6px 8px;font-family:inherit;font-size:11.5px;color:#3A4152;outline:none">
                                 </div>
+                                <input id="{{ ex.photoInputId }}" type="file" accept="image/*" onchange="{{ ex.onPhoto }}" style="display:none">
+                                <div style="display:flex;gap:6px;margin-top:6px;align-items:center">
+                                  <button onclick="{{ ex.onPickPhoto }}" style="flex:none;display:flex;align-items:center;gap:6px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border:none;border-radius:8px;padding:7px 10px;font-family:inherit;font-weight:700;font-size:11px;cursor:pointer"><i data-lucide="camera" style="width:14px;height:14px"></i>{{ ex.photoBtnLabel }}</button>
+                                  <sc-if value="{{ ex.hasPhoto }}" hint-placeholder-val="{{ false }}"><button onclick="{{ ex.onClearPhoto }}" style="flex:none;width:28px;height:28px;border-radius:8px;border:none;background:#F4F6F8;color:#9AA2B4;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="image-off" style="width:13px;height:13px"></i></button></sc-if>
+                                </div>
+                                <div style="display:flex;gap:6px;margin-top:6px;align-items:center">
+                                  <i data-lucide="video" style="width:14px;height:14px;color:#8A22D5;flex:none"></i>
+                                  <input value="{{ ex.video }}" oninput="{{ ex.onVideo }}" placeholder="Paste demo video link (YouTube / Vimeo / MP4)" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:8px;padding:6px 8px;font-family:inherit;font-size:11px;color:#3A4152;outline:none">
+                                  <sc-if value="{{ ex.hasVideo }}" hint-placeholder-val="{{ false }}"><button onclick="{{ ex.onClearVideo }}" style="flex:none;width:28px;height:28px;border-radius:8px;border:none;background:#F4F6F8;color:#9AA2B4;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:13px;height:13px"></i></button></sc-if>
+                                </div>
+                                {{ ex.mediaEl }}
                               </div>
                             </sc-for>
                             <button onclick="{{ fs.onAddEx }}" style="display:flex;align-items:center;justify-content:center;gap:6px;background:none;border:1.5px dashed #CDD3E0;border-radius:12px;padding:9px;cursor:pointer;color:#7A8296;font-family:inherit;font-size:12.5px;font-weight:600"><i data-lucide="plus" style="width:15px;height:15px"></i> Add exercise</button>
@@ -3043,10 +3054,15 @@
                                 {{ pvset.txt }}
                                 <sc-if value="{{ pvset.hasStrokes }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#067EEA;font-weight:700;margin-top:2px">Stroke: {{ pvset.strokesStr }}</div></sc-if>
                                 <sc-if value="{{ pvset.hasTypes }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#0A0F1A;font-weight:700;margin-top:2px">Type: {{ pvset.typesStr }}</div></sc-if>
+                                <sc-if value="{{ pvset.hasLabels }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#4F46E5;font-weight:700;margin-top:2px">Focus: {{ pvset.labelsStr }}</div></sc-if>
+                                <sc-if value="{{ pvset.hasGroups }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#0E7490;font-weight:700;margin-top:2px">Groups: {{ pvset.groupsStr }}</div></sc-if>
+                                <sc-if value="{{ pvset.hasSwimmers }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#3730A3;font-weight:700;margin-top:2px">Swimmers: {{ pvset.swimmersStr }}</div></sc-if>
+                                <sc-if value="{{ pvset.hasSendoff }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#2733D6;font-weight:700;margin-top:2px">Send-off: {{ pvset.sendoffStr }}</div></sc-if>
                                 <sc-if value="{{ pvset.hasEquip }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#3B2FD6;font-weight:600;margin-top:2px">Tools: {{ pvset.equipStr }}</div></sc-if>
                                 <sc-if value="{{ pvset.hasRest }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#9A6206;font-weight:700;margin-top:2px">Rest: {{ pvset.restStr }}</div></sc-if>
                                 <sc-if value="{{ pvset.hasHr }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#C81E4B;font-weight:700;margin-top:2px">{{ pvset.hrStr }}</div></sc-if>
                               </td>
+                              <td style="padding:7px 0 7px 8px;font-family:monospace;font-weight:700;color:#0C1116;text-align:right;width:64px;white-space:nowrap;vertical-align:top">{{ pvset.setMetres }}m</td>
                             </tr>
                           </sc-for>
                         </table>
@@ -3330,6 +3346,7 @@
                 <sc-if value="{{ pset.hasRest }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#9A6206;font-weight:700;margin-top:2px">Rest: {{ pset.restStr }}</div></sc-if>
                 <sc-if value="{{ pset.hasHr }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#C81E4B;font-weight:700;margin-top:2px">{{ pset.hrStr }}</div></sc-if>
               </td>
+              <td style="padding:7px 0 7px 8px;font-family:monospace;font-weight:700;color:#0C1116;text-align:right;width:64px;white-space:nowrap;vertical-align:top">{{ pset.setMetres }}m</td>
             </tr>
           </sc-for>
         </table>
@@ -3528,6 +3545,7 @@ class Component extends DCLogic {
     ]};
     this._fpid=0;
     this.fitnessPlans=this._loadJSON('vx_fitness_plans', {});
+    this.fitnessMedia=this._loadJSON('vx_fitness_media', {});
     this.rebuildRoster();
 
     this.state = {
@@ -3646,7 +3664,11 @@ class Component extends DCLogic {
   go(patch){ this.setState(patch); }
   openSquad(id){ this.setState({view:'squad', squadId:id, tab:'group', swimmerId:null, showSwitcher:false, tool:null}); try{ this._plansFetch(); }catch(e){} try{ this._squadPlansFetch(); }catch(e){} }
   openSwimmer(id){ this.setState({view:'profile', swimmerId:id, profileEvent:null}); }
-  openTool(t, club){ const patch={tool:t, toolScopeClub:!!club, aiOut:null, aiLoading:false}; if(t==='clock'){ const seq=this.clockSeq(); patch.clockRunning=false; patch.clockSetIdx=0; patch.clockRep=1; patch.clockRemain=seq[0]?seq[0].interval:0; } this.setState(patch); if(t==='lounge'){ try{ this._loungeFetch(); }catch(e){} } if(t==='season'){ try{ this._seasonFetch(); }catch(e){} } }
+  _fitnessLocked(){ const a=(this.accounts||[]).find(x=>x.id===this.state.pickedId)||{};
+    // Locked to the Fitness Plan tool if their role mentions "fitness" OR the account is Coach Nedhal.
+    if(a.id==='ahmed'||a.id==='sameh') return false; // club admins always have full access
+    return /fitness/i.test(a.role||'') || /nedhal/i.test(a.label||'') || /nedhal/i.test(a.user||''); }
+  openTool(t, club){ if(this._fitnessLocked() && t!=='fitness') t='fitness'; const patch={tool:t, toolScopeClub:!!club, aiOut:null, aiLoading:false}; if(t==='clock'){ const seq=this.clockSeq(); patch.clockRunning=false; patch.clockSetIdx=0; patch.clockRep=1; patch.clockRemain=seq[0]?seq[0].interval:0; } this.setState(patch); if(t==='lounge'){ try{ this._loungeFetch(); }catch(e){} } if(t==='season'){ try{ this._seasonFetch(); }catch(e){} } }
 
   todayISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
   curAttendDate(){ return this.state.attendDateISO || this.todayISO(); }
@@ -3914,15 +3936,32 @@ class Component extends DCLogic {
     if(window.__vxUpsert){ window.__vxUpsert('staff_accounts', [this._staffRow(id, o, isCustom)]).then(ok=>{ if(ok) this._staffFetch(); }); }
   }
   meetsCalAdd(){ const f=this.state.meetsCalForm||{}; const name=(f.name||'').trim(); const date=(f.date||'').trim(); if(!name||!date) return; this.meetsCal.push({id:'mc_'+Date.now(), name:name, date:date, place:(f.place||'').trim(), pdf:f.pdf||'', pdfName:f.pdfName||''}); this.meetsCal.sort(function(a,b){return (a.date||'').localeCompare(b.date||'');}); this._saveJSON('vx_meets_cal', this.meetsCal); this.setState({meetsCalForm:{name:'',date:'',place:'',pdf:'',pdfName:''}}); }
-  meetsViewPdf(pdf, title){ if(!pdf) return; const w=window.open('', '_blank'); if(!w) return; w.document.title=title||'Meet details'; w.document.body.style.margin='0'; const ifr=w.document.createElement('iframe'); ifr.src=pdf; ifr.style.cssText='border:0;width:100vw;height:100vh'; w.document.body.appendChild(ifr); }
+  meetsViewPdf(pdf, title){ if(!pdf) return; this._openDataUrl(pdf); }
   _esc(s){ return (''+(s==null?'':s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-  _openPrintDoc(title, inner){ const w=window.open('', '_blank'); if(!w) return;
+  // Open generated HTML / a stored file reliably on every platform. Android Chrome does NOT
+  // render window.open('')+document.write or a long data: URL, so we build a Blob object URL
+  // and navigate to it (falling back to the same tab when the popup is blocked).
+  _openHtml(html){
+    try{ const url=URL.createObjectURL(new Blob([html],{type:'text/html'}));
+      const w=window.open(url,'_blank');
+      if(!w){ location.href=url; }
+      setTimeout(()=>{ try{ URL.revokeObjectURL(url); }catch(e){} }, 60000);
+    }catch(e){ try{ const w=window.open('','_blank'); if(w){ w.document.open(); w.document.write(html); w.document.close(); } }catch(x){} }
+  }
+  _dataUrlToBlob(dataUrl){ try{ const c=dataUrl.indexOf(','); const meta=dataUrl.slice(0,c); const b64=dataUrl.slice(c+1);
+    const mime=(meta.match(/data:([^;]+)/)||[])[1]||'application/octet-stream'; const bin=atob(b64); const len=bin.length; const arr=new Uint8Array(len);
+    for(let i=0;i<len;i++) arr[i]=bin.charCodeAt(i); return new Blob([arr],{type:mime}); }catch(e){ return null; } }
+  _openDataUrl(dataUrl){ if(!dataUrl) return;
+    if(/^data:/.test(dataUrl)){ const blob=this._dataUrlToBlob(dataUrl); if(blob){ const url=URL.createObjectURL(blob);
+      const w=window.open(url,'_blank'); if(!w) location.href=url; setTimeout(()=>{ try{ URL.revokeObjectURL(url); }catch(e){} }, 60000); return; } }
+    const w=window.open(dataUrl,'_blank'); if(!w) location.href=dataUrl; }
+  _openPrintDoc(title, inner){
     const club=(this.brandConfig&&this.brandConfig.clubName)||'Vortex Swimming Club';
     const logo=(location.origin||'')+'/assets/b798adf9.png';
     const header='<div style="display:flex;align-items:center;gap:12px;border-bottom:3px solid #067EEA;padding-bottom:14px;margin-bottom:18px"><img src="'+logo+'" alt="" style="width:44px;height:44px"><div style="flex:1"><div style="font-weight:800;font-size:20px;color:#0C1116;letter-spacing:-.02em">'+this._esc(club)+'</div><div style="font-size:11px;color:#7A8296;font-weight:700;letter-spacing:.06em;text-transform:uppercase">Vortex SC coaching app</div></div></div>';
     const css='body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;margin:0;padding:0;color:#0C1116}.wrap{padding:16px 24px 40px}h1{font-size:20px;margin:0 0 2px;letter-spacing:-.01em}.sub{color:#7A8296;font-size:12px;margin:0 0 16px}table{width:100%;border-collapse:collapse;font-size:12.5px}th,td{text-align:left;padding:7px 9px;border-bottom:1px solid #E5E9F0}th{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:#9AA2B4}.r{text-align:right}.mono{font-family:ui-monospace,Menlo,monospace;font-weight:700}.tot{font-weight:700}.brand{margin-top:22px;padding-top:12px;border-top:1px solid #EEF1F5;color:#0C1116;font-weight:700;font-size:12px}.topbar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top) + 10px) 16px 10px;background:#0A0F1A}.backbtn{display:flex;align-items:center;gap:7px;background:rgba(255,255,255,.12);color:#fff;border:none;border-radius:11px;padding:9px 14px 9px 11px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}.printbtn{margin-left:auto;background:#067EEA;color:#fff;border:none;border-radius:11px;padding:9px 16px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}@media print{.noprint{display:none}}';
     const doc='<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>'+this._esc(title)+'</title><style>'+css+'</style></head><body><div class="topbar noprint"><button class="backbtn" onclick="if(window.opener){window.close();}else{history.back();}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:17px;height:17px"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>Close</button><button class="printbtn" onclick="window.print()">Save as PDF / Print</button></div><div class="wrap">'+header+inner+'<div class="brand">'+this._esc(club)+'</div></div></body></html>';
-    w.document.open(); w.document.write(doc); w.document.close();
+    this._openHtml(doc);
   }
   exportAttendancePdf(squadId){ const sq=this.squadById[squadId]||{name:'Squad',coach:''}; const now=new Date();
     const y=this.state.attendCalY!=null?this.state.attendCalY:now.getFullYear(); const m=this.state.attendCalM!=null?this.state.attendCalM:now.getMonth();
@@ -4392,6 +4431,32 @@ class Component extends DCLogic {
   fitRemoveSection(id, secId){ this.mutateFitPlan(id, p=>{ p.sections=p.sections.filter(s=>s.id!==secId); }); }
   fitRenameSection(id, secId, title){ this.mutateFitPlan(id, p=>{ const sec=p.sections.find(s=>s.id===secId); if(sec) sec.title=title; }); }
   fitResetPlan(id){ this.fitnessPlans={...this.fitnessPlans, [id]:this.makeDefaultFitnessPlan()}; this._saveJSON('vx_fitness_plans', this.fitnessPlans); this.forceUpdate(); }
+  // ---- Fitness exercise media (demo photo + video link), kept in its own synced key so the
+  // photos never bloat the plan document itself. Photos are downscaled before storing.
+  getFitMedia(exId){ return (this.fitnessMedia||{})[exId] || {photo:'', video:''}; }
+  _saveFitMedia(map){ this.fitnessMedia=map; this._saveJSON('vx_fitness_media', map); this.forceUpdate(); }
+  fitSetVideo(exId, url){ const m={...(this.fitnessMedia||{})}; m[exId]={...(m[exId]||{}), video:(url||'').trim()}; this._saveFitMedia(m); }
+  fitClearVideo(exId){ const m={...(this.fitnessMedia||{})}; if(m[exId]) m[exId]={...m[exId], video:''}; this._saveFitMedia(m); }
+  fitClearPhoto(exId){ const m={...(this.fitnessMedia||{})}; if(m[exId]) m[exId]={...m[exId], photo:''}; this._saveFitMedia(m); }
+  async fitUploadPhoto(e, exId){ const f=e.target.files && e.target.files[0]; e.target.value=''; if(!f) return;
+    try{ const dataUrl=await this._resizeImage(f, 900, 0.72); const m={...(this.fitnessMedia||{})}; m[exId]={...(m[exId]||{}), photo:dataUrl}; this._saveFitMedia(m); }catch(err){} }
+  _resizeImage(file, maxDim, quality){ return new Promise((resolve,reject)=>{ const fr=new FileReader();
+    fr.onload=()=>{ const img=new Image(); img.onload=()=>{ let w=img.width,h=img.height; const scale=Math.min(1, maxDim/Math.max(w,h)); const cw=Math.max(1,Math.round(w*scale)), ch=Math.max(1,Math.round(h*scale));
+      const c=document.createElement('canvas'); c.width=cw; c.height=ch; const ctx=c.getContext('2d'); ctx.drawImage(img,0,0,cw,ch);
+      try{ resolve(c.toDataURL('image/jpeg', quality)); }catch(e){ resolve(fr.result); } }; img.onerror=reject; img.src=fr.result; }; fr.onerror=reject; fr.readAsDataURL(file); }); }
+  _ytIdFrom(url){ const m=(url||'').match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/); return m?m[1]:''; }
+  _videoEmbedEl(url){ const R=window.React; if(!url) return null; const yt=this._ytIdFrom(url); const vim=(url.match(/vimeo\.com\/(\d+)/)||[])[1];
+    const frame=(src)=>R.createElement('div',{key:'v', style:{position:'relative',width:'100%',paddingTop:'56.25%',borderRadius:10,overflow:'hidden',background:'#000'}},
+      R.createElement('iframe',{src:src, style:{position:'absolute',inset:0,width:'100%',height:'100%',border:'none'}, allow:'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen', allowFullScreen:true}));
+    if(yt) return frame('https://www.youtube.com/embed/'+yt);
+    if(vim) return frame('https://player.vimeo.com/video/'+vim);
+    if(/\.(mp4|webm|mov)(\?|#|$)/i.test(url)) return R.createElement('video',{key:'v', src:url, controls:true, playsInline:true, style:{width:'100%',borderRadius:10,background:'#000',display:'block'}});
+    return R.createElement('a',{key:'v', href:url, target:'_blank', rel:'noreferrer', style:{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,fontWeight:700,color:'#8A22D5',textDecoration:'none'}}, '▶ Watch demo video'); }
+  _fitMediaEl(exId){ const R=window.React; const m=this.getFitMedia(exId); const kids=[];
+    if(m.photo) kids.push(R.createElement('img',{key:'p', src:m.photo, alt:'', style:{width:'100%',maxHeight:200,objectFit:'cover',borderRadius:10,display:'block'}}));
+    const emb=this._videoEmbedEl(m.video); if(emb) kids.push(emb);
+    if(!kids.length) return null;
+    return R.createElement('div',{style:{display:'flex',flexDirection:'column',gap:8,marginTop:8}}, kids); }
 
   // ---- InBody import & analysis ----
   async inbodyPdfImport(e){
@@ -4875,7 +4940,8 @@ class Component extends DCLogic {
       body+='<div style="margin-top:15px"><div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid '+sq.accent+';padding-bottom:5px;margin-bottom:6px"><span style="font-weight:800;text-transform:uppercase;font-size:12px;letter-spacing:.06em;color:#0C1116">'+this._esc(sec.title||'Section')+'</span><span class="mono" style="color:#7A8296;font-weight:700">'+sub+'m</span></div><table><tbody>';
       (sec.sets||[]).forEach(s=>{ const reps=Number(s.reps)||1; const dist=Number(s.dist)||0; const distLabel=(reps>1?(reps+'×'+dist):(''+dist))+'m';
         const tags=[]; if((Number(s.circuit)||1)>1) tags.push((s.circuit)+' rounds'); if((s.groups||[]).length) tags.push((s.groups).join('/')); if((s.swimmers||[]).length) tags.push('For: '+(s.swimmers).map(x=>String(x.name||'').split(' ')[0]).join(', ')); if((s.strokes||[]).length) tags.push((s.strokes).join('/')); if((s.types||[]).length) tags.push((s.types).join(', ')); if((s.labels||[]).length) tags.push((s.labels).join(', ')); if((s.equip||[]).length) tags.push('Tools: '+(s.equip).join(', ')); if(s.sendoff) tags.push('On '+s.sendoff); if(s.rest) tags.push('Rest '+s.rest); { const hf=s.hrFrom||'', ht=s.hrTo||''; if(hf||ht) tags.push('HR '+(hf||'?')+(ht?('-'+ht):'')); else if(s.hr) tags.push('HR '+s.hr); } if(s.zone) tags.push(s.zone);
-        body+='<tr><td class="mono" style="width:84px;font-weight:700;color:'+sq.accent+';vertical-align:top">'+this._esc(distLabel)+'</td><td>'+this._esc(s.txt||'')+(tags.length?('<div style="font-size:11px;color:#7A8296;margin-top:2px">'+this._esc(tags.join(' · '))+'</div>'):'')+'</td></tr>';
+        const setTot=reps*dist*(Number(s.circuit)||1);
+        body+='<tr><td class="mono" style="width:84px;font-weight:700;color:'+sq.accent+';vertical-align:top">'+this._esc(distLabel)+'</td><td>'+this._esc(s.txt||'')+(tags.length?('<div style="font-size:11px;color:#7A8296;margin-top:2px">'+this._esc(tags.join(' · '))+'</div>'):'')+'</td><td class="mono r" style="width:66px;color:#0C1116;font-weight:700;vertical-align:top;white-space:nowrap">'+setTot.toLocaleString()+'m</td></tr>';
       });
       body+='</tbody></table></div>';
     });
@@ -5131,7 +5197,7 @@ class Component extends DCLogic {
     this.academyTrials=g('vx_academy_trials', this.academyTrials); this.academyFees=g('vx_academy_fees', this.academyFees); this.invoices=g('vx_invoices', this.invoices);
     this.brandConfig=g('vx_brand', this.brandConfig); this.notifications=g('vx_notifications', this.notifications);
     this.tpaceTests=g('vx_tpace', this.tpaceTests); this.fitnessTests=g('vx_fitness_tests', this.fitnessTests);
-    this.fitnessPlans=g('vx_fitness_plans', this.fitnessPlans); this.promoStore=g('vx_promo', this.promoStore); this.aiSuggOverrides=g('vx_ai_sugg_ovr', this.aiSuggOverrides);
+    this.fitnessPlans=g('vx_fitness_plans', this.fitnessPlans); this.fitnessMedia=g('vx_fitness_media', this.fitnessMedia); this.promoStore=g('vx_promo', this.promoStore); this.aiSuggOverrides=g('vx_ai_sugg_ovr', this.aiSuggOverrides);
     this.relayOverrides=g('vx_relay_ovr', this.relayOverrides);
     this.planCustom=g('vx_plan_custom', this.planCustom); ['type','stroke','tools','zone','label'].forEach(k=>{ if(!Array.isArray((this.planCustom||{})[k])){ this.planCustom=this.planCustom||{}; this.planCustom[k]=[]; } });
     this.rosterEdits=g('vx_roster_edits', this.rosterEdits); try{ this.rebuildRoster(); }catch(e){}
@@ -5285,7 +5351,10 @@ class Component extends DCLogic {
       {id:'relay', icon:'users-round', title:'Relay Builder', sub:'Fastest lineup by stroke', tint:'rgba(12,122,79,.1)', color:'#0C7A4F'},
       {id:'season', icon:'calendar-range', title:'Season Plan', sub:'Phases · weeks · peak & taper', tint:'rgba(124,77,255,.12)', color:'#7C4DFF'},
     ];
-    const toolTiles=toolDefs.map(t=>({...t, onClick:T(t.id, scopeClub)}));
+    // A staff member whose role contains "fitness" (e.g. Coach Nedhal, role "Fitness Coach")
+    // is limited to the Fitness Plan tool only — every other tool is hidden for them.
+    const _fitOnly=this._fitnessLocked();
+    const toolTiles=(_fitOnly? toolDefs.filter(t=>t.id==='fitness') : toolDefs).map(t=>({...t, onClick:T(t.id, scopeClub)}));
 
     // ---- roster ----
     const rq=(S.rosterQuery||'').toLowerCase();
@@ -5824,12 +5893,17 @@ class Component extends DCLogic {
       id:sec.id, title:sec.title,
       onTitle:(e)=>this.fitRenameSection(S.squadId, sec.id, e.target.value),
       onRemoveSection:()=>this.fitRemoveSection(S.squadId, sec.id),
-      exs: sec.exs.map(ex=>({ id:ex.id, name:ex.name, sets:ex.sets, reps:ex.reps, rest:ex.rest,
+      exs: sec.exs.map(ex=>{ const med=this.getFitMedia(ex.id); return { id:ex.id, name:ex.name, sets:ex.sets, reps:ex.reps, rest:ex.rest,
         onName:(e)=>this.fitSetField(S.squadId, sec.id, ex.id, 'name', e.target.value),
         onSets:(e)=>this.fitSetField(S.squadId, sec.id, ex.id, 'sets', parseInt(e.target.value,10)||0),
         onReps:(e)=>this.fitSetField(S.squadId, sec.id, ex.id, 'reps', e.target.value),
         onRest:(e)=>this.fitSetField(S.squadId, sec.id, ex.id, 'rest', e.target.value),
-        onRemove:()=>this.fitRemoveEx(S.squadId, sec.id, ex.id) })),
+        onRemove:()=>this.fitRemoveEx(S.squadId, sec.id, ex.id),
+        photoInputId:'vx-fitphoto-'+ex.id, onPickPhoto:()=>{ const el=document.getElementById('vx-fitphoto-'+ex.id); if(el) el.click(); },
+        onPhoto:(e)=>this.fitUploadPhoto(e, ex.id), hasPhoto:!!med.photo, onClearPhoto:()=>this.fitClearPhoto(ex.id),
+        video:med.video||'', onVideo:(e)=>this.fitSetVideo(ex.id, e.target.value), hasVideo:!!med.video, onClearVideo:()=>this.fitClearVideo(ex.id),
+        photoBtnLabel: med.photo?'Change photo':'Add photo',
+        mediaEl:this._fitMediaEl(ex.id) }; }),
       onAddEx:()=>this.fitAddEx(S.squadId, sec.id)
     }));
     const fitTitle = fitPlan.title;
@@ -6347,7 +6421,7 @@ class Component extends DCLogic {
       onSubmitPlanReview:()=>this.submitPlanForReview(S.squadId, squad.name),
       onClosePrintPreview:()=>this.setState({printPreviewOpen:false}), onConfirmPrint:()=>{ this._printEscape(); setTimeout(()=>window.print(), 30); }, printPreviewOpen:S.printPreviewOpen,
       printSheet:{ accent:squad.accent, clubName:this.brandConfig.clubName||'Vortex Swimming Club', squadName:squad.name, printDate:new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}), zoneLabel:(zoneRows[zi]?zoneRows[zi].code+' \u00b7 '+zoneRows[zi].name:zName), title:sessionTitle||'Session', coach:squad.coach, total:planTotalN.toLocaleString(),
-        sections: planSections.map(ps=>({ title:ps.title, dot:ps.dot, subtotal:ps.subtotal, sets: ps.sets.map(st=>{ const onEquip=(st.equip||[]).filter(e=>e.on).map(e=>e.label); const onTypes=(st.types||[]).filter(e=>e.on).map(e=>e.label); const onStrokes=(st.strokes||[]).filter(e=>e.on).map(e=>e.label); const onLabels=(st.labels||[]).filter(e=>e.on).map(e=>e.label); const setSw=(st.setSwimmers||[]).map(e=>e.name); const onGroups=(st.setGroups||[]).filter(e=>e.on).map(e=>e.label); const rounds=Number(st.circuit)||1; return {dist:(rounds>1?(rounds+'×('+(st.reps>1?(st.reps+'×'+st.dist):st.dist)+')'):(st.reps>1?(st.reps+'×'+st.dist):st.dist)), txt:st.txt, hasStrokes:onStrokes.length>0, strokesStr:onStrokes.join('/'), hasTypes:onTypes.length>0, typesStr:onTypes.join(', '), hasLabels:onLabels.length>0, labelsStr:onLabels.join(', '), hasGroups:onGroups.length>0, groupsStr:onGroups.join(', '), hasSwimmers:setSw.length>0, swimmersStr:setSw.join(', '), hasEquip:onEquip.length>0, equipStr:onEquip.join(', '), hasSendoff:!!st.sendoffVal, sendoffStr:st.sendoffVal||'', hasRest:!!st.rest, restStr:st.rest||'', hasHr:!!(st.hrFromVal||st.hrToVal), hrStr:(st.hrFromVal||st.hrToVal)?('HR '+(st.hrFromVal||'?')+(st.hrToVal?('-'+st.hrToVal):'')):'', zoneCode:st.zone||''}; }) })) },
+        sections: planSections.map(ps=>({ title:ps.title, dot:ps.dot, subtotal:ps.subtotal, sets: ps.sets.map(st=>{ const onEquip=(st.equip||[]).filter(e=>e.on).map(e=>e.label); const onTypes=(st.types||[]).filter(e=>e.on).map(e=>e.label); const onStrokes=(st.strokes||[]).filter(e=>e.on).map(e=>e.label); const onLabels=(st.labels||[]).filter(e=>e.on).map(e=>e.label); const setSw=(st.setSwimmers||[]).map(e=>e.name); const onGroups=(st.setGroups||[]).filter(e=>e.on).map(e=>e.label); const rounds=Number(st.circuit)||1; return {dist:(rounds>1?(rounds+'×('+(st.reps>1?(st.reps+'×'+st.dist):st.dist)+')'):(st.reps>1?(st.reps+'×'+st.dist):st.dist)), setMetres:(Number(st.setMetres)||0).toLocaleString(), txt:st.txt, hasStrokes:onStrokes.length>0, strokesStr:onStrokes.join('/'), hasTypes:onTypes.length>0, typesStr:onTypes.join(', '), hasLabels:onLabels.length>0, labelsStr:onLabels.join(', '), hasGroups:onGroups.length>0, groupsStr:onGroups.join(', '), hasSwimmers:setSw.length>0, swimmersStr:setSw.join(', '), hasEquip:onEquip.length>0, equipStr:onEquip.join(', '), hasSendoff:!!st.sendoffVal, sendoffStr:st.sendoffVal||'', hasRest:!!st.rest, restStr:st.rest||'', hasHr:!!(st.hrFromVal||st.hrToVal), hrStr:(st.hrFromVal||st.hrToVal)?('HR '+(st.hrFromVal||'?')+(st.hrToVal?('-'+st.hrToVal):'')):'', zoneCode:st.zone||''}; }) })) },
       onImportPdfClick:()=>{ const el=document.getElementById('vx-pdf-input'); if(el) el.click(); },
       pdfImportBusy:S.pdfImportBusy, pdfImportMsg:S.pdfImportMsg, pdfImportMsgColor: S.pdfImportOk?'#0C7A4F':'#B42318',
       onPdfFileChange:(e)=>this.handlePdfImport(e, S.squadId),
@@ -6399,10 +6473,10 @@ class Component extends DCLogic {
           onPickDocId:()=>{ const el=document.getElementById('vx-doc-id-input'); if(el) el.click(); },
           onPickDocMedical:()=>{ const el=document.getElementById('vx-doc-medical-input'); if(el) el.click(); },
           onUploadDocBirth:(e)=>this.uploadDoc(e, swObj.id, 'birth'), onUploadDocId:(e)=>this.uploadDoc(e, swObj.id, 'id'), onUploadDocMedical:(e)=>this.uploadDoc(e, swObj.id, 'medical'),
-          onViewDocBirth:()=>{ if(docBirth && docBirth.dataUrl) window.open(docBirth.dataUrl, '_blank'); },
-          onViewDocMedical:()=>{ if(docMedical && docMedical.dataUrl) window.open(docMedical.dataUrl, '_blank'); },
+          onViewDocBirth:()=>{ if(docBirth && docBirth.dataUrl) this._openDataUrl(docBirth.dataUrl); },
+          onViewDocMedical:()=>{ if(docMedical && docMedical.dataUrl) this._openDataUrl(docMedical.dataUrl); },
           onRemoveDocMedical:()=>this.removeDoc(swObj.id,'medical'),
-          onViewDocId:()=>{ if(docId && docId.dataUrl) window.open(docId.dataUrl, '_blank'); },
+          onViewDocId:()=>{ if(docId && docId.dataUrl) this._openDataUrl(docId.dataUrl); },
           onRemoveDocBirth:()=>this.removeDoc(swObj.id,'birth'), onRemoveDocId:()=>this.removeDoc(swObj.id,'id'),
           inbodyRows, inbodyHasRows:inbodyRows.length>0,
           inbodyWeight:S2.inbodyForm.weight, inbodyFat:S2.inbodyForm.fat, inbodyMuscle:S2.inbodyForm.muscle,
