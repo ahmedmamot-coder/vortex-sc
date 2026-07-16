@@ -53,6 +53,15 @@
   window.__vxSelect = function(table, qs){ return fetch(SB_URL+"/rest/v1/"+table+(qs?("?"+qs):""), { headers: HEAD }).then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; }); };
   window.__vxDelete = function(table, qs){ return fetch(SB_URL+"/rest/v1/"+table+"?"+qs, { method:"DELETE", headers: HEAD }).then(function(r){ return r.ok; }).catch(function(){ return false; }); };
   window.__vxUpsert = function(table, rows){ return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: Object.assign({}, HEAD, {"Prefer":"resolution=merge-duplicates,return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(!r.ok){ r.text().then(function(t){ try{console.warn("vx upsert "+table+" HTTP "+r.status+": "+t);}catch(e){} }); } return r.ok; }).catch(function(){ return false; }); };
+  // Upload a file (photo/video) to the public "vx-media" Storage bucket and return its public URL,
+  // or null on failure. Used for fitness-exercise demo photos & videos so large files never sit in
+  // the sync blob. Requires the vx-media bucket + anon policies (see setup notes).
+  window.__vxUploadFile = function(path, file){
+    var base = SB_URL + "/storage/v1/object/vx-media/" + path;
+    return fetch(base, { method:"POST", headers: { "apikey":SB_ANON, "Authorization":"Bearer "+SB_ANON, "Content-Type": (file && file.type) || "application/octet-stream", "x-upsert":"true" }, body: file })
+      .then(function(r){ if(!r.ok){ return r.text().then(function(t){ try{ console.warn("vx upload HTTP "+r.status+": "+t); }catch(e){} return null; }); } return SB_URL + "/storage/v1/object/public/vx-media/" + path; })
+      .catch(function(e){ try{ console.warn("vx upload error", e); }catch(x){} return null; });
+  };
   // Install write-through sync UP FRONT so every write reaches the database.
   var origSet = localStorage.setItem.bind(localStorage);
   window.__vxsetlocal = origSet; // write locally WITHOUT re-pushing (used by background pull)
@@ -2246,6 +2255,7 @@
                         <input value="{{ fitTitle }}" oninput="{{ onFitTitle }}" style="width:100%;border:none;outline:none;background:none;font-family:inherit;font-size:16px;font-weight:700;color:#0C1116;padding:0;margin-bottom:2px">
                         <p style="margin:0;font-size:11px;color:#9AA2B4">Dryland &amp; conditioning — {{ squad.name }}</p>
                       </div>
+                      <sc-if value="{{ fitMediaMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:11.5px;font-weight:600;color:#B42318">{{ fitMediaMsg }}</p></sc-if>
                       <sc-for list="{{ fitSections }}" as="fs" hint-placeholder-count="4">
                         <div>
                           <div style="display:flex;align-items:center;gap:7px;margin:0 3px 7px">
@@ -2274,6 +2284,8 @@
                                   <input value="{{ ex.video }}" oninput="{{ ex.onVideo }}" placeholder="Paste demo video link (YouTube / Vimeo / MP4)" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:8px;padding:6px 8px;font-family:inherit;font-size:11px;color:#3A4152;outline:none">
                                   <sc-if value="{{ ex.hasVideo }}" hint-placeholder-val="{{ false }}"><button onclick="{{ ex.onClearVideo }}" style="flex:none;width:28px;height:28px;border-radius:8px;border:none;background:#F4F6F8;color:#9AA2B4;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:13px;height:13px"></i></button></sc-if>
                                 </div>
+                                <input id="{{ ex.videoInputId }}" type="file" accept="video/*" onchange="{{ ex.onVideoFile }}" style="display:none">
+                                <button onclick="{{ ex.onPickVideo }}" style="margin-top:6px;display:flex;align-items:center;gap:6px;background:rgba(138,34,213,.1);color:#8A22D5;border:none;border-radius:8px;padding:7px 10px;font-family:inherit;font-weight:700;font-size:11px;cursor:pointer"><i data-lucide="upload" style="width:14px;height:14px"></i>{{ ex.videoBtnLabel }}</button>
                                 {{ ex.mediaEl }}
                               </div>
                             </sc-for>
@@ -3589,7 +3601,7 @@ class Component extends DCLogic {
       seasonOpenWeek:null,
       planSessDate:null, planSessSlot:'AM', planSessTime:'', planCalY:null, planCalM:null, planCalDay:null,
       videoActiveId:null, videoUrlDraft:'', videoTitleDraft:'', videoTagDraft:'', videoAddOpen:false, videoRate:1, videoNoteDraft:'', videoCurT:0, videoDur:0,
-      fitAddOpen:false, inbodyMode:'pdf', inbodySwId:'', inbodyQuery:'', inbodyPdfBusy:false, inbodyPdfMsg:'', inbodyQrOpen:false, inbodyQrMsg:'', inbodyDraft:null,
+      fitAddOpen:false, fitBusy:null, fitMediaMsg:'', inbodyMode:'pdf', inbodySwId:'', inbodyQuery:'', inbodyPdfBusy:false, inbodyPdfMsg:'', inbodyQrOpen:false, inbodyQrMsg:'', inbodyDraft:null,
       shareNote:'',
       moveOverride:{}, moveQuery:'',
       rosterQuery:'', meetSel:0, boardSel:0,
@@ -4438,8 +4450,29 @@ class Component extends DCLogic {
   fitSetVideo(exId, url){ const m={...(this.fitnessMedia||{})}; m[exId]={...(m[exId]||{}), video:(url||'').trim()}; this._saveFitMedia(m); }
   fitClearVideo(exId){ const m={...(this.fitnessMedia||{})}; if(m[exId]) m[exId]={...m[exId], video:''}; this._saveFitMedia(m); }
   fitClearPhoto(exId){ const m={...(this.fitnessMedia||{})}; if(m[exId]) m[exId]={...m[exId], photo:''}; this._saveFitMedia(m); }
+  async _uploadMedia(file, kind, exId, forceExt){ const up=window.__vxUploadFile; if(!up) return null;
+    let ext=forceExt || ((file.name||'').split('.').pop()||'').toLowerCase().replace(/[^a-z0-9]/g,'') || 'bin';
+    const path=kind+'/'+exId+'_'+Date.now()+'.'+ext;
+    try{ return await up(path, file); }catch(e){ return null; } }
   async fitUploadPhoto(e, exId){ const f=e.target.files && e.target.files[0]; e.target.value=''; if(!f) return;
-    try{ const dataUrl=await this._resizeImage(f, 900, 0.72); const m={...(this.fitnessMedia||{})}; m[exId]={...(m[exId]||{}), photo:dataUrl}; this._saveFitMedia(m); }catch(err){} }
+    this.setState({fitBusy:'photo:'+exId}); let val='';
+    try{ const blob=await this._resizeImageBlob(f, 1100, 0.75);
+      if(blob && window.__vxUploadFile){ const u=await this._uploadMedia(blob, 'fitphoto', exId, 'jpg'); if(u) val=u; }
+      if(!val){ val=await this._resizeImage(f, 900, 0.72); } // fallback: inline image if storage isn't set up
+    }catch(err){ try{ val=await this._resizeImage(f, 900, 0.72); }catch(e2){} }
+    this.setState({fitBusy:null});
+    if(!val) return; const m={...(this.fitnessMedia||{})}; m[exId]={...(m[exId]||{}), photo:val}; this._saveFitMedia(m); }
+  async fitUploadVideo(e, exId){ const f=e.target.files && e.target.files[0]; e.target.value=''; if(!f) return;
+    if(!window.__vxUploadFile){ this.setState({fitMediaMsg:'Video upload needs the vx-media storage bucket - set it up first.'}); return; }
+    this.setState({fitBusy:'video:'+exId, fitMediaMsg:''});
+    const u=await this._uploadMedia(f, 'fitvideo', exId);
+    this.setState({fitBusy:null});
+    if(u){ const m={...(this.fitnessMedia||{})}; m[exId]={...(m[exId]||{}), video:u}; this._saveFitMedia(m); }
+    else { this.setState({fitMediaMsg:'Upload failed - check the file size (max 50MB) and that the vx-media bucket exists.'}); } }
+  _resizeImageBlob(file, maxDim, quality){ return new Promise((resolve)=>{ const fr=new FileReader();
+    fr.onload=()=>{ const img=new Image(); img.onload=()=>{ let w=img.width,h=img.height; const scale=Math.min(1, maxDim/Math.max(w,h)); const cw=Math.max(1,Math.round(w*scale)), ch=Math.max(1,Math.round(h*scale));
+      const c=document.createElement('canvas'); c.width=cw; c.height=ch; c.getContext('2d').drawImage(img,0,0,cw,ch);
+      try{ c.toBlob((b)=>resolve(b), 'image/jpeg', quality); }catch(e){ resolve(null); } }; img.onerror=()=>resolve(null); img.src=fr.result; }; fr.onerror=()=>resolve(null); fr.readAsDataURL(file); }); }
   _resizeImage(file, maxDim, quality){ return new Promise((resolve,reject)=>{ const fr=new FileReader();
     fr.onload=()=>{ const img=new Image(); img.onload=()=>{ let w=img.width,h=img.height; const scale=Math.min(1, maxDim/Math.max(w,h)); const cw=Math.max(1,Math.round(w*scale)), ch=Math.max(1,Math.round(h*scale));
       const c=document.createElement('canvas'); c.width=cw; c.height=ch; const ctx=c.getContext('2d'); ctx.drawImage(img,0,0,cw,ch);
@@ -5901,8 +5934,11 @@ class Component extends DCLogic {
         onRemove:()=>this.fitRemoveEx(S.squadId, sec.id, ex.id),
         photoInputId:'vx-fitphoto-'+ex.id, onPickPhoto:()=>{ const el=document.getElementById('vx-fitphoto-'+ex.id); if(el) el.click(); },
         onPhoto:(e)=>this.fitUploadPhoto(e, ex.id), hasPhoto:!!med.photo, onClearPhoto:()=>this.fitClearPhoto(ex.id),
+        videoInputId:'vx-fitvideo-'+ex.id, onPickVideo:()=>{ const el=document.getElementById('vx-fitvideo-'+ex.id); if(el) el.click(); },
+        onVideoFile:(e)=>this.fitUploadVideo(e, ex.id),
         video:med.video||'', onVideo:(e)=>this.fitSetVideo(ex.id, e.target.value), hasVideo:!!med.video, onClearVideo:()=>this.fitClearVideo(ex.id),
-        photoBtnLabel: med.photo?'Change photo':'Add photo',
+        photoBtnLabel: (S.fitBusy==='photo:'+ex.id)?'Uploading…':(med.photo?'Change photo':'Add photo'),
+        videoBtnLabel: (S.fitBusy==='video:'+ex.id)?'Uploading…':'Upload video',
         mediaEl:this._fitMediaEl(ex.id) }; }),
       onAddEx:()=>this.fitAddEx(S.squadId, sec.id)
     }));
@@ -6751,6 +6787,7 @@ class Component extends DCLogic {
       onOpenSeason:()=>this.openTool('season', false),
       sponsorsRows, sponsorsEmpty: sponsorsRows.length===0, sponsorsScopeLabel,
       fitSections, fitTitle, onFitTitle, onFitAddSection, onFitReset,
+      fitMediaMsg:S.fitMediaMsg||'', fitMediaMsgShow:!!S.fitMediaMsg,
       ibModeIsPdf, ibModeIsQr, onIbModePdf:()=>this.setState({inbodyMode:'pdf'}), onIbModeQr:()=>this.setState({inbodyMode:'qr'}),
       ibModePdfBg: ibModeIsPdf?'#fff':'transparent', ibModeQrBg: ibModeIsQr?'#fff':'transparent',
       inbodyQuery:S.inbodyQuery, onIbQuery:(e)=>this.setState({inbodyQuery:e.target.value}), ibSwRows, ibHasSel, ibSelName: ibSel?ibSel.name:'',
