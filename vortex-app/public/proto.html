@@ -2077,6 +2077,7 @@
                           <p style="margin:0;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:#9AA2B4;font-weight:700">Up next</p>
                           <p style="margin:5px 0 0;font-size:13px;color:#3A4152;font-weight:600">{{ clockView.nextTxt }}</p>
                         </div>
+                        <button onclick="{{ onClockFsEnter }}" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;background:#0A0F1A;color:#fff;border:none;border-radius:14px;padding:13px;font-family:inherit;font-weight:700;font-size:13.5px;cursor:pointer"><i data-lucide="maximize-2" style="width:17px;height:17px"></i>Full screen for poolside</button>
                       </div>
                     </sc-if>
                     <sc-if value="{{ clockEmpty }}" hint-placeholder-val="{{ false }}">
@@ -3117,6 +3118,21 @@
             </sc-if>
 
             <!-- VORTEX ID OVERLAY -->
+            <sc-if value="{{ clockFs }}" hint-placeholder-val="{{ false }}">
+              <div class="vx-screen" style="position:absolute;inset:0;z-index:60;background:#0A0F1A;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 18px">
+                <button onclick="{{ onClockFsExit }}" style="position:absolute;top:calc(env(safe-area-inset-top) + 12px);right:16px;width:42px;height:42px;border-radius:12px;background:rgba(255,255,255,.12);border:none;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2"><i data-lucide="minimize-2" style="width:19px;height:19px"></i></button>
+                <p style="margin:0 0 8px;font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700;text-align:center">{{ clockView.section }}</p>
+                <div style="font-family:var(--font-mono);font-size:clamp(96px, 30vw, 300px);line-height:.95;font-weight:700;color:#fff;letter-spacing:-.02em">{{ clockView.time }}</div>
+                <p style="margin:12px 0 0;font-size:17px;color:rgba(255,255,255,.7);font-weight:600">{{ clockView.rep }}</p>
+                <p style="margin:5px 0 0;font-size:15.5px;color:#fff;font-weight:600;text-align:center;max-width:520px">{{ clockView.setTxt }}</p>
+                <div style="display:flex;gap:14px;margin-top:34px">
+                  <button onclick="{{ onClockPrev }}" style="width:62px;height:62px;border-radius:16px;background:rgba(255,255,255,.1);border:none;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center"><i data-lucide="skip-back" style="width:24px;height:24px"></i></button>
+                  <button onclick="{{ onClockToggle }}" style="min-width:150px;height:62px;padding:0 26px;border-radius:16px;background:var(--vx-blue);border:none;cursor:pointer;color:#fff;font-family:inherit;font-weight:700;font-size:17px;display:flex;align-items:center;justify-content:center;gap:9px"><i data-lucide="{{ clockBtnIcon }}" style="width:22px;height:22px"></i>{{ clockBtnLabel }}</button>
+                  <button onclick="{{ onClockReset }}" style="width:62px;height:62px;border-radius:16px;background:rgba(255,255,255,.1);border:none;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center"><i data-lucide="rotate-ccw" style="width:24px;height:24px"></i></button>
+                  <button onclick="{{ onClockNext }}" style="width:62px;height:62px;border-radius:16px;background:rgba(255,255,255,.1);border:none;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center"><i data-lucide="skip-forward" style="width:24px;height:24px"></i></button>
+                </div>
+              </div>
+            </sc-if>
             <sc-if value="{{ showVortexId }}" hint-placeholder-val="{{ false }}">
               <div class="vx-screen" style="position:absolute;inset:0;z-index:47;background:#0A0F1A;display:flex;flex-direction:column">
                 <div style="flex:none;height:44px"></div>
@@ -3566,7 +3582,7 @@ class Component extends DCLogic {
       showSwitcher:false,
       attend:{}, handbookOpen:null,
       attendView:'day', attendDateISO:null, attendCalY:null, attendCalM:null, attendYearSel:null,
-      clockRunning:false, clockSetIdx:0, clockRep:1, clockRemain:0, reviewMode:'review',
+      clockRunning:false, clockSetIdx:0, clockRep:1, clockRemain:0, clockFs:false, reviewMode:'review',
       plans:_plans,
       family:this._loadFamily(), familyUser:null, familyActiveIdx:0,
       famMode:'login', famName:'', famEmail:'', famPass:'', famPass2:'', famPhone:'', famRole:'parent', famSearch:'', famPicked:[], famErr:'', famResetOk:false, famBusy:false, famRegisteredMsg:'',
@@ -5257,6 +5273,10 @@ class Component extends DCLogic {
   clockStart(){ const seq=this.clockSeq(); if(!seq.length) return; const cur=seq[this.state.clockSetIdx]||seq[0]; this.setState({clockRunning:true, clockRemain:this.state.clockRemain||cur.interval}); }
   clockPause(){ this.setState({clockRunning:false}); }
   clockReset(){ const seq=this.clockSeq(); this.setState({clockRunning:false, clockSetIdx:0, clockRep:1, clockRemain:(seq[0]?seq[0].interval:0)}); }
+  _enterNativeFs(){ try{ const el=document.documentElement; const r=el.requestFullscreen||el.webkitRequestFullscreen||el.mozRequestFullScreen; if(r) r.call(el); }catch(e){} }
+  _exitNativeFs(){ try{ const x=document.exitFullscreen||document.webkitExitFullscreen||document.mozCancelFullScreen; if(x && (document.fullscreenElement||document.webkitFullscreenElement)) x.call(document); }catch(e){} }
+  clockFsEnter(){ this.setState({clockFs:true}); this._enterNativeFs(); }
+  clockFsExit(){ this.setState({clockFs:false}); this._exitNativeFs(); }
   clockJump(d){ const seq=this.clockSeq(); let i=this.state.clockSetIdx+d; if(i<0)i=0; if(i>seq.length-1)i=Math.max(0,seq.length-1); this.setState({clockSetIdx:i, clockRep:1, clockRemain:(seq[i]?seq[i].interval:0), clockRunning:false}); }
   tickClock(){ const seq=this.clockSeq(); const s=this.state; const cur=seq[s.clockSetIdx]; if(!cur){ this.setState({clockRunning:false}); return; } const remain=s.clockRemain-1; if(remain>0){ this.setState({clockRemain:remain}); return; } if(s.clockRep < cur.reps){ this.setState({clockRep:s.clockRep+1, clockRemain:cur.interval}); return; } if(s.clockSetIdx < seq.length-1){ const ni=s.clockSetIdx+1; this.setState({clockSetIdx:ni, clockRep:1, clockRemain:seq[ni].interval}); return; } this.setState({clockRunning:false, clockRemain:0}); }
 
@@ -6839,6 +6859,7 @@ class Component extends DCLogic {
       reviewTabBg1:rvMode==='review'?'var(--vx-blue)':'transparent', reviewTabFg1:rvMode==='review'?'#fff':'#7A8296', reviewTabBg2:rvMode==='guide'?'var(--vx-blue)':'transparent', reviewTabFg2:rvMode==='guide'?'#fff':'#7A8296',
       clockView, clockDash, clockEmpty:clkSeq.length===0, clockBtnIcon:S.clockRunning?'pause':'play', clockBtnLabel:S.clockRunning?'Pause':'Start',
       onClockToggle:()=> S.clockRunning?this.clockPause():this.clockStart(), onClockReset:()=>this.clockReset(), onClockPrev:()=>this.clockJump(-1), onClockNext:()=>this.clockJump(1),
+      clockFs:S.clockFs, onClockFsEnter:()=>this.clockFsEnter(), onClockFsExit:()=>this.clockFsExit(),
       energyZones, insightAttend, insightStats, insChips, insightsShowPicker, insightScopeLabel,
       boardChips, boardTitle, boardMeta, boardRows, boardEmpty, boardIsComp, boardEvent, onBoardEvent,
       boardEventOptionsV: boardEventOptions.map(e=>({value:e, label:e})),
