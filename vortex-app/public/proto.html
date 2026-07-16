@@ -2296,6 +2296,70 @@
                       </sc-for>
                       <button onclick="{{ onFitAddSection }}" style="display:flex;align-items:center;justify-content:center;gap:6px;background:none;border:1.5px dashed #CDD3E0;border-radius:12px;padding:10px;cursor:pointer;color:#3A4152;font-family:inherit;font-size:12.5px;font-weight:700"><i data-lucide="plus-circle" style="width:15px;height:15px"></i> Add block</button>
                       <button onclick="{{ onFitReset }}" style="display:flex;align-items:center;justify-content:center;gap:7px;background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:10px;cursor:pointer;color:#7A8296;font-family:inherit;font-size:12px;font-weight:700"><i data-lucide="rotate-ccw" style="width:14px;height:14px"></i> Reset to template</button>
+
+                      <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                        <p style="margin:0 0 9px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4">Save this session</p>
+                        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                          <span style="display:flex;align-items:center;gap:5px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:6px 9px"><i data-lucide="calendar" style="width:15px;height:15px;color:#7A8296"></i><input value="{{ fitSessDate }}" oninput="{{ onFitSessDate }}" type="date" style="border:none;outline:none;background:none;font-family:var(--font-mono);font-size:12.5px;font-weight:700;color:#0C1116"></span>
+                          <span style="display:flex;gap:3px;background:#F4F6F8;border-radius:9px;padding:3px">
+                            <button onclick="{{ onFitSlotAM }}" style="padding:6px 12px;border:none;border-radius:8px;background:{{ fitSlotAMBg }};color:{{ fitSlotAMFg }};font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">AM</button>
+                            <button onclick="{{ onFitSlotPM }}" style="padding:6px 12px;border:none;border-radius:8px;background:{{ fitSlotPMBg }};color:{{ fitSlotPMFg }};font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">PM</button>
+                          </span>
+                          <span style="display:flex;align-items:center;gap:5px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:6px 9px;flex:1;min-width:96px"><i data-lucide="clock" style="width:15px;height:15px;color:#7A8296"></i><input value="{{ fitSessTime }}" oninput="{{ onFitSessTime }}" type="time" style="border:none;outline:none;background:none;font-family:var(--font-mono);font-size:12.5px;font-weight:700;color:#0C1116;flex:1;min-width:0"></span>
+                        </div>
+                        <button onclick="{{ onSaveFitSession }}" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-top:11px;background:#0A0F1A;color:#fff;border:none;border-radius:12px;height:46px;font-family:inherit;font-weight:700;font-size:13.5px;cursor:pointer"><i data-lucide="save" style="width:17px;height:17px"></i> Save session to fitness log</button>
+                        <sc-if value="{{ fitSavedMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:8px 2px 0;font-size:11.5px;font-weight:600;color:#0C7A4F">{{ fitSavedMsg }}</p></sc-if>
+                      </div>
+
+                      <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+                          <button onclick="{{ onFitCalPrev }}" style="width:28px;height:28px;border-radius:8px;border:1px solid #E5E9F0;background:#fff;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="chevron-left" style="width:15px;height:15px"></i></button>
+                          <h4 style="margin:0;font-size:13px;font-weight:700;color:#0C1116">{{ fitCalLabel }}</h4>
+                          <button onclick="{{ onFitCalNext }}" style="width:28px;height:28px;border-radius:8px;border:1px solid #E5E9F0;background:#fff;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="chevron-right" style="width:15px;height:15px"></i></button>
+                        </div>
+                        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:5px">
+                          <span style="text-align:center;font-size:9.5px;font-weight:700;color:#9AA2B4">M</span><span style="text-align:center;font-size:9.5px;font-weight:700;color:#9AA2B4">T</span><span style="text-align:center;font-size:9.5px;font-weight:700;color:#9AA2B4">W</span><span style="text-align:center;font-size:9.5px;font-weight:700;color:#9AA2B4">T</span><span style="text-align:center;font-size:9.5px;font-weight:700;color:#9AA2B4">F</span><span style="text-align:center;font-size:9.5px;font-weight:700;color:#9AA2B4">S</span><span style="text-align:center;font-size:9.5px;font-weight:700;color:#9AA2B4">S</span>
+                        </div>
+                        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">
+                          <sc-for list="{{ fitCalCells }}" as="d" hint-placeholder-count="35">
+                            <button onclick="{{ d.onClick }}" style="aspect-ratio:1;border:1px solid {{ d.border }};border-radius:8px;background:{{ d.bg }};color:{{ d.fg }};cursor:pointer;font-family:inherit;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:0"><span style="font-size:11px;font-weight:700">{{ d.day }}</span><span style="font-size:8px;font-weight:800;color:{{ d.kmFg }};line-height:1;font-family:var(--font-mono)">{{ d.kmLabel }}</span><span style="display:flex;gap:2px;height:5px"><sc-if value="{{ d.hasAm }}" hint-placeholder-val="{{ false }}"><span style="width:5px;height:5px;border-radius:50%;background:#0C6CE0"></span></sc-if><sc-if value="{{ d.hasPm }}" hint-placeholder-val="{{ false }}"><span style="width:5px;height:5px;border-radius:50%;background:#6D28D9"></span></sc-if></span></button>
+                          </sc-for>
+                        </div>
+                        <sc-if value="{{ fitCalDaySel }}" hint-placeholder-val="{{ false }}">
+                          <div style="margin-top:11px;padding-top:11px;border-top:1px solid #EEF1F5">
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;font-weight:700;color:#0C1116">{{ fitCalSelLabel }}</span><span style="font-family:var(--font-mono);font-size:12px;font-weight:800;color:{{ squad.accent }}">{{ fitCalDayEx }} ex</span></div>
+                            <sc-if value="{{ fitCalDayHasSessions }}" hint-placeholder-val="{{ true }}">
+                              <div style="display:flex;flex-direction:column;gap:6px">
+                                <sc-for list="{{ fitCalDaySessions }}" as="ds" hint-placeholder-count="2">
+                                  <div style="display:flex;align-items:center;gap:9px;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:10px;padding:8px 10px">
+                                    <span style="flex:none;background:{{ ds.slotBg }};color:{{ ds.slotFg }};border-radius:6px;padding:2px 7px;font-size:9.5px;font-weight:800">{{ ds.slotLabel }}</span>
+                                    <span style="flex:1;min-width:0;font-size:12.5px;font-weight:700;color:#0C1116;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ds.title }}</span>
+                                    <span style="flex:none;font-family:var(--font-mono);font-size:11.5px;font-weight:700;color:#7A8296">{{ ds.totalEx }} ex</span>
+                                    <button onclick="{{ ds.onView }}" style="flex:none;width:28px;height:28px;border-radius:8px;border:none;background:var(--vx-blue-tint);color:var(--vx-blue-dark);cursor:pointer;display:flex;align-items:center;justify-content:center" title="View PDF"><i data-lucide="file-text" style="width:13px;height:13px"></i></button>
+                                    <button onclick="{{ ds.onEdit }}" style="flex:none;width:28px;height:28px;border-radius:8px;border:none;background:#EEF1F5;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center" title="Load &amp; edit"><i data-lucide="pencil" style="width:13px;height:13px"></i></button>
+                                  </div>
+                                </sc-for>
+                              </div>
+                            </sc-if>
+                            <sc-if value="{{ fitCalDayHasSessions }}" hint-placeholder-val="{{ false }}">
+                              <p style="margin:0;font-size:11.5px;color:#9AA2B4">No dryland saved on this day yet — set this date above and tap “Save session”.</p>
+                            </sc-if>
+                          </div>
+                        </sc-if>
+                      </div>
+
+                      <sc-if value="{{ fitSavedEmpty }}" hint-placeholder-val="{{ true }}"><p style="margin:0 2px;font-size:11.5px;color:#9AA2B4">No fitness sessions saved yet — build the blocks above, set a date + AM/PM, and tap “Save session”.</p></sc-if>
+                      <div style="display:flex;flex-direction:column;gap:7px">
+                        <sc-for list="{{ fitSavedRows }}" as="sp" hint-placeholder-count="0">
+                          <div style="display:flex;align-items:center;gap:11px;background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:10px 12px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
+                            <span style="flex:none;text-align:center;min-width:46px"><span style="display:block;font-family:var(--font-mono);font-size:16px;font-weight:800;color:{{ squad.accent }}">{{ sp.totalEx }}</span><span style="display:block;font-size:9px;font-weight:700;text-transform:uppercase;color:#9AA2B4">exercises</span></span>
+                            <span style="flex:1;min-width:0"><span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:13px;font-weight:700;color:#0C1116">{{ sp.title }}</span><span style="background:{{ sp.slotBg }};color:{{ sp.slotFg }};border-radius:6px;padding:2px 7px;font-size:9.5px;font-weight:800">{{ sp.slotLabel }}</span></span><span style="display:block;font-size:11px;color:#7A8296;margin-top:2px">{{ sp.dateLabel }}</span></span>
+                            <button onclick="{{ sp.onView }}" style="flex:none;width:32px;height:32px;border-radius:9px;border:none;background:var(--vx-blue-tint);color:var(--vx-blue-dark);cursor:pointer;display:flex;align-items:center;justify-content:center" title="View as PDF"><i data-lucide="file-text" style="width:14px;height:14px"></i></button>
+                            <button onclick="{{ sp.onEdit }}" style="flex:none;width:32px;height:32px;border-radius:9px;border:none;background:#F4F6F8;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center" title="Load &amp; edit"><i data-lucide="pencil" style="width:14px;height:14px"></i></button>
+                            <button onclick="{{ sp.onDelete }}" style="flex:none;width:32px;height:32px;border-radius:9px;border:none;background:#FDECEC;color:#E5484D;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="trash-2" style="width:14px;height:14px"></i></button>
+                          </div>
+                        </sc-for>
+                      </div>
                     </div>
                   </sc-if>
 
@@ -3611,6 +3675,7 @@ class Component extends DCLogic {
     this._fpid=0;
     this.fitnessPlans=this._loadJSON('vx_fitness_plans', {});
     this.fitnessMedia=this._loadJSON('vx_fitness_media', {});
+    this.fitSaved={};
     this.loungeComments={};
     this.rebuildRoster();
 
@@ -3654,6 +3719,7 @@ class Component extends DCLogic {
       feesDraft:{},
       seasonOpenWeek:null,
       planSessDate:null, planSessSlot:'AM', planSessTime:'', planCalY:null, planCalM:null, planCalDay:null,
+      fitSessDate:null, fitSessSlot:'AM', fitSessTime:'', fitCalY:null, fitCalM:null, fitCalDay:null, fitSavedMsg:'',
       videoActiveId:null, videoUrlDraft:'', videoTitleDraft:'', videoTagDraft:'', videoAddOpen:false, videoRate:1, videoNoteDraft:'', videoCurT:0, videoDur:0,
       fitAddOpen:false, fitBusy:null, fitMediaMsg:'', inbodyMode:'pdf', inbodySwId:'', inbodyQuery:'', inbodyPdfBusy:false, inbodyPdfMsg:'', inbodyQrOpen:false, inbodyQrMsg:'', inbodyDraft:null,
       shareNote:'',
@@ -3735,7 +3801,7 @@ class Component extends DCLogic {
     // Locked to the Fitness Plan tool if their role mentions "fitness" OR the account is Coach Nedhal.
     if(a.id==='ahmed'||a.id==='sameh') return false; // club admins always have full access
     return /fitness/i.test(a.role||'') || /nedhal/i.test(a.label||'') || /nedhal/i.test(a.user||''); }
-  openTool(t, club){ if(this._fitnessLocked() && t!=='fitness') t='fitness'; const patch={tool:t, toolScopeClub:!!club, aiOut:null, aiLoading:false}; if(t==='clock'){ const seq=this.clockSeq(); patch.clockRunning=false; patch.clockSetIdx=0; patch.clockRep=1; patch.clockRemain=seq[0]?seq[0].interval:0; } this.setState(patch); if(t==='lounge'){ try{ this._loungeFetch(); }catch(e){} } if(t==='season'){ try{ this._seasonFetch(); }catch(e){} } }
+  openTool(t, club){ if(this._fitnessLocked() && t!=='fitness') t='fitness'; const patch={tool:t, toolScopeClub:!!club, aiOut:null, aiLoading:false}; if(t==='clock'){ const seq=this.clockSeq(); patch.clockRunning=false; patch.clockSetIdx=0; patch.clockRep=1; patch.clockRemain=seq[0]?seq[0].interval:0; } this.setState(patch); if(t==='lounge'){ try{ this._loungeFetch(); }catch(e){} } if(t==='season'){ try{ this._seasonFetch(); }catch(e){} } if(t==='fitness'){ try{ this._fitSessFetch(); }catch(e){} } }
 
   todayISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
   curAttendDate(){ return this.state.attendDateISO || this.todayISO(); }
@@ -4591,6 +4657,37 @@ class Component extends DCLogic {
     const emb=this._videoEmbedEl(m.video); if(emb) kids.push(emb);
     if(!kids.length) return null;
     return R.createElement('div',{style:{display:'flex',flexDirection:'column',gap:8,marginTop:8}}, kids); }
+  // ---- Fitness sessions: save the dryland plan as a dated session + browse a calendar,
+  // exactly like the swim Plans builder (its own fitness_sessions table, INSERT per session).
+  _fitExCount(plan){ let n=0; (plan&&plan.sections||[]).forEach(sec=>{ n+=(sec.exs||[]).length; }); return n; }
+  async _fitSessFetch(){
+    if(!window.__vxSelect) return;
+    const rows=await window.__vxSelect('fitness_sessions', 'select=*&order=ts.desc&limit=500');
+    if(rows==null) return; // table missing / offline → keep current
+    const grouped={}; rows.forEach(r=>{ const sq=r.squad_id||'?'; (grouped[sq]=grouped[sq]||[]).push({ id:r.id, date:r.sday||'', title:r.title||'Session', totalEx:r.total_exs||0, slot:(r.plan&&r.plan._slot)||'', time:(r.plan&&r.plan._time)||'', plan:r.plan||{} }); });
+    this.fitSaved=grouped; this.forceUpdate();
+  }
+  async saveFitSession(squadId){ const S=this.state; const plan=this.getFitPlan(squadId); const id=this._uid('fsn')+'_'+Math.random().toString(36).slice(2,6);
+    const date=S.fitSessDate||this.todayISO(); const slot=S.fitSessSlot||'AM'; const time=S.fitSessTime||'';
+    const planCopy=JSON.parse(JSON.stringify(plan)); planCopy._slot=slot; planCopy._time=time;
+    const rec={ id, date, slot, time, title:plan.title||'Dryland', totalEx:this._fitExCount(plan), plan:planCopy };
+    const list=[rec, ...((this.fitSaved&&this.fitSaved[squadId])||[])]; this.fitSaved={...(this.fitSaved||{}), [squadId]:list};
+    this.setState({fitSavedMsg:'Session saved for '+this.shortDate(date.split('-').reverse().join('/'))+' · '+slot+(time?(' '+time):'')+' ✓'});
+    const row={ id, squad_id:squadId, title:rec.title, total_exs:rec.totalEx, plan:planCopy, sday:date, ts:Date.now() };
+    try{ if(window.__vxInsert){ const ok=await window.__vxInsert('fitness_sessions', [row]); if(ok) await this._fitSessFetch(); else this.setState({fitSavedMsg:'Saved on this device, but the database rejected it — run the fitness_sessions SQL.'}); } }catch(e){} }
+  loadFitSession(squadId, id){ const rec=((this.fitSaved&&this.fitSaved[squadId])||[]).find(r=>r.id===id); if(!rec) return;
+    this.mutateFitPlan(squadId, p=>{ p.title=rec.plan.title; p.sections=JSON.parse(JSON.stringify(rec.plan.sections||[])); });
+    this.setState({fitSavedMsg:'Loaded into the editor — change date/time and Save again to reschedule.', fitSessDate:rec.date||this.todayISO(), fitSessSlot:rec.slot||'AM', fitSessTime:rec.time||''}); }
+  async deleteFitSession(squadId, id){ const list=((this.fitSaved&&this.fitSaved[squadId])||[]).filter(r=>r.id!==id); this.fitSaved={...(this.fitSaved||{}), [squadId]:list}; this.forceUpdate();
+    try{ if(window.__vxDelete){ await window.__vxDelete('fitness_sessions', 'id=eq.'+encodeURIComponent(id)); await this._fitSessFetch(); } }catch(e){} }
+  viewFitSessionPdf(squadId, id){ const rec=((this.fitSaved&&this.fitSaved[squadId])||[]).find(r=>r.id===id); if(!rec) return;
+    const sq=this.squadById[squadId]||{name:'',accent:'#067EEA'}; const plan=rec.plan||{};
+    const dl=new Date(rec.date+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+    let body='<h1>'+this._esc(rec.title||'Dryland')+'</h1><p class="sub">'+this._esc(sq.name)+' · '+dl+(rec.time?(' · '+this._esc(rec.time)):'')+' · '+this._fitExCount(plan)+' exercises</p>';
+    (plan.sections||[]).forEach(sec=>{ body+='<div style="margin-top:15px"><div style="border-bottom:2px solid '+sq.accent+';padding-bottom:5px;margin-bottom:6px"><span style="font-weight:800;text-transform:uppercase;font-size:12px;letter-spacing:.06em;color:#0C1116">'+this._esc(sec.title||'Block')+'</span></div><table><tbody>';
+      (sec.exs||[]).forEach(ex=>{ body+='<tr><td style="vertical-align:top">'+this._esc(ex.name||'')+'</td><td class="mono r" style="width:150px;color:#0C1116;font-weight:700;vertical-align:top;white-space:nowrap">'+this._esc((ex.sets||'')+' × '+(ex.reps||'')+(ex.rest?('  ·  rest '+ex.rest):''))+'</td></tr>'; });
+      body+='</tbody></table></div>'; });
+    this._openPrintDoc((rec.title||'Dryland')+' — '+sq.name, body); }
 
   // ---- InBody import & analysis ----
   async inbodyPdfImport(e){
@@ -5278,6 +5375,7 @@ class Component extends DCLogic {
     this._plansFetch();
     this._squadPlansFetch();
     this._seasonFetch();
+    this._fitSessFetch();
     this._planCustomFetch();
     this._plansInt=setInterval(()=>{ if(this.state.view==='squad' && this.state.tab==='plans'){ this._plansFetch(); this._squadPlansFetch(); } }, 8000);
     // Staff accounts live in their own table (staff_accounts).
@@ -6912,6 +7010,36 @@ class Component extends DCLogic {
       sponsorsRows, sponsorsEmpty: sponsorsRows.length===0, sponsorsScopeLabel,
       fitSections, fitTitle, onFitTitle, onFitAddSection, onFitReset,
       fitMediaMsg:S.fitMediaMsg||'', fitMediaMsgShow:!!S.fitMediaMsg,
+      onSaveFitSession:()=>this.saveFitSession(S.squadId), fitSavedMsg:S.fitSavedMsg||'', fitSavedMsgShow:!!S.fitSavedMsg,
+      fitSessDate:S.fitSessDate||this.todayISO(), onFitSessDate:(e)=>this.setState({fitSessDate:e.target.value}),
+      fitSlotAMBg:(S.fitSessSlot!=='PM')?squad.accent:'#F4F6F8', fitSlotAMFg:(S.fitSessSlot!=='PM')?'#fff':'#7A8296',
+      fitSlotPMBg:(S.fitSessSlot==='PM')?squad.accent:'#F4F6F8', fitSlotPMFg:(S.fitSessSlot==='PM')?'#fff':'#7A8296',
+      onFitSlotAM:()=>this.setState({fitSessSlot:'AM'}), onFitSlotPM:()=>this.setState({fitSessSlot:'PM'}),
+      fitSessTime:S.fitSessTime, onFitSessTime:(e)=>this.setState({fitSessTime:e.target.value}),
+      ...(()=>{ const fs=(this.fitSaved&&this.fitSaved[S.squadId])||[];
+        const slotMeta=(x)=>x==='PM'?{label:'Evening',bg:'#EDE7FF',fg:'#6D28D9'}:{label:'Morning',bg:'#E3F0FF',fg:'#0C6CE0'};
+        const daySel=S.fitCalDay;
+        const rows=fs.slice().sort((a,b)=>((b.date||'').localeCompare(a.date||''))||((a.slot==='PM'?1:0)-(b.slot==='PM'?1:0))).map(r=>{ const sm=slotMeta(r.slot); return { id:r.id, title:r.title||'Dryland', totalEx:r.totalEx||0,
+          dateLabel:new Date(r.date+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}),
+          slotLabel:sm.label+(r.time?(' · '+r.time):''), slotBg:sm.bg, slotFg:sm.fg,
+          onView:()=>this.viewFitSessionPdf(S.squadId, r.id), onEdit:()=>this.loadFitSession(S.squadId, r.id), onDelete:()=>this.deleteFitSession(S.squadId, r.id) }; });
+        const calObj = daySel? new Date(daySel+'T00:00:00') : (S.fitSessDate? new Date(S.fitSessDate+'T00:00:00') : new Date());
+        const calY=S.fitCalY!=null?S.fitCalY:calObj.getFullYear(); const calM=S.fitCalM!=null?S.fitCalM:calObj.getMonth();
+        const monthLabel=new Date(calY,calM,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
+        const dim=new Date(calY,calM+1,0).getDate(); const firstDow=(new Date(calY,calM,1).getDay()+6)%7;
+        const byDay={}; fs.forEach(r=>{ if(!r.date) return; (byDay[r.date]=byDay[r.date]||{am:0,pm:0,ex:0}); if(r.slot==='PM') byDay[r.date].pm++; else byDay[r.date].am++; byDay[r.date].ex+=(r.totalEx||0); });
+        const cells=[]; for(let i=0;i<firstDow;i++) cells.push({day:'', blank:true, hasAm:false, hasPm:false, kmLabel:'', bg:'transparent', fg:'transparent', border:'transparent', onClick:()=>{}});
+        for(let d=1; d<=dim; d++){ const dISO=calY+'-'+String(calM+1).padStart(2,'0')+'-'+String(d).padStart(2,'0'); const info=byDay[dISO]||{am:0,pm:0,ex:0}; const sel=dISO===daySel; const isToday=dISO===this.todayISO();
+          cells.push({day:d, blank:false, hasAm:info.am>0, hasPm:info.pm>0, kmLabel: info.ex>0?(info.ex+' ex'):'', kmFg: sel?'#fff':squad.accent, bg: sel?squad.accent:(isToday?'#EEF1F5':'#fff'), fg: sel?'#fff':'#0C1116', border: sel?squad.accent:'#EEF1F5', onClick:()=>this.setState({fitCalDay: daySel===dISO?null:dISO, fitSessDate:dISO}) }); }
+        const selLabel = daySel? new Date(daySel+'T00:00:00').toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'short'}) : '';
+        const daySessions = daySel? fs.filter(r=>r.date===daySel).slice().sort((a,b)=>(a.slot==='PM'?1:0)-(b.slot==='PM'?1:0)).map(r=>{ const sm=slotMeta(r.slot); return {id:r.id, title:r.title||'Dryland', slotLabel:sm.label+(r.time?(' · '+r.time):''), slotBg:sm.bg, slotFg:sm.fg, totalEx:(r.totalEx||0), onView:()=>this.viewFitSessionPdf(S.squadId,r.id), onEdit:()=>this.loadFitSession(S.squadId,r.id), onDelete:()=>this.deleteFitSession(S.squadId,r.id)}; }) : [];
+        const daySelEx = daySel? ((byDay[daySel]&&byDay[daySel].ex)||0) : 0;
+        return { fitSavedRows:rows, fitSavedEmpty:rows.length===0,
+          fitCalLabel:monthLabel, fitCalCells:cells,
+          onFitCalPrev:()=>{ let m=calM-1,y=calY; if(m<0){m=11;y--;} this.setState({fitCalM:m,fitCalY:y}); },
+          onFitCalNext:()=>{ let m=calM+1,y=calY; if(m>11){m=0;y++;} this.setState({fitCalM:m,fitCalY:y}); },
+          fitCalDaySel:!!daySel, fitCalSelLabel:selLabel, onFitCalClearDay:()=>this.setState({fitCalDay:null}),
+          fitCalDaySessions:daySessions, fitCalDayHasSessions:daySessions.length>0, fitCalDayEx:daySelEx }; })(),
       ibModeIsPdf, ibModeIsQr, onIbModePdf:()=>this.setState({inbodyMode:'pdf'}), onIbModeQr:()=>this.setState({inbodyMode:'qr'}),
       ibModePdfBg: ibModeIsPdf?'#fff':'transparent', ibModeQrBg: ibModeIsQr?'#fff':'transparent',
       inbodyQuery:S.inbodyQuery, onIbQuery:(e)=>this.setState({inbodyQuery:e.target.value}), ibSwRows, ibHasSel, ibSelName: ibSel?ibSel.name:'',
