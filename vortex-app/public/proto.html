@@ -471,7 +471,7 @@
         <!-- ================= APP ================= -->
         <sc-if value="{{ showApp }}" hint-placeholder-val="{{ true }}">
           <div style="height:100%;display:flex;flex-direction:column;position:relative;background:{{ appTopColor }}">
-            <main class="vx-scroll" style="filter:{{ appThemeFilter }};flex:1;overflow-y:auto;overflow-x:hidden;position:relative;background:url('assets/b798adf9.png') no-repeat bottom 16px right 14px / 30px auto local, url('assets/pattern-transparent.png') repeat-y top right / 140px auto local, #EEF1F5">
+            <main class="vx-scroll" style="filter:{{ appThemeFilter }};flex:1;overflow-y:auto;overflow-x:hidden;position:relative;background:url('assets/pattern-transparent.png') repeat-y top right / 140px auto local, #EEF1F5">
 
               <!-- ===== HUB ===== -->
               <sc-if value="{{ showHub }}" hint-placeholder-val="{{ true }}">
@@ -1205,7 +1205,10 @@
                     <img src="assets/a4d3e396.jpg" alt="" style="position:absolute;top:-30px;right:-20px;width:55%;height:210%;object-fit:cover;opacity:.32;mix-blend-mode:screen">
                     <div style="position:relative;display:flex;align-items:center;justify-content:space-between">
                       <button onclick="{{ onOpenSwitcher }}" style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.22);border-radius:11px;padding:7px 12px 7px 9px;cursor:pointer;color:#fff"><i data-lucide="arrow-left-right" style="width:16px;height:16px"></i><span style="font-size:12.5px;font-weight:700">Switch</span></button>
-                      <button onclick="{{ onGoHub }}" style="width:36px;height:36px;border-radius:11px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#fff"><i data-lucide="layout-grid" style="width:17px;height:17px"></i></button>
+                      <div style="display:flex;align-items:center;gap:10px">
+                        <img src="assets/b798adf9.png" alt="Vortex" style="width:30px;height:30px;object-fit:contain">
+                        <button onclick="{{ onGoHub }}" style="width:36px;height:36px;border-radius:11px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#fff"><i data-lucide="layout-grid" style="width:17px;height:17px"></i></button>
+                      </div>
                     </div>
                     <div style="position:relative;display:flex;align-items:center;gap:12px;margin-top:14px">
                       {{ squad.avatar }}
