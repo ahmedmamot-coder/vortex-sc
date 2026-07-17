@@ -336,13 +336,17 @@
     #vx-print-sheet, #vx-print-sheet *{visibility:visible}
     #vx-print-sheet{display:block !important;position:absolute !important;top:0 !important;left:0 !important;width:100% !important;margin:0 !important;background-color:#fff !important;padding:0 !important}
     #vx-print-sheet.vx-pattern-bg{background-color:#fff !important;background-image:url("assets/pattern-transparent.png") !important;background-repeat:repeat-y !important;background-position:right top !important;background-size:280px 316px !important}
-    #vx-print-sheet table{margin-bottom:6px !important}
-    #vx-print-sheet tr{border-bottom:2px solid #C9B8F5 !important}
-    #vx-print-sheet td{padding-top:16px !important;padding-bottom:16px !important;font-size:15px !important}
-    #vx-print-sheet td:first-child{font-size:16px !important}
-    #vx-print-sheet span[style*="letter-spacing:.06em"]{font-size:15px !important}
-    #vx-print-sheet [style*="break-inside:avoid"]{margin-bottom:30px !important}
-    @page{size:A4;margin:14mm}
+    /* Compact so a whole session fits on one page instead of spilling to many. */
+    #vx-print-sheet table{margin-bottom:3px !important}
+    #vx-print-sheet tr{border-bottom:1px solid #D6DCE8 !important}
+    #vx-print-sheet td{padding-top:2.5px !important;padding-bottom:2.5px !important;font-size:10px !important;line-height:1.2 !important;vertical-align:top !important}
+    #vx-print-sheet td:first-child{font-size:10.5px !important}
+    #vx-print-sheet td div{font-size:9px !important;margin-top:1px !important}
+    #vx-print-sheet h1{font-size:15px !important}
+    #vx-print-sheet span[style*="letter-spacing:.06em"]{font-size:10px !important}
+    #vx-print-sheet [style*="break-inside:avoid"]{margin-bottom:5px !important}
+    #vx-print-sheet [style*="margin-bottom:14px"]{margin-bottom:5px !important}
+    @page{size:A4;margin:8mm}
   }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -3248,6 +3252,7 @@
                               <td style="padding:7px 8px 7px 0;font-family:monospace;font-weight:700;color:{{ printSheet.accent }};width:56px;vertical-align:top">{{ pvset.dist }}m<sc-if value="{{ pvset.zoneCode }}" hint-placeholder-val="{{ false }}"><br><span style="font-size:9px;color:#9AA2B4;font-weight:700">{{ pvset.zoneCode }}</span></sc-if></td>
                               <td style="padding:7px 0;color:#3A4152;font-size:13px;vertical-align:top">
                                 {{ pvset.txt }}
+                                <sc-if value="{{ pvset.hasZone }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:{{ squad.accent }};font-weight:700;margin-top:2px">Zone: {{ pvset.zoneStr }}</div></sc-if>
                                 <sc-if value="{{ pvset.hasStrokes }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#067EEA;font-weight:700;margin-top:2px">Stroke: {{ pvset.strokesStr }}</div></sc-if>
                                 <sc-if value="{{ pvset.hasTypes }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#0A0F1A;font-weight:700;margin-top:2px">Type: {{ pvset.typesStr }}</div></sc-if>
                                 <sc-if value="{{ pvset.hasLabels }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#4F46E5;font-weight:700;margin-top:2px">Focus: {{ pvset.labelsStr }}</div></sc-if>
@@ -3609,6 +3614,7 @@
               <td style="padding:7px 8px 7px 0;font-family:monospace;font-weight:700;color:{{ printSheet.accent }};width:56px;vertical-align:top">{{ pset.dist }}m<sc-if value="{{ pset.zoneCode }}" hint-placeholder-val="{{ false }}"><br><span style="font-size:9px;color:#9AA2B4;font-weight:700">{{ pset.zoneCode }}</span></sc-if></td>
               <td style="padding:7px 0;color:#3A4152;font-size:13px;vertical-align:top">
                 {{ pset.txt }}
+                <sc-if value="{{ pset.hasZone }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:{{ squad.accent }};font-weight:700;margin-top:2px">Zone: {{ pset.zoneStr }}</div></sc-if>
                 <sc-if value="{{ pset.hasStrokes }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#067EEA;font-weight:700;margin-top:2px">Stroke: {{ pset.strokesStr }}</div></sc-if>
                 <sc-if value="{{ pset.hasTypes }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#0A0F1A;font-weight:700;margin-top:2px">Type: {{ pset.typesStr }}</div></sc-if>
                 <sc-if value="{{ pset.hasLabels }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#4F46E5;font-weight:700;margin-top:2px">Focus: {{ pset.labelsStr }}</div></sc-if>
@@ -5886,7 +5892,7 @@ class Component extends DCLogic {
         onTitle:(e)=>this.renameSection(S.squadId, sm.id, e.target.value),
         onRemoveSection:()=>this.removeSection(S.squadId, sm.id),
         sets:sets.map(s=>{ const reps=Number(s.reps)||1; const dist=Number(s.dist)||0; return {
-          id:s.id, dist:dist, reps:reps, txt:s.txt, rest:s.rest||'', hr:s.hr||'', circuit:(Number(s.circuit)||1), isCircuit:(Number(s.circuit)||1)>1, setMetres:(reps*dist*(Number(s.circuit)||1)),
+          id:s.id, dist:dist, reps:reps, txt:s.txt, rest:s.rest||'', hr:s.hr||'', zone:(s.zone||''), circuit:(Number(s.circuit)||1), isCircuit:(Number(s.circuit)||1)>1, setMetres:(reps*dist*(Number(s.circuit)||1)),
           onCircuitDec:()=>this.stepSetCircuit(S.squadId,sm.id,s.id,-1), onCircuitInc:()=>this.stepSetCircuit(S.squadId,sm.id,s.id,1),
           onOpenSwimmers:()=>this.openSwimmerPicker(sm.id,s.id), hasSetSwimmers:(s.swimmers||[]).length>0,
           setSwimmers:(s.swimmers||[]).map(sw=>({name:(sw.name||'').split(' ')[0]||sw.initials, initials:sw.initials, onRemove:()=>this.toggleSetSwimmer(sm.id,s.id,sw)})),
@@ -6980,7 +6986,7 @@ class Component extends DCLogic {
       onSubmitPlanReview:()=>this.submitPlanForReview(S.squadId, squad.name),
       onClosePrintPreview:()=>this.setState({printPreviewOpen:false}), onConfirmPrint:()=>{ this._printEscape(); setTimeout(()=>window.print(), 30); }, printPreviewOpen:S.printPreviewOpen,
       printSheet:{ accent:squad.accent, clubName:this.brandConfig.clubName||'Vortex Swimming Club', squadName:squad.name, printDate:new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}), zoneLabel:(zoneRows[zi]?zoneRows[zi].code+' \u00b7 '+zoneRows[zi].name:zName), title:sessionTitle||'Session', coach:squad.coach, total:planTotalN.toLocaleString(),
-        sections: planSections.map(ps=>({ title:ps.title, dot:ps.dot, subtotal:ps.subtotal, sets: ps.sets.map(st=>{ const onEquip=(st.equip||[]).filter(e=>e.on).map(e=>e.label); const onTypes=(st.types||[]).filter(e=>e.on).map(e=>e.label); const onStrokes=(st.strokes||[]).filter(e=>e.on).map(e=>e.label); const onLabels=(st.labels||[]).filter(e=>e.on).map(e=>e.label); const setSw=(st.setSwimmers||[]).map(e=>e.name); const onGroups=(st.setGroups||[]).filter(e=>e.on).map(e=>e.label); const rounds=Number(st.circuit)||1; return {dist:(rounds>1?(rounds+'×('+(st.reps>1?(st.reps+'×'+st.dist):st.dist)+')'):(st.reps>1?(st.reps+'×'+st.dist):st.dist)), setMetres:(Number(st.setMetres)||0).toLocaleString(), txt:st.txt, hasStrokes:onStrokes.length>0, strokesStr:onStrokes.join('/'), hasTypes:onTypes.length>0, typesStr:onTypes.join(', '), hasLabels:onLabels.length>0, labelsStr:onLabels.join(', '), hasGroups:onGroups.length>0, groupsStr:onGroups.join(', '), hasSwimmers:setSw.length>0, swimmersStr:setSw.join(', '), hasEquip:onEquip.length>0, equipStr:onEquip.join(', '), hasSendoff:!!st.sendoffVal, sendoffStr:st.sendoffVal||'', hasRest:!!st.rest, restStr:st.rest||'', hasHr:!!(st.hrFromVal||st.hrToVal), hrStr:(st.hrFromVal||st.hrToVal)?('HR '+(st.hrFromVal||'?')+(st.hrToVal?('-'+st.hrToVal):'')):'', zoneCode:st.zone||''}; }) })) },
+        sections: planSections.map(ps=>({ title:ps.title, dot:ps.dot, subtotal:ps.subtotal, sets: ps.sets.map(st=>{ const onEquip=(st.equip||[]).filter(e=>e.on).map(e=>e.label); const onTypes=(st.types||[]).filter(e=>e.on).map(e=>e.label); const onStrokes=(st.strokes||[]).filter(e=>e.on).map(e=>e.label); const onLabels=(st.labels||[]).filter(e=>e.on).map(e=>e.label); const setSw=(st.setSwimmers||[]).map(e=>e.name); const onGroups=(st.setGroups||[]).filter(e=>e.on).map(e=>e.label); const rounds=Number(st.circuit)||1; return {dist:(rounds>1?(rounds+'×('+(st.reps>1?(st.reps+'×'+st.dist):st.dist)+')'):(st.reps>1?(st.reps+'×'+st.dist):st.dist)), setMetres:(Number(st.setMetres)||0).toLocaleString(), txt:st.txt, hasStrokes:onStrokes.length>0, strokesStr:onStrokes.join('/'), hasTypes:onTypes.length>0, typesStr:onTypes.join(', '), hasLabels:onLabels.length>0, labelsStr:onLabels.join(', '), hasGroups:onGroups.length>0, groupsStr:onGroups.join(', '), hasSwimmers:setSw.length>0, swimmersStr:setSw.join(', '), hasEquip:onEquip.length>0, equipStr:onEquip.join(', '), hasSendoff:!!st.sendoffVal, sendoffStr:st.sendoffVal||'', hasRest:!!st.rest, restStr:st.rest||'', hasHr:!!(st.hrFromVal||st.hrToVal), hrStr:(st.hrFromVal||st.hrToVal)?('HR '+(st.hrFromVal||'?')+(st.hrToVal?('-'+st.hrToVal):'')):'', zoneCode:st.zone||'', hasZone:!!st.zone, zoneStr:st.zone||''}; }) })) },
       onImportPdfClick:()=>{ const el=document.getElementById('vx-pdf-input'); if(el) el.click(); },
       pdfImportBusy:S.pdfImportBusy, pdfImportMsg:S.pdfImportMsg, pdfImportMsgColor: S.pdfImportOk?'#0C7A4F':'#B42318',
       onPdfFileChange:(e)=>this.handlePdfImport(e, S.squadId),
