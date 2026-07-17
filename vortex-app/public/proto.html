@@ -3984,7 +3984,7 @@ class Component extends DCLogic {
     // Locked to the Fitness Plan tool if their role mentions "fitness" OR the account is Coach Nedhal.
     if(a.id==='ahmed'||a.id==='sameh') return false; // club admins always have full access
     return /fitness/i.test(a.role||'') || /nedhal/i.test(a.label||'') || /nedhal/i.test(a.user||''); }
-  openTool(t, club){ if(this._fitnessLocked() && t!=='fitness') t='fitness'; const patch={tool:t, toolScopeClub:!!club, aiOut:null, aiLoading:false}; if(t==='clock'){ const seq=this.clockSeq(); patch.clockRunning=false; patch.clockSetIdx=0; patch.clockRep=1; patch.clockRemain=seq[0]?seq[0].interval:0; } this.setState(patch); if(t==='lounge'){ try{ this._loungeFetch(); }catch(e){} } if(t==='season'){ try{ this._seasonFetch(); }catch(e){} } if(t==='fitness'){ try{ this._fitSessFetch(); }catch(e){} try{ this._fitPlansFetch(); }catch(e){} } }
+  openTool(t, club){ if(this._fitnessLocked() && t!=='fitness') t='fitness'; const patch={tool:t, toolScopeClub:!!club, aiOut:null, aiLoading:false}; if(t==='clock'){ const seq=this.clockSeq(); patch.clockRunning=false; patch.clockSetIdx=0; patch.clockRep=1; patch.clockRemain=seq[0]?seq[0].interval:0; } this.setState(patch); if(t==='lounge'){ try{ this._loungeFetch(); }catch(e){} } if(t==='season'){ try{ this._seasonFetch(); }catch(e){} try{ this._plansFetch(); }catch(e){} try{ this._squadPlansFetch(); }catch(e){} } if(t==='fitness'){ try{ this._fitSessFetch(); }catch(e){} try{ this._fitPlansFetch(); }catch(e){} } }
 
   todayISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
   curAttendDate(){ return this.state.attendDateISO || this.todayISO(); }
@@ -5723,6 +5723,7 @@ class Component extends DCLogic {
     try{ this._famMsgFetch(); }catch(e){}
     try{ this._alertsFetch(); }catch(e){}
     try{ if(this.state.tool==='fitness') this._fitPlansFetch(); }catch(e){}
+    try{ if(this.state.tool==='season'){ this._seasonFetch(); this._plansFetch(); } }catch(e){}
   }
   _hydrateShared(){
     // Re-read shared stores from localStorage (freshly pulled) and re-render. We intentionally do
