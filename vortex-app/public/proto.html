@@ -632,7 +632,7 @@
                     <div style="background:#fff;border:1px solid #E5E9F0;border-radius:18px;padding:6px 6px 8px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
                       <sc-for list="{{ adminRows }}" as="r" hint-placeholder-count="4">
                         <button onclick="{{ r.onClick }}" style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:none;border:none;padding:11px 10px;cursor:pointer;border-bottom:1px solid {{ r.divider }}">
-                          <span style="width:36px;height:36px;flex:none;border-radius:10px;background:var(--vx-blue-tint);color:var(--vx-blue);display:flex;align-items:center;justify-content:center"><i data-lucide="{{ r.icon }}" style="width:18px;height:18px"></i></span>
+                          <span style="width:38px;height:38px;flex:none;border-radius:12px;background:linear-gradient(140deg,#3F9CFF,#0768D6);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 14px rgba(7,104,214,.28)"><i data-lucide="{{ r.icon }}" style="width:18px;height:18px"></i></span>
                           <span style="flex:1"><span style="display:block;font-weight:600;font-size:14px;color:#0C1116">{{ r.title }}</span><span style="display:block;font-size:11.5px;color:#7A8296">{{ r.sub }}</span></span>
                           <i data-lucide="chevron-right" style="width:16px;height:16px;color:#C7CDDA"></i>
                         </button>
@@ -682,8 +682,8 @@
                   </div>
                   <div style="padding:16px 15px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
                     <sc-for list="{{ toolTiles }}" as="t" hint-placeholder-count="8">
-                      <button onclick="{{ t.onClick }}" style="text-align:left;background:#fff;border:1px solid #E5E9F0;border-radius:17px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05);cursor:pointer;display:flex;flex-direction:column;gap:20px;min-height:112px">
-                        <span style="width:40px;height:40px;border-radius:12px;background:{{ t.tint }};color:{{ t.color }};display:flex;align-items:center;justify-content:center"><i data-lucide="{{ t.icon }}" style="width:20px;height:20px"></i></span>
+                      <button onclick="{{ t.onClick }}" style="text-align:left;background:#fff;border:1px solid #EEF1F5;border-radius:20px;padding:15px;box-shadow:0 10px 26px rgba(11,20,40,.07);cursor:pointer;display:flex;flex-direction:column;gap:20px;min-height:116px">
+                        <span style="width:44px;height:44px;border-radius:14px;background:{{ t.grad }};color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:{{ t.glow }}"><i data-lucide="{{ t.icon }}" style="width:21px;height:21px"></i></span>
                         <span><span style="display:block;font-weight:700;font-size:14px;color:#0C1116">{{ t.title }}</span><span style="display:block;font-size:11px;color:#7A8296;margin-top:2px;line-height:1.3">{{ t.sub }}</span></span>
                       </button>
                     </sc-for>
@@ -705,7 +705,7 @@
                     <sc-for list="{{ handbookCards }}" as="c" hint-placeholder-count="8">
                       <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;box-shadow:0 2px 7px rgba(11,20,40,.05);overflow:hidden">
                         <button onclick="{{ c.onToggle }}" style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:none;border:none;padding:14px;cursor:pointer;font-family:inherit">
-                          <span style="width:40px;height:40px;flex:none;border-radius:12px;background:var(--vx-blue-tint);color:var(--vx-blue);display:flex;align-items:center;justify-content:center"><i data-lucide="{{ c.icon }}" style="width:20px;height:20px"></i></span>
+                          <span style="width:42px;height:42px;flex:none;border-radius:14px;background:linear-gradient(140deg,#3F9CFF,#0768D6);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(7,104,214,.3)"><i data-lucide="{{ c.icon }}" style="width:20px;height:20px"></i></span>
                           <span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:14.5px;color:#0C1116">{{ c.title }}</span><span style="display:block;font-size:11.5px;color:#7A8296;margin-top:1px">{{ c.summary }}</span></span>
                           <i data-lucide="{{ c.chevron }}" style="width:18px;height:18px;color:#AEB6C7"></i>
                         </button>
@@ -3987,6 +3987,12 @@ class Component extends DCLogic {
     return R.createElement('span',{style}, kids);
   }
 
+  // ---- Colour helpers for the gradient icon tiles used across the app ----
+  _shade(hex, amt){ try{ let h=(hex||'').replace('#',''); if(h.length===3) h=h.split('').map(c=>c+c).join(''); const n=parseInt(h,16); let r=(n>>16)&255,g=(n>>8)&255,b=n&255; const f=(v)=>Math.max(0,Math.min(255,Math.round(v+(amt<0? v*amt/100 : (255-v)*amt/100)))); r=f(r);g=f(g);b=f(b); return '#'+((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1); }catch(e){ return hex; } }
+  _hexA(hex, a){ try{ let h=(hex||'').replace('#',''); if(h.length===3) h=h.split('').map(c=>c+c).join(''); const n=parseInt(h,16); return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+a+')'; }catch(e){ return 'rgba(11,20,40,.2)'; } }
+  _gradTile(hex){ return 'linear-gradient(140deg,'+this._shade(hex,16)+','+this._shade(hex,-18)+')'; }
+  _tileGlow(hex){ return '0 8px 18px '+this._hexA(hex,.32); }
+
   // navigation
   go(patch){ this.setState(patch); }
   openSquad(id){ this.setState({view:'squad', squadId:id, tab:'group', swimmerId:null, showSwitcher:false, tool:null}); try{ this._plansFetch(); }catch(e){} try{ this._squadPlansFetch(); }catch(e){} }
@@ -5925,7 +5931,7 @@ class Component extends DCLogic {
     // A staff member whose role contains "fitness" (e.g. Coach Nedhal, role "Fitness Coach")
     // is limited to the Fitness Plan tool only — every other tool is hidden for them.
     const _fitOnly=this._fitnessLocked();
-    const toolTiles=(_fitOnly? toolDefs.filter(t=>t.id==='fitness') : toolDefs).map(t=>({...t, onClick:T(t.id, scopeClub)}));
+    const toolTiles=(_fitOnly? toolDefs.filter(t=>t.id==='fitness') : toolDefs).map(t=>({...t, grad:this._gradTile(t.color), glow:this._tileGlow(t.color), onClick:T(t.id, scopeClub)}));
 
     // ---- roster ----
     const rq=(S.rosterQuery||'').toLowerCase();
