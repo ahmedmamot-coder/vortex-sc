@@ -2738,8 +2738,9 @@
                                     </div>
                                   </sc-if>
                                   <sc-if value="{{ w.hasSessions }}" hint-placeholder-val="{{ false }}">
-                                    <p style="margin:0;font-size:11px;color:#9AA2B4">No sessions saved in this week yet. In the Plans tab, set a session's date within this week and tap “Save session”.</p>
+                                    <p style="margin:0;font-size:11px;color:#9AA2B4">No sessions saved in this week yet — add one for the week below.</p>
                                   </sc-if>
+                                  <button onclick="{{ w.onAddSession }}" style="display:flex;align-items:center;justify-content:center;gap:7px;width:100%;background:{{ w.phaseColor }};color:#fff;border:none;border-radius:10px;padding:10px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer"><i data-lucide="plus" style="width:15px;height:15px"></i>Add a session for this week</button>
                                 </div>
                               </sc-if>
                             </div>
@@ -5358,6 +5359,8 @@ class Component extends DCLogic {
   setSeasonField(squadId, field, val){ this.mutateSeason(squadId, s=>{ s[field]=val; }); }
   // Pick a season year: sets the name and the start (first Monday on/after 1 Sep of that year).
   seasonChoose(squadId, startY){ const sep=this._mondayISO(startY+'-09-01'); this.mutateSeason(squadId, s=>{ s.name=startY+' / '+(startY+1)+' Season'; s.start=sep; }); }
+  // Jump from a season week straight to the Plans builder, pre-set to that week's start date.
+  seasonAddSessionForWeek(startISO){ this.setState({tool:null, view:'squad', tab:'plans', planSessDate:startISO, planCalDay:startISO, seasonOpenWeek:null}); }
   seasonAddPhase(squadId){ this.mutateSeason(squadId, s=>{ s.phases.push({id:this._uid('ph'), name:'New phase', weeks:2, load:'medium'}); }); }
   seasonRemovePhase(squadId, pid){ this.mutateSeason(squadId, s=>{ s.phases=s.phases.filter(p=>p.id!==pid); if(!s.phases.length) s.phases=this.makeDefaultSeason().phases; }); }
   seasonPhaseField(squadId, pid, field, val){ this.mutateSeason(squadId, s=>{ const p=s.phases.find(x=>x.id===pid); if(p) p[field]=val; }); }
@@ -6151,6 +6154,7 @@ class Component extends DCLogic {
           isTarget, sessionCount:sess.length, sessionM:sess.reduce((a,x)=>a+(x.totalM||0),0),
           weekKm:(sess.reduce((a,x)=>a+(x.totalM||0),0)/1000).toFixed(1), avgKm: sess.length? ((sess.reduce((a,x)=>a+(x.totalM||0),0)/sess.length)/1000).toFixed(1) : '0',
           hasSessions:sess.length>0, sessions:sess.slice().sort((a,b)=>((a.date||'').localeCompare(b.date||''))||((a.slot==='PM'?1:0)-(b.slot==='PM'?1:0))).map(sp=>{ const slm=sp.slot==='PM'?{l:'PM',bg:'#EDE7FF',fg:'#6D28D9'}:{l:'AM',bg:'#E3F0FF',fg:'#0C6CE0'}; return {id:sp.id, title:sp.title||'Session', zone:sp.zone||'—', slotLabel:slm.l, slotBg:slm.bg, slotFg:slm.fg, m:(sp.totalM||0).toLocaleString(), dateLabel:this._fmtDMY(sp.date), onView:()=>this.viewPlanSnapshotPdf(S.squadId,sp.id), onEdit:()=>this.loadPlanSnapshot(S.squadId,sp.id)}; }),
+          onAddSession:()=>this.seasonAddSessionForWeek(startISO),
           open:(S.seasonOpenWeek===wn), chevron:(S.seasonOpenWeek===wn)?'chevron-up':'chevron-down', onToggle:()=>this.setState({seasonOpenWeek:S.seasonOpenWeek===wn?null:wn}) });
         wISO=this._addDaysISO(wISO,7); wn++;
       }
