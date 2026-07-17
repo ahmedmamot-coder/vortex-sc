@@ -1,39 +1,15 @@
-import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-export async function proxy(request: NextRequest) {
-  let response = NextResponse.next({ request });
-
-  // Refreshing the Supabase session is best-effort. A network hiccup, a slow
-  // auth server, or a missing env var must never take the whole page down with
-  // MIDDLEWARE_INVOCATION_FAILED — so everything below is wrapped and falls back
-  // to just passing the request through.
-  try {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!url || !anon) return response;
-
-    const supabase = createServerClient(url, anon, {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-          response = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options),
-          );
-        },
-      },
-    });
-
-    await supabase.auth.getUser();
-  } catch {
-    return NextResponse.next({ request });
-  }
-
-  return response;
+// The Vortex app runs entirely client-side from /proto.html and talks to Supabase
+// directly from the browser (anon key), so there is NOTHING for server-side
+// middleware to do here. Previously this file created a Supabase server client and
+// called auth.getUser() on every request — when that (or the @supabase/ssr import in
+// the Edge runtime) failed, users saw "500: MIDDLEWARE_INVOCATION_FAILED".
+//
+// It is now a pure pass-through with no external imports and no async work, so it can
+// never throw at init or at runtime.
+export function proxy(_request: NextRequest) {
+  return NextResponse.next();
 }
 
 export const config = {
