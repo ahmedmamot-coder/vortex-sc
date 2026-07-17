@@ -88,6 +88,23 @@ create policy fitness_sessions_read   on public.fitness_sessions for select to a
 create policy fitness_sessions_insert on public.fitness_sessions for insert to anon, authenticated with check (true);
 create policy fitness_sessions_delete on public.fitness_sessions for delete to anon, authenticated using (true);
 
+-- ---- 5b) fitness_plans : each squad's editable dryland plan (one row/squad) --
+create table if not exists public.fitness_plans (
+  id         text primary key,   -- squad id
+  plan       jsonb,
+  ts         bigint,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table public.fitness_plans enable row level security;
+grant select, insert, update, delete on public.fitness_plans to anon, authenticated;
+drop policy if exists fitness_plans_read   on public.fitness_plans;
+drop policy if exists fitness_plans_insert on public.fitness_plans;
+drop policy if exists fitness_plans_update on public.fitness_plans;
+create policy fitness_plans_read   on public.fitness_plans for select to anon, authenticated using (true);
+create policy fitness_plans_insert on public.fitness_plans for insert to anon, authenticated with check (true);
+create policy fitness_plans_update on public.fitness_plans for update to anon, authenticated using (true) with check (true);
+
 -- ---- 6) staff_accounts ------------------------------------------------------
 create table if not exists public.staff_accounts (
   id text primary key, name text, username text, pin text, role text,

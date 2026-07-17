@@ -25,7 +25,7 @@
   var REST = SB_URL + "/rest/v1/club_state";
   var HEAD = { "apikey": SB_ANON, "Authorization": "Bearer " + SB_ANON, "Content-Type": "application/json" };
   // Every shared data type the club edits. The only key kept per-device is vx_api_key.
-  var SYNC = ["vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_attend_log","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_plans","vx_fitness_media","vx_wa_targets","vx_videos"];
+  var SYNC = ["vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_attend_log","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos"];
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
   window.__vxWriteTs = {};   // last time THIS device wrote each key (ms) — guards against stale pulls
@@ -3977,7 +3977,7 @@ class Component extends DCLogic {
     // Locked to the Fitness Plan tool if their role mentions "fitness" OR the account is Coach Nedhal.
     if(a.id==='ahmed'||a.id==='sameh') return false; // club admins always have full access
     return /fitness/i.test(a.role||'') || /nedhal/i.test(a.label||'') || /nedhal/i.test(a.user||''); }
-  openTool(t, club){ if(this._fitnessLocked() && t!=='fitness') t='fitness'; const patch={tool:t, toolScopeClub:!!club, aiOut:null, aiLoading:false}; if(t==='clock'){ const seq=this.clockSeq(); patch.clockRunning=false; patch.clockSetIdx=0; patch.clockRep=1; patch.clockRemain=seq[0]?seq[0].interval:0; } this.setState(patch); if(t==='lounge'){ try{ this._loungeFetch(); }catch(e){} } if(t==='season'){ try{ this._seasonFetch(); }catch(e){} } if(t==='fitness'){ try{ this._fitSessFetch(); }catch(e){} } }
+  openTool(t, club){ if(this._fitnessLocked() && t!=='fitness') t='fitness'; const patch={tool:t, toolScopeClub:!!club, aiOut:null, aiLoading:false}; if(t==='clock'){ const seq=this.clockSeq(); patch.clockRunning=false; patch.clockSetIdx=0; patch.clockRep=1; patch.clockRemain=seq[0]?seq[0].interval:0; } this.setState(patch); if(t==='lounge'){ try{ this._loungeFetch(); }catch(e){} } if(t==='season'){ try{ this._seasonFetch(); }catch(e){} } if(t==='fitness'){ try{ this._fitSessFetch(); }catch(e){} try{ this._fitPlansFetch(); }catch(e){} } }
 
   todayISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
   curAttendDate(){ return this.state.attendDateISO || this.todayISO(); }
@@ -4864,14 +4864,27 @@ class Component extends DCLogic {
   // ---- Fitness Plan ----
   makeDefaultFitnessPlan(){ const t=this.fitnessTemplate; return { title:t.title, sections:t.sections.map(s=>({id:this._uid('fs'), title:s.title, exs:s.exs.map(e=>({id:this._uid('fe'), name:e.name, sets:e.sets, reps:e.reps, rest:e.rest})) })) }; }
   getFitPlan(id){ return this.fitnessPlans[id] || this.makeDefaultFitnessPlan(); }
-  mutateFitPlan(id, fn){ const plans={...this.fitnessPlans}; const cur=plans[id]?JSON.parse(JSON.stringify(plans[id])):this.makeDefaultFitnessPlan(); fn(cur); plans[id]=cur; this.fitnessPlans=plans; this._saveJSON('vx_fitness_plans', plans); this.forceUpdate(); }
+  mutateFitPlan(id, fn){ const plans={...this.fitnessPlans}; const cur=plans[id]?JSON.parse(JSON.stringify(plans[id])):this.makeDefaultFitnessPlan(); fn(cur); plans[id]=cur; this.fitnessPlans=plans; this._saveJSON('vx_fitness_plans', plans);
+    this._editedFitSquads=this._editedFitSquads||{}; this._editedFitSquads[id]=true; this._fitPlanPush(id); this.forceUpdate(); }
+  // Each squad's fitness plan is its own row in fitness_plans (like squad_plans), so it always
+  // saves to the database and syncs to every account without the sync-blob overwriting it.
+  _fitPlanPush(id){ if(!window.__vxUpsert || id==null) return; this._fpTimers=this._fpTimers||{}; clearTimeout(this._fpTimers[id]);
+    this._fpTimers[id]=setTimeout(()=>{ const plan=(this.fitnessPlans||{})[id]; if(plan==null) return;
+      try{ window.__vxUpsert('fitness_plans', [{id:String(id), plan:plan, ts:Date.now(), updated_at:new Date().toISOString()}]); }catch(e){} }, 400); }
+  async _fitPlansFetch(){ if(!window.__vxSelect) return;
+    const rows=await window.__vxSelect('fitness_plans', 'select=id,plan,ts,updated_at'); if(!rows || !Array.isArray(rows)) return;
+    const edited=this._editedFitSquads||{}; const plans={...(this.fitnessPlans||{})}; let changed=false;
+    rows.forEach(r=>{ if(!r || !r.id || r.plan==null) return; if(edited[r.id]) return; // don't clobber a squad this device is editing
+      plans[r.id]=r.plan; changed=true; });
+    if(changed){ this.fitnessPlans=plans; try{ this._saveJSON('vx_fitness_plans', plans); }catch(e){} this.forceUpdate(); } }
   fitSetField(id, secId, exId, field, val){ this.mutateFitPlan(id, p=>{ const sec=p.sections.find(s=>s.id===secId); const ex=sec&&sec.exs.find(e=>e.id===exId); if(ex) ex[field]=val; }); }
   fitAddEx(id, secId){ this.mutateFitPlan(id, p=>{ const sec=p.sections.find(s=>s.id===secId); if(sec) sec.exs.push({id:this._uid('fe'), name:'New exercise', sets:3, reps:'10', rest:':30'}); }); }
   fitRemoveEx(id, secId, exId){ this.mutateFitPlan(id, p=>{ const sec=p.sections.find(s=>s.id===secId); if(sec) sec.exs=sec.exs.filter(e=>e.id!==exId); }); }
   fitAddSection(id){ this.mutateFitPlan(id, p=>{ p.sections.push({id:this._uid('fs'), title:'New block', exs:[]}); }); }
   fitRemoveSection(id, secId){ this.mutateFitPlan(id, p=>{ p.sections=p.sections.filter(s=>s.id!==secId); }); }
   fitRenameSection(id, secId, title){ this.mutateFitPlan(id, p=>{ const sec=p.sections.find(s=>s.id===secId); if(sec) sec.title=title; }); }
-  fitResetPlan(id){ this.fitnessPlans={...this.fitnessPlans, [id]:this.makeDefaultFitnessPlan()}; this._saveJSON('vx_fitness_plans', this.fitnessPlans); this.forceUpdate(); }
+  fitResetPlan(id){ this.fitnessPlans={...this.fitnessPlans, [id]:this.makeDefaultFitnessPlan()}; this._saveJSON('vx_fitness_plans', this.fitnessPlans);
+    this._editedFitSquads=this._editedFitSquads||{}; this._editedFitSquads[id]=true; this._fitPlanPush(id); this.forceUpdate(); }
   // ---- Fitness exercise media (demo photo + video link), kept in its own synced key so the
   // photos never bloat the plan document itself. Photos are downscaled before storing.
   getFitMedia(exId){ return (this.fitnessMedia||{})[exId] || {photo:'', video:''}; }
@@ -5666,6 +5679,7 @@ class Component extends DCLogic {
     this._squadPlansFetch();
     this._seasonFetch();
     this._fitSessFetch();
+    this._fitPlansFetch();
     this._famMsgFetch();
     this._alertsFetch();
     this._planCustomFetch();
@@ -5699,6 +5713,7 @@ class Component extends DCLogic {
     try{ this._planCustomFetch(); }catch(e){}
     try{ this._famMsgFetch(); }catch(e){}
     try{ this._alertsFetch(); }catch(e){}
+    try{ if(this.state.tool==='fitness') this._fitPlansFetch(); }catch(e){}
   }
   _hydrateShared(){
     // Re-read shared stores from localStorage (freshly pulled) and re-render. We intentionally do
