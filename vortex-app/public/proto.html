@@ -25,7 +25,7 @@
   var REST = SB_URL + "/rest/v1/club_state";
   var HEAD = { "apikey": SB_ANON, "Authorization": "Bearer " + SB_ANON, "Content-Type": "application/json" };
   // Every shared data type the club edits. The only key kept per-device is vx_api_key.
-  var SYNC = ["vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_attend_log","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_plans","vx_fitness_media","vx_videos"];
+  var SYNC = ["vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_attend_log","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_plans","vx_fitness_media","vx_wa_targets","vx_videos"];
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
   window.__vxWriteTs = {};   // last time THIS device wrote each key (ms) — guards against stale pulls
@@ -319,6 +319,9 @@
   .vx-screen{animation:vxrise .32s cubic-bezier(.22,1,.36,1)}
   .vx-sheet{animation:vxsheet .34s cubic-bezier(.22,1,.36,1)}
   [data-lucide]{stroke-width:2;flex:none}
+  /* Dark mode: invert the light UI and restore photos/videos so they look normal. */
+  main.vx-theme-dark{ filter: invert(1) hue-rotate(180deg); }
+  main.vx-theme-dark img, main.vx-theme-dark video, main.vx-theme-dark [data-noinvert]{ filter: invert(1) hue-rotate(180deg); }
   .vx-bar{transform-origin:bottom;animation:vxbar .5s cubic-bezier(.22,1,.36,1)}
   .vx-spin{animation:vxspin .9s linear infinite}
   #vx-print-sheet{display:none}
@@ -466,7 +469,7 @@
         <!-- ================= APP ================= -->
         <sc-if value="{{ showApp }}" hint-placeholder-val="{{ true }}">
           <div style="height:100%;display:flex;flex-direction:column;position:relative;background:{{ appTopColor }}">
-            <main class="vx-scroll" style="flex:1;overflow-y:auto;overflow-x:hidden;position:relative;background:url('assets/b798adf9.png') no-repeat top 10px right 10px / 34px auto local, url('assets/pattern-transparent.png') repeat-y top right / 150px auto local, #EEF1F5">
+            <main class="vx-scroll {{ appThemeClass }}" style="flex:1;overflow-y:auto;overflow-x:hidden;position:relative;background:url('assets/b798adf9.png') no-repeat top 10px right 10px / 34px auto local, url('assets/pattern-transparent.png') repeat-y top right / 150px auto local, #EEF1F5">
 
               <!-- ===== HUB ===== -->
               <sc-if value="{{ showHub }}" hint-placeholder-val="{{ true }}">
@@ -477,6 +480,7 @@
                       <img src="assets/9b59d9a2.png" alt="Vortex SC" style="height:20px">
                       <div style="display:flex;gap:8px">
                         <button onclick="{{ onOpenNotifs }}" style="width:37px;height:37px;border-radius:11px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative"><i data-lucide="bell" style="width:17px;height:17px"></i><sc-if value="{{ notifUnreadHub }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;top:8px;right:9px;width:7px;height:7px;border-radius:50%;background:#22D7D7;border:1.5px solid #0A0F1A"></span></sc-if></button>
+                        <button onclick="{{ onOpenSettings }}" style="width:37px;height:37px;border-radius:11px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer"><i data-lucide="settings" style="width:17px;height:17px"></i></button>
                         <button onclick="{{ onLogout }}" style="width:37px;height:37px;border-radius:11px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer"><i data-lucide="log-out" style="width:17px;height:17px"></i></button>
                       </div>
                     </div>
@@ -725,6 +729,7 @@
                       <img src="assets/9b59d9a2.png" alt="Vortex SC" style="height:19px">
                       <span style="display:flex;gap:8px">
                         <button onclick="{{ onOpenNotifs }}" style="position:relative;width:36px;height:36px;border-radius:11px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer"><i data-lucide="bell" style="width:16px;height:16px"></i><sc-if value="{{ notifUnreadFam }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;top:-3px;right:-3px;min-width:15px;height:15px;padding:0 3px;border-radius:8px;background:#E64B5C;color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ notifUnreadCount }}</span></sc-if></button>
+                        <button onclick="{{ onOpenSettings }}" style="width:36px;height:36px;border-radius:11px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer"><i data-lucide="settings" style="width:16px;height:16px"></i></button>
                         <button onclick="{{ onFamLogout }}" style="width:36px;height:36px;border-radius:11px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer"><i data-lucide="log-out" style="width:16px;height:16px"></i></button>
                       </span>
                     </div>
@@ -3301,6 +3306,68 @@
                 </div>
               </div>
             </sc-if>
+            <sc-if value="{{ settingsOpen }}" hint-placeholder-val="{{ false }}">
+              <div class="vx-screen" style="position:absolute;inset:0;z-index:58;background:#EEF1F5;display:flex;flex-direction:column">
+                <div style="flex:none;background:#0A0F1A;color:#fff;padding:calc(max(env(safe-area-inset-top),44px) + 6px) 16px 14px;display:flex;align-items:center;gap:10px">
+                  <button onclick="{{ onCloseSettings }}" style="width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.12);border:none;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer"><i data-lucide="arrow-left" style="width:17px;height:17px"></i></button>
+                  <span style="font-size:17px;font-weight:700">Settings</span>
+                </div>
+                <div class="vx-scroll" style="flex:1;overflow-y:auto;padding:15px;display:flex;flex-direction:column;gap:13px">
+                  <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                    <p style="margin:0 0 10px;font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7A8296">Appearance</p>
+                    <div style="display:flex;gap:8px">
+                      <button onclick="{{ onThemeLight }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:7px;background:{{ themeLightBg }};color:{{ themeLightFg }};border:none;border-radius:11px;padding:12px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer"><i data-lucide="sun" style="width:16px;height:16px"></i>Light</button>
+                      <button onclick="{{ onThemeDark }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:7px;background:{{ themeDarkBg }};color:{{ themeDarkFg }};border:none;border-radius:11px;padding:12px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer"><i data-lucide="moon" style="width:16px;height:16px"></i>Dark</button>
+                    </div>
+                  </div>
+                  <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                    <p style="margin:0 0 11px;font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7A8296">My profile</p>
+                    <input id="vx-set-photo" type="file" accept="image/*" onchange="{{ onSetPhoto }}" style="display:none">
+                    <div style="display:flex;align-items:center;gap:13px;margin-bottom:11px">
+                      {{ setPhoto }}
+                      <button onclick="{{ onPickSetPhoto }}" style="display:flex;align-items:center;gap:7px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border:none;border-radius:9px;padding:9px 13px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer"><i data-lucide="camera" style="width:15px;height:15px"></i>Change photo</button>
+                    </div>
+                    <input value="{{ setName }}" oninput="{{ onSetName }}" placeholder="Full name" style="width:100%;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:11px 13px;font-family:inherit;font-size:13.5px;color:#0C1116;outline:none;box-sizing:border-box;margin-bottom:8px">
+                    <input value="{{ setPhone }}" oninput="{{ onSetPhone }}" placeholder="Phone / WhatsApp" type="tel" style="width:100%;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:11px 13px;font-family:inherit;font-size:13.5px;color:#0C1116;outline:none;box-sizing:border-box">
+                    <button onclick="{{ onSaveProfile }}" style="margin-top:11px;width:100%;background:#0A0F1A;color:#fff;border:none;border-radius:11px;padding:12px;font-family:inherit;font-weight:700;font-size:13.5px;cursor:pointer">Save profile</button>
+                  </div>
+                  <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                    <p style="margin:0 0 4px;font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7A8296">WhatsApp share contacts</p>
+                    <p style="margin:0 0 11px;font-size:11px;color:#9AA2B4;line-height:1.5">Save the coaches / group admins you share plans with. Numbers need the country code (digits only).</p>
+                    <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:10px">
+                      <sc-for list="{{ waList }}" as="w" hint-placeholder-count="0">
+                        <div style="display:flex;align-items:center;gap:9px;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:10px;padding:9px 11px">
+                          <i data-lucide="message-circle" style="width:15px;height:15px;color:#25D366;flex:none"></i>
+                          <span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;font-weight:700;color:#0C1116">{{ w.label }}</span><span style="display:block;font-size:11px;color:#7A8296">+{{ w.number }}</span></span>
+                          <button onclick="{{ w.onRemove }}" style="flex:none;width:30px;height:30px;border-radius:8px;border:none;background:#FDECEC;color:#E5484D;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="trash-2" style="width:13px;height:13px"></i></button>
+                        </div>
+                      </sc-for>
+                    </div>
+                    <input value="{{ waLabel }}" oninput="{{ onWaLabel }}" placeholder="Name (e.g. Senior B group admin)" style="width:100%;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:10px 12px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none;box-sizing:border-box;margin-bottom:7px">
+                    <div style="display:flex;gap:7px">
+                      <input value="{{ waNumber }}" oninput="{{ onWaNumber }}" placeholder="Number e.g. 9745xxxxxxx" type="tel" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:10px 12px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                      <button onclick="{{ onAddWaTarget }}" style="flex:none;background:var(--vx-blue);color:#fff;border:none;border-radius:10px;padding:0 16px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer">Add</button>
+                    </div>
+                  </div>
+                  <sc-if value="{{ settingsMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:0 2px;font-size:12px;font-weight:600;color:#0C7A4F">{{ settingsMsg }}</p></sc-if>
+                </div>
+              </div>
+            </sc-if>
+            <sc-if value="{{ shareOpen }}" hint-placeholder-val="{{ false }}">
+              <div class="vx-screen" style="position:absolute;inset:0;z-index:59;background:rgba(10,15,26,.55);display:flex;flex-direction:column;justify-content:flex-end">
+                <div class="vx-sheet" style="background:#fff;border-radius:20px 20px 0 0;padding:18px 16px calc(env(safe-area-inset-bottom) + 20px)">
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><span style="font-size:16px;font-weight:700;color:#0C1116">Share plan as PDF</span><button onclick="{{ onCloseShare }}" style="width:32px;height:32px;border-radius:9px;background:#F4F6F8;border:none;color:#7A8296;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:15px;height:15px"></i></button></div>
+                  <p style="margin:0 0 13px;font-size:12px;color:#7A8296;line-height:1.5">Sends a printable link to the current session. Pick a saved contact, or use your phone's share sheet to choose any WhatsApp group.</p>
+                  <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:11px">
+                    <sc-for list="{{ shareTargets }}" as="t" hint-placeholder-count="0">
+                      <button onclick="{{ t.onShare }}" style="display:flex;align-items:center;gap:10px;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:12px;padding:11px 13px;cursor:pointer;font-family:inherit;text-align:left"><span style="width:34px;height:34px;border-radius:9px;background:#DCF7E6;color:#128C4B;display:flex;align-items:center;justify-content:center;flex:none"><i data-lucide="message-circle" style="width:17px;height:17px"></i></span><span style="flex:1;min-width:0"><span style="display:block;font-size:13px;font-weight:700;color:#0C1116">{{ t.label }}</span><span style="display:block;font-size:11px;color:#7A8296">Send to +{{ t.number }}</span></span><i data-lucide="send" style="width:16px;height:16px;color:#25D366"></i></button>
+                    </sc-for>
+                  </div>
+                  <button onclick="{{ onShareNative }}" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;background:#0A0F1A;color:#fff;border:none;border-radius:13px;padding:13px;font-family:inherit;font-weight:700;font-size:14px;cursor:pointer"><i data-lucide="share-2" style="width:17px;height:17px"></i>Share to a group / other app</button>
+                  <p style="margin:9px 2px 0;font-size:11px;color:#9AA2B4;line-height:1.5">Tip: add your groups' admin numbers in Settings → WhatsApp share contacts for one-tap sending.</p>
+                </div>
+              </div>
+            </sc-if>
             <sc-if value="{{ showVortexId }}" hint-placeholder-val="{{ false }}">
               <div class="vx-screen" style="position:absolute;inset:0;z-index:47;background:#0A0F1A;display:flex;flex-direction:column">
                 <div style="flex:none;height:44px"></div>
@@ -3745,6 +3812,7 @@ class Component extends DCLogic {
     this.fitSaved={};
     this.famMessages={};
     this.signupAlerts=[];
+    this.waTargets=this._loadJSON('vx_wa_targets', {});
     this.loungeComments={};
     this.rebuildRoster();
 
@@ -3804,7 +3872,9 @@ class Component extends DCLogic {
       aiKind:'season', aiPrompt:'', aiOut:null, aiLoading:false,
       loungeEditId:null, loungeEditText:'', commentDrafts:{}, reqOpen:false, reqTo:'', reqText:'', reqMsg:'',
       fmBody:'', fmSet:'', fmVideo:'',
+      theme:'light', settingsOpen:false, famProfileDraft:null, waLabel:'', waNumber:'', shareOpen:false, shareMsg:'',
     };
+    try{ var _th=localStorage.getItem('vx_theme'); if(_th) this.state.theme=_th; }catch(e){}
     // Vortex Lounge chat is backed by its own table (lounge_posts), loaded via _loungeFetch().
     // The seed posts in state.feed only show until the first real fetch replaces them.
     // Keep the user signed in across a page refresh (per-device session — NOT synced).
@@ -4166,6 +4236,63 @@ class Component extends DCLogic {
     const doc='<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>'+this._esc(title)+'</title><style>'+css+'</style></head><body><div class="topbar noprint"><button class="backbtn" onclick="if(window.opener){window.close();}else{history.back();}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:17px;height:17px"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>Close</button><button class="printbtn" onclick="window.print()">Save as PDF / Print</button></div><div class="wrap">'+header+inner+'<div class="brand">'+this._esc(club)+'</div></div></body></html>';
     this._openHtml(doc);
   }
+  // Build the same branded document as a standalone HTML string (used for sharing a link).
+  _buildShareDoc(title, inner){
+    const club=(this.brandConfig&&this.brandConfig.clubName)||'Vortex Swimming Club';
+    const logo=(location.origin||'')+'/assets/b798adf9.png';
+    const header='<div style="display:flex;align-items:center;gap:12px;border-bottom:3px solid #067EEA;padding-bottom:14px;margin-bottom:18px"><img src="'+logo+'" alt="" style="width:44px;height:44px"><div style="flex:1"><div style="font-weight:800;font-size:20px;color:#0C1116">'+this._esc(club)+'</div><div style="font-size:11px;color:#7A8296;font-weight:700;letter-spacing:.06em;text-transform:uppercase">Vortex SC coaching app</div></div></div>';
+    const css='body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;margin:0;color:#0C1116;background:#fff}.wrap{padding:16px 24px 40px;max-width:820px;margin:0 auto}h1{font-size:20px;margin:0 0 2px}.sub{color:#7A8296;font-size:12px;margin:0 0 16px}table{width:100%;border-collapse:collapse;font-size:12.5px}th,td{text-align:left;padding:7px 9px;border-bottom:1px solid #E5E9F0}.r{text-align:right}.mono{font-family:ui-monospace,Menlo,monospace;font-weight:700}.printbtn{display:inline-flex;gap:7px;background:#067EEA;color:#fff;border:none;border-radius:11px;padding:10px 16px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:14px}@media print{.noprint{display:none}}';
+    return '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+this._esc(title)+'</title><style>'+css+'</style></head><body><div class="wrap"><button class="printbtn noprint" onclick="window.print()">Save as PDF / Print</button>'+header+inner+'</div></body></html>';
+  }
+  // Inner body (sections + sets) for the squad's current live plan.
+  _currentPlanBody(squadId){ const sq=this.squadById[squadId]||{name:'',accent:'#067EEA'}; const plan=this.getPlan(squadId);
+    const dl=new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+    let body='<h1>'+this._esc(plan.title||'Session')+'</h1><p class="sub">'+this._esc(sq.name)+' · '+dl+' · '+this.planMetres(plan).toLocaleString()+'m total</p>';
+    (plan.sections||[]).forEach(sec=>{ let sub=0; (sec.sets||[]).forEach(s=>sub+=(Number(s.dist)||0)*(Number(s.reps)||1)*(Number(s.circuit)||1));
+      body+='<div style="margin-top:15px"><div style="display:flex;justify-content:space-between;border-bottom:2px solid '+sq.accent+';padding-bottom:5px;margin-bottom:6px"><span style="font-weight:800;text-transform:uppercase;font-size:12px;letter-spacing:.06em">'+this._esc(sec.title||'Section')+'</span><span class="mono" style="color:#7A8296">'+sub+'m</span></div><table><tbody>';
+      (sec.sets||[]).forEach(s=>{ const reps=Number(s.reps)||1, dist=Number(s.dist)||0, rounds=Number(s.circuit)||1; const distLabel=(rounds>1?(rounds+'×('+(reps>1?(reps+'×'+dist):dist)+')'):(reps>1?(reps+'×'+dist):(''+dist)))+'m';
+        const tags=[]; if((s.strokes||[]).length) tags.push((s.strokes).join('/')); if((s.types||[]).length) tags.push((s.types).join(', ')); if(s.rest) tags.push('Rest '+s.rest); if(s.zone) tags.push(s.zone);
+        const tot=reps*dist*rounds;
+        body+='<tr><td class="mono" style="width:96px;color:'+sq.accent+';font-weight:700;vertical-align:top">'+this._esc(distLabel)+'</td><td>'+this._esc(s.txt||'')+(tags.length?('<div style="font-size:11px;color:#7A8296;margin-top:2px">'+this._esc(tags.join(' · '))+'</div>'):'')+'</td><td class="mono r" style="width:66px;vertical-align:top">'+tot.toLocaleString()+'m</td></tr>'; });
+      body+='</tbody></table></div>'; });
+    return body;
+  }
+  // ---- Theme (dark / light) ----
+  setTheme(t){ this.setState({theme:t}); try{ localStorage.setItem('vx_theme', t); }catch(e){} }
+  // ---- Settings + my-profile + WhatsApp share targets ----
+  openSettings(){ const acc=this._me(); const fam=this.state.familyUser;
+    let profDraft=null;
+    if(fam) profDraft={name:fam.name||'', phone:fam.phone||'', photo:fam.photo||''};
+    else this.staffAccOpen(this.state.pickedId); // populates staffAccDraft for staff
+    this.setState({settingsOpen:true, famProfileDraft:profDraft, settingsMsg:''}); }
+  closeSettings(){ this.setState({settingsOpen:false, staffEditId:null, staffAccDraft:null, famProfileDraft:null}); }
+  async saveFamilyProfile(){ const d=this.state.famProfileDraft||{}; const fu=this.state.familyUser; if(!fu) return;
+    const upd={...fu, name:(d.name||fu.name), phone:(d.phone||fu.phone), photo:(d.photo!=null?d.photo:fu.photo)};
+    const list=(this.family||[]).map(f=>f.id===fu.id?upd:f); this._saveFamily(list);
+    this.setState({familyUser:upd, settingsMsg:'Profile saved ✓'});
+    if(window.__vxInsert){ try{ await window.__vxInsert('family_accounts', [{id:upd.id, name:upd.name, email:upd.email, phone:upd.phone, pass:upd.pass||'', role:upd.role, swimmer_ids:upd.swimmerIds, ts:Date.now()}]); }catch(e){} } }
+  async famProfilePhoto(e){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(!f) return; try{ const dataUrl=await this._resizeImage(f, 400, 0.8); this.setState({famProfileDraft:{...(this.state.famProfileDraft||{}), photo:dataUrl}}); }catch(err){} }
+  _waMap(){ return this.waTargets||{}; }
+  _waFor(accId){ return (this._waMap()[accId]||[]); }
+  addWaTarget(){ const acc=this._me(); const accId=this.state.familyUser?('fam:'+this.state.familyUser.id):acc.id;
+    const label=(this.state.waLabel||'').trim(); const number=(this.state.waNumber||'').replace(/[^\d]/g,'');
+    if(!label||number.length<8) return this.setState({settingsMsg:'Enter a name and a full number (with country code, digits only).'});
+    const map={...this._waMap()}; map[accId]=[...(map[accId]||[]), {id:'wa'+Date.now(), label, number}]; this.waTargets=map; this._saveJSON('vx_wa_targets', map);
+    this.setState({waLabel:'', waNumber:'', settingsMsg:'Contact saved ✓'}); }
+  removeWaTarget(id){ const acc=this._me(); const accId=this.state.familyUser?('fam:'+this.state.familyUser.id):acc.id;
+    const map={...this._waMap()}; map[accId]=(map[accId]||[]).filter(t=>t.id!==id); this.waTargets=map; this._saveJSON('vx_wa_targets', map); this.forceUpdate(); }
+  // ---- Share the current plan as a link (opens WhatsApp / native share sheet) ----
+  async sharePlan(squadId, target){ const sq=this.squadById[squadId]||{name:'Squad'};
+    this.setState({shareMsg:'Preparing plan…'});
+    const body=this._currentPlanBody(squadId); const html=this._buildShareDoc((this.getPlan(squadId).title||'Session')+' — '+sq.name, body);
+    let url='';
+    if(window.__vxUploadFile){ try{ const file=new Blob([html],{type:'text/html'}); const path='plans/plan-'+squadId+'-'+Date.now()+'.html'; const u=await window.__vxUploadFile(path, file); if(u) url=u; }catch(e){} }
+    const text=(this.getPlan(squadId).title||'Session')+' — '+sq.name+(url?('\n'+url):'');
+    if(target && target.number){ window.open('https://wa.me/'+target.number+'?text='+encodeURIComponent(text), '_blank'); this.setState({shareOpen:false, shareMsg:'Opened WhatsApp for '+target.label+' ✓'}); return; }
+    // No specific contact: use the native share sheet (lets you pick any group), else copy.
+    try{ if(navigator.share){ await navigator.share({title:sq.name+' session plan', text:(this.getPlan(squadId).title||'Session'), url:url||location.href}); this.setState({shareOpen:false, shareMsg:'Shared ✓'}); return; } }catch(e){ this.setState({shareOpen:false, shareMsg:''}); return; }
+    if(url){ try{ await navigator.clipboard.writeText(url); this.setState({shareOpen:false, shareMsg:'Plan link copied — paste it into any WhatsApp chat ✓'}); return; }catch(e){} }
+    window.open('https://wa.me/?text='+encodeURIComponent(text), '_blank'); this.setState({shareOpen:false, shareMsg:'Opened WhatsApp ✓'}); }
   exportAttendancePdf(squadId){ const sq=this.squadById[squadId]||{name:'Squad',coach:''}; const today=this.todayISO();
     const firstThis=today.slice(0,8)+'01';
     let from=this.state.attendFrom||firstThis; let to=this.state.attendTo||today;
@@ -5560,7 +5687,7 @@ class Component extends DCLogic {
     this.academyTrials=g('vx_academy_trials', this.academyTrials); this.academyFees=g('vx_academy_fees', this.academyFees); this.invoices=g('vx_invoices', this.invoices);
     this.brandConfig=g('vx_brand', this.brandConfig); this.notifications=g('vx_notifications', this.notifications);
     this.tpaceTests=g('vx_tpace', this.tpaceTests); this.fitnessTests=g('vx_fitness_tests', this.fitnessTests);
-    this.fitnessPlans=g('vx_fitness_plans', this.fitnessPlans); this.fitnessMedia=g('vx_fitness_media', this.fitnessMedia); this.promoStore=g('vx_promo', this.promoStore); this.aiSuggOverrides=g('vx_ai_sugg_ovr', this.aiSuggOverrides);
+    this.fitnessPlans=g('vx_fitness_plans', this.fitnessPlans); this.fitnessMedia=g('vx_fitness_media', this.fitnessMedia); this.waTargets=g('vx_wa_targets', this.waTargets); this.promoStore=g('vx_promo', this.promoStore); this.aiSuggOverrides=g('vx_ai_sugg_ovr', this.aiSuggOverrides);
     this.relayOverrides=g('vx_relay_ovr', this.relayOverrides);
     this.planCustom=g('vx_plan_custom', this.planCustom); ['type','stroke','tools','zone','label'].forEach(k=>{ if(!Array.isArray((this.planCustom||{})[k])){ this.planCustom=this.planCustom||{}; this.planCustom[k]=[]; } });
     this.rosterEdits=g('vx_roster_edits', this.rosterEdits); try{ this.rebuildRoster(); }catch(e){}
@@ -6648,6 +6775,31 @@ class Component extends DCLogic {
       onFamSubmit: S.famMode==='login' ? ()=>this.famLogin() : (S.famMode==='forgot' ? ()=>this.famResetPassword() : (S.famMode==='setnew' ? ()=>this.famSetNewPassword() : ()=>this.famRegister())),
       famSubmitLabel: S.famMode==='login' ? (S.famBusy?'Signing in…':'Sign in') : (S.famMode==='forgot' ? (S.famBusy?'Sending…':'Send reset link') : (S.famMode==='setnew' ? (S.famBusy?'Saving…':'Set new password') : (S.famBusy?'Creating…':'Create account'))),
 
+      appThemeClass: S.theme==='dark' ? 'vx-theme-dark' : '',
+      ...(()=>{ const acc=this._me(); const isFam=!!S.familyUser; const accId=isFam?('fam:'+S.familyUser.id):acc.id;
+        const d=isFam?(S.famProfileDraft||{}):(S.staffAccDraft||{});
+        const waList=this._waFor(accId).map(t=>({ id:t.id, label:t.label, number:t.number, onRemove:()=>this.removeWaTarget(t.id), onShare:()=>this.sharePlan(S.squadId, t) }));
+        return {
+          onOpenSettings:()=>this.openSettings(), onCloseSettings:()=>this.closeSettings(), settingsOpen:!!S.settingsOpen,
+          settingsMsg:S.settingsMsg||'', settingsMsgShow:!!S.settingsMsg,
+          themeIsDark:S.theme==='dark', onThemeLight:()=>this.setTheme('light'), onThemeDark:()=>this.setTheme('dark'),
+          themeLightBg:S.theme!=='dark'?'#0A0F1A':'#F4F6F8', themeLightFg:S.theme!=='dark'?'#fff':'#7A8296',
+          themeDarkBg:S.theme==='dark'?'#0A0F1A':'#F4F6F8', themeDarkFg:S.theme==='dark'?'#fff':'#7A8296',
+          settingsIsFamily:isFam, settingsIsStaff:!isFam,
+          // profile fields (staff use staffAccDraft, family use famProfileDraft)
+          setName:isFam?(d.name||''):(d.label||''), onSetName:(e)=> isFam? this.setState({famProfileDraft:{...(S.famProfileDraft||{}), name:e.target.value}}) : this.staffAccChange('label', e.target.value),
+          setPhone:d.phone||'', onSetPhone:(e)=> isFam? this.setState({famProfileDraft:{...(S.famProfileDraft||{}), phone:e.target.value}}) : this.staffAccChange('phone', e.target.value),
+          setPhoto:this.av((isFam?d.photo:d.photo)||null, (isFam?(d.name||'?'):(d.label||'?')).slice(0,2).toUpperCase(), 56, 14, acc.accent||'#067EEA', '#fff', 18),
+          onPickSetPhoto:()=>{ const el=document.getElementById('vx-set-photo'); if(el) el.click(); },
+          onSetPhoto:(e)=> isFam? this.famProfilePhoto(e) : this.staffAccPhoto(e),
+          onSaveProfile:()=> isFam? this.saveFamilyProfile() : this.staffAccSave(S.pickedId),
+          // WhatsApp share targets
+          waList, waHasList:waList.length>0, waLabel:S.waLabel||'', onWaLabel:(e)=>this.setState({waLabel:e.target.value}),
+          waNumber:S.waNumber||'', onWaNumber:(e)=>this.setState({waNumber:e.target.value}), onAddWaTarget:()=>this.addWaTarget(),
+          // share panel
+          shareOpen:!!S.shareOpen, onCloseShare:()=>this.setState({shareOpen:false}), shareMsg:S.shareMsg||'', shareMsgShow:!!S.shareMsg,
+          shareTargets:waList, shareHasTargets:waList.length>0, onShareNative:()=>this.sharePlan(S.squadId, null),
+        }; })(),
       appTopColor: (S.view==='hub'||S.view==='tools'||S.view==='handbook'||S.view==='family'||S.view==='academy') ? '#0A0F1A' : '#EEF1F5',
       statusInk: (S.view==='hub'||S.view==='tools'||S.view==='handbook'||S.view==='family'||S.view==='academy') ? '#fff' : '#0C1116',
       liveClock: S.liveClock || (()=>{ const n=new Date(); let h=n.getHours(); const m=n.getMinutes(); h=h%12; if(h===0)h=12; return h+':'+(m<10?'0':'')+m; })(),
@@ -6814,7 +6966,7 @@ class Component extends DCLogic {
           onPlanCalNext:()=>{ let m=calM+1,y=calY; if(m>11){m=0;y++;} this.setState({planCalM:m,planCalY:y}); },
           planCalDaySel:!!daySel, planCalSelLabel:selLabel, onPlanCalClearDay:()=>this.setState({planCalDay:null}),
           planCalDaySessions:daySessions, planCalDayHasSessions:daySessions.length>0, planCalDayKm:daySelKm }; })(),
-      onShareWhatsapp:()=>this.setState({shareNote:'Shared to '+squad.name+' WhatsApp group ✓'}), onPrintPlan:()=>this.setState({printPreviewOpen:true}),
+      onShareWhatsapp:()=>this.setState({shareOpen:true, shareMsg:''}), onPrintPlan:()=>this.setState({printPreviewOpen:true}),
       onSubmitPlanReview:()=>this.submitPlanForReview(S.squadId, squad.name),
       onClosePrintPreview:()=>this.setState({printPreviewOpen:false}), onConfirmPrint:()=>{ this._printEscape(); setTimeout(()=>window.print(), 30); }, printPreviewOpen:S.printPreviewOpen,
       printSheet:{ accent:squad.accent, clubName:this.brandConfig.clubName||'Vortex Swimming Club', squadName:squad.name, printDate:new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}), zoneLabel:(zoneRows[zi]?zoneRows[zi].code+' \u00b7 '+zoneRows[zi].name:zName), title:sessionTitle||'Session', coach:squad.coach, total:planTotalN.toLocaleString(),
