@@ -475,7 +475,7 @@
         <!-- ================= APP ================= -->
         <sc-if value="{{ showApp }}" hint-placeholder-val="{{ true }}">
           <div style="height:100%;display:flex;flex-direction:column;position:relative;background:{{ appTopColor }}">
-            <main class="vx-scroll" style="filter:{{ appThemeFilter }};flex:1;overflow-y:auto;overflow-x:hidden;position:relative;background:url('assets/pattern-transparent.png') repeat-y top right / 140px auto local, #EEF1F5">
+            <main class="vx-scroll" style="filter:{{ appThemeFilter }};flex:1;overflow-y:auto;overflow-x:hidden;position:relative;padding-bottom:{{ mainPadBottom }};background:url('assets/pattern-transparent.png') repeat-y top right / 140px auto local, #EEF1F5">
 
               <!-- ===== HUB ===== -->
               <sc-if value="{{ showHub }}" hint-placeholder-val="{{ true }}">
@@ -1888,8 +1888,8 @@
             </main>
 
             <sc-if value="{{ showNav }}" hint-placeholder-val="{{ true }}">
-              <div style="flex:none;display:flex;justify-content:center;background:{{ navBarBg }};padding:9px 12px calc(env(safe-area-inset-bottom) + 10px);position:relative;z-index:5">
-                <div style="display:flex;align-items:center;gap:4px;background:#0A0F1A;border-radius:999px;padding:6px 8px;box-shadow:0 12px 30px rgba(0,0,0,.28)">
+              <div style="position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:center;background:transparent;padding:9px 12px calc(env(safe-area-inset-bottom) + 10px);z-index:20;pointer-events:none">
+                <div style="display:flex;align-items:center;gap:4px;background:#0A0F1A;border-radius:999px;padding:6px 8px;box-shadow:0 12px 30px rgba(0,0,0,.28);pointer-events:auto">
                   <sc-for list="{{ navItems }}" as="n" hint-placeholder-count="5">
                     <button onclick="{{ n.onClick }}" style="display:flex;align-items:center;gap:6px;height:42px;padding:0 {{ n.pad }};border-radius:999px;background:{{ n.pillBg }};border:none;cursor:pointer;color:{{ n.color }};font-family:inherit"><i data-lucide="{{ n.icon }}" style="width:21px;height:21px"></i><sc-if value="{{ n.active }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;font-weight:700;white-space:nowrap">{{ n.label }}</span></sc-if></button>
                   </sc-for>
@@ -6052,6 +6052,7 @@ class Component extends DCLogic {
     // Floating pill nav: the active tab expands into a coloured pill with its label; others are icon-only.
     const navItems=tabs.map(t=>{ const on=S.tab===t.id; return {icon:t.icon, label:t.label, active:on, color: on?'#fff':'rgba(255,255,255,.6)', pillBg: on?squad.accent:'transparent', pad: on?'15px':'13px', onClick:()=>this.setState({tab:t.id})}; });
     const navBarBg = (S.theme==='dark') ? '#0B0F17' : '#EEF1F5';
+    const mainPadBottom = (S.view==='squad') ? '92px' : '0px';
 
     // ---- tool overlay content ----
     const toolTitleMap={insights:'Insights',boards:'Boards',video:'Video Analysis',lounge:'Vortex Lounge',goals:'Season Goals',ai:'AI Assistants',review:'AI Plan Review',clock:'Pace Clock',talent:'Talent Board',relay:'Relay Builder',zoneeng:'Zone Engine',sponsors:'Sponsors',tpace:'T-Pace Tests',promo:'Level-Up Review',entries:'Meet Entries',fitness:'Fitness Plan',inbody:'InBody Import',season:'Season Plan'};
@@ -6924,7 +6925,7 @@ class Component extends DCLogic {
         return { resultsSwOptions, resultsSwExportLabel: selSw? ('Export '+selSw.name+"'s results") : 'Pick a swimmer above to export',
           onExportSwimmerResults:()=>{ if(S.resultsSwId) this.exportSwimmerResultsPdf(S.squadId, S.resultsSwId); } }; })(),
       attendYearLabel, attendYearAvgPct, attendYearBars, onAttendYearPrev, onAttendYearNext,
-      rosterQuery:S.rosterQuery, onRosterQuery:(e)=>this.setState({rosterQuery:e.target.value}), rosterCountLine, roster, navItems, navBarBg,
+      rosterQuery:S.rosterQuery, onRosterQuery:(e)=>this.setState({rosterQuery:e.target.value}), rosterCountLine, roster, navItems, navBarBg, mainPadBottom,
       planTotal:planTotalN.toLocaleString(), zoneOptions, planSections, onAddSection, sessionTitle, onSessionTitle, onResetPlan,
       onSavePlan:()=>this.savePlanSnapshot(S.squadId), savedPlanMsg:S.savedPlanMsg||'', savedPlanMsgShow:!!S.savedPlanMsg,
       // ---- ladder / pyramid builder (shape + steppers, no typing) ----
