@@ -500,31 +500,31 @@
                   <div style="position:relative;z-index:1;padding:16px 15px 22px;display:flex;flex-direction:column;gap:16px;margin-top:-16px">
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
                       <sc-if value="{{ isAdminUser }}" hint-placeholder-val="{{ true }}">
-                      <button onclick="{{ onGoAdmin }}" style="text-align:left;background:#fff;border:1px solid #E5E9F0;border-radius:19px;padding:15px;box-shadow:0 6px 18px rgba(11,20,40,.07);cursor:pointer;grid-column:span 2;display:flex;align-items:center;gap:13px">
-                        <span style="width:46px;height:46px;flex:none;border-radius:13px;background:var(--vx-blue-tint);color:var(--vx-blue);display:flex;align-items:center;justify-content:center"><i data-lucide="building-2" style="width:22px;height:22px"></i></span>
+                      <button onclick="{{ onGoAdmin }}" style="text-align:left;background:#fff;border:1px solid #E5E9F0;border-radius:22px;padding:16px;box-shadow:0 12px 30px rgba(11,20,40,.08);cursor:pointer;grid-column:span 2;display:flex;align-items:center;gap:13px">
+                        <span style="width:46px;height:46px;flex:none;border-radius:15px;background:linear-gradient(140deg,#3F9CFF,#0768D6);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(7,104,214,.32)"><i data-lucide="building-2" style="width:22px;height:22px"></i></span>
                         <span style="flex:1"><span style="display:block;font-weight:700;font-size:15px;color:#0C1116">Club Administration</span><span style="display:block;font-size:12.5px;color:#7A8296;margin-top:1px">Swimmers · meets · staff · parents</span></span>
                         <i data-lucide="arrow-right" style="width:18px;height:18px;color:#AEB6C7"></i>
                       </button>
                       </sc-if>
-                      <button onclick="{{ onGoTools }}" style="text-align:left;grid-column:{{ toolsSpan }};background:#0A0F1A;color:#fff;border:none;border-radius:19px;padding:15px;box-shadow:0 10px 26px rgba(11,20,40,.16);cursor:pointer;display:flex;flex-direction:column;justify-content:space-between;min-height:124px;position:relative;overflow:hidden">
-                        <img src="assets/a4d3e396.jpg" alt="" style="position:absolute;bottom:-40px;right:-30px;width:120px;opacity:.4;mix-blend-mode:screen">
-                        <span style="position:relative;width:42px;height:42px;border-radius:12px;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center"><i data-lucide="sparkles" style="width:20px;height:20px"></i></span>
+                      <button onclick="{{ onGoTools }}" style="text-align:left;grid-column:{{ toolsSpan }};background:linear-gradient(145deg,#2A2FD6 0%,#1A1F55 55%,#0A0F1A 100%);color:#fff;border:none;border-radius:22px;padding:16px;box-shadow:0 16px 34px rgba(24,28,120,.28);cursor:pointer;display:flex;flex-direction:column;justify-content:space-between;min-height:130px;position:relative;overflow:hidden">
+                        <img src="assets/a4d3e396.jpg" alt="" style="position:absolute;bottom:-40px;right:-30px;width:120px;opacity:.35;mix-blend-mode:screen">
+                        <span style="position:relative;width:44px;height:44px;border-radius:14px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center"><i data-lucide="sparkles" style="width:21px;height:21px"></i></span>
                         <span style="position:relative"><span style="display:block;font-weight:700;font-size:15px">Tools &amp; AI</span><span style="display:block;font-size:11.5px;opacity:.6;margin-top:1px">{{ toolsSubLabel }}</span></span>
                       </button>
                       <sc-if value="{{ isAdminUser }}" hint-placeholder-val="{{ true }}">
-                      <button onclick="{{ onGoMove }}" style="text-align:left;background:#fff;border:1px solid #E5E9F0;border-radius:19px;padding:15px;box-shadow:0 6px 18px rgba(11,20,40,.07);cursor:pointer;display:flex;flex-direction:column;justify-content:space-between;min-height:124px">
-                        <span style="width:42px;height:42px;border-radius:12px;background:var(--vx-blue-tint);color:var(--vx-blue);display:flex;align-items:center;justify-content:center"><i data-lucide="arrow-left-right" style="width:20px;height:20px"></i></span>
+                      <button onclick="{{ onGoMove }}" style="text-align:left;background:#fff;border:1px solid #E5E9F0;border-radius:22px;padding:16px;box-shadow:0 12px 30px rgba(11,20,40,.08);cursor:pointer;display:flex;flex-direction:column;justify-content:space-between;min-height:124px">
+                        <span style="width:44px;height:44px;border-radius:14px;background:linear-gradient(140deg,#3F9CFF,#0768D6);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(7,104,214,.32)"><i data-lucide="arrow-left-right" style="width:20px;height:20px"></i></span>
                         <span><span style="display:block;font-weight:700;font-size:15px;color:#0C1116">Move swimmers</span><span style="display:block;font-size:11.5px;color:#7A8296;margin-top:1px">Reassign between squads</span></span>
                       </button>
                       </sc-if>
-                      <button onclick="{{ onGoHandbook }}" style="text-align:left;background:#fff;border:1px solid #E5E9F0;border-radius:19px;padding:15px;box-shadow:0 6px 18px rgba(11,20,40,.07);cursor:pointer;grid-column:span 2;display:flex;align-items:center;gap:13px">
-                        <span style="width:46px;height:46px;flex:none;border-radius:13px;background:var(--vx-blue-tint);color:var(--vx-blue);display:flex;align-items:center;justify-content:center"><i data-lucide="book-open" style="width:22px;height:22px"></i></span>
+                      <button onclick="{{ onGoHandbook }}" style="text-align:left;background:#fff;border:1px solid #E5E9F0;border-radius:22px;padding:16px;box-shadow:0 12px 30px rgba(11,20,40,.08);cursor:pointer;grid-column:span 2;display:flex;align-items:center;gap:13px">
+                        <span style="width:46px;height:46px;flex:none;border-radius:15px;background:linear-gradient(140deg,#8A5CFF,#5B21C6);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(91,33,198,.3)"><i data-lucide="book-open" style="width:22px;height:22px"></i></span>
                         <span style="flex:1"><span style="display:block;font-weight:700;font-size:15px;color:#0C1116">Coaches Handbook</span><span style="display:block;font-size:12.5px;color:#7A8296;margin-top:1px">Pathway · zones · technique · meets</span></span>
                         <i data-lucide="arrow-right" style="width:18px;height:18px;color:#AEB6C7"></i>
                       </button>
                       <sc-if value="{{ isAdminUser }}" hint-placeholder-val="{{ true }}">
-                      <button onclick="{{ onGoAcademy }}" style="text-align:left;background:#fff;border:1px solid #E5E9F0;border-radius:19px;padding:15px;box-shadow:0 6px 18px rgba(11,20,40,.07);cursor:pointer;grid-column:span 2;display:flex;align-items:center;gap:13px">
-                        <span style="width:46px;height:46px;flex:none;border-radius:13px;background:rgba(12,122,79,.1);color:#0C7A4F;display:flex;align-items:center;justify-content:center"><i data-lucide="graduation-cap" style="width:22px;height:22px"></i></span>
+                      <button onclick="{{ onGoAcademy }}" style="text-align:left;background:#fff;border:1px solid #E5E9F0;border-radius:22px;padding:16px;box-shadow:0 12px 30px rgba(11,20,40,.08);cursor:pointer;grid-column:span 2;display:flex;align-items:center;gap:13px">
+                        <span style="width:46px;height:46px;flex:none;border-radius:15px;background:linear-gradient(140deg,#34D77E,#0C9F5F);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(12,159,95,.3)"><i data-lucide="graduation-cap" style="width:22px;height:22px"></i></span>
                         <span style="flex:1"><span style="display:block;font-weight:700;font-size:15px;color:#0C1116">Academy</span><span style="display:block;font-size:12.5px;color:#7A8296;margin-top:1px">Trials · level ladder · schedule · fees</span></span>
                         <i data-lucide="arrow-right" style="width:18px;height:18px;color:#AEB6C7"></i>
                       </button>
