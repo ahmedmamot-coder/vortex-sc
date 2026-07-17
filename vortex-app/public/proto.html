@@ -1888,10 +1888,12 @@
             </main>
 
             <sc-if value="{{ showNav }}" hint-placeholder-val="{{ true }}">
-              <div style="flex:none;display:flex;background:#fff;border-top:1px solid #E5E9F0;padding:7px 6px 22px;box-shadow:0 -4px 20px rgba(11,20,40,.05);position:relative;z-index:5">
-                <sc-for list="{{ navItems }}" as="n" hint-placeholder-count="5">
-                  <button onclick="{{ n.onClick }}" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:none;cursor:pointer;padding:5px 0;color:{{ n.color }}"><i data-lucide="{{ n.icon }}" style="width:22px;height:22px"></i><span style="font-size:10px;font-weight:{{ n.weight }};letter-spacing:.02em">{{ n.label }}</span></button>
-                </sc-for>
+              <div style="flex:none;display:flex;justify-content:center;background:{{ navBarBg }};padding:9px 12px calc(env(safe-area-inset-bottom) + 10px);position:relative;z-index:5">
+                <div style="display:flex;align-items:center;gap:4px;background:#0A0F1A;border-radius:999px;padding:6px 8px;box-shadow:0 12px 30px rgba(0,0,0,.28)">
+                  <sc-for list="{{ navItems }}" as="n" hint-placeholder-count="5">
+                    <button onclick="{{ n.onClick }}" style="display:flex;align-items:center;gap:6px;height:42px;padding:0 {{ n.pad }};border-radius:999px;background:{{ n.pillBg }};border:none;cursor:pointer;color:{{ n.color }};font-family:inherit"><i data-lucide="{{ n.icon }}" style="width:21px;height:21px"></i><sc-if value="{{ n.active }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;font-weight:700;white-space:nowrap">{{ n.label }}</span></sc-if></button>
+                  </sc-for>
+                </div>
               </div>
             </sc-if>
 
@@ -6047,7 +6049,9 @@ class Component extends DCLogic {
 
     // ---- nav ----
     const tabs=[{id:'group',icon:'users',label:'Group'},{id:'plans',icon:'list-checks',label:'Plans'},{id:'attend',icon:'calendar-check',label:'Attend'},{id:'results',icon:'medal',label:'Results'},{id:'more',icon:'layout-grid',label:'More'}];
-    const navItems=tabs.map(t=>({icon:t.icon, label:t.label, color: S.tab===t.id?squad.accent:'#9AA2B4', weight: S.tab===t.id?'700':'500', onClick:()=>this.setState({tab:t.id})}));
+    // Floating pill nav: the active tab expands into a coloured pill with its label; others are icon-only.
+    const navItems=tabs.map(t=>{ const on=S.tab===t.id; return {icon:t.icon, label:t.label, active:on, color: on?'#fff':'rgba(255,255,255,.6)', pillBg: on?squad.accent:'transparent', pad: on?'15px':'13px', onClick:()=>this.setState({tab:t.id})}; });
+    const navBarBg = (S.theme==='dark') ? '#0B0F17' : '#EEF1F5';
 
     // ---- tool overlay content ----
     const toolTitleMap={insights:'Insights',boards:'Boards',video:'Video Analysis',lounge:'Vortex Lounge',goals:'Season Goals',ai:'AI Assistants',review:'AI Plan Review',clock:'Pace Clock',talent:'Talent Board',relay:'Relay Builder',zoneeng:'Zone Engine',sponsors:'Sponsors',tpace:'T-Pace Tests',promo:'Level-Up Review',entries:'Meet Entries',fitness:'Fitness Plan',inbody:'InBody Import',season:'Season Plan'};
@@ -6920,7 +6924,7 @@ class Component extends DCLogic {
         return { resultsSwOptions, resultsSwExportLabel: selSw? ('Export '+selSw.name+"'s results") : 'Pick a swimmer above to export',
           onExportSwimmerResults:()=>{ if(S.resultsSwId) this.exportSwimmerResultsPdf(S.squadId, S.resultsSwId); } }; })(),
       attendYearLabel, attendYearAvgPct, attendYearBars, onAttendYearPrev, onAttendYearNext,
-      rosterQuery:S.rosterQuery, onRosterQuery:(e)=>this.setState({rosterQuery:e.target.value}), rosterCountLine, roster, navItems,
+      rosterQuery:S.rosterQuery, onRosterQuery:(e)=>this.setState({rosterQuery:e.target.value}), rosterCountLine, roster, navItems, navBarBg,
       planTotal:planTotalN.toLocaleString(), zoneOptions, planSections, onAddSection, sessionTitle, onSessionTitle, onResetPlan,
       onSavePlan:()=>this.savePlanSnapshot(S.squadId), savedPlanMsg:S.savedPlanMsg||'', savedPlanMsgShow:!!S.savedPlanMsg,
       // ---- ladder / pyramid builder (shape + steppers, no typing) ----
