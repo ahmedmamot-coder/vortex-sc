@@ -1590,6 +1590,24 @@
                   </div>
                   <div style="padding:15px;display:flex;flex-direction:column;gap:13px">
                     <div>
+                      <h2 style="font-size:11.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#7A8296;margin:0 2px 9px">Attendance this season</h2>
+                      <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                        <div style="display:flex;align-items:center;gap:14px">
+                          <svg viewBox="0 0 60 60" style="width:62px;height:62px;flex:none"><circle cx="30" cy="30" r="24" fill="none" stroke="#EEF1F5" stroke-width="7"></circle><circle cx="30" cy="30" r="24" fill="none" stroke="{{ profileAttRingColor }}" stroke-width="7" stroke-linecap="round" stroke-dasharray="{{ profileAttDash }}" transform="rotate(-90 30 30)"></circle><text x="30" y="34" text-anchor="middle" style="font-size:13px;font-weight:800;fill:#0C1116">{{ profileAttPct }}</text></svg>
+                          <div style="flex:1;display:flex;gap:7px">
+                            <div style="flex:1;text-align:center;background:#F1FBF6;border-radius:10px;padding:8px 4px"><span style="display:block;font-size:16px;font-weight:800;color:#1CB87A">{{ profileAttPresent }}</span><span style="display:block;font-size:9px;font-weight:700;text-transform:uppercase;color:#9AA2B4;margin-top:1px">Present</span></div>
+                            <div style="flex:1;text-align:center;background:#FEF7EC;border-radius:10px;padding:8px 4px"><span style="display:block;font-size:16px;font-weight:800;color:#C77E12">{{ profileAttLate }}</span><span style="display:block;font-size:9px;font-weight:700;text-transform:uppercase;color:#9AA2B4;margin-top:1px">Late</span></div>
+                            <div style="flex:1;text-align:center;background:#FCEEEE;border-radius:10px;padding:8px 4px"><span style="display:block;font-size:16px;font-weight:800;color:#E5484D">{{ profileAttAbsent }}</span><span style="display:block;font-size:9px;font-weight:700;text-transform:uppercase;color:#9AA2B4;margin-top:1px">Absent</span></div>
+                          </div>
+                        </div>
+                        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:6px;height:56px;margin-top:13px;padding-top:11px;border-top:1px solid #EEF1F5">
+                          <sc-for list="{{ profileAttBars }}" as="b" hint-placeholder-count="6">
+                            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;justify-content:flex-end;height:100%"><span style="width:100%;max-width:22px;border-radius:5px 5px 0 0;background:{{ b.bg }};height:{{ b.h }}"></span><span style="font-size:9px;color:#9AA2B4;font-weight:700">{{ b.label }}</span></div>
+                          </sc-for>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
                       <h2 style="font-size:11.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#7A8296;margin:0 2px 9px">Personal bests</h2>
                       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
                         <sc-for list="{{ swimmerPbs }}" as="p" hint-placeholder-count="4">
@@ -7019,6 +7037,18 @@ class Component extends DCLogic {
           isSponsored: sponsorOn,
           profileMsgThread:this._famMsgEls(swObj.id, 'staff'), profileMsgEmpty:((this.famMessages||{})[swObj.id]||[]).length===0,
           onSendFamMsg:()=>this.sendFamMsg(swObj.id, 'staff'),
+          // ---- attendance performance (same synced data coaches mark in the Attend tab) ----
+          ...(()=>{ const sqid=S.squadId; const idx=(this.roster[sqid]||[]).findIndex(x=>x.id===swObj.id); const today=this.todayISO(); const yStart=today.slice(0,4)+'-01-01';
+            let p=0,l=0,a=0,tot=0; let dt=new Date(yStart+'T00:00:00'); const end=new Date(today+'T00:00:00'); let g=0;
+            while(dt<=end && g<400){ const dISO=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0'); const st=this.getAttendStatus(sqid,dISO,swObj.id,idx<0?0:idx); tot++; if(st==='present')p++; else if(st==='absent')a++; else l++; dt.setDate(dt.getDate()+1); g++; }
+            const pct= tot? Math.round((p/tot)*100):0;
+            // last 6 months trend
+            const mNames=['J','F','M','A','M','J','J','A','S','O','N','D']; const now=new Date(); const bars=[];
+            for(let k=5;k>=0;k--){ const d=new Date(now.getFullYear(), now.getMonth()-k, 1); const my=d.getFullYear(), mm=d.getMonth(); const dim=new Date(my,mm+1,0).getDate(); let mp=0,mt=0;
+              for(let dd=1; dd<=dim; dd++){ const dISO=my+'-'+String(mm+1).padStart(2,'0')+'-'+String(dd).padStart(2,'0'); if(dISO>today) continue; if(this.getAttendStatus(sqid,dISO,swObj.id,idx<0?0:idx)==='present')mp++; mt++; }
+              const mpct=mt?Math.round((mp/mt)*100):0; bars.push({label:mNames[mm], pct:mpct, h:Math.max(4,Math.round(mpct*0.5))+'px', bg: mpct>=85?'#1CB87A':(mpct>=70?squad.accent:'#F5A623') }); }
+            const ring=(pct/100)*151;
+            return { profileAttPct:pct+'%', profileAttPresent:p, profileAttLate:l, profileAttAbsent:a, profileAttSessions:tot, profileAttDash:ring.toFixed(1)+' 151', profileAttRingColor: pct>=85?'#1CB87A':(pct>=70?squad.accent:'#F5A623'), profileAttBars:bars, profileAttHasData:tot>0 }; })(),
           onOpenVortexId:()=>this.setState({showVortexId:true}), vortexIdBtnTop: sponsorOn?'calc(max(env(safe-area-inset-top), 44px) + 36px)':'calc(max(env(safe-area-inset-top), 44px) + 4px)',
           vortexIdCard:{
             name:swObj.name, initials:swObj.initials, avatarEl: this.av(this.swimmerPhotos[swObj.id]||null, swObj.initials, 72, 20, 'rgba(255,255,255,.18)', '#fff', 22, 'rgba(255,255,255,.3)'),
