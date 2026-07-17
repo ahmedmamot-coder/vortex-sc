@@ -5808,7 +5808,7 @@ class Component extends DCLogic {
   clockStartFrom(i){ const seq=this.clockSeq(); if(!seq.length) return; const idx=Math.max(0,Math.min(i, seq.length-1)); this.setState({clockSetIdx:idx, clockRep:1, clockRemain:(seq[idx]?seq[idx].interval:0), clockRunning:true, clockFs:true}); this._enterNativeFs(); }
   tickClock(){ const seq=this.clockSeq(); const s=this.state; const cur=seq[s.clockSetIdx]; if(!cur){ this.setState({clockRunning:false}); return; } const remain=s.clockRemain-1; if(remain>0){ this.setState({clockRemain:remain}); return; } if(s.clockRep < cur.reps){ this.setState({clockRep:s.clockRep+1, clockRemain:cur.interval}); return; } if(s.clockSetIdx < seq.length-1){ const ni=s.clockSetIdx+1; this.setState({clockSetIdx:ni, clockRep:1, clockRemain:seq[ni].interval}); return; } this.setState({clockRunning:false, clockRemain:0}); }
 
-  medal(place){ if(place==1) return ['#FCEFD6','#9A6206']; if(place==2) return ['#E7EAF2','#5A657E']; if(place==3) return ['#F3E6DA','#8A5A2B']; return ['#EEF1F5','#7A8296']; }
+  medal(place){ if(place==1) return ['linear-gradient(140deg,#F6C544,#C6890B)','#fff']; if(place==2) return ['linear-gradient(140deg,#DFE3ED,#A9B2C4)','#3A4152']; if(place==3) return ['linear-gradient(140deg,#DBA672,#A5652E)','#fff']; return ['#EEF1F5','#7A8296']; }
 
   aiGenerate(){
     if(this.state.aiLoading) return;
