@@ -319,9 +319,12 @@
   .vx-screen{animation:vxrise .32s cubic-bezier(.22,1,.36,1)}
   .vx-sheet{animation:vxsheet .34s cubic-bezier(.22,1,.36,1)}
   [data-lucide]{stroke-width:2;flex:none}
-  /* Dark mode: invert the light UI and restore photos/videos so they look normal. */
-  main.vx-theme-dark{ filter: invert(1) hue-rotate(180deg); }
+  /* Dark mode: invert only the light content screens (squad/profile). Photos & videos are
+     re-inverted so they look normal, and decorative blend-mode images are hidden (they turn
+     into grey blocks when inverted). Already-dark screens (hub, tools, family) are left alone. */
+  main.vx-theme-dark{ filter: invert(0.94) hue-rotate(180deg); }
   main.vx-theme-dark img, main.vx-theme-dark video, main.vx-theme-dark [data-noinvert]{ filter: invert(1) hue-rotate(180deg); }
+  main.vx-theme-dark [style*="mix-blend"]{ display:none !important; }
   .vx-bar{transform-origin:bottom;animation:vxbar .5s cubic-bezier(.22,1,.36,1)}
   .vx-spin{animation:vxspin .9s linear infinite}
   #vx-print-sheet{display:none}
@@ -6775,7 +6778,7 @@ class Component extends DCLogic {
       onFamSubmit: S.famMode==='login' ? ()=>this.famLogin() : (S.famMode==='forgot' ? ()=>this.famResetPassword() : (S.famMode==='setnew' ? ()=>this.famSetNewPassword() : ()=>this.famRegister())),
       famSubmitLabel: S.famMode==='login' ? (S.famBusy?'Signing in…':'Sign in') : (S.famMode==='forgot' ? (S.famBusy?'Sending…':'Send reset link') : (S.famMode==='setnew' ? (S.famBusy?'Saving…':'Set new password') : (S.famBusy?'Creating…':'Create account'))),
 
-      appThemeClass: S.theme==='dark' ? 'vx-theme-dark' : '',
+      appThemeClass: (S.theme==='dark' && (S.view==='squad'||S.view==='profile')) ? 'vx-theme-dark' : '',
       ...(()=>{ const acc=this._me(); const isFam=!!S.familyUser; const accId=isFam?('fam:'+S.familyUser.id):acc.id;
         const d=isFam?(S.famProfileDraft||{}):(S.staffAccDraft||{});
         const waList=this._waFor(accId).map(t=>({ id:t.id, label:t.label, number:t.number, onRemove:()=>this.removeWaTarget(t.id), onShare:()=>this.sharePlan(S.squadId, t) }));
