@@ -1358,6 +1358,7 @@
                         <button onclick="{{ onSubmitPlanReview }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:7px;background:{{ squad.accent }};color:#fff;border:none;border-radius:12px;height:46px;font-family:inherit;font-weight:700;font-size:14px;cursor:pointer;box-shadow:0 8px 20px {{ squad.glow }}"><i data-lucide="shield-check" style="width:17px;height:17px"></i> Submit for AI Review</button>
                         <button onclick="{{ onShareWhatsapp }}" style="flex:none;width:46px;height:46px;background:#fff;border:1px solid #E5E9F0;border-radius:12px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#0C1116" title="Share to squad"><i data-lucide="send" style="width:17px;height:17px"></i></button>
                         <button onclick="{{ onPrintPlan }}" style="flex:none;width:46px;height:46px;background:#fff;border:1px solid #E5E9F0;border-radius:12px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#0C1116"><i data-lucide="printer" style="width:18px;height:18px"></i></button>
+                        <button onclick="{{ onOpenPaceClock }}" title="Run this session on the pace clock" style="flex:none;width:46px;height:46px;background:var(--vx-blue-tint);border:1px solid var(--vx-blue);border-radius:12px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--vx-blue-dark)"><i data-lucide="timer" style="width:18px;height:18px"></i></button>
                         <button onclick="{{ onResetPlan }}" style="flex:none;width:46px;height:46px;background:#fff;border:1px solid #E5E9F0;border-radius:12px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#7A8296" title="Reset to template"><i data-lucide="rotate-ccw" style="width:18px;height:18px"></i></button>
                       </div>
                       <p style="margin:8px 2px 0;font-size:11px;color:{{ shareNoteColor }};height:14px;font-weight:600">{{ shareNote }}</p>
@@ -2166,6 +2167,16 @@
                   <sc-if value="{{ toolClock }}" hint-placeholder-val="{{ true }}">
                     <sc-if value="{{ clockView.has }}" hint-placeholder-val="{{ true }}">
                       <div style="display:flex;flex-direction:column;gap:14px">
+                        <div style="display:flex;gap:8px">
+                          <button onclick="{{ onClockStartBeginning }}" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;background:var(--vx-blue);color:#fff;border:none;border-radius:14px;padding:12px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer;line-height:1.2"><i data-lucide="play" style="width:18px;height:18px"></i>Start from<br>Beginning</button>
+                          <button onclick="{{ onClockStartSelected }}" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;background:#0A0F1A;color:#fff;border:none;border-radius:14px;padding:12px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer;line-height:1.2"><i data-lucide="target" style="width:18px;height:18px"></i>Start from<br>Selected</button>
+                        </div>
+                        <div style="display:flex;flex-direction:column;gap:6px">
+                          <sc-for list="{{ clockRows }}" as="c" hint-placeholder-count="6">
+                            <sc-if value="{{ c.isHead }}" hint-placeholder-val="{{ false }}"><p style="margin:6px 2px 1px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ squad.accent }}">{{ c.section }}</p></sc-if>
+                            <button onclick="{{ c.onSelect }}" style="display:flex;align-items:center;gap:11px;width:100%;text-align:left;background:{{ c.bg }};border:1px solid {{ c.border }};border-radius:12px;padding:10px 12px;cursor:pointer;font-family:inherit"><span style="flex:none;min-width:78px"><span style="display:block;font-family:var(--font-mono);font-size:14px;font-weight:800;color:{{ c.distFg }}">{{ c.distLabel }}</span><span style="display:block;font-size:10.5px;color:#9AA2B4;font-weight:700">{{ c.intervalLabel }}</span></span><span style="flex:1;min-width:0;font-size:12.5px;font-weight:600;color:#0C1116">{{ c.txt }}</span><sc-if value="{{ c.selected }}" hint-placeholder-val="{{ false }}"><i data-lucide="check-circle-2" style="width:18px;height:18px;color:{{ squad.accent }};flex:none"></i></sc-if></button>
+                          </sc-for>
+                        </div>
                         <div style="background:#0A0F1A;color:#fff;border-radius:20px;padding:22px 18px;text-align:center">
                           <p style="margin:0;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">{{ clockView.section }}</p>
                           <div style="position:relative;width:184px;height:184px;margin:14px auto 8px">
@@ -5783,6 +5794,9 @@ class Component extends DCLogic {
   clockFsEnter(){ this.setState({clockFs:true}); this._enterNativeFs(); }
   clockFsExit(){ this.setState({clockFs:false}); this._exitNativeFs(); }
   clockJump(d){ const seq=this.clockSeq(); let i=this.state.clockSetIdx+d; if(i<0)i=0; if(i>seq.length-1)i=Math.max(0,seq.length-1); this.setState({clockSetIdx:i, clockRep:1, clockRemain:(seq[i]?seq[i].interval:0), clockRunning:false}); }
+  clockSelect(i){ const seq=this.clockSeq(); const idx=Math.max(0,Math.min(i, seq.length-1)); this.setState({clockSetIdx:idx, clockRep:1, clockRemain:(seq[idx]?seq[idx].interval:0), clockRunning:false}); }
+  // Start the clock from a chosen set and jump straight into the poolside full-screen view.
+  clockStartFrom(i){ const seq=this.clockSeq(); if(!seq.length) return; const idx=Math.max(0,Math.min(i, seq.length-1)); this.setState({clockSetIdx:idx, clockRep:1, clockRemain:(seq[idx]?seq[idx].interval:0), clockRunning:true, clockFs:true}); this._enterNativeFs(); }
   tickClock(){ const seq=this.clockSeq(); const s=this.state; const cur=seq[s.clockSetIdx]; if(!cur){ this.setState({clockRunning:false}); return; } const remain=s.clockRemain-1; if(remain>0){ this.setState({clockRemain:remain}); return; } if(s.clockRep < cur.reps){ this.setState({clockRep:s.clockRep+1, clockRemain:cur.interval}); return; } if(s.clockSetIdx < seq.length-1){ const ni=s.clockSetIdx+1; this.setState({clockSetIdx:ni, clockRep:1, clockRemain:seq[ni].interval}); return; } this.setState({clockRunning:false, clockRemain:0}); }
 
   medal(place){ if(place==1) return ['#FCEFD6','#9A6206']; if(place==2) return ['#E7EAF2','#5A657E']; if(place==3) return ['#F3E6DA','#8A5A2B']; return ['#EEF1F5','#7A8296']; }
@@ -6234,6 +6248,11 @@ class Component extends DCLogic {
     const clkCur=clkSeq[clkIdx]||null, clkNext=clkSeq[clkIdx+1]||null;
     const clkRemain=S.clockRemain||0; const cMM=Math.floor(clkRemain/60), cSS=clkRemain%60;
     const clockView={ has:clkSeq.length>0, time:cMM+':'+(cSS<10?'0':'')+cSS, section:clkCur?clkCur.section:'—', setTxt:clkCur?clkCur.txt:'', rep:clkCur?('Rep '+S.clockRep+' / '+clkCur.reps):'', nextTxt:clkNext?(clkNext.section+' · '+clkNext.txt):'Session complete' };
+    // Session list (reflects the plan) — tap a set to select, then Start from Selected.
+    const _ivFmt=(sec)=>{ const m=Math.floor((sec||0)/60), s=(sec||0)%60; return m+':'+(s<10?'0':'')+s; };
+    let _lastSec=null; const clockRows=clkSeq.map((st,i)=>{ const head=(st.section!==_lastSec); _lastSec=st.section; const on=(i===clkIdx);
+      return { idx:i, isHead:head, section:st.section||'Set', distLabel:(st.reps>1?(st.reps+' × '+st.dist):('1 × '+st.dist)), intervalLabel:'@ '+_ivFmt(st.interval), txt:st.txt||'', selected:on,
+        bg:on?'var(--vx-blue-tint)':'#fff', border:on?'var(--vx-blue)':'#E5E9F0', distFg:on?'var(--vx-blue-dark)':squad.accent, onSelect:()=>this.clockSelect(i) }; });
     const clkProg=clkCur?Math.max(0,Math.min(1,1-(clkRemain/(clkCur.interval||1)))):0;
     const clockDash=(clkProg*326.7).toFixed(1)+' 326.7';
 
@@ -7034,7 +7053,7 @@ class Component extends DCLogic {
           onPlanCalNext:()=>{ let m=calM+1,y=calY; if(m>11){m=0;y++;} this.setState({planCalM:m,planCalY:y}); },
           planCalDaySel:!!daySel, planCalSelLabel:selLabel, onPlanCalClearDay:()=>this.setState({planCalDay:null}),
           planCalDaySessions:daySessions, planCalDayHasSessions:daySessions.length>0, planCalDayKm:daySelKm }; })(),
-      onShareWhatsapp:()=>this.setState({shareOpen:true, shareMsg:''}), onPrintPlan:()=>this.setState({printPreviewOpen:true}),
+      onShareWhatsapp:()=>this.setState({shareOpen:true, shareMsg:''}), onPrintPlan:()=>this.setState({printPreviewOpen:true}), onOpenPaceClock:()=>this.openTool('clock', false),
       onSubmitPlanReview:()=>this.submitPlanForReview(S.squadId, squad.name),
       onClosePrintPreview:()=>this.setState({printPreviewOpen:false}), onConfirmPrint:()=>{ this._printEscape(); setTimeout(()=>window.print(), 30); }, printPreviewOpen:S.printPreviewOpen,
       printSheet:{ accent:squad.accent, clubName:this.brandConfig.clubName||'Vortex Swimming Club', squadName:squad.name, printDate:new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}), zoneLabel:(zoneRows[zi]?zoneRows[zi].code+' \u00b7 '+zoneRows[zi].name:zName), title:sessionTitle||'Session', coach:squad.coach, total:planTotalN.toLocaleString(),
@@ -7471,6 +7490,7 @@ class Component extends DCLogic {
       reviewTabBg1:rvMode==='review'?'var(--vx-blue)':'transparent', reviewTabFg1:rvMode==='review'?'#fff':'#7A8296', reviewTabBg2:rvMode==='guide'?'var(--vx-blue)':'transparent', reviewTabFg2:rvMode==='guide'?'#fff':'#7A8296',
       clockView, clockDash, clockEmpty:clkSeq.length===0, clockBtnIcon:S.clockRunning?'pause':'play', clockBtnLabel:S.clockRunning?'Pause':'Start',
       onClockToggle:()=> S.clockRunning?this.clockPause():this.clockStart(), onClockReset:()=>this.clockReset(), onClockPrev:()=>this.clockJump(-1), onClockNext:()=>this.clockJump(1),
+      clockRows, onClockStartBeginning:()=>this.clockStartFrom(0), onClockStartSelected:()=>this.clockStartFrom(S.clockSetIdx),
       clockFs:S.clockFs, onClockFsEnter:()=>this.clockFsEnter(), onClockFsExit:()=>this.clockFsExit(),
       energyZones, insightAttend, insightStats, insChips, insightsShowPicker, insightScopeLabel,
       boardChips, boardTitle, boardMeta, boardRows, boardEmpty, boardIsComp, boardEvent, onBoardEvent,
