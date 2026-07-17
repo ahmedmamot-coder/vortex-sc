@@ -319,12 +319,11 @@
   .vx-screen{animation:vxrise .32s cubic-bezier(.22,1,.36,1)}
   .vx-sheet{animation:vxsheet .34s cubic-bezier(.22,1,.36,1)}
   [data-lucide]{stroke-width:2;flex:none}
-  /* Dark mode: invert only the light content screens (squad/profile). Photos & videos are
-     re-inverted so they look normal, and decorative blend-mode images are hidden (they turn
-     into grey blocks when inverted). Already-dark screens (hub, tools, family) are left alone. */
-  main.vx-theme-dark{ filter: invert(0.94) hue-rotate(180deg); }
-  main.vx-theme-dark img, main.vx-theme-dark video, main.vx-theme-dark [data-noinvert]{ filter: invert(1) hue-rotate(180deg); }
-  main.vx-theme-dark [style*="mix-blend"]{ display:none !important; }
+  /* Dark mode: the main scroll area gets an inline `filter:invert(...)` on the light screens.
+     We key the helper rules off that inline style so photos/videos are re-inverted (look normal)
+     and decorative blend-mode overlays are hidden (they'd become grey blocks when inverted). */
+  main[style*="invert("] img, main[style*="invert("] video, main[style*="invert("] [data-noinvert]{ filter: invert(1) hue-rotate(180deg); }
+  main[style*="invert("] [style*="mix-blend"]{ display:none !important; }
   .vx-bar{transform-origin:bottom;animation:vxbar .5s cubic-bezier(.22,1,.36,1)}
   .vx-spin{animation:vxspin .9s linear infinite}
   #vx-print-sheet{display:none}
@@ -472,7 +471,7 @@
         <!-- ================= APP ================= -->
         <sc-if value="{{ showApp }}" hint-placeholder-val="{{ true }}">
           <div style="height:100%;display:flex;flex-direction:column;position:relative;background:{{ appTopColor }}">
-            <main class="vx-scroll {{ appThemeClass }}" style="flex:1;overflow-y:auto;overflow-x:hidden;position:relative;background:url('assets/b798adf9.png') no-repeat top 10px right 10px / 34px auto local, url('assets/pattern-transparent.png') repeat-y top right / 150px auto local, #EEF1F5">
+            <main class="vx-scroll" style="filter:{{ appThemeFilter }};flex:1;overflow-y:auto;overflow-x:hidden;position:relative;background:url('assets/b798adf9.png') no-repeat top 10px right 10px / 34px auto local, url('assets/pattern-transparent.png') repeat-y top right / 150px auto local, #EEF1F5">
 
               <!-- ===== HUB ===== -->
               <sc-if value="{{ showHub }}" hint-placeholder-val="{{ true }}">
@@ -6778,7 +6777,7 @@ class Component extends DCLogic {
       onFamSubmit: S.famMode==='login' ? ()=>this.famLogin() : (S.famMode==='forgot' ? ()=>this.famResetPassword() : (S.famMode==='setnew' ? ()=>this.famSetNewPassword() : ()=>this.famRegister())),
       famSubmitLabel: S.famMode==='login' ? (S.famBusy?'Signing in…':'Sign in') : (S.famMode==='forgot' ? (S.famBusy?'Sending…':'Send reset link') : (S.famMode==='setnew' ? (S.famBusy?'Saving…':'Set new password') : (S.famBusy?'Creating…':'Create account'))),
 
-      appThemeClass: (S.theme==='dark' && (S.view==='squad'||S.view==='profile')) ? 'vx-theme-dark' : '',
+      appThemeFilter: (S.theme==='dark' && (S.view==='squad'||S.view==='profile'||S.view==='admin'||S.view==='move')) ? 'invert(0.94) hue-rotate(180deg)' : 'none',
       ...(()=>{ const acc=this._me(); const isFam=!!S.familyUser; const accId=isFam?('fam:'+S.familyUser.id):acc.id;
         const d=isFam?(S.famProfileDraft||{}):(S.staffAccDraft||{});
         const waList=this._waFor(accId).map(t=>({ id:t.id, label:t.label, number:t.number, onRemove:()=>this.removeWaTarget(t.id), onShare:()=>this.sharePlan(S.squadId, t) }));
