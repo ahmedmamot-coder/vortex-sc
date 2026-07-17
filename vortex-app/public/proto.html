@@ -6144,18 +6144,18 @@ class Component extends DCLogic {
     const seasonTotalWeeks=season.phases.reduce((a,p)=>a+Math.max(1,parseInt(p.weeks,10)||1),0);
     let wISO=season.start, wn=1; const seasonWeeks=[];
     season.phases.forEach((ph,pi)=>{ const col=seasonPhaseColors[pi%seasonPhaseColors.length]; const lm=this._seasonLoadMeta(ph.load); const nweeks=Math.max(1,parseInt(ph.weeks,10)||1);
-      for(let i=0;i<nweeks;i++){ const startISO=wISO, endISO=this._addDaysISO(wISO,6);
+      for(let i=0;i<nweeks;i++){ const startISO=wISO, endISO=this._addDaysISO(wISO,6); const wnum=wn;
         const wkMeets=seasonMeets.filter(m=>m.iso>=startISO && m.iso<=endISO);
         const sess=seasonSaved.filter(sp=>sp.date && sp.date>=startISO && sp.date<=endISO);
         const isTarget=wkMeets.some(m=>(season.targets||[]).includes(m.name));
-        seasonWeeks.push({ n:wn, phase:ph.name, phaseColor:col, loadLabel:(ph.loadLabel&&String(ph.loadLabel).trim())?ph.loadLabel:lm.label, loadPct:lm.pct, loadColor:lm.color,
+        seasonWeeks.push({ n:wnum, phase:ph.name, phaseColor:col, loadLabel:(ph.loadLabel&&String(ph.loadLabel).trim())?ph.loadLabel:lm.label, loadPct:lm.pct, loadColor:lm.color,
           startISO, endISO, dateLabel:this._fmtDMY(startISO)+' – '+this._fmtDMY(endISO),
           meets:wkMeets.map(m=>({name:m.name, target:(season.targets||[]).includes(m.name), bg:(season.targets||[]).includes(m.name)?'#E5484D':'#EEF1F5', fg:(season.targets||[]).includes(m.name)?'#fff':'#5A657E'})), hasMeets:wkMeets.length>0,
           isTarget, sessionCount:sess.length, sessionM:sess.reduce((a,x)=>a+(x.totalM||0),0),
           weekKm:(sess.reduce((a,x)=>a+(x.totalM||0),0)/1000).toFixed(1), avgKm: sess.length? ((sess.reduce((a,x)=>a+(x.totalM||0),0)/sess.length)/1000).toFixed(1) : '0',
           hasSessions:sess.length>0, sessions:sess.slice().sort((a,b)=>((a.date||'').localeCompare(b.date||''))||((a.slot==='PM'?1:0)-(b.slot==='PM'?1:0))).map(sp=>{ const slm=sp.slot==='PM'?{l:'PM',bg:'#EDE7FF',fg:'#6D28D9'}:{l:'AM',bg:'#E3F0FF',fg:'#0C6CE0'}; return {id:sp.id, title:sp.title||'Session', zone:sp.zone||'—', slotLabel:slm.l, slotBg:slm.bg, slotFg:slm.fg, m:(sp.totalM||0).toLocaleString(), dateLabel:this._fmtDMY(sp.date), onView:()=>this.viewPlanSnapshotPdf(S.squadId,sp.id), onEdit:()=>this.loadPlanSnapshot(S.squadId,sp.id)}; }),
           onAddSession:()=>this.seasonAddSessionForWeek(startISO),
-          open:(S.seasonOpenWeek===wn), chevron:(S.seasonOpenWeek===wn)?'chevron-up':'chevron-down', onToggle:()=>this.setState({seasonOpenWeek:S.seasonOpenWeek===wn?null:wn}) });
+          open:(S.seasonOpenWeek===wnum), chevron:(S.seasonOpenWeek===wnum)?'chevron-up':'chevron-down', onToggle:()=>this.setState({seasonOpenWeek:S.seasonOpenWeek===wnum?null:wnum}) });
         wISO=this._addDaysISO(wISO,7); wn++;
       }
     });
