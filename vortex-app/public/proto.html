@@ -2616,7 +2616,13 @@
                   <sc-if value="{{ toolSeason }}" hint-placeholder-val="{{ true }}">
                     <div style="display:flex;flex-direction:column;gap:14px">
                       <div style="background:linear-gradient(135deg,#4B2D9E,#7C4DFF);color:#fff;border-radius:16px;padding:15px 16px">
-                        <div style="display:flex;align-items:center;gap:11px;margin-bottom:11px"><span style="width:40px;height:40px;flex:none;border-radius:12px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center"><i data-lucide="calendar-range" style="width:21px;height:21px"></i></span><input value="{{ seasonName }}" oninput="{{ onSeasonName }}" style="flex:1;min-width:0;background:none;border:none;outline:none;color:#fff;font-family:inherit;font-size:16px;font-weight:800;padding:0"></div>
+                        <div style="display:flex;align-items:center;gap:11px;margin-bottom:9px"><span style="width:40px;height:40px;flex:none;border-radius:12px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center"><i data-lucide="calendar-range" style="width:21px;height:21px"></i></span><input value="{{ seasonName }}" oninput="{{ onSeasonName }}" placeholder="Season name" style="flex:1;min-width:0;background:rgba(255,255,255,.12);border:none;border-radius:9px;outline:none;color:#fff;font-family:inherit;font-size:16px;font-weight:800;padding:8px 10px"><i data-lucide="pencil" style="width:15px;height:15px;color:rgba(255,255,255,.6);flex:none"></i></div>
+                        <div class="vx-scroll" style="display:flex;gap:6px;overflow-x:auto;margin-bottom:11px;padding-bottom:2px">
+                          <span style="flex:none;align-self:center;font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.6)">Choose:</span>
+                          <sc-for list="{{ seasonChoices }}" as="sc" hint-placeholder-count="4">
+                            <button onclick="{{ sc.onSelect }}" style="flex:none;background:{{ sc.bg }};color:{{ sc.fg }};border:none;border-radius:999px;padding:6px 13px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">{{ sc.label }}</button>
+                          </sc-for>
+                        </div>
                         <div style="display:flex;gap:8px">
                           <div style="flex:1;background:rgba(255,255,255,.12);border-radius:11px;padding:8px 10px"><span style="display:block;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.65);font-weight:700">From (Mon)</span><input value="{{ seasonStart }}" oninput="{{ onSeasonStart }}" type="date" style="width:100%;background:none;border:none;outline:none;color:#fff;font-family:var(--font-mono);font-size:12.5px;font-weight:700;padding:2px 0 0"></div>
                           <div style="flex:1;background:rgba(255,255,255,.12);border-radius:11px;padding:8px 10px"><span style="display:block;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.65);font-weight:700">To</span><input value="{{ seasonEndISO }}" oninput="{{ onSeasonEnd }}" type="date" style="width:100%;background:none;border:none;outline:none;color:#fff;font-family:var(--font-mono);font-size:12.5px;font-weight:700;padding:2px 0 0"></div>
@@ -5350,6 +5356,8 @@ class Component extends DCLogic {
   _seasonPush(id){ if(!window.__vxUpsert||id==null) return; this._seaTimers=this._seaTimers||{}; clearTimeout(this._seaTimers[id]); this._seaTimers[id]=setTimeout(()=>{ const season=(this.seasonPlans||{})[id]; if(season==null) return; try{ window.__vxUpsert('season_plans',[{id:String(id), season:season, ts:Date.now(), updated_at:new Date().toISOString()}]); }catch(e){} }, 500); }
   async _seasonFetch(){ if(!window.__vxSelect) return; const rows=await window.__vxSelect('season_plans','select=id,season,ts,updated_at'); if(!rows||!Array.isArray(rows)) return; const all={...(this.seasonPlans||{})}; const edited=this._editedSeasons||{}; let changed=false; rows.forEach(r=>{ if(!r||!r.id||r.season==null) return; if(edited[r.id]) return; if(JSON.stringify(all[r.id])!==JSON.stringify(r.season)){ all[r.id]=r.season; changed=true; } }); if(changed){ this.seasonPlans=all; try{ (window.__vxsetlocal||localStorage.setItem.bind(localStorage))('vx_season', JSON.stringify(all)); }catch(e){} this.setState({}); } }
   setSeasonField(squadId, field, val){ this.mutateSeason(squadId, s=>{ s[field]=val; }); }
+  // Pick a season year: sets the name and the start (first Monday on/after 1 Sep of that year).
+  seasonChoose(squadId, startY){ const sep=this._mondayISO(startY+'-09-01'); this.mutateSeason(squadId, s=>{ s.name=startY+' / '+(startY+1)+' Season'; s.start=sep; }); }
   seasonAddPhase(squadId){ this.mutateSeason(squadId, s=>{ s.phases.push({id:this._uid('ph'), name:'New phase', weeks:2, load:'medium'}); }); }
   seasonRemovePhase(squadId, pid){ this.mutateSeason(squadId, s=>{ s.phases=s.phases.filter(p=>p.id!==pid); if(!s.phases.length) s.phases=this.makeDefaultSeason().phases; }); }
   seasonPhaseField(squadId, pid, field, val){ this.mutateSeason(squadId, s=>{ const p=s.phases.find(x=>x.id===pid); if(p) p[field]=val; }); }
@@ -7365,6 +7373,8 @@ class Component extends DCLogic {
       toolRelay:S.tool==='relay', relayGroups, relayHasGroups, relayScopeLabel:toolScope, ...relayPicker,
       toolSeason:S.tool==='season',
       seasonName:season.name, onSeasonName:(e)=>this.setSeasonField(S.squadId,'name',e.target.value),
+      seasonChoices:(()=>{ const now=new Date(); const baseY=(now.getMonth()>=8)?now.getFullYear():now.getFullYear()-1; const yrs=[baseY-1,baseY,baseY+1,baseY+2];
+        return yrs.map(y=>{ const label=y+'/'+(y+1); const on=(season.name||'').indexOf(String(y)+' / '+(y+1))===0; return {label, y, on, bg:on?'#fff':'rgba(255,255,255,.14)', fg:on?'#4B2D9E':'#fff', onSelect:()=>this.seasonChoose(S.squadId, y)}; }); })(),
       seasonStart:season.start, onSeasonStart:(e)=>this.setSeasonField(S.squadId,'start', this._mondayISO(e.target.value)),
       seasonEndISO, onSeasonEnd:(e)=>this.setSeasonEnd(S.squadId, e.target.value),
       seasonStartLabel:this._fmtDMY(season.start, true), seasonEndLabel:this._fmtDMY(seasonEndISO, true),
