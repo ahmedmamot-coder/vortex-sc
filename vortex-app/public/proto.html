@@ -3879,7 +3879,8 @@ class Component extends DCLogic {
     // tiny local cache (URLs only) for instant display; the table is the source of truth.
     this.swimmerDocs=this._loadJSON('vx_docs_cache', {});
     this.sponsoredMap=this._loadJSON('vx_sponsored', {});
-    this.swimmerPhotos=this._loadJSON('vx_sw_photos', {});
+    this.swimmerPhotos=this._sanitizePhotos(this._loadJSON('vx_sw_photos', {}));
+    try{ this._saveJSON('vx_sw_photos', this.swimmerPhotos); }catch(e){}
     this.fitnessTests=this._loadJSON('vx_fitness_tests', {});
     this.aiSuggOverrides=this._loadJSON('vx_ai_sugg_ovr', {});
     this.promoStore=this._loadJSON('vx_promo', {});
@@ -4664,19 +4665,28 @@ class Component extends DCLogic {
     this.setState({inbodyForm:{weight:'',fat:'',muscle:''}});
   }
   deleteInbody(swId, idx){ const m=this._swMeta(swId); const list=(m.inbody||[]).slice(); list.splice(idx,1); this._saveSwMeta(swId, {...m, inbody:list}); }
-  savePhoto(swId, dataUrl){ this.swimmerPhotos={...this.swimmerPhotos, [swId]:dataUrl}; this._saveJSON('vx_sw_photos', this.swimmerPhotos); this.forceUpdate(); }
+  // Only small http(s) URLs are kept in vx_sw_photos now (the actual image lives in Storage), so
+  // this key can never overflow the localStorage quota the way base64 photos did.
+  _sanitizePhotos(map){ const out={}; Object.keys(map||{}).forEach(k=>{ const v=map[k]; if(typeof v==='string' && /^https?:\/\//.test(v)) out[k]=v; }); return out; }
+  savePhoto(swId, url){ this.swimmerPhotos={...this.swimmerPhotos, [swId]:url}; this._saveJSON('vx_sw_photos', this.swimmerPhotos); this.forceUpdate(); }
   async handlePhotoUpload(e, swId){
     const file=e.target.files && e.target.files[0]; e.target.value=''; if(!file) return;
-    const img=new Image();
-    const url=URL.createObjectURL(file);
-    await new Promise((res,rej)=>{ img.onload=res; img.onerror=rej; img.src=url; });
-    const size=240;
-    const canvas=document.createElement('canvas'); canvas.width=size; canvas.height=size;
-    const ctx=canvas.getContext('2d');
-    const s=Math.min(img.width,img.height);
-    ctx.drawImage(img, (img.width-s)/2, (img.height-s)/2, s, s, 0, 0, size, size);
-    URL.revokeObjectURL(url);
-    this.savePhoto(swId, canvas.toDataURL('image/jpeg', 0.85));
+    this.setState({docBusy:'photo', docMsg:'Uploading photo…'});
+    try{
+      const img=new Image(); const objUrl=URL.createObjectURL(file);
+      await new Promise((res,rej)=>{ img.onload=res; img.onerror=rej; img.src=objUrl; });
+      const size=320; const canvas=document.createElement('canvas'); canvas.width=size; canvas.height=size;
+      const ctx=canvas.getContext('2d'); const s=Math.min(img.width,img.height);
+      ctx.drawImage(img, (img.width-s)/2, (img.height-s)/2, s, s, 0, 0, size, size);
+      URL.revokeObjectURL(objUrl);
+      const blob=await new Promise((res)=>canvas.toBlob(res, 'image/jpeg', 0.85));
+      if(!blob) throw new Error('could not process image');
+      if(!window.__vxUploadFile) throw new Error('storage unavailable');
+      const url=await window.__vxUploadFile('photos/'+swId+'-'+Date.now()+'.jpg', blob);
+      if(!url) throw new Error(window.__vxUploadErr||'upload failed');
+      this.savePhoto(swId, url);
+      this.setState({docBusy:null, docMsg:'Photo saved ✓'});
+    }catch(err){ this.setState({docBusy:null, docMsg:'Photo upload failed — '+((err&&err.message)||'try again')}); }
   }
   removePhoto(swId){ const p={...this.swimmerPhotos}; delete p[swId]; this.swimmerPhotos=p; this._saveJSON('vx_sw_photos', p); this.forceUpdate(); }
   async profileInbodyPdf(e, swId){
@@ -6014,7 +6024,7 @@ class Component extends DCLogic {
     this.squadGoals=g('vx_squad_goals', this.squadGoals);
     this.swimmerMeta=this._sanitizeMeta(g('vx_sw_meta', this.swimmerMeta));
     this.sponsoredMap=g('vx_sponsored', this.sponsoredMap);
-    this.swimmerPhotos=g('vx_sw_photos', this.swimmerPhotos);
+    this.swimmerPhotos=this._sanitizePhotos(g('vx_sw_photos', this.swimmerPhotos));
     this.staffOverrides=g('vx_staff_ovr', this.staffOverrides);
     this.meetStatus=g('vx_meet_status', this.meetStatus); this.meetEntries=g('vx_meet_entries', this.meetEntries);
     this.customMeets=g('vx_custom_meets', this.customMeets); this.eventRequests=g('vx_event_requests', this.eventRequests);
