@@ -39,12 +39,27 @@ if ('serviceWorker' in navigator) {
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
   window.__vxWriteTs = {};   // last time THIS device wrote each key (ms) — guards against stale pulls
+  // ---- Auth session (Supabase GoTrue) ----------------------------------------------------
+  // When a user is signed in, every data request carries THEIR JWT, so the database can
+  // enforce per-user access (row-level security). When signed out — or for staff who aren't
+  // on Auth yet — it falls back to the anon key, so all existing flows keep working unchanged.
+  window.__VX_AUTH = null;
+  function _saveAuth(a){ window.__VX_AUTH = a; try{ if(a) localStorage.setItem('vx_auth', JSON.stringify(a)); else localStorage.removeItem('vx_auth'); }catch(e){} }
+  function _curTok(){ var a=window.__VX_AUTH; if(a && a.token && a.exp && Date.now() < (a.exp - 5000)) return a.token; return SB_ANON; }
+  function dyn(extra){ var h={ "apikey": SB_ANON, "Authorization": "Bearer " + _curTok(), "Content-Type": "application/json" }; return extra ? Object.assign(h, extra) : h; }
+  var _refreshTimer=null;
+  function _scheduleRefresh(){ if(_refreshTimer) clearTimeout(_refreshTimer); var a=window.__VX_AUTH; if(!a||!a.refresh) return; var due=a.exp - Date.now() - 60000; if(due<0) due=0; if(due>3000000) due=3000000; _refreshTimer=setTimeout(_doRefresh, due); }
+  function _doRefresh(){ var a=window.__VX_AUTH; if(!a||!a.refresh) return; fetch(SB_URL+"/auth/v1/token?grant_type=refresh_token", { method:"POST", headers:{ "apikey":SB_ANON, "Content-Type":"application/json" }, body: JSON.stringify({ refresh_token:a.refresh }) }).then(function(r){ return r.ok? r.json():null; }).then(function(j){ if(j && j.access_token){ window.__vxSetAuth(j); } else { _saveAuth(null); } }).catch(function(){}); }
+  window.__vxSetAuth = function(session){ if(!session || !session.access_token) return; var exp=Date.now() + ((session.expires_in? session.expires_in*1000 : 3600000)); _saveAuth({ token:session.access_token, refresh:session.refresh_token||null, exp:exp, uid:(session.user&&session.user.id)||null, email:(session.user&&session.user.email)||null }); _scheduleRefresh(); };
+  window.__vxClearAuth = function(){ if(_refreshTimer) clearTimeout(_refreshTimer); _saveAuth(null); };
+  window.__vxAuthUid = function(){ return window.__VX_AUTH ? window.__VX_AUTH.uid : null; };
+  try{ var _ra=localStorage.getItem('vx_auth'); if(_ra){ var _pa=JSON.parse(_ra); if(_pa && _pa.token){ window.__VX_AUTH=_pa; if(_pa.exp && Date.now() > (_pa.exp - 60000)) _doRefresh(); else _scheduleRefresh(); } } }catch(e){}
   function pushKey(k, v){
     if (SYNC.indexOf(k) === -1) return;
     var val; try { val = JSON.parse(v); } catch(e){ return; }
     window.__vxWriteTs[k] = Date.now();
     try {
-      fetch(REST, { method:"POST", headers: Object.assign({}, HEAD, {"Prefer":"resolution=merge-duplicates,return=minimal"}),
+      fetch(REST, { method:"POST", headers: dyn({"Prefer":"resolution=merge-duplicates,return=minimal"}),
         body: JSON.stringify([{ key:k, value:val, updated_at:new Date().toISOString() }]) })
       .then(function(r){ window.__vxSyncOk = r.ok; if(!r.ok){ r.text().then(function(t){ try{ console.warn("vx sync HTTP "+r.status+" on "+k+": "+t); }catch(e){} }); } })
       .catch(function(e){ window.__vxSyncOk=false; try{ console.warn("vx sync network error on "+k, e); }catch(x){} });
@@ -52,23 +67,23 @@ if ('serviceWorker' in navigator) {
   }
   function pull(keys){
     var url = REST + "?select=key,value,updated_at&key=in.(" + keys.join(",") + ")";
-    return fetch(url, { headers: HEAD }).then(function(r){ return r.ok ? r.json() : []; }).catch(function(){ return []; });
+    return fetch(url, { headers: dyn() }).then(function(r){ return r.ok ? r.json() : []; }).catch(function(){ return []; });
   }
   window.__vxpush = pushKey;
   window.__vxpull = pull;
   window.__VX_SB = { url: SB_URL, anon: SB_ANON, head: HEAD };
   // Generic table helpers — used by the Lounge chat, where each message is its own row
   // (append-only INSERT), so posts can never overwrite each other.
-  window.__vxInsert = function(table, rows){ return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: Object.assign({}, HEAD, {"Prefer":"return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(!r.ok){ r.text().then(function(t){ try{console.warn("vx insert "+table+" HTTP "+r.status+": "+t);}catch(e){} }); } return r.ok; }).catch(function(){ return false; }); };
-  window.__vxSelect = function(table, qs){ return fetch(SB_URL+"/rest/v1/"+table+(qs?("?"+qs):""), { headers: HEAD }).then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; }); };
-  window.__vxDelete = function(table, qs){ return fetch(SB_URL+"/rest/v1/"+table+"?"+qs, { method:"DELETE", headers: HEAD }).then(function(r){ return r.ok; }).catch(function(){ return false; }); };
-  window.__vxUpsert = function(table, rows){ return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: Object.assign({}, HEAD, {"Prefer":"resolution=merge-duplicates,return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(!r.ok){ r.text().then(function(t){ try{console.warn("vx upsert "+table+" HTTP "+r.status+": "+t);}catch(e){} }); } return r.ok; }).catch(function(){ return false; }); };
+  window.__vxInsert = function(table, rows){ return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":"return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(!r.ok){ r.text().then(function(t){ try{console.warn("vx insert "+table+" HTTP "+r.status+": "+t);}catch(e){} }); } return r.ok; }).catch(function(){ return false; }); };
+  window.__vxSelect = function(table, qs){ return fetch(SB_URL+"/rest/v1/"+table+(qs?("?"+qs):""), { headers: dyn() }).then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; }); };
+  window.__vxDelete = function(table, qs){ return fetch(SB_URL+"/rest/v1/"+table+"?"+qs, { method:"DELETE", headers: dyn() }).then(function(r){ return r.ok; }).catch(function(){ return false; }); };
+  window.__vxUpsert = function(table, rows){ return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":"resolution=merge-duplicates,return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(!r.ok){ r.text().then(function(t){ try{console.warn("vx upsert "+table+" HTTP "+r.status+": "+t);}catch(e){} }); } return r.ok; }).catch(function(){ return false; }); };
   // Upload a file (photo/video) to the public "vx-media" Storage bucket and return its public URL,
   // or null on failure. Used for fitness-exercise demo photos & videos so large files never sit in
   // the sync blob. Requires the vx-media bucket + anon policies (see setup notes).
   window.__vxUploadFile = function(path, file){
     var base = SB_URL + "/storage/v1/object/vx-media/" + path;
-    return fetch(base, { method:"POST", headers: { "apikey":SB_ANON, "Authorization":"Bearer "+SB_ANON, "Content-Type": (file && file.type) || "application/octet-stream", "x-upsert":"true" }, body: file })
+    return fetch(base, { method:"POST", headers: { "apikey":SB_ANON, "Authorization":"Bearer "+_curTok(), "Content-Type": (file && file.type) || "application/octet-stream", "x-upsert":"true" }, body: file })
       .then(function(r){ if(!r.ok){ return r.text().then(function(t){ try{ console.warn("vx upload HTTP "+r.status+": "+t); }catch(e){} return null; }); } return SB_URL + "/storage/v1/object/public/vx-media/" + path; })
       .catch(function(e){ try{ console.warn("vx upload error", e); }catch(x){} return null; });
   };
@@ -5393,7 +5408,8 @@ class Component extends DCLogic {
     try { await this._familyFetch(); } catch(e){}
     const existing=this.family||this.state.family||[];
     if(existing.find(f=>(f.email||'').trim().toLowerCase()===email)) return this.setState({famErr:'An account with this email already exists \u2014 sign in instead.'});
-    const rec={id:this._uid('fam')+'_'+Math.random().toString(36).slice(2,5), name:S.famName.trim(), email, phone:phoneDigits, pass:S.famPass, role:S.famRole, swimmerIds:S.famPicked.slice()};
+    // Password is NOT stored here anymore — Supabase Auth holds it securely (hashed).
+    const rec={id:this._uid('fam')+'_'+Math.random().toString(36).slice(2,5), name:S.famName.trim(), email, phone:phoneDigits, pass:'', role:S.famRole, swimmerIds:S.famPicked.slice()};
     this.setState({famErr:'', famBusy:true});
     const _authRes=await this._authPost('/signup?redirect_to='+encodeURIComponent(location.origin+location.pathname), {email, password:S.famPass, data:{name:rec.name, phone:phoneDigits, role:rec.role, swimmer_ids:rec.swimmerIds}});
     if(_authRes.ok===false && !_authRes.netfail){ const _m=(_authRes.j&&(_authRes.j.msg||_authRes.j.error_description||_authRes.j.message))||'Could not create the account.'; if(/registered|already|exists/i.test(_m)) return this.setState({famBusy:false, famErr:'This email is already registered - sign in or reset your password.'}); return this.setState({famBusy:false, famErr:_m}); }
@@ -5418,6 +5434,7 @@ class Component extends DCLogic {
       window.open('https://wa.me/'+waNum+'?text='+waText, '_blank');
     }catch(e){}
     const _ar=this._famRegAuthRes||{}; const _hasSession=_ar.ok && _ar.j && _ar.j.access_token;
+    if(_hasSession && window.__vxSetAuth){ try{ window.__vxSetAuth(_ar.j); }catch(e){} }
     if(_hasSession || _ar.netfail){ try{ localStorage.setItem('vx_session', JSON.stringify({type:'family', email:rec.email})); }catch(e){}
       this.setState({familyUser:rec, familyActiveIdx:0, screen:'app', view:'family', famErr:'', famBusy:false}); }
     else { this.setState({famBusy:false, famMode:'login', famPass:'', famPass2:'', famErr:'', famRegisteredMsg:'Account created! We emailed a confirmation link to '+email+'. Open it, then sign in.'}); }
@@ -5430,6 +5447,7 @@ class Component extends DCLogic {
     // 1) Supabase Auth first (this enforces the email confirmation).
     const res=await this._authPost('/token?grant_type=password', {email, password:pass});
     if(res.ok && res.j && res.j.access_token){
+      if(window.__vxSetAuth){ try{ window.__vxSetAuth(res.j); }catch(e){} }
       try{ await this._familyFetch(); }catch(e){}
       let rec=(this.family||[]).find(f=>(f.email||'').trim().toLowerCase()===email);
       if(!rec){ const u=res.j.user||{}; const md=u.user_metadata||{}; rec={id:u.id||this._uid('fam'), name:md.name||email.split('@')[0], email, phone:md.phone||'', role:md.role||'parent', swimmerIds:md.swimmer_ids||[]};
@@ -5446,7 +5464,7 @@ class Component extends DCLogic {
     if(rec){ try{ localStorage.setItem('vx_session', JSON.stringify({type:'family', email:rec.email})); }catch(e){} return this.setState({familyUser:rec, familyActiveIdx:0, screen:'app', view:'family', famErr:'', famBusy:false}); }
     return this.setState({famBusy:false, famErr:'Wrong email or password - or reset it below.'});
   }
-  famLogout(){ try{ localStorage.removeItem('vx_session'); }catch(e){} this.setState({familyUser:null, screen:'login', loginStage:'accounts', famMode:'login', famName:'', famEmail:'', famPass:'', famPass2:'', famPicked:[], famSearch:'', famErr:''}); }
+  famLogout(){ try{ localStorage.removeItem('vx_session'); }catch(e){} if(window.__vxClearAuth){ try{ window.__vxClearAuth(); }catch(e){} } this.setState({familyUser:null, screen:'login', loginStage:'accounts', famMode:'login', famName:'', famEmail:'', famPass:'', famPass2:'', famPicked:[], famSearch:'', famErr:''}); }
   makeDefaultPlan(){ const t=this.planTemplate; const migrate=(sec)=>({id:this._uid(sec.key[0]||'s'), title:sec.title, sets:sec.sets.map(s=>({id:this._uid(sec.key[0]||'s'), dist:s.dist, txt:s.txt, equip:[...(s.equip||[])], types:[...(s.types||[])], rest:s.rest||''}))}); return {title:t.title, zone:t.zone, sections:t.sections.map(migrate)}; }
   _migratePlan(p){
     if(p && p.sections) return p;
