@@ -1249,10 +1249,27 @@
                     <div class="vx-screen" style="padding:14px 15px 20px">
                       <div style="background:#fff;border:1px solid #E5E9F0;border-radius:17px;padding:15px;box-shadow:0 2px 7px rgba(11,20,40,.05);margin-bottom:12px">
                         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px"><div style="flex:1;min-width:0"><p style="margin:0;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:#9AA2B4;font-weight:700">Session · today</p><input value="{{ sessionTitle }}" oninput="{{ onSessionTitle }}" placeholder="Session name" style="width:100%;margin:3px 0 0;border:none;outline:none;background:none;font-family:inherit;font-size:18px;font-weight:700;color:#0C1116;letter-spacing:-.01em;padding:0"></div><span style="text-align:right;flex:none"><span style="display:block;font-family:var(--font-mono);font-weight:700;font-size:20px;color:{{ squad.accent }};line-height:1">{{ planTotal }}</span><span style="display:block;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4;margin-top:2px">metres</span></span></div>
-                        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:13px">
-                          <sc-for list="{{ zoneOptions }}" as="z" hint-placeholder-count="6">
-                            <button onclick="{{ z.onClick }}" style="border:1px solid {{ z.border }};background:{{ z.bg }};color:{{ z.fg }};border-radius:9px;padding:8px 4px;cursor:pointer;font-family:inherit"><span style="display:block;font-weight:700;font-size:12px">{{ z.id }}</span><span style="display:block;font-size:8.5px;margin-top:1px;opacity:.85">{{ z.label }}</span></button>
-                          </sc-for>
+                        <div style="margin-top:13px;display:flex;flex-direction:column;gap:9px">
+                          <span style="display:flex;align-items:center;gap:8px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:11px;padding:9px 11px">
+                            <i data-lucide="map-pin" style="width:16px;height:16px;color:{{ squad.accent }};flex:none"></i>
+                            <input value="{{ planPoolName }}" oninput="{{ onPlanPoolName }}" placeholder="Pool name (e.g. Hamdan Sports Complex)" style="flex:1;min-width:0;border:none;outline:none;background:none;font-family:inherit;font-size:13px;font-weight:600;color:#0C1116;padding:0">
+                          </span>
+                          <div>
+                            <span style="display:block;font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#B9C0CC;margin:0 2px 5px">Pool length &amp; course</span>
+                            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
+                              <sc-for list="{{ courseOpts }}" as="c" hint-placeholder-count="3">
+                                <button onclick="{{ c.onClick }}" style="border:1px solid {{ c.border }};background:{{ c.bg }};color:{{ c.fg }};border-radius:9px;padding:8px 4px;cursor:pointer;font-family:inherit"><span style="display:block;font-weight:700;font-size:13px">{{ c.len }}</span><span style="display:block;font-size:8.5px;margin-top:1px;opacity:.85">{{ c.course }}</span></button>
+                              </sc-for>
+                            </div>
+                          </div>
+                          <div>
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin:0 2px 5px"><span style="font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#B9C0CC">Session intensity</span><span style="font-size:11px;font-weight:700;color:{{ rpeColor }}">{{ rpeLabel }}</span></div>
+                            <div style="display:grid;grid-template-columns:repeat(10,1fr);gap:4px">
+                              <sc-for list="{{ rpeOpts }}" as="r" hint-placeholder-count="10">
+                                <button onclick="{{ r.onClick }}" style="border:none;border-radius:7px;padding:7px 0;cursor:pointer;font-family:var(--font-mono);font-weight:700;font-size:12px;background:{{ r.bg }};color:{{ r.fg }}">{{ r.n }}</button>
+                              </sc-for>
+                            </div>
+                          </div>
                         </div>
                         <div style="display:flex;gap:7px;margin-top:11px;align-items:center;flex-wrap:wrap">
                           <span style="display:flex;align-items:center;gap:5px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:6px 9px"><i data-lucide="calendar" style="width:15px;height:15px;color:#7A8296"></i><input value="{{ planSessDate }}" oninput="{{ onPlanSessDate }}" type="date" style="border:none;outline:none;background:none;font-family:var(--font-mono);font-size:12.5px;font-weight:700;color:#0C1116"></span>
@@ -4395,7 +4412,11 @@ class Component extends DCLogic {
     text(ML, y, 'Vortex SC coaching app', 'n', 9, grey); nl(24);
     // Title block
     text(ML, y, (plan.title||'Session'), 'b', 15, dark); nl(15);
-    text(ML, y, (sq.name||'Squad')+'  -  '+dl+'  -  '+this.planMetres(plan).toLocaleString()+'m total', 'n', 10, grey); nl(20);
+    text(ML, y, (sq.name||'Squad')+'  -  '+dl+'  -  '+this.planMetres(plan).toLocaleString()+'m total', 'n', 10, grey); nl(14);
+    const courseMap={SCM:'25m SCM', LCM:'50m LCM', SCY:'25y SCY'};
+    const meta2=[]; if(plan.poolName) meta2.push(plan.poolName); meta2.push(courseMap[plan.course||'SCM']);
+    if(Number(plan.rpe)>0) meta2.push('Intensity RPE '+Number(plan.rpe));
+    text(ML, y, meta2.join('  -  '), 'n', 10, grey); nl(20);
     (plan.sections||[]).forEach(sec=>{
       let sub=0; (sec.sets||[]).forEach(s=>sub+=(Number(s.dist)||0)*(Number(s.reps)||1)*(Number(s.circuit)||1));
       if(y<BOT+46){ pages.push(ops); ops=[]; y=TOP; }
@@ -6081,9 +6102,19 @@ class Component extends DCLogic {
         onAdd:()=>this.addPlanSet(S.squadId,sm.id), onAddLadder:()=>this.openLadder(sm.id) };
     });
     const onAddSection=()=>this.addSection(S.squadId);
-    const zoneDefs=[{id:'EN1',label:'Recovery',name:'Recovery'},{id:'EN2',label:'Aerobic',name:'Aerobic Endurance'},{id:'EN3',label:'Threshold',name:'Aerobic Threshold'},{id:'SP1',label:'VO₂ max',name:'VO₂ Max'},{id:'SP2',label:'Lactate',name:'Lactate Tolerance'},{id:'SP3',label:'Sprint',name:'Sprint & Power'}];
-    const zoneOptions=zoneDefs.map(z=>{ const on=plan.zone===z.id; return {id:z.id, label:z.label, onClick:()=>{ this.mutatePlan(S.squadId, p=>{ p.zone=z.id; p.title=z.name; }); },
+    // Pool name / length+course / session intensity (replaced the old per-session zone picker — zones now live per set)
+    const planPoolName=plan.poolName||'';
+    const onPlanPoolName=(e)=>this.setPlanMeta(S.squadId,'poolName',e.target.value);
+    const curCourse=plan.course||'SCM';
+    const courseDefs=[{course:'SCM',len:'25m'},{course:'LCM',len:'50m'},{course:'SCY',len:'25y'}];
+    const courseOpts=courseDefs.map(c=>{ const on=curCourse===c.course; return {course:c.course, len:c.len, onClick:()=>this.setPlanMeta(S.squadId,'course',c.course),
       bg:on?squad.accent:'#fff', fg:on?'#fff':'#3A4152', border:on?squad.accent:'#E5E9F0'}; });
+    const curRpe=Number(plan.rpe)||0;
+    const rpeWord=(n)=> n<=0?'':(n<=3?'Easy':(n<=5?'Moderate':(n<=7?'Hard':(n<=9?'Very hard':'Max'))));
+    const rpeOpts=[1,2,3,4,5,6,7,8,9,10].map(n=>{ const on=curRpe===n; const trail=curRpe>0&&n<curRpe; return {n:String(n), onClick:()=>this.setPlanMeta(S.squadId,'rpe', curRpe===n?0:n),
+      bg:on?squad.accent:(trail?this._hexA(squad.accent,.16):'#F1F3F7'), fg:on?'#fff':(trail?squad.accent:'#8A93A6')}; });
+    const rpeLabel=curRpe>0?('RPE '+curRpe+' · '+rpeWord(curRpe)):'Tap to set';
+    const rpeColor=curRpe>0?squad.accent:'#B9C0CC';
     const sessionTitle=plan.title||'';
     const onSessionTitle=(e)=>this.setPlanMeta(S.squadId,'title',e.target.value);
     const onResetPlan=()=>{ if(window.confirm('Reset this squad\u2019s plan to the default template?')) this.resetPlan(S.squadId); };
@@ -7071,7 +7102,7 @@ class Component extends DCLogic {
           onExportSwimmerResults:()=>{ if(S.resultsSwId) this.exportSwimmerResultsPdf(S.squadId, S.resultsSwId); } }; })(),
       attendYearLabel, attendYearAvgPct, attendYearBars, onAttendYearPrev, onAttendYearNext,
       rosterQuery:S.rosterQuery, onRosterQuery:(e)=>this.setState({rosterQuery:e.target.value}), rosterCountLine, roster, navItems, navBarBg, mainPadBottom,
-      planTotal:planTotalN.toLocaleString(), zoneOptions, planSections, onAddSection, sessionTitle, onSessionTitle, onResetPlan,
+      planTotal:planTotalN.toLocaleString(), planPoolName, onPlanPoolName, courseOpts, rpeOpts, rpeLabel, rpeColor, planSections, onAddSection, sessionTitle, onSessionTitle, onResetPlan,
       onSavePlan:()=>this.savePlanSnapshot(S.squadId), savedPlanMsg:S.savedPlanMsg||'', savedPlanMsgShow:!!S.savedPlanMsg,
       // ---- ladder / pyramid builder (shape + steppers, no typing) ----
       ...(()=>{ const open=!!S.ladderOpen; const pv=open?this.ladderPreview():{steps:[],total:0,timeMin:0,text:'',empty:true};
