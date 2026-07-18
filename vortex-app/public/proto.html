@@ -81,11 +81,13 @@ if ('serviceWorker' in navigator) {
   // Upload a file (photo/video) to the public "vx-media" Storage bucket and return its public URL,
   // or null on failure. Used for fitness-exercise demo photos & videos so large files never sit in
   // the sync blob. Requires the vx-media bucket + anon policies (see setup notes).
+  window.__vxUploadErr = "";
   window.__vxUploadFile = function(path, file){
     var base = SB_URL + "/storage/v1/object/vx-media/" + path;
+    window.__vxUploadErr = "";
     return fetch(base, { method:"POST", headers: { "apikey":SB_ANON, "Authorization":"Bearer "+_curTok(), "Content-Type": (file && file.type) || "application/octet-stream", "x-upsert":"true" }, body: file })
-      .then(function(r){ if(!r.ok){ return r.text().then(function(t){ try{ console.warn("vx upload HTTP "+r.status+": "+t); }catch(e){} return null; }); } return SB_URL + "/storage/v1/object/public/vx-media/" + path; })
-      .catch(function(e){ try{ console.warn("vx upload error", e); }catch(x){} return null; });
+      .then(function(r){ if(!r.ok){ return r.text().then(function(t){ var reason = r.status===404 ? "storage bucket 'vx-media' not found — run the storage SQL" : (r.status===403||r.status===401 ? "storage permission denied (HTTP "+r.status+")" : ("upload HTTP "+r.status)); window.__vxUploadErr = reason; try{ console.warn("vx upload HTTP "+r.status+": "+t); }catch(e){} return null; }); } return SB_URL + "/storage/v1/object/public/vx-media/" + path; })
+      .catch(function(e){ window.__vxUploadErr = "network error reaching storage"; try{ console.warn("vx upload error", e); }catch(x){} return null; });
   };
   // Install write-through sync UP FRONT so every write reaches the database.
   var origSet = localStorage.setItem.bind(localStorage);
@@ -1795,6 +1797,7 @@ if ('serviceWorker' in navigator) {
                               <button onclick="{{ onPickDocMedical }}" style="display:flex;align-items:center;justify-content:space-between;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:10px;padding:9px 11px;cursor:pointer;font-family:inherit"><span style="font-size:12.5px;color:#3A4152;font-weight:600">Medical certificate (full check-up)</span><span style="display:flex;align-items:center;gap:5px;background:#FBE4E4;color:#B42318;border-radius:7px;padding:3px 9px;font-size:10.5px;font-weight:700"><i data-lucide="upload" style="width:11px;height:11px"></i>Missing — upload PDF/photo</span></button>
                             </sc-if>
                             <p style="margin:2px 2px 0;font-size:10.5px;color:#9AA2B4;line-height:1.4">Doctor-issued full physical check-up, required for meet entries per federation rules.</p>
+                            <sc-if value="{{ docMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:6px 2px 0;font-size:11px;font-weight:700;color:{{ docMsgColor }}">{{ docMsg }}</p></sc-if>
                           </div>
                         </div>
 
@@ -4603,11 +4606,11 @@ class Component extends DCLogic {
       const ext=((file.name||'').match(/\.([a-z0-9]+)$/i)||[])[1] || (file.type==='application/pdf'?'pdf':(file.type&&file.type.indexOf('png')>=0?'png':'jpg'));
       const path='docs/'+swId+'/'+key+'-'+Date.now()+'.'+ext;
       const url=await window.__vxUploadFile(path, file);
-      if(!url) throw new Error('upload failed');
+      if(!url) throw new Error(window.__vxUploadErr||'upload failed');
       const m=this._swMeta(swId);
       this._saveSwMeta(swId, {...m, docs:{...m.docs, [key]:{url, name:file.name, type:file.type, uploadedAt:new Date().toISOString().slice(0,10)}}});
-      this.setState({docBusy:null, docMsg:''});
-    }catch(err){ this.setState({docBusy:null, docMsg:'Upload failed — check your connection and try again.'}); }
+      this.setState({docBusy:null, docMsg:'Uploaded & saved ✓'});
+    }catch(err){ this.setState({docBusy:null, docMsg:'Upload failed — '+((err&&err.message)||'try again')}); }
   }
   _openUrl(url){ if(!url) return; try{ const w=window.open(url,'_blank'); if(!w) location.href=url; }catch(e){ try{ location.href=url; }catch(x){} } }
   _openDoc(doc){ if(!doc) return; if(doc.url) this._openUrl(doc.url); else if(doc.dataUrl) this._openDataUrl(doc.dataUrl); }
@@ -7348,6 +7351,7 @@ class Component extends DCLogic {
           onPickDocId:()=>{ const el=document.getElementById('vx-doc-id-input'); if(el) el.click(); },
           onPickDocMedical:()=>{ const el=document.getElementById('vx-doc-medical-input'); if(el) el.click(); },
           onUploadDocBirth:(e)=>this.uploadDoc(e, swObj.id, 'birth'), onUploadDocId:(e)=>this.uploadDoc(e, swObj.id, 'id'), onUploadDocMedical:(e)=>this.uploadDoc(e, swObj.id, 'medical'),
+          docMsg:S2.docMsg||'', docMsgShow:!!S2.docMsg, docMsgColor:/fail|denied|not found|error/i.test(S2.docMsg||'')?'#B42318':'#0C7A4F',
           onViewDocBirth:()=>this._openDoc(docBirth),
           onViewDocMedical:()=>this._openDoc(docMedical),
           onRemoveDocMedical:()=>this.removeDoc(swObj.id,'medical'),
