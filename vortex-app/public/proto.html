@@ -96,7 +96,7 @@ if ('serviceWorker' in navigator) {
   function boot(){ if(booted) return; booted=true; var s=document.createElement("script"); s.src="assets/support.js"; s.onload=hideSplash; document.body.appendChild(s); }
   setTimeout(boot, 2500);
   setTimeout(function(){ hideSplash(); }, 6000);
-  pull(SYNC).then(function(rows){
+  function applyPull(rows, seed){
     var have = {};
     try { (rows||[]).forEach(function(r){ have[r.key]=true; if(r.value==null) return;
       // Only overwrite local with the server copy when the server is newer than the
@@ -108,10 +108,15 @@ if ('serviceWorker' in navigator) {
       if(localVal==null || !localTs || remoteTs>=localTs){ origSet(r.key, JSON.stringify(r.value)); }
       else { pushKey(r.key, localVal); } // local is newer — push it up so the server catches up
     }); } catch(e){}
-    // Seed: upload any local data the database doesn't have yet.
-    try { SYNC.forEach(function(k){ if(have[k]) return; var lv=localStorage.getItem(k); if(lv!=null) pushKey(k, lv); }); } catch(e){}
-    boot();
-  });
+    if(seed){ try { SYNC.forEach(function(k){ if(have[k]) return; var lv=localStorage.getItem(k); if(lv!=null) pushKey(k, lv); }); } catch(e){} }
+  }
+  // Re-pull the shared club data with whatever credentials are current. Called once at boot
+  // (anon) and again right after login (now carrying the user's JWT), so once anonymous reads
+  // are blocked by row-level security, signed-in users still load everything. Fires a DOM event
+  // the app listens for to refresh the screen with the freshly pulled data.
+  window.__vxRepull = function(){ return pull(SYNC).then(function(rows){ applyPull(rows, false);
+    try{ window.dispatchEvent(new Event('vx-data-refreshed')); }catch(e){} return true; }).catch(function(){ return false; }); };
+  pull(SYNC).then(function(rows){ window.__vxBootEmpty = !(rows && rows.length); applyPull(rows, true); boot(); });
 })();
 </script>
 </head>
@@ -5434,7 +5439,7 @@ class Component extends DCLogic {
       window.open('https://wa.me/'+waNum+'?text='+waText, '_blank');
     }catch(e){}
     const _ar=this._famRegAuthRes||{}; const _hasSession=_ar.ok && _ar.j && _ar.j.access_token;
-    if(_hasSession && window.__vxSetAuth){ try{ window.__vxSetAuth(_ar.j); }catch(e){} }
+    if(_hasSession && window.__vxSetAuth){ try{ window.__vxSetAuth(_ar.j); }catch(e){} this._postLoginRefresh(); }
     if(_hasSession || _ar.netfail){ try{ localStorage.setItem('vx_session', JSON.stringify({type:'family', email:rec.email})); }catch(e){}
       this.setState({familyUser:rec, familyActiveIdx:0, screen:'app', view:'family', famErr:'', famBusy:false}); }
     else { this.setState({famBusy:false, famMode:'login', famPass:'', famPass2:'', famErr:'', famRegisteredMsg:'Account created! We emailed a confirmation link to '+email+'. Open it, then sign in.'}); }
@@ -5448,6 +5453,7 @@ class Component extends DCLogic {
     const res=await this._authPost('/token?grant_type=password', {email, password:pass});
     if(res.ok && res.j && res.j.access_token){
       if(window.__vxSetAuth){ try{ window.__vxSetAuth(res.j); }catch(e){} }
+      this._postLoginRefresh();
       try{ await this._familyFetch(); }catch(e){}
       let rec=(this.family||[]).find(f=>(f.email||'').trim().toLowerCase()===email);
       if(!rec){ const u=res.j.user||{}; const md=u.user_metadata||{}; rec={id:u.id||this._uid('fam'), name:md.name||email.split('@')[0], email, phone:md.phone||'', role:md.role||'parent', swimmerIds:md.swimmer_ids||[]};
@@ -5465,6 +5471,10 @@ class Component extends DCLogic {
     return this.setState({famBusy:false, famErr:'Wrong email or password - or reset it below.'});
   }
   famLogout(){ try{ localStorage.removeItem('vx_session'); }catch(e){} if(window.__vxClearAuth){ try{ window.__vxClearAuth(); }catch(e){} } this.setState({familyUser:null, screen:'login', loginStage:'accounts', famMode:'login', famName:'', famEmail:'', famPass:'', famPass2:'', famPicked:[], famSearch:'', famErr:''}); }
+  // After login: if the boot pull loaded no shared data (which only happens once anonymous reads
+  // are blocked by row-level security), reload once so boot re-runs carrying the user's JWT and
+  // loads everything. While policies are open, boot already has data, so this never fires.
+  _postLoginRefresh(){ try{ if(window.__vxBootEmpty && !this._authReloaded){ this._authReloaded=true; setTimeout(function(){ try{ location.reload(); }catch(e){} }, 400); } }catch(e){} }
   // Stage B: give a signed-in staff member a real Supabase Auth session (JWT) in the background,
   // alongside their existing username+PIN login. Fire-and-forget and fully fault-tolerant — if
   // anything fails the coach is already logged in locally, so this can never block sign-in.
@@ -5477,11 +5487,11 @@ class Component extends DCLogic {
       const pin=(''+(acct.pin||'')).trim();
       const pw='vxsc_'+acct.id+'_'+(pin||'0000');             // deterministic so the same PIN re-authenticates
       this._authPost('/token?grant_type=password', {email, password:pw}).then((res)=>{
-        if(res && res.ok && res.j && res.j.access_token){ window.__vxSetAuth(res.j); return; }
+        if(res && res.ok && res.j && res.j.access_token){ window.__vxSetAuth(res.j); this._postLoginRefresh(); return; }
         // Not provisioned in Auth yet → create the account, then a session (if confirmation is off).
         this._authPost('/signup?redirect_to='+encodeURIComponent(location.origin+location.pathname),
           {email, password:pw, data:{name:acct.label||'', role:acct.role||'Coach', staff:true, staff_id:acct.id}}
-        ).then((sr)=>{ if(sr && sr.ok && sr.j && sr.j.access_token) window.__vxSetAuth(sr.j); }).catch(()=>{});
+        ).then((sr)=>{ if(sr && sr.ok && sr.j && sr.j.access_token){ window.__vxSetAuth(sr.j); this._postLoginRefresh(); } }).catch(()=>{});
       }).catch(()=>{});
     }catch(e){}
   }
