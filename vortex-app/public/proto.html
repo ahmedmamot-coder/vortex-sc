@@ -11,6 +11,16 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Vortex SC">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="/manifest.webmanifest">
+<script>
+/* Register the service worker so the app is installable (Add to Home Screen / Google Play).
+   The SW is network-first for the app HTML, so deploys still show immediately. */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('/sw.js').catch(function(){ /* offline/unsupported: app still works */ });
+  });
+}
+</script>
 <script src="assets/react.js"></script>
 <script src="assets/react-dom.js"></script>
 <script src="assets/vx-photos.js"></script>
