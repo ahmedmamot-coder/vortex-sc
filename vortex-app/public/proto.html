@@ -4320,7 +4320,10 @@ class Component extends DCLogic {
   staffAccOpen(id){ const a=this.accounts.find(x=>x.id===id); if(!a) return; this.setState({staffEditId:id, staffAccDraft:{label:a.label||'', user:a.user||'', pin:a.pin||'', role:a.role||'Coach', squadId:a.squadId||'', photo:a.photo||'', phone:a.phone||'', email:a.email||'', bio:a.bio||''}}); }
   staffAccChange(field, val){ this.setState({staffAccDraft:{...(this.state.staffAccDraft||{}), [field]:val}}); }
   staffAccCancel(){ this.setState({staffEditId:null, staffAccDraft:null}); }
-  async staffAccPhoto(e){ const file=e.target.files && e.target.files[0]; e.target.value=''; if(!file) return; const reader=new FileReader(); const dataUrl=await new Promise((res,rej)=>{ reader.onload=()=>res(reader.result); reader.onerror=rej; reader.readAsDataURL(file); }); this.staffAccChange('photo', dataUrl); }
+  async staffAccPhoto(e){ const file=e.target.files && e.target.files[0]; e.target.value=''; if(!file) return;
+    let val=await this._uploadImage(file, 'staff');
+    if(!val){ try{ val=await this._resizeImage(file, 400, 0.8); }catch(err){} }
+    if(val) this.staffAccChange('photo', val); }
   staffAccSave(id){ const d=this.state.staffAccDraft||{}; const a=this.accounts.find(x=>x.id===id); if(!a) return;
     const label=(d.label||'').trim(), user=(d.user||'').trim().toLowerCase(), pin=(d.pin||'').trim();
     if(!label||!user||!pin){ return; }
@@ -4396,7 +4399,10 @@ class Component extends DCLogic {
     const list=(this.family||[]).map(f=>f.id===fu.id?upd:f); this._saveFamily(list);
     this.setState({familyUser:upd, settingsMsg:'Profile saved ✓'});
     if(window.__vxInsert){ try{ await window.__vxInsert('family_accounts', [{id:upd.id, name:upd.name, email:upd.email, phone:upd.phone, pass:upd.pass||'', role:upd.role, swimmer_ids:upd.swimmerIds, ts:Date.now()}]); }catch(e){} } }
-  async famProfilePhoto(e){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(!f) return; try{ const dataUrl=await this._resizeImage(f, 400, 0.8); this.setState({famProfileDraft:{...(this.state.famProfileDraft||{}), photo:dataUrl}}); }catch(err){} }
+  async famProfilePhoto(e){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(!f) return;
+    let val=await this._uploadImage(f, 'family');
+    if(!val){ try{ val=await this._resizeImage(f, 400, 0.8); }catch(err){} }
+    if(val) this.setState({famProfileDraft:{...(this.state.famProfileDraft||{}), photo:val}}); }
   _waMap(){ return this.waTargets||{}; }
   _waFor(accId){ return (this._waMap()[accId]||[]); }
   addWaTarget(){ const acc=this._me(); const accId=this.state.familyUser?('fam:'+this.state.familyUser.id):acc.id;
@@ -5160,6 +5166,9 @@ class Component extends DCLogic {
     let ext=forceExt || ((file.name||'').split('.').pop()||'').toLowerCase().replace(/[^a-z0-9]/g,'') || 'bin';
     const path=kind+'/'+exId+'_'+Date.now()+'.'+ext;
     try{ return await up(path, file); }catch(e){ return null; } }
+  // Shared: resize an image and upload it to Storage, returning its URL (or null to let the caller
+  // fall back to a small inline image). Used for staff/family profile photos and Lounge images.
+  async _uploadImage(file, folder){ try{ if(!window.__vxUploadFile) return null; const blob=await this._resizeImageBlob(file, 640, 0.82); const src=blob||file; return await this._uploadMedia(src, folder, 'i'+Math.random().toString(36).slice(2,7), 'jpg'); }catch(e){ return null; } }
   async fitUploadPhoto(e, exId){ const f=e.target.files && e.target.files[0]; e.target.value=''; if(!f) return;
     this.setState({fitBusy:'photo:'+exId}); let val='';
     try{ const blob=await this._resizeImageBlob(f, 1100, 0.75);
@@ -6871,7 +6880,10 @@ class Component extends DCLogic {
     const composeEmojiChips=composeEmojis.map(e=>({e, onClick:()=>{ this.setState({compose:(this.state.compose||'')+e}); }}));
     const onComposeEmojiToggle=()=>this.setState({composeEmojiOpen:!this.state.composeEmojiOpen});
     const onComposePickPhoto=()=>{ const el=document.getElementById('vx-lounge-photo'); if(el) el.click(); };
-    const onComposePhoto=async(ev)=>{ const file=ev.target.files&&ev.target.files[0]; ev.target.value=''; if(!file) return; const reader=new FileReader(); const dataUrl=await new Promise((res,rej)=>{ reader.onload=()=>res(reader.result); reader.onerror=rej; reader.readAsDataURL(file); }); this.setState({composeImage:dataUrl}); };
+    const onComposePhoto=async(ev)=>{ const file=ev.target.files&&ev.target.files[0]; ev.target.value=''; if(!file) return;
+      let val=await this._uploadImage(file, 'lounge');
+      if(!val){ try{ val=await this._resizeImage(file, 900, 0.75); }catch(e){} }
+      if(val) this.setState({composeImage:val}); };
     const onComposeRemovePhoto=()=>this.setState({composeImage:''});
     // goals — per-swimmer, editable, AI-assisted
     const goalsPool = S.toolScopeClub ? this.allSwimmersFlat() : (this.roster[S.squadId]||[]).map(sw=>({...sw, squadId:S.squadId, squadName:squad.name}));
@@ -7670,7 +7682,11 @@ class Component extends DCLogic {
       onMeetsName:(e)=>this.setState({meetsCalForm:{...(this.state.meetsCalForm||{}), name:e.target.value}}),
       onMeetsDate:(e)=>this.setState({meetsCalForm:{...(this.state.meetsCalForm||{}), date:e.target.value}}),
       onMeetsPlace:(e)=>this.setState({meetsCalForm:{...(this.state.meetsCalForm||{}), place:e.target.value}}),
-      onMeetsPdf:(e)=>{ const file=e.target.files&&e.target.files[0]; if(!file) return; const r=new FileReader(); r.onload=()=>this.setState({meetsCalForm:{...(this.state.meetsCalForm||{}), pdf:r.result, pdfName:file.name}}); r.readAsDataURL(file); },
+      onMeetsPdf:async(e)=>{ const file=e.target.files&&e.target.files[0]; if(!file) return;
+        this.setState({meetsCalForm:{...(this.state.meetsCalForm||{}), pdfName:file.name}});
+        let url=null; try{ if(window.__vxUploadFile){ url=await window.__vxUploadFile('meets/'+Date.now()+'-'+(file.name||'meet.pdf').replace(/[^\w.\-]+/g,'_'), file); } }catch(err){}
+        if(url){ this.setState({meetsCalForm:{...(this.state.meetsCalForm||{}), pdf:url, pdfName:file.name}}); }
+        else { const r=new FileReader(); r.onload=()=>this.setState({meetsCalForm:{...(this.state.meetsCalForm||{}), pdf:r.result, pdfName:file.name}}); r.readAsDataURL(file); } },
       meetsPdfLabel: (S.meetsCalForm&&S.meetsCalForm.pdfName) ? S.meetsCalForm.pdfName : 'Attach info PDF (optional)',
       onMeetsAdd:()=>this.meetsCalAdd(),
       meetsCalEmpty: this.meetsCal.length===0,
