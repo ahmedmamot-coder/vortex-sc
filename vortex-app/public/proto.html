@@ -3410,7 +3410,7 @@
               <div class="vx-screen" style="position:absolute;inset:0;z-index:59;background:rgba(10,15,26,.55);display:flex;flex-direction:column;justify-content:flex-end">
                 <div class="vx-sheet" style="background:#fff;border-radius:20px 20px 0 0;padding:18px 16px calc(env(safe-area-inset-bottom) + 20px)">
                   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><span style="font-size:16px;font-weight:700;color:#0C1116">Share plan as PDF</span><button onclick="{{ onCloseShare }}" style="width:32px;height:32px;border-radius:9px;background:#F4F6F8;border:none;color:#7A8296;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:15px;height:15px"></i></button></div>
-                  <p style="margin:0 0 13px;font-size:12px;color:#7A8296;line-height:1.5">Sends a printable link to the current session. Pick a saved contact, or use your phone's share sheet to choose any WhatsApp group.</p>
+                  <p style="margin:0 0 13px;font-size:12px;color:#7A8296;line-height:1.5">Builds a PDF of the current session on your device. Use your phone's share sheet to send the PDF file straight into any WhatsApp chat or group, or pick a saved contact.</p>
                   <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:11px">
                     <sc-for list="{{ shareTargets }}" as="t" hint-placeholder-count="0">
                       <button onclick="{{ t.onShare }}" style="display:flex;align-items:center;gap:10px;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:12px;padding:11px 13px;cursor:pointer;font-family:inherit;text-align:left"><span style="width:34px;height:34px;border-radius:9px;background:#DCF7E6;color:#128C4B;display:flex;align-items:center;justify-content:center;flex:none"><i data-lucide="message-circle" style="width:17px;height:17px"></i></span><span style="flex:1;min-width:0"><span style="display:block;font-size:13px;font-weight:700;color:#0C1116">{{ t.label }}</span><span style="display:block;font-size:11px;color:#7A8296">Send to +{{ t.number }}</span></span><i data-lucide="send" style="width:16px;height:16px;color:#25D366"></i></button>
@@ -4345,18 +4345,106 @@ class Component extends DCLogic {
     this.setState({waLabel:'', waNumber:'', settingsMsg:'Contact saved ✓'}); }
   removeWaTarget(id){ const acc=this._me(); const accId=this.state.familyUser?('fam:'+this.state.familyUser.id):acc.id;
     const map={...this._waMap()}; map[accId]=(map[accId]||[]).filter(t=>t.id!==id); this.waTargets=map; this._saveJSON('vx_wa_targets', map); this.forceUpdate(); }
-  // ---- Share the current plan as a link (opens WhatsApp / native share sheet) ----
-  async sharePlan(squadId, target){ const sq=this.squadById[squadId]||{name:'Squad'};
-    this.setState({shareMsg:'Preparing plan…'});
-    const body=this._currentPlanBody(squadId); const html=this._buildShareDoc((this.getPlan(squadId).title||'Session')+' — '+sq.name, body);
-    let url='';
-    if(window.__vxUploadFile){ try{ const file=new Blob([html],{type:'text/html'}); const path='plans/plan-'+squadId+'-'+Date.now()+'.html'; const u=await window.__vxUploadFile(path, file); if(u) url=u; }catch(e){} }
-    const text=(this.getPlan(squadId).title||'Session')+' — '+sq.name+(url?('\n'+url):'');
-    if(target && target.number){ window.open('https://wa.me/'+target.number+'?text='+encodeURIComponent(text), '_blank'); this.setState({shareOpen:false, shareMsg:'Opened WhatsApp for '+target.label+' ✓'}); return; }
-    // No specific contact: use the native share sheet (lets you pick any group), else copy.
-    try{ if(navigator.share){ await navigator.share({title:sq.name+' session plan', text:(this.getPlan(squadId).title||'Session'), url:url||location.href}); this.setState({shareOpen:false, shareMsg:'Shared ✓'}); return; } }catch(e){ this.setState({shareOpen:false, shareMsg:''}); return; }
-    if(url){ try{ await navigator.clipboard.writeText(url); this.setState({shareOpen:false, shareMsg:'Plan link copied — paste it into any WhatsApp chat ✓'}); return; }catch(e){} }
-    window.open('https://wa.me/?text='+encodeURIComponent(text), '_blank'); this.setState({shareOpen:false, shareMsg:'Opened WhatsApp ✓'}); }
+  // ---- Share the current plan as a real PDF file (native share sheet / download) ----
+  async sharePlan(squadId, target){ const sq=this.squadById[squadId]||{name:'Squad'}; const plan=this.getPlan(squadId);
+    const fname=(((plan.title||'Session').replace(/[^\w\- ]+/g,'').trim()||'Session')+' - '+((sq.name||'Squad').replace(/[^\w\- ]+/g,'').trim()))+'.pdf';
+    this.setState({shareMsg:'Building PDF…'});
+    let blob=null; try{ blob=this._buildPlanPdf(squadId); }catch(e){ blob=null; }
+    if(!blob){ this.setState({shareOpen:false, shareMsg:'Could not build the PDF on this device.'}); return; }
+    // 1) Native share sheet with the actual PDF file attached (WhatsApp, Mail, AirDrop, …).
+    try{ if(navigator.canShare){ const file=new File([blob], fname, {type:'application/pdf'});
+      if(navigator.canShare({files:[file]})){ await navigator.share({files:[file], title:(plan.title||'Session'), text:(sq.name||'Squad')+' session plan'});
+        this.setState({shareOpen:false, shareMsg:'Shared PDF ✓'}); return; } }
+    }catch(e){ if(e && e.name==='AbortError'){ this.setState({shareOpen:false, shareMsg:''}); return; } }
+    // 2) File-sharing unsupported (desktop / older browsers): download the PDF so it can be attached.
+    try{ const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=fname; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>{ try{ URL.revokeObjectURL(url); }catch(_){}}, 60000);
+      if(target && target.number){ window.open('https://wa.me/'+target.number, '_blank'); this.setState({shareOpen:false, shareMsg:'PDF downloaded — attach it in the WhatsApp chat with '+target.label+' ✓'}); return; }
+      this.setState({shareOpen:false, shareMsg:'PDF downloaded — attach it in any chat ✓'}); return;
+    }catch(e){ this.setState({shareOpen:false, shareMsg:'Could not export the PDF on this device.'}); }
+  }
+  // ---- Minimal, self-contained PDF writer (no external library; single-file / offline / CSP safe) ----
+  _pdfEsc(s){ s=''+(s==null?'':s); let o=''; for(let i=0;i<s.length;i++){ const c=s.charCodeAt(i);
+    if(c===40) o+='\\('; else if(c===41) o+='\\)'; else if(c===92) o+='\\\\';
+    else if(c>=32 && c<=126) o+=s[i];
+    else if(c===0xB7) o+='-'; else if(c===0x2013||c===0x2014) o+='-'; else if(c===0x00D7||c===0x2715||c===0x2716) o+='x';
+    else if(c===9) o+=' '; else o+=' '; }
+    return o; }
+  _pdfRgb(hex){ try{ let h=(hex||'#000').replace('#',''); if(h.length===3) h=h.split('').map(c=>c+c).join(''); const n=parseInt(h,16); return [((n>>16)&255)/255, ((n>>8)&255)/255, (n&255)/255]; }catch(e){ return [0,0,0]; } }
+  _pdfWrap(s, widthPt, size){ s=''+(s||''); if(!s.trim()) return []; const cw=size*0.52; const max=Math.max(8, Math.floor(widthPt/cw));
+    const words=s.trim().split(/\s+/); const lines=[]; let cur='';
+    words.forEach(w=>{ if(((cur?cur+' ':'')+w).length<=max){ cur=(cur?cur+' ':'')+w; }
+      else { if(cur) lines.push(cur); while(w.length>max){ lines.push(w.slice(0,max)); w=w.slice(max); } cur=w; } });
+    if(cur) lines.push(cur); return lines; }
+  _pdfTextOp(o){ const f=o.font==='b'?'/F2':'/F1'; const c=o.rgb||[0,0,0];
+    return 'BT '+f+' '+o.size+' Tf '+c[0].toFixed(3)+' '+c[1].toFixed(3)+' '+c[2].toFixed(3)+' rg '+o.x.toFixed(1)+' '+o.y.toFixed(1)+' Td ('+o.text+') Tj ET\n'; }
+  _pdfRectOp(o){ const c=o.rgb||[0,0,0];
+    return c[0].toFixed(3)+' '+c[1].toFixed(3)+' '+c[2].toFixed(3)+' rg '+o.x.toFixed(1)+' '+o.y.toFixed(1)+' '+o.w.toFixed(1)+' '+o.h.toFixed(1)+' re f\n'; }
+  _buildPlanPdf(squadId){
+    const sq=this.squadById[squadId]||{name:'',accent:'#067EEA'}; const plan=this.getPlan(squadId);
+    const club=(this.brandConfig&&this.brandConfig.clubName)||'Vortex Swimming Club';
+    const dl=new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+    const accent=this._pdfRgb(sq.accent||'#067EEA'); const grey=[0.48,0.51,0.57]; const dark=[0.047,0.067,0.086];
+    const PW=595, PH=842, ML=50, RIGHT=545, TOP=798, BOT=54;
+    const pages=[]; let ops=[]; let y=TOP;
+    const nl=(h)=>{ y-=h; if(y<BOT){ pages.push(ops); ops=[]; y=TOP; } };
+    const text=(x,ty,s,font,size,rgb)=>{ ops.push({t:'text',x,y:ty,text:this._pdfEsc(s),font,size,rgb}); };
+    const rect=(x,yy,w,h,rgb)=>{ ops.push({t:'rect',x,y:yy,w,h,rgb}); };
+    // Header
+    rect(ML, y+15, RIGHT-ML, 3, accent);
+    text(ML, y, club, 'b', 16, dark); nl(15);
+    text(ML, y, 'Vortex SC coaching app', 'n', 9, grey); nl(24);
+    // Title block
+    text(ML, y, (plan.title||'Session'), 'b', 15, dark); nl(15);
+    text(ML, y, (sq.name||'Squad')+'  -  '+dl+'  -  '+this.planMetres(plan).toLocaleString()+'m total', 'n', 10, grey); nl(20);
+    (plan.sections||[]).forEach(sec=>{
+      let sub=0; (sec.sets||[]).forEach(s=>sub+=(Number(s.dist)||0)*(Number(s.reps)||1)*(Number(s.circuit)||1));
+      if(y<BOT+46){ pages.push(ops); ops=[]; y=TOP; }
+      text(ML, y, (sec.title||'Section').toUpperCase(), 'b', 11, accent);
+      text(RIGHT-64, y, sub.toLocaleString()+'m', 'b', 10, grey); nl(7);
+      rect(ML, y+2, RIGHT-ML, 1.2, accent); nl(12);
+      (sec.sets||[]).forEach(s=>{
+        const reps=Number(s.reps)||1, dist=Number(s.dist)||0, rounds=Number(s.circuit)||1;
+        const distLabel=(rounds>1?(rounds+'x('+(reps>1?(reps+'x'+dist):dist)+')'):(reps>1?(reps+'x'+dist):(''+dist)))+'m';
+        const tot=reps*dist*rounds;
+        const tags=[]; if((s.strokes||[]).length) tags.push(s.strokes.join('/')); if((s.types||[]).length) tags.push(s.types.join(', ')); if(s.rest) tags.push('Rest '+s.rest); if(s.zone) tags.push(s.zone);
+        const descX=ML+80, descW=RIGHT-66-descX; const descLines=this._pdfWrap(s.txt||'', descW, 10.5);
+        text(ML, y, distLabel, 'b', 10.5, accent);
+        text(descX, y, descLines.length?descLines[0]:'', 'n', 10.5, dark);
+        text(RIGHT-62, y, tot.toLocaleString()+'m', 'n', 10, grey); nl(14);
+        for(let i=1;i<descLines.length;i++){ text(descX, y, descLines[i], 'n', 10.5, dark); nl(13); }
+        if(tags.length){ text(descX, y, tags.join('   -   '), 'n', 8.5, grey); nl(13); }
+        nl(3);
+      });
+      nl(10);
+    });
+    pages.push(ops);
+    return this._pdfAssemble(pages, PW, PH);
+  }
+  _pdfAssemble(pages, PW, PH){
+    if(!pages.length) pages=[[]];
+    let nextId=5; const contents=[];
+    for(let p=0;p<pages.length;p++){ const pageId=nextId++, contentId=nextId++; let stream='';
+      pages[p].forEach(o=>{ stream += (o.t==='text'? this._pdfTextOp(o) : this._pdfRectOp(o)); });
+      contents.push({pageId, contentId, stream}); }
+    const parts=[];
+    parts.push({id:1, body:'<< /Type /Catalog /Pages 2 0 R >>'});
+    parts.push({id:2, body:'<< /Type /Pages /Kids ['+contents.map(c=>c.pageId+' 0 R').join(' ')+'] /Count '+contents.length+' >>'});
+    parts.push({id:3, body:'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>'});
+    parts.push({id:4, body:'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>'});
+    contents.forEach(c=>{
+      parts.push({id:c.pageId, body:'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 '+PW+' '+PH+'] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents '+c.contentId+' 0 R >>'});
+      parts.push({id:c.contentId, body:'<< /Length '+c.stream.length+' >>\nstream\n'+c.stream+'\nendstream'});
+    });
+    parts.sort((a,b)=>a.id-b.id); const maxId=parts[parts.length-1].id;
+    let pdf='%PDF-1.4\n'; const offsets=new Array(maxId+1).fill(0);
+    parts.forEach(pt=>{ offsets[pt.id]=pdf.length; pdf+=pt.id+' 0 obj\n'+pt.body+'\nendobj\n'; });
+    const xrefPos=pdf.length;
+    pdf+='xref\n0 '+(maxId+1)+'\n0000000000 65535 f \n';
+    for(let i=1;i<=maxId;i++){ pdf+=(''+(offsets[i]||0)).padStart(10,'0')+' 00000 n \n'; }
+    pdf+='trailer\n<< /Size '+(maxId+1)+' /Root 1 0 R >>\nstartxref\n'+xrefPos+'\n%%EOF';
+    const bytes=new Uint8Array(pdf.length); for(let i=0;i<pdf.length;i++) bytes[i]=pdf.charCodeAt(i)&0xff;
+    return new Blob([bytes],{type:'application/pdf'});
+  }
   exportAttendancePdf(squadId){ const sq=this.squadById[squadId]||{name:'Squad',coach:''}; const today=this.todayISO();
     const firstThis=today.slice(0,8)+'01';
     let from=this.state.attendFrom||firstThis; let to=this.state.attendTo||today;
