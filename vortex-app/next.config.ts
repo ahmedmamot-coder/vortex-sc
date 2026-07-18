@@ -5,7 +5,11 @@ const nextConfig: NextConfig = {
   // beforeFiles runs ahead of the app router, so "/" resolves to the prototype.
   async rewrites() {
     return {
-      beforeFiles: [{ source: "/", destination: "/proto.html" }],
+      beforeFiles: [
+        { source: "/", destination: "/proto.html" },
+        { source: "/privacy", destination: "/privacy.html" },
+        { source: "/consent", destination: "/consent.html" },
+      ],
       afterFiles: [],
       fallback: [],
     };
