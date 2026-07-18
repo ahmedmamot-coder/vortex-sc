@@ -3879,8 +3879,7 @@ class Component extends DCLogic {
     // tiny local cache (URLs only) for instant display; the table is the source of truth.
     this.swimmerDocs=this._loadJSON('vx_docs_cache', {});
     this.sponsoredMap=this._loadJSON('vx_sponsored', {});
-    this.swimmerPhotos=this._sanitizePhotos(this._loadJSON('vx_sw_photos', {}));
-    try{ this._saveJSON('vx_sw_photos', this.swimmerPhotos); }catch(e){}
+    this.swimmerPhotos=this._sanitizePhotos(this._loadJSON('vx_photos_cache', {}));  // table-backed; refreshed by _docsFetch
     this.fitnessTests=this._loadJSON('vx_fitness_tests', {});
     this.aiSuggOverrides=this._loadJSON('vx_ai_sugg_ovr', {});
     this.promoStore=this._loadJSON('vx_promo', {});
@@ -4604,8 +4603,13 @@ class Component extends DCLogic {
   async _docsFetch(){
     if(!window.__vxSelect) return;
     const rows=await window.__vxSelect('swimmer_docs', 'select=*'); if(rows==null) return;
-    const map={}; rows.forEach(r=>{ const sw=r.swimmer_id, k=r.kind; if(!sw||!k||!r.url) return; (map[sw]=map[sw]||{})[k]={url:r.url, name:r.name, type:r.type, uploadedAt:r.uploaded_at}; });
-    this.swimmerDocs=map; try{ this._saveLocalOnly('vx_docs_cache', map); }catch(e){} this.forceUpdate();
+    const map={}; const photos={...(this.swimmerPhotos||{})};
+    rows.forEach(r=>{ const sw=r.swimmer_id, k=r.kind; if(!sw||!k||!r.url) return;
+      if(k==='photo'){ photos[sw]=r.url; }
+      else { (map[sw]=map[sw]||{})[k]={url:r.url, name:r.name, type:r.type, uploadedAt:r.uploaded_at}; } });
+    this.swimmerDocs=map; this.swimmerPhotos=photos;
+    try{ this._saveLocalOnly('vx_docs_cache', map); this._saveLocalOnly('vx_photos_cache', photos); }catch(e){}
+    this.forceUpdate();
   }
   // Strip any heavy base64 out of the meta blob so it never exceeds the browser storage quota
   // (which was silently failing the save and making documents "reappear as missing"). Only the
@@ -4668,7 +4672,14 @@ class Component extends DCLogic {
   // Only small http(s) URLs are kept in vx_sw_photos now (the actual image lives in Storage), so
   // this key can never overflow the localStorage quota the way base64 photos did.
   _sanitizePhotos(map){ const out={}; Object.keys(map||{}).forEach(k=>{ const v=map[k]; if(typeof v==='string' && /^https?:\/\//.test(v)) out[k]=v; }); return out; }
-  savePhoto(swId, url){ this.swimmerPhotos={...this.swimmerPhotos, [swId]:url}; this._saveJSON('vx_sw_photos', this.swimmerPhotos); this.forceUpdate(); }
+  // Photos are backed by the swimmer_docs table (kind='photo') — the same reliable path as the
+  // documents — so they never depend on the quota-limited synced blob.
+  savePhoto(swId, url){
+    this.swimmerPhotos={...this.swimmerPhotos, [swId]:url};
+    try{ this._saveLocalOnly('vx_photos_cache', this.swimmerPhotos); }catch(e){}
+    if(window.__vxUpsert){ try{ window.__vxUpsert('swimmer_docs', [{id:swId+'::photo', swimmer_id:swId, kind:'photo', url, name:'', type:'image/jpeg', uploaded_at:new Date().toISOString().slice(0,10), ts:Date.now()}]); }catch(e){} }
+    this.forceUpdate();
+  }
   async handlePhotoUpload(e, swId){
     const file=e.target.files && e.target.files[0]; e.target.value=''; if(!file) return;
     this.setState({docBusy:'photo', docMsg:'Uploading photo…'});
@@ -4688,7 +4699,10 @@ class Component extends DCLogic {
       this.setState({docBusy:null, docMsg:'Photo saved ✓'});
     }catch(err){ this.setState({docBusy:null, docMsg:'Photo upload failed — '+((err&&err.message)||'try again')}); }
   }
-  removePhoto(swId){ const p={...this.swimmerPhotos}; delete p[swId]; this.swimmerPhotos=p; this._saveJSON('vx_sw_photos', p); this.forceUpdate(); }
+  removePhoto(swId){ const p={...this.swimmerPhotos}; delete p[swId]; this.swimmerPhotos=p;
+    try{ this._saveLocalOnly('vx_photos_cache', p); }catch(e){}
+    if(window.__vxDelete){ try{ window.__vxDelete('swimmer_docs', 'id=eq.'+encodeURIComponent(swId+'::photo')); }catch(e){} }
+    this.forceUpdate(); }
   async profileInbodyPdf(e, swId){
     const file=e.target.files && e.target.files[0]; e.target.value=''; if(!file) return;
     this.setState({profileIbBusy:true, profileIbMsg:'Saving report\u2026'});
@@ -6024,7 +6038,7 @@ class Component extends DCLogic {
     this.squadGoals=g('vx_squad_goals', this.squadGoals);
     this.swimmerMeta=this._sanitizeMeta(g('vx_sw_meta', this.swimmerMeta));
     this.sponsoredMap=g('vx_sponsored', this.sponsoredMap);
-    this.swimmerPhotos=this._sanitizePhotos(g('vx_sw_photos', this.swimmerPhotos));
+    // (Swimmer photos come from the swimmer_docs table now, not this synced blob — don't overwrite them here.)
     this.staffOverrides=g('vx_staff_ovr', this.staffOverrides);
     this.meetStatus=g('vx_meet_status', this.meetStatus); this.meetEntries=g('vx_meet_entries', this.meetEntries);
     this.customMeets=g('vx_custom_meets', this.customMeets); this.eventRequests=g('vx_event_requests', this.eventRequests);
