@@ -1805,7 +1805,10 @@ if ('serviceWorker' in navigator) {
                               <sc-for list="{{ inbodyRows }}" as="ib" hint-placeholder-count="2">
                                 <div style="display:flex;align-items:center;justify-content:space-between;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:10px;padding:9px 11px">
                                   <span><span style="display:block;font-size:12px;font-weight:700;color:#0C1116">{{ ib.weight }} · {{ ib.fat }} · {{ ib.muscle }}</span><span style="display:block;font-size:10.5px;color:#9AA2B4;margin-top:1px">{{ ib.dateLabel }}</span></span>
-                                  <button onclick="{{ ib.onDelete }}" style="flex:none;width:24px;height:24px;border-radius:7px;border:none;background:#EEF1F5;color:#9AA2B4;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:13px;height:13px"></i></button>
+                                  <span style="display:flex;align-items:center;gap:6px;flex:none">
+                                    <sc-if value="{{ ib.hasFile }}" hint-placeholder-val="{{ false }}"><button onclick="{{ ib.onViewFile }}" style="display:flex;align-items:center;gap:4px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border:none;border-radius:7px;padding:5px 9px;font-family:inherit;font-weight:700;font-size:10.5px;cursor:pointer"><i data-lucide="file-text" style="width:12px;height:12px"></i>Report</button></sc-if>
+                                    <button onclick="{{ ib.onDelete }}" style="flex:none;width:24px;height:24px;border-radius:7px;border:none;background:#EEF1F5;color:#9AA2B4;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:13px;height:13px"></i></button>
+                                  </span>
                                 </div>
                               </sc-for>
                             </div>
@@ -4589,13 +4592,25 @@ class Component extends DCLogic {
     if(on) m[swId]=true; else delete m[swId];
     this.sponsoredMap=m; this._saveJSON('vx_sponsored', m); this.forceUpdate(); }
   toggleDoc(swId, key){ const m=this._swMeta(swId); this._saveSwMeta(swId, {...m, docs:{...m.docs, [key]:!m.docs[key]}}); }
+  // Documents are uploaded to Supabase Storage and only their URL is kept in the synced meta.
+  // Previously the whole base64 file was stuffed into the vx_sw_meta blob, which overflowed the
+  // browser storage quota — the write then failed silently and the document "disappeared".
   async uploadDoc(e, swId, key){
     const file=e.target.files && e.target.files[0]; e.target.value=''; if(!file) return;
-    const reader=new FileReader();
-    const dataUrl=await new Promise((res,rej)=>{ reader.onload=()=>res(reader.result); reader.onerror=rej; reader.readAsDataURL(file); });
-    const m=this._swMeta(swId);
-    this._saveSwMeta(swId, {...m, docs:{...m.docs, [key]:{dataUrl, name:file.name, type:file.type, uploadedAt:new Date().toISOString().slice(0,10)}}});
+    this.setState({docBusy:key, docMsg:''});
+    try{
+      if(!window.__vxUploadFile) throw new Error('storage unavailable');
+      const ext=((file.name||'').match(/\.([a-z0-9]+)$/i)||[])[1] || (file.type==='application/pdf'?'pdf':(file.type&&file.type.indexOf('png')>=0?'png':'jpg'));
+      const path='docs/'+swId+'/'+key+'-'+Date.now()+'.'+ext;
+      const url=await window.__vxUploadFile(path, file);
+      if(!url) throw new Error('upload failed');
+      const m=this._swMeta(swId);
+      this._saveSwMeta(swId, {...m, docs:{...m.docs, [key]:{url, name:file.name, type:file.type, uploadedAt:new Date().toISOString().slice(0,10)}}});
+      this.setState({docBusy:null, docMsg:''});
+    }catch(err){ this.setState({docBusy:null, docMsg:'Upload failed — check your connection and try again.'}); }
   }
+  _openUrl(url){ if(!url) return; try{ const w=window.open(url,'_blank'); if(!w) location.href=url; }catch(e){ try{ location.href=url; }catch(x){} } }
+  _openDoc(doc){ if(!doc) return; if(doc.url) this._openUrl(doc.url); else if(doc.dataUrl) this._openDataUrl(doc.dataUrl); }
   removeDoc(swId, key){ const m=this._swMeta(swId); this._saveSwMeta(swId, {...m, docs:{...m.docs, [key]:false}}); }
   addInbody(swId){ const f=this.state.inbodyForm; const w=parseFloat(f.weight), fat=parseFloat(f.fat), mus=parseFloat(f.muscle);
     if(!w) return;
@@ -4622,21 +4637,33 @@ class Component extends DCLogic {
   removePhoto(swId){ const p={...this.swimmerPhotos}; delete p[swId]; this.swimmerPhotos=p; this._saveJSON('vx_sw_photos', p); this.forceUpdate(); }
   async profileInbodyPdf(e, swId){
     const file=e.target.files && e.target.files[0]; e.target.value=''; if(!file) return;
-    this.setState({profileIbBusy:true, profileIbMsg:'Reading PDF\u2026'});
+    this.setState({profileIbBusy:true, profileIbMsg:'Saving report\u2026'});
+    // 1) Always keep the original file safe in Storage (never in the quota-limited blob), so the
+    //    full report can be viewed later even if we can't read the numbers off a photo scan.
+    let fileUrl=null;
+    try{ if(window.__vxUploadFile){ const ext=((file.name||'').match(/\.([a-z0-9]+)$/i)||[])[1] || (/pdf/i.test(file.type||'')?'pdf':'jpg'); fileUrl=await window.__vxUploadFile('inbody/'+swId+'/'+Date.now()+'.'+ext, file); } }catch(err){}
+    // 2) Try to auto-read the values from a text-based InBody PDF. A photo/scan has no text layer \u2014
+    //    that's fine, the report is still saved and the coach can type the values in.
+    let data={};
     try{
-      if(!window.pdfjsLib) throw new Error('PDF engine unavailable');
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-      const buf=await file.arrayBuffer();
-      const doc=await window.pdfjsLib.getDocument({data:buf}).promise;
-      let text='';
-      for(let i=1;i<=doc.numPages;i++){ const page=await doc.getPage(i); const c=await page.getTextContent(); text+=' '+c.items.map(it=>it.str).join(' '); }
-      const data=this._extractInbodyFields(text);
-      if(!data.weight) throw new Error('Couldn\u2019t find a weight value \u2014 is this an InBody report?');
-      const m=this._swMeta(swId);
-      const rec={date:new Date().toISOString().slice(0,10), weight:data.weight, fat:data.pbf, muscle:data.smm, bmr:data.bmr, visceralFat:data.visceralFat, whr:data.whr};
-      this._saveSwMeta(swId, {...m, inbody:[rec, ...(m.inbody||[])]});
-      this.setState({profileIbBusy:false, profileIbMsg:'Scan imported \u2713'});
-    } catch(err){ this.setState({profileIbBusy:false, profileIbMsg:(err&&err.message)||'Import failed'}); }
+      if(window.pdfjsLib && /pdf/i.test(file.type||'')){
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        const buf=await file.arrayBuffer(); const doc=await window.pdfjsLib.getDocument({data:buf}).promise;
+        let text=''; for(let i=1;i<=doc.numPages;i++){ const page=await doc.getPage(i); const c=await page.getTextContent(); text+=' '+c.items.map(it=>it.str).join(' '); }
+        data=this._extractInbodyFields(text)||{};
+      }
+    }catch(err){}
+    const m=this._swMeta(swId);
+    const rec={date:new Date().toISOString().slice(0,10), weight:data.weight||null, fat:data.pbf||null, muscle:data.smm||null,
+      bmr:data.bmr||null, visceralFat:data.visceralFat||null, whr:data.whr||null, protein:data.protein||null, minerals:data.minerals||null,
+      tbw:data.tbw||null, bmi:data.bmi||null, score:data.score||null, phaseAngle:data.phaseAngle||null, fileUrl:fileUrl||null, fileName:file.name||''};
+    this._saveSwMeta(swId, {...m, inbody:[rec, ...(m.inbody||[])]});
+    const readCount=Object.keys(data).filter(k=>data[k]!=null).length;
+    let msg;
+    if(!fileUrl) msg='Saved, but the file upload failed \u2014 check your connection.';
+    else if(readCount) msg='Report saved & '+readCount+' values read automatically \u2713';
+    else msg='Report saved \u2713 \u2014 it\u2019s a photo scan, so type the values in below.';
+    this.setState({profileIbBusy:false, profileIbMsg:msg});
   }
   _fitTests(swId){ return this.fitnessTests[swId]||[]; }
   addFitTest(swId){ const f=this.state.fitForm;
@@ -5174,15 +5201,24 @@ class Component extends DCLogic {
   }
   _extractInbodyFields(text){
     const num=(re)=>{ const m=text.match(re); return m?parseFloat(m[1]):null; };
-    return {
+    const clean={};
+    const raw={
       weight: num(/weight[^\d\-]{0,10}(\d{1,3}(?:\.\d+)?)/i),
       smm: num(/(?:skeletal muscle mass|smm)[^\d\-]{0,10}(\d{1,3}(?:\.\d+)?)/i),
       bodyFatMass: num(/body fat mass[^\d\-]{0,10}(\d{1,3}(?:\.\d+)?)/i),
       pbf: num(/(?:percent body fat|pbf|body fat[^m]{0,4}%)[^\d\-]{0,10}(\d{1,3}(?:\.\d+)?)/i),
-      bmr: num(/bmr[^\d\-]{0,10}(\d{2,5})/i),
-      visceralFat: num(/visceral fat[^\d\-]{0,10}(\d{1,2}(?:\.\d+)?)/i),
+      bmr: num(/(?:bmr|basal metabolic rate)[^\d\-]{0,12}(\d{3,5})/i),
+      visceralFat: num(/(?:visceral fat(?: area| level)?|vfa)[^\d\-]{0,12}(\d{1,3}(?:\.\d+)?)/i),
       whr: num(/(?:waist[\-\s]?hip ratio|whr)[^\d\-]{0,10}(\d(?:\.\d+)?)/i),
+      protein: num(/protein[^\d\-]{0,10}(\d{1,2}(?:\.\d+)?)/i),
+      minerals: num(/minerals?[^\d\-]{0,10}(\d(?:\.\d+)?)/i),
+      tbw: num(/total body water[^\d\-]{0,10}(\d{1,3}(?:\.\d+)?)/i),
+      bmi: num(/(?:bmi|body mass index)[^\d\-]{0,10}(\d{1,2}(?:\.\d+)?)/i),
+      score: num(/(?:inbody score)[^\d\-]{0,10}(\d{1,3})/i),
+      phaseAngle: num(/(?:phase angle)[^\d\-]{0,12}(\d(?:\.\d+)?)/i),
     };
+    Object.keys(raw).forEach(k=>{ if(raw[k]!=null) clean[k]=raw[k]; });
+    return clean;
   }
   async inbodyQrScan(e){
     const file=e.target.files && e.target.files[0]; e.target.value=''; if(!file) return;
@@ -7270,7 +7306,8 @@ class Component extends DCLogic {
         const docBirth=meta.docs.birth||null, docId=meta.docs.id||null, docMedical=meta.docs.medical||null;
         const inbodyRows=(meta.inbody||[]).slice(0,6).map((r,i)=>({
           dateLabel:this.shortDate(r.date.split('-').reverse().join('/')),
-          weight:r.weight+' kg', fat: r.fat!=null?(r.fat+'% fat'):'—', muscle: r.muscle!=null?(r.muscle+' kg muscle'):'—',
+          weight: r.weight!=null?(r.weight+' kg'):'—', fat: r.fat!=null?(r.fat+'% fat'):'—', muscle: r.muscle!=null?(r.muscle+' kg muscle'):'—',
+          hasFile:!!r.fileUrl, onViewFile: r.fileUrl? ()=>this._openUrl(r.fileUrl) : ()=>{},
           onDelete:()=>this.deleteInbody(swObj.id, i) }));
         return {
           sponsorOn, sponsorBg: sponsorOn?'linear-gradient(135deg,#7A5A12,#C89B3C)':'#EEF1F5', sponsorFg: sponsorOn?'#fff':'#7A8296', sponsorLabel: sponsorOn?'VIP Sponsored athlete':'Mark as sponsored',
@@ -7311,10 +7348,10 @@ class Component extends DCLogic {
           onPickDocId:()=>{ const el=document.getElementById('vx-doc-id-input'); if(el) el.click(); },
           onPickDocMedical:()=>{ const el=document.getElementById('vx-doc-medical-input'); if(el) el.click(); },
           onUploadDocBirth:(e)=>this.uploadDoc(e, swObj.id, 'birth'), onUploadDocId:(e)=>this.uploadDoc(e, swObj.id, 'id'), onUploadDocMedical:(e)=>this.uploadDoc(e, swObj.id, 'medical'),
-          onViewDocBirth:()=>{ if(docBirth && docBirth.dataUrl) this._openDataUrl(docBirth.dataUrl); },
-          onViewDocMedical:()=>{ if(docMedical && docMedical.dataUrl) this._openDataUrl(docMedical.dataUrl); },
+          onViewDocBirth:()=>this._openDoc(docBirth),
+          onViewDocMedical:()=>this._openDoc(docMedical),
           onRemoveDocMedical:()=>this.removeDoc(swObj.id,'medical'),
-          onViewDocId:()=>{ if(docId && docId.dataUrl) this._openDataUrl(docId.dataUrl); },
+          onViewDocId:()=>this._openDoc(docId),
           onRemoveDocBirth:()=>this.removeDoc(swObj.id,'birth'), onRemoveDocId:()=>this.removeDoc(swObj.id,'id'),
           inbodyRows, inbodyHasRows:inbodyRows.length>0,
           inbodyWeight:S2.inbodyForm.weight, inbodyFat:S2.inbodyForm.fat, inbodyMuscle:S2.inbodyForm.muscle,
@@ -7475,11 +7512,11 @@ class Component extends DCLogic {
             {label:'Birth certificate', doc: meta.docs.birth, kind:'birth', icon:'file-badge'},
             {label:'ID / passport copy', doc: meta.docs.id, kind:'id', icon:'contact'},
             {label:'Medical certificate', doc: meta.docs.medical, kind:'medical', icon:'stethoscope'},
-          ].map(d=>{ const on=!!d.doc; const hasFile = on && typeof d.doc==='object' && d.doc.dataUrl;
+          ].map(d=>{ const on=!!d.doc; const hasFile = on && typeof d.doc==='object' && (d.doc.url || d.doc.dataUrl);
             return {label:d.label, icon:d.icon, statusLabel: on?'On file':'Missing', statusBg: on?'#DCF5EA':'#FBE4E4', statusFg: on?'#0C7A4F':'#B42318', missing:!on, hasFile:!!hasFile,
             fileName: hasFile? (d.doc.name+' · '+d.doc.uploadedAt) : 'Not uploaded yet', uploadedAt: hasFile? d.doc.uploadedAt : '', uploadLabel: on?'Replace':'Upload',
             inputId:'vx-fam-doc-'+d.kind+'-input', onPick:()=>{ const el=document.getElementById('vx-fam-doc-'+d.kind+'-input'); if(el) el.click(); },
-            onView: hasFile? ()=>this.meetsViewPdf(d.doc.dataUrl, d.doc.name||d.label) : null,
+            onView: hasFile? ()=>this._openDoc(d.doc) : null,
             onRemove: on? ()=>this.removeDoc(sw.id, d.kind) : null,
             onUpload:(e)=>this.uploadDoc(e, sw.id, d.kind) }; }),
         }; })(),
