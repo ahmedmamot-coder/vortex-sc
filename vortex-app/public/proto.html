@@ -5465,6 +5465,26 @@ class Component extends DCLogic {
     return this.setState({famBusy:false, famErr:'Wrong email or password - or reset it below.'});
   }
   famLogout(){ try{ localStorage.removeItem('vx_session'); }catch(e){} if(window.__vxClearAuth){ try{ window.__vxClearAuth(); }catch(e){} } this.setState({familyUser:null, screen:'login', loginStage:'accounts', famMode:'login', famName:'', famEmail:'', famPass:'', famPass2:'', famPicked:[], famSearch:'', famErr:''}); }
+  // Stage B: give a signed-in staff member a real Supabase Auth session (JWT) in the background,
+  // alongside their existing username+PIN login. Fire-and-forget and fully fault-tolerant — if
+  // anything fails the coach is already logged in locally, so this can never block sign-in.
+  // Requires the staff account to have an email; the password is derived from the account id+PIN.
+  _staffAuthEnsure(acct){
+    try{
+      if(!acct || !window.__vxSetAuth) return;
+      const email=(''+(acct.email||'')).trim().toLowerCase();
+      if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;   // no valid email yet → skip (still works locally)
+      const pin=(''+(acct.pin||'')).trim();
+      const pw='vxsc_'+acct.id+'_'+(pin||'0000');             // deterministic so the same PIN re-authenticates
+      this._authPost('/token?grant_type=password', {email, password:pw}).then((res)=>{
+        if(res && res.ok && res.j && res.j.access_token){ window.__vxSetAuth(res.j); return; }
+        // Not provisioned in Auth yet → create the account, then a session (if confirmation is off).
+        this._authPost('/signup?redirect_to='+encodeURIComponent(location.origin+location.pathname),
+          {email, password:pw, data:{name:acct.label||'', role:acct.role||'Coach', staff:true, staff_id:acct.id}}
+        ).then((sr)=>{ if(sr && sr.ok && sr.j && sr.j.access_token) window.__vxSetAuth(sr.j); }).catch(()=>{});
+      }).catch(()=>{});
+    }catch(e){}
+  }
   makeDefaultPlan(){ const t=this.planTemplate; const migrate=(sec)=>({id:this._uid(sec.key[0]||'s'), title:sec.title, sets:sec.sets.map(s=>({id:this._uid(sec.key[0]||'s'), dist:s.dist, txt:s.txt, equip:[...(s.equip||[])], types:[...(s.types||[])], rest:s.rest||''}))}); return {title:t.title, zone:t.zone, sections:t.sections.map(migrate)}; }
   _migratePlan(p){
     if(p && p.sections) return p;
@@ -6971,7 +6991,7 @@ class Component extends DCLogic {
         const rawU = (uEl && uEl.value) || this.state.loginUser || '';
         const rawP = (pEl && pEl.value) || this.state.loginPinVal || '';
         const u=norm(rawU).toLowerCase(); const pl=norm(rawP).toLowerCase();
-        const doLogin=(acct)=>{ const st={screen:'app', view:'hub', pickedId:acct.id, loginUser:'', loginPinVal:'', loginErr:''}; if(acct.squadId){ st.squadId=acct.squadId; } if(uEl)uEl.value=''; if(pEl)pEl.value=''; try{ localStorage.setItem('vx_session', JSON.stringify({type:'staff', id:acct.id})); }catch(e){} this.setState(st); };
+        const doLogin=(acct)=>{ const st={screen:'app', view:'hub', pickedId:acct.id, loginUser:'', loginPinVal:'', loginErr:''}; if(acct.squadId){ st.squadId=acct.squadId; } if(uEl)uEl.value=''; if(pEl)pEl.value=''; try{ localStorage.setItem('vx_session', JSON.stringify({type:'staff', id:acct.id})); }catch(e){} try{ this._staffAuthEnsure(acct); }catch(e){} this.setState(st); };
         // Username is space/case-insensitive; PIN is case-insensitive so a typed capital never locks you out.
         const acct=this.accounts.find(a=>(a.user&&norm(a.user).toLowerCase()===u)||(a.label&&norm(a.label).toLowerCase()===u));
         if(acct && norm(acct.pin).toLowerCase()===pl){ return doLogin(acct); }
@@ -7063,7 +7083,7 @@ class Component extends DCLogic {
         };
       })(),
       onGoAdmin:()=>this.setState({view:'admin'}), onGoTools:()=>{ const a=this.accounts.find(x=>x.id===S.pickedId)||{}; const adm=!!(a.id==='ahmed'||a.id==='sameh'); this.setState({view:'tools', toolScopeClub:adm}); }, onGoMove:()=>this.setState({view:'move'}),
-      onGoHub:()=>this.setState({view:'hub', showSwitcher:false}), onLogout:()=>{ try{ localStorage.removeItem('vx_session'); }catch(e){} this.setState({screen:'login', loginStage:'accounts', pin:'', view:'hub'}); },
+      onGoHub:()=>this.setState({view:'hub', showSwitcher:false}), onLogout:()=>{ try{ localStorage.removeItem('vx_session'); }catch(e){} if(window.__vxClearAuth){ try{ window.__vxClearAuth(); }catch(e){} } this.setState({screen:'login', loginStage:'accounts', pin:'', view:'hub'}); },
       onGoHandbook:()=>this.setState({view:'handbook'}), handbookCards:this.handbook.map(c=>({icon:c.icon, title:c.title, summary:c.summary, expanded:S.handbookOpen===c.id, chevron:S.handbookOpen===c.id?'chevron-up':'chevron-down', onToggle:()=>this.setState({handbookOpen:S.handbookOpen===c.id?null:c.id}), sections:c.sections.map(s=>({h:s.h, lead:s.lead||'', hasLead:!!s.lead, bullets:s.bullets||[]}))})),
       ...(()=>{
         const famCtx = S.familyUser ? {swimmerIds:S.familyUser.swimmerIds} : null;
