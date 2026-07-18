@@ -3871,7 +3871,10 @@ class Component extends DCLogic {
     this.rosterEdits=this._loadJSON('vx_roster_edits', {edits:{}, deleted:{}, added:{}});
     this.staffOverrides=this._loadJSON('vx_staff_ovr', {});
     this.tpaceTests=this._loadJSON('vx_tpace', {});
-    this.swimmerMeta=this._loadJSON('vx_sw_meta', {});
+    this.swimmerMeta=this._sanitizeMeta(this._loadJSON('vx_sw_meta', {}));
+    // Proactively purge any old base64 that's bloating the blob (locally and, via sync, on the
+    // server) so document/InBody saves stop hitting the storage quota.
+    try{ this._saveJSON('vx_sw_meta', this.swimmerMeta); }catch(e){}
     this.sponsoredMap=this._loadJSON('vx_sponsored', {});
     this.swimmerPhotos=this._loadJSON('vx_sw_photos', {});
     this.fitnessTests=this._loadJSON('vx_fitness_tests', {});
@@ -4590,7 +4593,20 @@ class Component extends DCLogic {
     // quota). Merge the dedicated flag in — reading code keeps using meta.sponsored unchanged.
     const sp=!!((this.sponsoredMap||{})[swId]) || !!base.sponsored;
     return {...base, sponsored:sp}; }
-  _saveSwMeta(swId, meta){ this.swimmerMeta={...this.swimmerMeta, [swId]:meta}; this._saveJSON('vx_sw_meta', this.swimmerMeta); this.forceUpdate(); }
+  // Strip any heavy base64 out of the meta blob so it never exceeds the browser storage quota
+  // (which was silently failing the save and making documents "reappear as missing"). Only the
+  // small Supabase Storage URL + metadata is kept; old base64-only docs are cleared for re-upload.
+  _sanitizeMeta(map){
+    const out={};
+    Object.keys(map||{}).forEach(id=>{ const m=map[id]||{}; const docs={};
+      Object.keys(m.docs||{}).forEach(k=>{ const d=(m.docs||{})[k];
+        if(d && typeof d==='object'){ docs[k] = d.url ? {url:d.url, name:d.name, type:d.type, uploadedAt:d.uploadedAt} : false; }
+        else { docs[k]=d; } });
+      const inbody=(m.inbody||[]).map(r=>{ const c={...r}; if(c.dataUrl) delete c.dataUrl; if(c.image) delete c.image; return c; });
+      out[id]={...m, docs, inbody}; });
+    return out;
+  }
+  _saveSwMeta(swId, meta){ const clean=this._sanitizeMeta({...this.swimmerMeta, [swId]:meta}); this.swimmerMeta=clean; this._saveJSON('vx_sw_meta', clean); this.forceUpdate(); }
   toggleSponsor(swId){ const on=!this._swMeta(swId).sponsored; const m={...(this.sponsoredMap||{})};
     if(on) m[swId]=true; else delete m[swId];
     this.sponsoredMap=m; this._saveJSON('vx_sponsored', m); this.forceUpdate(); }
@@ -5970,7 +5986,7 @@ class Component extends DCLogic {
     this.attendLog=g('vx_attend_log', this.attendLog);
     this.swimmerGoals=g('vx_swimmer_goals', this.swimmerGoals);
     this.squadGoals=g('vx_squad_goals', this.squadGoals);
-    this.swimmerMeta=g('vx_sw_meta', this.swimmerMeta);
+    this.swimmerMeta=this._sanitizeMeta(g('vx_sw_meta', this.swimmerMeta));
     this.sponsoredMap=g('vx_sponsored', this.sponsoredMap);
     this.swimmerPhotos=g('vx_sw_photos', this.swimmerPhotos);
     this.staffOverrides=g('vx_staff_ovr', this.staffOverrides);
