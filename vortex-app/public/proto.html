@@ -3875,6 +3875,9 @@ class Component extends DCLogic {
     // Proactively purge any old base64 that's bloating the blob (locally and, via sync, on the
     // server) so document/InBody saves stop hitting the storage quota.
     try{ this._saveJSON('vx_sw_meta', this.swimmerMeta); }catch(e){}
+    // Documents live in their own table (swimmer_docs), never the quota-limited blob. Keep a
+    // tiny local cache (URLs only) for instant display; the table is the source of truth.
+    this.swimmerDocs=this._loadJSON('vx_docs_cache', {});
     this.sponsoredMap=this._loadJSON('vx_sponsored', {});
     this.swimmerPhotos=this._loadJSON('vx_sw_photos', {});
     this.fitnessTests=this._loadJSON('vx_fitness_tests', {});
@@ -4058,7 +4061,7 @@ class Component extends DCLogic {
   // navigation
   go(patch){ this.setState(patch); }
   openSquad(id){ this.setState({view:'squad', squadId:id, tab:'group', swimmerId:null, showSwitcher:false, tool:null}); try{ this._plansFetch(); }catch(e){} try{ this._squadPlansFetch(); }catch(e){} }
-  openSwimmer(id){ this.setState({view:'profile', swimmerId:id, profileEvent:null}); try{ this._famMsgFetch(); }catch(e){} }
+  openSwimmer(id){ this.setState({view:'profile', swimmerId:id, profileEvent:null}); try{ this._famMsgFetch(); }catch(e){} try{ this._docsFetch(); }catch(e){} }
   _fitnessLocked(){ const a=(this.accounts||[]).find(x=>x.id===this.state.pickedId)||{};
     // Locked to the Fitness Plan tool if their role mentions "fitness" OR the account is Coach Nedhal.
     if(a.id==='ahmed'||a.id==='sameh') return false; // club admins always have full access
@@ -4592,7 +4595,17 @@ class Component extends DCLogic {
     // heavy vx_sw_meta blob (which can carry base64 docs/InBody images and hit the storage
     // quota). Merge the dedicated flag in — reading code keeps using meta.sponsored unchanged.
     const sp=!!((this.sponsoredMap||{})[swId]) || !!base.sponsored;
-    return {...base, sponsored:sp}; }
+    // Documents come from the dedicated swimmer_docs table (overlaid on any legacy blob docs).
+    const docsOvr=(this.swimmerDocs||{})[swId]||{};
+    const docs={...(base.docs||{}), ...docsOvr};
+    return {...base, sponsored:sp, docs}; }
+  _docFor(swId, key){ return ((this.swimmerDocs||{})[swId]||{})[key]||null; }
+  async _docsFetch(){
+    if(!window.__vxSelect) return;
+    const rows=await window.__vxSelect('swimmer_docs', 'select=*'); if(rows==null) return;
+    const map={}; rows.forEach(r=>{ const sw=r.swimmer_id, k=r.kind; if(!sw||!k||!r.url) return; (map[sw]=map[sw]||{})[k]={url:r.url, name:r.name, type:r.type, uploadedAt:r.uploaded_at}; });
+    this.swimmerDocs=map; try{ this._saveLocalOnly('vx_docs_cache', map); }catch(e){} this.forceUpdate();
+  }
   // Strip any heavy base64 out of the meta blob so it never exceeds the browser storage quota
   // (which was silently failing the save and making documents "reappear as missing"). Only the
   // small Supabase Storage URL + metadata is kept; old base64-only docs are cleared for re-upload.
@@ -4623,14 +4636,26 @@ class Component extends DCLogic {
       const path='docs/'+swId+'/'+key+'-'+Date.now()+'.'+ext;
       const url=await window.__vxUploadFile(path, file);
       if(!url) throw new Error(window.__vxUploadErr||'upload failed');
-      const m=this._swMeta(swId);
-      this._saveSwMeta(swId, {...m, docs:{...m.docs, [key]:{url, name:file.name, type:file.type, uploadedAt:new Date().toISOString().slice(0,10)}}});
-      this.setState({docBusy:null, docMsg:'Uploaded & saved ✓'});
+      const doc={url, name:file.name, type:file.type, uploadedAt:new Date().toISOString().slice(0,10)};
+      // Save the document as its own database row — NEVER the quota-limited blob.
+      const map={...(this.swimmerDocs||{})}; map[swId]={...(map[swId]||{}), [key]:doc}; this.swimmerDocs=map;
+      try{ this._saveLocalOnly('vx_docs_cache', map); }catch(e){}
+      let ok=true; if(window.__vxUpsert){ ok=await window.__vxUpsert('swimmer_docs', [{id:swId+'::'+key, swimmer_id:swId, kind:key, url, name:file.name, type:file.type, uploaded_at:doc.uploadedAt, ts:Date.now()}]); }
+      // Clear any stale legacy copy still sitting in the blob so it can't shadow the new one.
+      const bm=this.swimmerMeta[swId]; if(bm && bm.docs && bm.docs[key]){ this._saveSwMeta(swId, {...bm, docs:{...bm.docs, [key]:false}}); }
+      this.setState({docBusy:null, docMsg: ok ? 'Uploaded & saved ✓' : 'Uploaded, but sync failed — run swimmer_docs.sql'});
+      this.forceUpdate();
     }catch(err){ this.setState({docBusy:null, docMsg:'Upload failed — '+((err&&err.message)||'try again')}); }
   }
   _openUrl(url){ if(!url) return; try{ const w=window.open(url,'_blank'); if(!w) location.href=url; }catch(e){ try{ location.href=url; }catch(x){} } }
   _openDoc(doc){ if(!doc) return; if(doc.url) this._openUrl(doc.url); else if(doc.dataUrl) this._openDataUrl(doc.dataUrl); }
-  removeDoc(swId, key){ const m=this._swMeta(swId); this._saveSwMeta(swId, {...m, docs:{...m.docs, [key]:false}}); }
+  removeDoc(swId, key){
+    const map={...(this.swimmerDocs||{})}; if(map[swId]){ const d={...map[swId]}; delete d[key]; map[swId]=d; } this.swimmerDocs=map;
+    try{ this._saveLocalOnly('vx_docs_cache', map); }catch(e){}
+    if(window.__vxDelete){ try{ window.__vxDelete('swimmer_docs', 'id=eq.'+encodeURIComponent(swId+'::'+key)); }catch(e){} }
+    const bm=this.swimmerMeta[swId]; if(bm && bm.docs && bm.docs[key]){ this._saveSwMeta(swId, {...bm, docs:{...bm.docs, [key]:false}}); }
+    this.forceUpdate();
+  }
   addInbody(swId){ const f=this.state.inbodyForm; const w=parseFloat(f.weight), fat=parseFloat(f.fat), mus=parseFloat(f.muscle);
     if(!w) return;
     const m=this._swMeta(swId);
@@ -5938,6 +5963,7 @@ class Component extends DCLogic {
     this._fitPlansFetch();
     this._famMsgFetch();
     this._alertsFetch();
+    this._docsFetch();
     this._planCustomFetch();
     this._plansInt=setInterval(()=>{ if(this.state.view==='squad' && this.state.tab==='plans'){ this._plansFetch(); this._squadPlansFetch(); } }, 8000);
     // Staff accounts live in their own table (staff_accounts).
