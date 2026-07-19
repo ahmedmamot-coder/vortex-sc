@@ -5349,6 +5349,7 @@ class Component extends DCLogic {
     if(!window.__vxSelect) return;
     const rows=await window.__vxSelect('fitness_sessions', 'select=*&order=ts.desc&limit=500');
     if(rows==null) return; // table missing / offline → keep current
+    if(rows.length===0 && this.fitSaved && Object.keys(this.fitSaved).some(k=>(this.fitSaved[k]||[]).length)) return;
     const grouped={}; rows.forEach(r=>{ const sq=r.squad_id||'?'; (grouped[sq]=grouped[sq]||[]).push({ id:r.id, date:r.sday||'', title:r.title||'Session', totalEx:r.total_exs||0, slot:(r.plan&&r.plan._slot)||'', time:(r.plan&&r.plan._time)||'', plan:r.plan||{} }); });
     this.fitSaved=grouped; this.forceUpdate();
   }
@@ -5357,7 +5358,7 @@ class Component extends DCLogic {
     const planCopy=JSON.parse(JSON.stringify(plan)); planCopy._slot=slot; planCopy._time=time;
     const rec={ id, date, slot, time, title:plan.title||'Dryland', totalEx:this._fitExCount(plan), plan:planCopy };
     const list=[rec, ...((this.fitSaved&&this.fitSaved[squadId])||[])]; this.fitSaved={...(this.fitSaved||{}), [squadId]:list};
-    this.setState({fitSavedMsg:'Session saved for '+this.shortDate(date.split('-').reverse().join('/'))+' · '+slot+(time?(' '+time):'')+' ✓'});
+    this.setState({fitSavedMsg:'Session saved for '+this._fmtDMY(date)+' · '+slot+(time?(' '+time):'')+' ✓'});
     const row={ id, squad_id:squadId, title:rec.title, total_exs:rec.totalEx, plan:planCopy, sday:date, ts:Date.now() };
     try{ if(window.__vxInsert){ const ok=await window.__vxInsert('fitness_sessions', [row]); if(ok) await this._fitSessFetch(); else this.setState({fitSavedMsg:'Saved on this device, but the database rejected it — run the fitness_sessions SQL.'}); } }catch(e){} }
   loadFitSession(squadId, id){ const rec=((this.fitSaved&&this.fitSaved[squadId])||[]).find(r=>r.id===id); if(!rec) return;
@@ -5961,6 +5962,9 @@ class Component extends DCLogic {
     if(!window.__vxSelect) return;
     const rows=await window.__vxSelect('plan_sessions', 'select=*&order=ts.desc&limit=500');
     if(rows==null) return; // table missing / offline → keep current
+    // If the read came back empty but we already hold saved sessions, the read was likely blocked
+    // (e.g. row-level security without a token) — keep what we have rather than wiping it.
+    if(rows.length===0 && this.savedPlans && Object.keys(this.savedPlans).some(k=>(this.savedPlans[k]||[]).length)) return;
     const grouped={}; rows.forEach(r=>{ const sq=r.squad_id||'?'; (grouped[sq]=grouped[sq]||[]).push({ id:r.id, date:r.sday||'', title:r.title||'Session', zone:r.zone||'', totalM:r.total_m||0, slot:(r.plan&&r.plan._slot)||'', time:(r.plan&&r.plan._time)||'', plan:r.plan||{} }); });
     this.savedPlans=grouped; try{ this._saveJSON('vx_saved_plans', grouped); }catch(e){} this.setState({});
   }
@@ -5970,7 +5974,7 @@ class Component extends DCLogic {
     const rec={ id, date, slot, time, title:plan.title||'Session', zone:plan.zone||'', totalM:this.planMetres(plan), plan:planCopy };
     // Optimistic add
     const list=[rec, ...((this.savedPlans&&this.savedPlans[squadId])||[])]; this.savedPlans={...(this.savedPlans||{}), [squadId]:list};
-    this.setState({savedPlanMsg:'Session saved for '+this.shortDate(date.split('-').reverse().join('/'))+' · '+slot+(time?(' '+time):'')+' ✓'});
+    this.setState({savedPlanMsg:'Session saved for '+this._fmtDMY(date)+' · '+slot+(time?(' '+time):'')+' ✓'});
     // Append a row (never overwrites another device's sessions), then refresh from the table.
     const row={ id, squad_id:squadId, title:rec.title, zone:rec.zone, total_m:rec.totalM, plan:planCopy, sday:date, ts:Date.now() };
     try{ if(window.__vxInsert){ const ok=await window.__vxInsert('plan_sessions', [row]); if(ok) await this._plansFetch(); else this.setState({savedPlanMsg:'Saved on this device, but the database rejected it — run the plan_sessions SQL.'}); } }catch(e){}
