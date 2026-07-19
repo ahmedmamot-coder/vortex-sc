@@ -35,7 +35,7 @@ if ('serviceWorker' in navigator) {
   var REST = SB_URL + "/rest/v1/club_state";
   var HEAD = { "apikey": SB_ANON, "Authorization": "Bearer " + SB_ANON, "Content-Type": "application/json" };
   // Every shared data type the club edits. The only key kept per-device is vx_api_key.
-  var SYNC = ["vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_attend_log","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_sw_status"];
+  var SYNC = ["vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_attend_log","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_meet_events","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_sw_status"];
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
   window.__vxWriteTs = {};   // last time THIS device wrote each key (ms) — guards against stale pulls
@@ -3045,6 +3045,9 @@ if ('serviceWorker' in navigator) {
                           <button onclick="{{ c.onClick }}" style="flex:none;background:{{ c.bg }};color:{{ c.fg }};border:1px solid {{ c.border }};border-radius:999px;padding:6px 12px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer">{{ c.label }}</button>
                         </sc-for>
                       </div>
+                      <sc-if value="{{ swDobChipShow }}" hint-placeholder-val="{{ false }}">
+                        <button onclick="{{ onToggleDobFilter }}" style="display:flex;align-items:center;gap:7px;align-self:flex-start;background:{{ swDobChipBg }};color:{{ swDobChipFg }};border:1px solid {{ swDobChipBorder }};border-radius:999px;padding:6px 13px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer"><i data-lucide="cake" style="width:13px;height:13px"></i>{{ swDobChipLabel }}</button>
+                      </sc-if>
 
                       <sc-if value="{{ swAddOpen }}" hint-placeholder-val="{{ false }}">
                         <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05);display:flex;flex-direction:column;gap:8px">
@@ -3225,6 +3228,17 @@ if ('serviceWorker' in navigator) {
                               <div style="padding:0 13px 12px;display:flex;flex-direction:column;gap:6px">
                                 <sc-if value="{{ m.hasEvents }}" hint-placeholder-val="{{ false }}">
                                   <div style="background:#F8FAFC;border-radius:9px;padding:8px 10px"><span style="display:block;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4;font-weight:700;margin-bottom:3px">Event program</span><span style="font-size:12px;color:#3A4152;line-height:1.5">{{ m.eventsLine }}</span></div>
+                                </sc-if>
+                                <button onclick="{{ m.onToggleEditEvents }}" style="display:flex;align-items:center;justify-content:center;gap:7px;background:#EAF1FF;color:var(--vx-blue-dark);border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer"><i data-lucide="list-checks" style="width:14px;height:14px"></i>{{ m.editEventsLabel }}</button>
+                                <sc-if value="{{ m.editingEvents }}" hint-placeholder-val="{{ false }}">
+                                  <div style="background:#F8FAFC;border:1px solid #EEF1F5;border-radius:10px;padding:10px">
+                                    <p style="margin:0 0 7px;font-size:10.5px;color:#7A8296;line-height:1.5">Tap events to add or remove them from this meet's program. Parents will only be able to request these events.</p>
+                                    <div style="display:flex;flex-wrap:wrap;gap:6px">
+                                      <sc-for list="{{ m.eventEditChips }}" as="ce" hint-placeholder-count="18">
+                                        <button onclick="{{ ce.onToggle }}" style="background:{{ ce.bg }};color:{{ ce.fg }};border:1px solid {{ ce.border }};border-radius:8px;padding:6px 10px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer">{{ ce.label }}</button>
+                                      </sc-for>
+                                    </div>
+                                  </div>
                                 </sc-if>
                                 <sc-for list="{{ m.top }}" as="t" hint-placeholder-count="3">
                                   <div style="display:flex;align-items:center;justify-content:space-between;background:#F8FAFC;border-radius:9px;padding:8px 10px"><span style="font-size:12px;color:#3A4152">{{ t.name }} · {{ t.event }}</span><span style="font-family:var(--font-mono);font-weight:700;font-size:12px;color:#0C1116">{{ t.time }}</span></div>
@@ -4007,6 +4021,7 @@ class Component extends DCLogic {
     this.meetStatus=this._loadJSON('vx_meet_status', {});
     this.meetEntries=this._loadJSON('vx_meet_entries', {});
     this.customMeets=this._loadJSON('vx_custom_meets', []);
+    this.meetEventsMap=this._loadJSON('vx_meet_events', {});
     this.eventRequests=this._loadJSON('vx_event_requests', []);
     this.swimmerGoals=this._loadJSON('vx_swimmer_goals', {});
     this.squadGoals=this._loadJSON('vx_squad_goals', {});
@@ -4063,10 +4078,10 @@ class Component extends DCLogic {
       family:this._loadFamily(), familyUser:null, familyActiveIdx:0,
       famMode:'login', famName:'', famEmail:'', famPass:'', famPass2:'', famPhone:'', famRole:'parent', famSearch:'', famPicked:[], famErr:'', famResetOk:false, famBusy:false, famRegisteredMsg:'',
       famVerify:null, famVerifyInput:'', famVerifyErr:'',
-      adminSection:null, swQuery:'', swSquadFilter:'all', swEditId:null, swAddOpen:false, swForm:{name:'',age:'',dob:'',gender:'Boys',squadId:'',pbs:[]},
+      adminSection:null, swQuery:'', swSquadFilter:'all', swDobFilter:false, swEditId:null, swAddOpen:false, swForm:{name:'',age:'',dob:'',gender:'Boys',squadId:'',pbs:[]},
       swPbEventSel:'50 Free', swPbTimeDraft:'', swPbCourse:'LCM', swPbMeet:'', swPbMeetDate:'',
       swEditPbs:[], swEditPbEventSel:'50 Free', swEditPbTimeDraft:'',
-      meetImportOpen:false, meetImportText:'', meetImportPreview:null, meetImportBusy:false, meetExpanded:null,
+      meetImportOpen:false, meetImportText:'', meetImportPreview:null, meetImportBusy:false, meetExpanded:null, meetEventsEditIdx:null,
       hytekMode:'paste', hytekPdfBusy:false, hytekPdfLabel:'Choose a Hy-Tek PDF export\u2026',
       calOpen:false, calName:'', calLocation:'', calDate:'', calCourse:'LCM', calErr:'',
       showVortexId:false,
@@ -4402,6 +4417,17 @@ class Component extends DCLogic {
     const meet={name, location:'', date:dateStr, course:courseLabel||'LCM', entries:0, events:[]};
     this.customMeets=[meet, ...this.customMeets];
     this._saveJSON('vx_custom_meets', this.customMeets);
+  }
+  // The event program for a meet: an admin-edited override (works for imported meets too),
+  // else the meet's own events list. Used by the meets panel and the family event-request chips.
+  _meetEvents(m){ if(!m) return []; const ov=(this.meetEventsMap||{})[m.name]; if(Array.isArray(ov)) return ov; return (Array.isArray(m.events)?m.events:[]); }
+  toggleMeetEvent(meetName, ev){ if(!meetName||!ev) return; const map={...(this.meetEventsMap||{})};
+    const meet=this.allMeets().find(x=>x.name===meetName);
+    const base = Array.isArray(map[meetName]) ? map[meetName] : ((meet&&Array.isArray(meet.events))?meet.events.slice():[]);
+    const i=base.indexOf(ev); if(i>=0) base.splice(i,1); else base.push(ev);
+    // keep them in the standard catalogue order for a tidy program
+    const order=this.EVENT_CATALOG(); map[meetName]=base.slice().sort((a,b)=>order.indexOf(a)-order.indexOf(b));
+    this.meetEventsMap=map; this._saveJSON('vx_meet_events', map); this.forceUpdate();
   }
   swFormAddPb(){ const S=this.state; const sec=this.parseTimeStr(S.swPbTimeDraft); if(sec==null) return;
     // A full meet history: each add is its OWN result (same event may appear at several meets),
@@ -7321,6 +7347,8 @@ class Component extends DCLogic {
     let swFlat=this.allSwimmersFlat();
     if(S.swSquadFilter!=='all') swFlat=swFlat.filter(sw=>sw.squadId===S.swSquadFilter);
     if(swQ) swFlat=swFlat.filter(sw=>sw.name.toLowerCase().includes(swQ));
+    const swMissingDobCount = swFlat.filter(sw=>!sw.dob).length;
+    if(S.swDobFilter) swFlat=swFlat.filter(sw=>!sw.dob);
     // No cap — show the whole roster so "All" lists everyone (and newly added swimmers appear).
     const swRows=swFlat.map(sw=>{ const editing=S.swEditId===(sw.squadId+'::'+sw.id); const gm=this.genMeta(sw.gender); const sq=this.squadById[sw.squadId];
       const editDraftGender = editing ? (S.swEditDraft?.gender ?? sw.gender) : sw.gender;
@@ -7375,8 +7403,12 @@ class Component extends DCLogic {
         all.sort((a,b)=>a.sec-b.sec);
         top=all.slice(0,5);
       }
+      const mEvents=this._meetEvents(m); const editingEvents=S.meetEventsEditIdx===i;
+      const eventEditChips = editingEvents ? this.EVENT_CATALOG().map(ev=>{ const on=mEvents.includes(ev); return {label:ev, on, bg:on?'#0A0F1A':'#F8FAFC', fg:on?'#fff':'#3A4152', border:on?'#0A0F1A':'#E5E9F0', onToggle:()=>this.toggleMeetEvent(m.name, ev)}; }) : [];
       return { name:m.name, meta:(m.course||'LCM')+' · '+(m.date||'')+(m.location?(' · '+m.location):'')+' · '+(m.entries||0)+' entries', chevron:expanded?'chevron-up':'chevron-down', expanded, top,
-        hasEvents: !!(m.events&&m.events.length), eventsLine: (m.events&&m.events.length)?m.events.join(' · '):'',
+        hasEvents: mEvents.length>0, eventsLine: mEvents.length?mEvents.join(' · '):'', eventCount:mEvents.length,
+        editingEvents, eventEditChips, editEventsLabel: editingEvents?'Done editing events':(mEvents.length?('Edit event program ('+mEvents.length+')'):'Add event program'),
+        onToggleEditEvents:()=>this.setState({meetEventsEditIdx: editingEvents?null:i}),
         onToggle:()=>this.setState({meetExpanded: expanded?null:i}),
         onManageEntries:()=>{ const idx=this.allMeets().findIndex(x=>x.name===m.name); this.setState({adminSection:null, tool:'entries', entriesMeetIdx: idx>=0?idx:0}); },
         status, statusBg:sBg, statusFg:sFg, onCycleStatus:()=>this.meetStatusCycle(m.name) };
@@ -8013,7 +8045,7 @@ class Component extends DCLogic {
         const curMeet = upcomingMeets[S.famReqMeetIdx] || upcomingMeets[0];
         // The events offered are exactly the ones the admin set up for THIS meet (full details);
         // if a meet has no event list yet, fall back to the standard catalogue.
-        const meetEvents = (curMeet && Array.isArray(curMeet.events) && curMeet.events.length) ? curMeet.events : this.EVENT_CATALOG();
+        const _mEv=this._meetEvents(curMeet); const meetEvents = _mEv.length ? _mEv : this.EVENT_CATALOG();
         const curReqEvent = meetEvents.includes(S.famReqEvent) ? S.famReqEvent : (meetEvents[0]||'50 Free');
         const famReqEventChips = meetEvents.map(ev=>({ label:ev, onClick:()=>this.setState({famReqEvent:ev}),
           bg: ev===curReqEvent?'#0A0F1A':'#F8FAFC', fg: ev===curReqEvent?'#fff':'#3A4152', border: ev===curReqEvent?'#0A0F1A':'#E5E9F0' }));
@@ -8034,6 +8066,10 @@ class Component extends DCLogic {
       onExportRosterCsv:()=>this.exportRosterCsv(),
       adminBrand: S.adminSection==='brand', brandView,
       swQuery:S.swQuery, onSwQuery:(e)=>this.setState({swQuery:e.target.value}), swSquadChips, swSquadFilterName,
+      swDobChipShow: S.swDobFilter || swMissingDobCount>0,
+      onToggleDobFilter:()=>this.setState({swDobFilter:!S.swDobFilter}),
+      swDobChipLabel: S.swDobFilter ? ('Showing '+swMissingDobCount+' missing DOB — tap to clear') : ('Missing DOB: '+swMissingDobCount),
+      swDobChipBg: S.swDobFilter?'#B4690E':'#FCEFDD', swDobChipFg: S.swDobFilter?'#fff':'#B4690E', swDobChipBorder: S.swDobFilter?'#B4690E':'#F3D9AE',
       swAddOpen:S.swAddOpen, onSwAddOpen:()=>this.setState({swAddOpen:true, swForm:{name:'',age:'',dob:'',gender:'Boys',squadId:(S.swSquadFilter!=='all'?S.swSquadFilter:''),pbs:[]}, swPbCourse:'LCM', swPbMeet:'', swPbMeetDate:''}), onSwAddCancel:()=>this.setState({swAddOpen:false}),
       swForm, swSquadOptions, onSwFormSquad:(e)=>this.setState({swForm:{...S.swForm, squadId:e.target.value}}),
       onSwFormName:(e)=>this.setState({swForm:{...S.swForm, name:e.target.value}}), onSwFormAge:(e)=>this.setState({swForm:{...S.swForm, age:e.target.value}}),
