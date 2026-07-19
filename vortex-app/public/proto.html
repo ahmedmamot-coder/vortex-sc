@@ -1786,6 +1786,12 @@ if ('serviceWorker' in navigator) {
                               <button onclick="{{ st.onClick }}" style="background:{{ st.bg }};color:{{ st.fg }};border:1px solid {{ st.border }};border-radius:9px;padding:7px 12px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">{{ st.label }}</button>
                             </sc-for>
                           </div>
+                          <sc-if value="{{ swStatusInactive }}" hint-placeholder-val="{{ false }}">
+                            <div style="display:flex;gap:7px;margin-top:8px;align-items:center">
+                              <span style="display:flex;align-items:center;gap:5px;flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:7px 9px"><span style="font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#9AA2B4">From</span><input value="{{ swStatusFrom }}" oninput="{{ onSwStatusFrom }}" type="date" style="flex:1;min-width:0;border:none;outline:none;background:none;font-family:var(--font-mono);font-size:11.5px;font-weight:700;color:#0C1116"></span>
+                              <span style="display:flex;align-items:center;gap:5px;flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:7px 9px"><span style="font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#9AA2B4">To</span><input value="{{ swStatusTo }}" oninput="{{ onSwStatusTo }}" type="date" style="flex:1;min-width:0;border:none;outline:none;background:none;font-family:var(--font-mono);font-size:11.5px;font-weight:700;color:#0C1116"></span>
+                            </div>
+                          </sc-if>
                         </div>
 
                         <div>
@@ -4745,8 +4751,11 @@ class Component extends DCLogic {
   _saveSwMeta(swId, meta){ const clean=this._sanitizeMeta({...this.swimmerMeta, [swId]:meta}); this.swimmerMeta=clean; this._saveJSON('vx_sw_meta', clean); this.forceUpdate(); }
   // Swimmer active/inactive status (traveling / break / sick / injured). Default = active.
   _statusLabel(k){ return {travel:'Traveling', 'break':'On break', sick:'Sick', injured:'Injured', other:'Away'}[k] || 'Away'; }
-  _swStatus(swId){ const s=(this.swimmerStatus||{})[swId]; return s ? {active:s.active!==false, reason:s.reason||'', since:s.since||''} : {active:true, reason:'', since:''}; }
-  setSwStatus(swId, active, reason){ const m={...(this.swimmerStatus||{})}; if(active){ delete m[swId]; } else { m[swId]={active:false, reason:reason||'break', since:this.todayISO()}; }
+  _fmtDMY(iso){ if(!iso) return ''; const p=(''+iso).split('-'); if(p.length!==3) return iso; const mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return parseInt(p[2],10)+' '+(mo[parseInt(p[1],10)-1]||'')+' '+p[0]; }
+  _swStatus(swId){ const s=(this.swimmerStatus||{})[swId]; return s ? {active:s.active!==false, reason:s.reason||'', from:s.from||s.since||'', to:s.to||''} : {active:true, reason:'', from:'', to:''}; }
+  setSwStatus(swId, active, reason){ const m={...(this.swimmerStatus||{})}; if(active){ delete m[swId]; } else { const prev=m[swId]||{}; m[swId]={active:false, reason:reason||prev.reason||'break', from:prev.from||prev.since||this.todayISO(), to:prev.to||''}; }
+    this.swimmerStatus=m; this._saveJSON('vx_sw_status', m); this.forceUpdate(); }
+  setSwStatusDate(swId, which, val){ const m={...(this.swimmerStatus||{})}; const cur=m[swId]||{active:false, reason:'break', from:this.todayISO(), to:''}; cur.active=false; cur[which]=val; m[swId]=cur;
     this.swimmerStatus=m; this._saveJSON('vx_sw_status', m); this.forceUpdate(); }
   toggleSponsor(swId){ const on=!this._swMeta(swId).sponsored; const m={...(this.sponsoredMap||{})};
     if(on) m[swId]=true; else delete m[swId];
@@ -7603,8 +7612,11 @@ class Component extends DCLogic {
         return {
           sponsorOn, sponsorBg: sponsorOn?'linear-gradient(135deg,#7A5A12,#C89B3C)':'#EEF1F5', sponsorFg: sponsorOn?'#fff':'#7A8296', sponsorLabel: sponsorOn?'VIP Sponsored athlete':'Mark as sponsored',
           onToggleSponsor:()=>this.toggleSponsor(swObj.id),
-          swStatusLabel: (()=>{ const s=this._swStatus(swObj.id); return s.active?'Active':(this._statusLabel(s.reason)+(s.since?(' · since '+this.shortDate(s.since.split('-').reverse().join('/'))):'')); })(),
+          swStatusLabel: (()=>{ const s=this._swStatus(swObj.id); if(s.active) return 'Active'; const r=this._statusLabel(s.reason); const dr=s.from?(' · '+this._fmtDMY(s.from)+(s.to?(' → '+this._fmtDMY(s.to)):' → (open)')):''; return r+dr; })(),
           swStatusColor: this._swStatus(swObj.id).active ? '#0C7A4F' : '#B4690E',
+          swStatusInactive: !this._swStatus(swObj.id).active,
+          swStatusFrom: this._swStatus(swObj.id).from||'', swStatusTo: this._swStatus(swObj.id).to||'',
+          onSwStatusFrom:(e)=>this.setSwStatusDate(swObj.id,'from',e.target.value), onSwStatusTo:(e)=>this.setSwStatusDate(swObj.id,'to',e.target.value),
           swStatusOpts: [{key:'active',label:'Active'},{key:'travel',label:'Traveling'},{key:'break',label:'Break'},{key:'sick',label:'Sick'},{key:'injured',label:'Injured'}].map(o=>{ const st=this._swStatus(swObj.id); const sel = o.key==='active' ? st.active : (!st.active && st.reason===o.key); const isAct=o.key==='active';
             return { label:o.label, onClick:()=>this.setSwStatus(swObj.id, isAct, isAct?'':o.key),
               bg: sel?(isAct?'#E4F3EC':'#FCEFDD'):'#F8FAFC', fg: sel?(isAct?'#0C7A4F':'#B4690E'):'#7A8296', border: sel?(isAct?'#B7E0C7':'#F0D9A8'):'#E5E9F0' }; }),
