@@ -2219,11 +2219,8 @@ if ('serviceWorker' in navigator) {
                             <button onclick="{{ ee.onToggle }}" style="background:{{ ee.bg }};color:{{ ee.fg }};border:1px solid {{ ee.border }};border-radius:8px;padding:6px 10px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer">{{ ee.label }}</button>
                           </sc-for>
                         </div>
-                        <div style="display:flex;gap:7px">
-                          <input value="{{ entriesHeat }}" oninput="{{ onEntriesHeat }}" placeholder="Heat #" type="number" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
-                          <input value="{{ entriesLane }}" oninput="{{ onEntriesLane }}" placeholder="Lane #" type="number" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
-                          <button onclick="{{ onEntryAdd }}" style="flex:none;background:var(--vx-blue);color:#fff;border:none;border-radius:9px;padding:9px 16px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer;display:flex;align-items:center;gap:6px"><i data-lucide="plus" style="width:15px;height:15px"></i>Add all</button>
-                        </div>
+                        <button onclick="{{ onEntryAdd }}" style="width:100%;background:var(--vx-blue);color:#fff;border:none;border-radius:10px;padding:12px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px"><i data-lucide="plus" style="width:16px;height:16px"></i>Add {{ entrySelName }} × selected events</button>
+                        <p style="margin:7px 2px 0;font-size:10.5px;color:#9AA2B4;line-height:1.5">Heats &amp; lanes are seeded automatically by personal best (fastest in the centre, last heat) — no manual heat/lane needed.</p>
                       </div>
                       <sc-if value="{{ entryHasRows }}" hint-placeholder-val="{{ false }}">
                         <div style="display:flex;flex-direction:column;gap:6px">
@@ -2231,6 +2228,7 @@ if ('serviceWorker' in navigator) {
                             <div style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:10px 12px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
                               <span style="font-family:var(--font-mono);font-weight:700;font-size:11px;color:{{ squad.accent }};background:var(--vx-blue-tint);border-radius:7px;padding:4px 7px;flex:none">H{{ e.heat }}·L{{ e.lane }}</span>
                               <span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;font-weight:600;color:#0C1116">{{ e.name }}</span><span style="display:block;font-size:10.5px;color:#7A8296">{{ e.event }}</span></span>
+                              <span style="flex:none;text-align:right;margin-right:2px"><span style="display:block;font-family:var(--font-mono);font-weight:700;font-size:12px;color:{{ squad.accent }}">{{ e.pb }}</span><span style="display:block;font-size:8.5px;letter-spacing:.05em;text-transform:uppercase;color:#B9C0CC">seed PB</span></span>
                               <button onclick="{{ e.onDelete }}" style="flex:none;width:24px;height:24px;border-radius:7px;border:none;background:#F4F6F8;color:#9AA2B4;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:14px;height:14px"></i></button>
                             </div>
                           </sc-for>
@@ -3398,13 +3396,13 @@ if ('serviceWorker' in navigator) {
                       <p style="margin:0 0 16px;font-size:16px;font-weight:700;color:#0C1116">{{ printProgram.meetName }}</p>
                       <sc-for list="{{ printProgram.heats }}" as="hh" hint-placeholder-count="3">
                         <div style="margin-bottom:14px">
-                          <p style="margin:0 0 7px;font-size:12.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:{{ printProgram.accent }}">Heat {{ hh.heat }}</p>
+                          <p style="margin:0 0 7px;font-size:12.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:{{ printProgram.accent }}">{{ hh.label }}</p>
                           <table style="width:100%;border-collapse:collapse">
                             <sc-for list="{{ hh.rows }}" as="rr" hint-placeholder-count="4">
                               <tr style="border-bottom:1px solid #EEF1F5">
                                 <td style="padding:6px 8px 6px 0;font-family:monospace;font-weight:700;color:#0C1116;width:50px">Ln {{ rr.lane }}</td>
                                 <td style="padding:6px 0;color:#3A4152;font-size:13px">{{ rr.name }}</td>
-                                <td style="padding:6px 0;color:#7A8296;font-size:12px;text-align:right">{{ rr.event }}</td>
+                                <td style="padding:6px 0;color:#0C1116;font-size:12px;font-family:monospace;font-weight:700;text-align:right">{{ rr.pb }}</td>
                               </tr>
                             </sc-for>
                           </table>
@@ -3794,13 +3792,13 @@ if ('serviceWorker' in navigator) {
       <p style="margin:0 0 16px;font-size:16px;font-weight:700;color:#0C1116">{{ printProgram.meetName }}</p>
       <sc-for list="{{ printProgram.heats }}" as="hh2" hint-placeholder-count="3">
         <div style="margin-bottom:14px;break-inside:avoid">
-          <p style="margin:0 0 7px;font-size:12.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:{{ printProgram.accent }}">Heat {{ hh2.heat }}</p>
+          <p style="margin:0 0 7px;font-size:12.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:{{ printProgram.accent }}">{{ hh2.label }}</p>
           <table style="width:100%;border-collapse:collapse">
             <sc-for list="{{ hh2.rows }}" as="rr2" hint-placeholder-count="4">
               <tr style="border-bottom:1px solid #EEF1F5">
                 <td style="padding:6px 8px 6px 0;font-family:monospace;font-weight:700;color:#0C1116;width:50px">Ln {{ rr2.lane }}</td>
                 <td style="padding:6px 0;color:#3A4152;font-size:13px">{{ rr2.name }}</td>
-                <td style="padding:6px 0;color:#7A8296;font-size:12px;text-align:right">{{ rr2.event }}</td>
+                <td style="padding:6px 0;color:#0C1116;font-size:12px;font-family:monospace;font-weight:700;text-align:right">{{ rr2.pb }}</td>
               </tr>
             </sc-for>
           </table>
@@ -4023,7 +4021,7 @@ class Component extends DCLogic {
       fitForm:{pushups:'',plankSec:'',vjump:'',sitreach:''},
       promoQuery:'',
       brandDraft:null,
-      entriesMeetIdx:0, entriesSwId:'', entriesEvent:'50 Free', entriesHeat:'', entriesLane:'', entriesQuery:'', printMode:'plan', entriesEventsSel:[],
+      entriesMeetIdx:0, entriesSwId:'', entriesSwSel:[], entriesEvent:'50 Free', entriesHeat:'', entriesLane:'', entriesQuery:'', printMode:'plan', entriesEventsSel:[],
       entryNewOpen:false, entryNewName:'', entryNewDob:'', entryNewSeed:'', entryNewErr:'',
       famReqEvent:'50 Free', famReqMeetIdx:0,
       famAttView:'month', famAttDateISO:null, famAttCalY:null, famAttCalM:null, famAttYearSel:null, famMeetSel:0,
@@ -4934,15 +4932,22 @@ class Component extends DCLogic {
   allMeets(){ return [...this.customMeets, ...this.meetsMeta]; }
   meetStatusCycle(name){ const order=['Upcoming','Entries open','In progress','Completed']; const cur=this.meetStatus[name]||'Upcoming'; const ni=(order.indexOf(cur)+1)%order.length; this.meetStatus={...this.meetStatus, [name]:order[ni]}; this._saveJSON('vx_meet_status', this.meetStatus); this.forceUpdate(); }
   toggleEntryEvent(ev){ const cur=this.state.entriesEventsSel.slice(); const i=cur.indexOf(ev); if(i>=0) cur.splice(i,1); else cur.push(ev); this.setState({entriesEventsSel:cur}); }
-  entryAdd(meetName, squadId){ const S=this.state; if(!S.entriesSwId) return;
-    const sw=this.allSwimmersFlat().find(x=>x.id===S.entriesSwId); if(!sw) return;
-    const events=(S.entriesEventsSel&&S.entriesEventsSel.length)?S.entriesEventsSel:[S.entriesEvent];
-    const heat=parseInt(S.entriesHeat,10)||1, lane=parseInt(S.entriesLane,10)||1;
-    const recs=events.map(ev=>({swId:sw.id, name:sw.name, event:ev, heat, lane}));
-    const list=[...(this.meetEntries[meetName]||[]), ...recs];
+  toggleEntrySwimmer(id){ const cur=(this.state.entriesSwSel||[]).slice(); const i=cur.indexOf(id); if(i>=0) cur.splice(i,1); else cur.push(id); this.setState({entriesSwSel:cur}); }
+  // Personal-best time for a swimmer in an event ('NT' = no time on file).
+  _pbTimeFor(swId, event){ const sw=this.allSwimmersFlat().find(s=>s.id===swId); const pb=sw&&(sw.pbs||[]).find(p=>p.event===event); return pb? (pb.time||this.fmt(pb.sec)) : 'NT'; }
+  entryAdd(meetName, squadId){ const S=this.state;
+    const swIds=(S.entriesSwSel&&S.entriesSwSel.length)?S.entriesSwSel:(S.entriesSwId?[S.entriesSwId]:[]);
+    if(!swIds.length) return this.setState({shareNote:'Pick at least one swimmer first.'});
+    const events=(S.entriesEventsSel&&S.entriesEventsSel.length)?S.entriesEventsSel:[];
+    if(!events.length) return this.setState({shareNote:'Pick at least one event.'});
+    const flat=this.allSwimmersFlat(); const existing=(this.meetEntries[meetName]||[]); const recs=[];
+    swIds.forEach(id=>{ const sw=flat.find(x=>x.id===id); if(!sw) return;
+      events.forEach(ev=>{ if(existing.some(e=>e.swId===id&&e.event===ev) || recs.some(e=>e.swId===id&&e.event===ev)) return; recs.push({swId:id, name:sw.name, event:ev, heat:1, lane:1}); }); });
+    const list=[...existing, ...recs];
     this.meetEntries={...this.meetEntries, [meetName]:list};
     this._saveJSON('vx_meet_entries', this.meetEntries);
-    this.setState({entriesHeat:'', entriesLane:'', entriesEventsSel:[]});
+    this.setState({entriesHeat:'', entriesLane:'', entriesEventsSel:[], entriesSwSel:[]});
+    this.autoSeedMeet(meetName);   // heats & lanes assigned automatically by PB
   }
   entryRemove(meetName, idx){ const list=(this.meetEntries[meetName]||[]).slice(); list.splice(idx,1); this.meetEntries={...this.meetEntries, [meetName]:list}; this._saveJSON('vx_meet_entries', this.meetEntries); this.forceUpdate(); }
   ageFromDob(dobStr){ if(!dobStr) return 0; const d=new Date(dobStr+'T00:00:00'); const t=new Date(); let age=t.getFullYear()-d.getFullYear(); const m=t.getMonth()-d.getMonth(); if(m<0 || (m===0 && t.getDate()<d.getDate())) age--; return Math.max(0,age); }
@@ -6819,11 +6824,12 @@ class Component extends DCLogic {
     const entriesList = (this.meetEntries[entryMeetName]||[]).filter(e=>entryRoster.some(sw=>sw.id===e.swId));
     const entriesSorted = entriesList.slice().sort((a,b)=> a.heat-b.heat || a.lane-b.lane);
     const entryRows = entriesSorted.map((e)=>{ const idx=(this.meetEntries[entryMeetName]||[]).indexOf(e); return {
-      name:e.name, event:e.event, heat:e.heat, lane:e.lane, onDelete:()=>this.entryRemove(entryMeetName, idx) }; });
+      name:e.name, event:e.event, heat:e.heat, lane:e.lane, pb:this._pbTimeFor(e.swId, e.event), onDelete:()=>this.entryRemove(entryMeetName, idx) }; });
     const entryMeetChips = entryMeetsList.map((n,i)=>({label:n, onClick:()=>this.setState({entriesMeetIdx:i}), bg:i===entryMeetIdx?squad.accent:'#fff', fg:i===entryMeetIdx?'#fff':'#3A4152', border:i===entryMeetIdx?squad.accent:'#E5E9F0'}));
-    const entrySwRows = entrySwOptions.slice(0,10).map(sw=>({id:sw.id, name:sw.name, initials:sw.initials, selected:S.entriesSwId===sw.id, onSelect:()=>this.setState({entriesSwId:sw.id})}));
-    const entrySelName = (entryRoster.find(sw=>sw.id===S.entriesSwId)||{}).name || '';
-    const entryHasSw = !!S.entriesSwId;
+    const entrySwSel=(S.entriesSwSel||[]);
+    const entrySwRows = entrySwOptions.slice(0,60).map(sw=>{ const on=entrySwSel.includes(sw.id); return {id:sw.id, name:sw.name, initials:sw.initials, selected:on?'#C7D6FF':'#F1F3F7', onSelect:()=>this.toggleEntrySwimmer(sw.id)}; });
+    const entrySelName = entrySwSel.length? (entrySwSel.length+' swimmer'+(entrySwSel.length>1?'s':'')+' selected') : '';
+    const entryHasSw = entrySwSel.length>0;
 
     // ---- Academy ----
     const acadTabs=['trials','ladder','schedule','fees'];
@@ -7971,7 +7977,11 @@ class Component extends DCLogic {
       printIsProgram: S.printMode==='program', printIsPlan: S.printMode!=='program',
       onPrintPlanMode:()=>this.setState({printMode:'plan'}),
       printProgram:{ clubName:this.brandConfig.clubName||'Vortex Swimming Club', accent:squad.accent, squadName:squad.name, meetName:entryMeetName, printDate:new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}),
-        heats:(()=>{ const list=(this.meetEntries[entryMeetName]||[]).filter(e=>entryRoster.some(sw=>sw.id===e.swId)); const byHeat={}; list.forEach(e=>{ (byHeat[e.heat]=byHeat[e.heat]||[]).push(e); }); return Object.keys(byHeat).sort((a,b)=>a-b).map(h=>({heat:h, rows:byHeat[h].sort((a,b)=>a.lane-b.lane).map(e=>({lane:e.lane, name:e.name, event:e.event}))})); })() },
+        heats:(()=>{ const list=(this.meetEntries[entryMeetName]||[]).filter(e=>entryRoster.some(sw=>sw.id===e.swId));
+          const byEv={}; list.forEach(e=>{ (byEv[e.event]=byEv[e.event]||[]).push(e); });
+          const out=[]; Object.keys(byEv).sort().forEach(ev=>{ const byHeat={}; byEv[ev].forEach(e=>{ (byHeat[e.heat]=byHeat[e.heat]||[]).push(e); });
+            Object.keys(byHeat).sort((a,b)=>a-b).forEach(h=>{ out.push({ label:ev+' — Heat '+h, heat:h, event:ev, rows:byHeat[h].sort((a,b)=>a.lane-b.lane).map(e=>({lane:e.lane, name:e.name, event:e.event, pb:this._pbTimeFor(e.swId, e.event)})) }); }); });
+          return out; })() },
       tpaceQuery:S.tpaceQuery, onTpaceQuery:(e)=>this.setState({tpaceQuery:e.target.value}),
       tpSwimmerRows, tpHasSel, tpNoSel: !tpHasSel, tpSelName: tpSel?tpSel.name:'', tpSelInitials: tpSel?tpSel.initials:'',
       tpType1000On, tpType400On, onTpType1000:()=>this.setState({tpaceType:'1000'}), onTpType400:()=>this.setState({tpaceType:'400'}),
