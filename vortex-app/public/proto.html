@@ -76,6 +76,9 @@ if ('serviceWorker' in navigator) {
   // (append-only INSERT), so posts can never overwrite each other.
   window.__vxInsert = function(table, rows){ return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":"return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(!r.ok){ r.text().then(function(t){ try{console.warn("vx insert "+table+" HTTP "+r.status+": "+t);}catch(e){} }); } return r.ok; }).catch(function(){ return false; }); };
   window.__vxSelect = function(table, qs){ return fetch(SB_URL+"/rest/v1/"+table+(qs?("?"+qs):""), { headers: dyn() }).then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; }); };
+  // Exact row count for a table (owner Data-Check panel). Uses PostgREST's Content-Range header
+  // (Prefer: count=exact) so we never download the rows themselves. Returns a number, or -1 on error.
+  window.__vxCount = function(table, qs){ return fetch(SB_URL+"/rest/v1/"+table+"?select=id"+(qs?("&"+qs):""), { method:"HEAD", headers: dyn({"Prefer":"count=exact","Range-Unit":"items","Range":"0-0"}) }).then(function(r){ var cr=r.headers.get("content-range")||""; var m=cr.split("/"); var n=m.length>1?parseInt(m[1],10):NaN; return isNaN(n)?(r.ok?0:-1):n; }).catch(function(){ return -1; }); };
   window.__vxDelete = function(table, qs){ return fetch(SB_URL+"/rest/v1/"+table+"?"+qs, { method:"DELETE", headers: dyn() }).then(function(r){ return r.ok; }).catch(function(){ return false; }); };
   window.__vxUpsert = function(table, rows){ return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":"resolution=merge-duplicates,return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(!r.ok){ r.text().then(function(t){ try{console.warn("vx upsert "+table+" HTTP "+r.status+": "+t);}catch(e){} }); } return r.ok; }).catch(function(){ return false; }); };
   // Upload a file (photo/video) to the public "vx-media" Storage bucket and return its public URL,
@@ -3498,6 +3501,24 @@ if ('serviceWorker' in navigator) {
                       </sc-if>
                     </div>
                   </sc-if>
+                  <sc-if value="{{ canDataCheck }}" hint-placeholder-val="{{ false }}">
+                    <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                      <p style="margin:0 0 4px;font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7A8296">Data check · owner only</p>
+                      <p style="margin:0 0 11px;font-size:11px;color:#9AA2B4;line-height:1.5">Live counts pulled straight from the database, so you can confirm everything really is saved — on every device, not just this one.</p>
+                      <button onclick="{{ onRunDataCheck }}" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--vx-blue);color:#fff;border:none;border-radius:11px;padding:12px;font-family:inherit;font-weight:700;font-size:13.5px;cursor:pointer"><i data-lucide="database" style="width:15px;height:15px"></i>{{ dataCheckBtnLabel }}</button>
+                      <sc-if value="{{ dataCheckMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:9px 2px 0;font-size:11px;font-weight:600;color:#7A8296">{{ dataCheckMsg }}</p></sc-if>
+                      <sc-if value="{{ dataCheckHasRows }}" hint-placeholder-val="{{ false }}">
+                        <div style="margin-top:12px;border-top:1px solid #EEF1F5;padding-top:6px">
+                          <sc-for list="{{ dataCheckRows }}" as="d" hint-placeholder-count="0">
+                            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 2px;border-bottom:1px solid #F4F6F8">
+                              <span style="font-size:12.5px;color:#3A4152">{{ d.label }}</span>
+                              <span style="font-size:14px;font-weight:800;color:{{ d.color }}">{{ d.value }}</span>
+                            </div>
+                          </sc-for>
+                        </div>
+                      </sc-if>
+                    </div>
+                  </sc-if>
                   <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
                     <p style="margin:0 0 11px;font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7A8296">My profile</p>
                     <input id="vx-set-photo" type="file" accept="image/*" onchange="{{ onSetPhoto }}" style="display:none">
@@ -5442,6 +5463,52 @@ class Component extends DCLogic {
   deleteAnnouncement(id){ this.announcements=(this.announcements||[]).filter(a=>a.id!==id);
     if(window.__vxDelete){ try{ window.__vxDelete('announcements', 'id=eq.'+encodeURIComponent(id)); }catch(e){} }
     if(this.state.annEditId===id) this.setState({annEditId:null, annMsg:''}); else this.forceUpdate(); }
+  // ---- Owner-only Data Check -------------------------------------------------------------
+  // Pull live row counts straight from the database so the owner can confirm — at a glance —
+  // that everything really is saved (per table), independent of any one device's local storage.
+  async runDataCheck(){
+    if(!this._isAdmin()) return;
+    this.setState({dataCheckRunning:true, dataCheckMsg:'Checking the database…'});
+    const C = window.__vxCount;
+    const num = (n)=> (n==null||n<0) ? '—' : String(n);
+    // local-derived (already in memory)
+    const local = {
+      swimmers: this.allSwimmersFlat().length,
+      squads: (this.squads||[]).length,
+      meets: this.allMeets().length,
+      entries: Object.values(this.meetEntries||{}).reduce((a,v)=>a+((v&&v.length)||0),0),
+    };
+    let db = {};
+    if(C){
+      const tables = ['plan_sessions','fitness_sessions','squad_plans','season_plans','fitness_plans','family_accounts','staff_accounts','swimmer_docs','push_subscriptions','announcements','family_messages','lounge_posts','lounge_comments','signup_alerts'];
+      try{
+        const res = await Promise.all(tables.map(t=>C(t)));
+        tables.forEach((t,i)=>{ db[t]=res[i]; });
+      }catch(e){}
+    }
+    const rows = [
+      ['Swimmers (this device)', local.swimmers],
+      ['Squads', local.squads],
+      ['Meets', local.meets],
+      ['Meet entries', local.entries],
+      ['Saved plan sessions', db.plan_sessions],
+      ['Saved fitness sessions', db.fitness_sessions],
+      ['Squad plans', db.squad_plans],
+      ['Season plans', db.season_plans],
+      ['Fitness plans', db.fitness_plans],
+      ['Swimmer files (docs/photos)', db.swimmer_docs],
+      ['Family accounts', db.family_accounts],
+      ['Staff accounts', db.staff_accounts],
+      ['Family messages', db.family_messages],
+      ['Lounge posts', db.lounge_posts],
+      ['Lounge comments', db.lounge_comments],
+      ['Sign-up alerts', db.signup_alerts],
+      ['Announcements', db.announcements],
+      ['Push subscriptions', db.push_subscriptions],
+    ].map(r=>({ label:r[0], value:num(r[1]), warn:(r[1]===-1) }));
+    this._dataCheck = { rows, at:new Date().toISOString() };
+    this.setState({dataCheckRunning:false, dataCheckMsg:'Checked '+new Date().toLocaleTimeString()});
+  }
   _famMsgEls(swimmerId, viewer){ const list=(this.famMessages||{})[swimmerId]||[];
     return list.map(m=>{ const mine=(viewer==='staff')?(m.sender==='staff'):(m.sender==='family');
       return { id:m.id, mine, notMine:!mine, align: mine?'flex-end':'flex-start', name:m.fromName, avatar:this.av(m.fromPhoto||null, (m.fromName||'?').slice(0,2).toUpperCase(), 24, 8, mine?'#0A0F1A':'#067EEA', '#fff', 9),
@@ -7401,6 +7468,11 @@ class Component extends DCLogic {
           annSendLabel: S.annEditId?'Update notification':'Send notification',
           annHasSent:(this.announcements||[]).length>0,
           annSent:(this.announcements||[]).slice(0,8).map(a=>({ id:a.id, body:a.body, audienceLabel:(a.audience==='family'?'Parents':a.audience==='staff'?'Coaches':'Everyone'), when:this.notifTimeAgo(a.at), onEdit:()=>this.editAnnouncement(a.id), onDelete:()=>this.deleteAnnouncement(a.id) })),
+          canDataCheck: this._isAdmin(), onRunDataCheck:()=>this.runDataCheck(),
+          dataCheckBtnLabel: S.dataCheckRunning?'Checking…':'Run data check',
+          dataCheckMsg:S.dataCheckMsg||'', dataCheckMsgShow:!!S.dataCheckMsg,
+          dataCheckHasRows:!!(this._dataCheck && this._dataCheck.rows && this._dataCheck.rows.length),
+          dataCheckRows:((this._dataCheck&&this._dataCheck.rows)||[]).map(r=>({ label:r.label, value:r.value, color:r.warn?'#B42318':(r.value==='—'?'#9AA2B4':'#0C1116') })),
           themeLightBg:S.theme!=='dark'?'#0A0F1A':'#F4F6F8', themeLightFg:S.theme!=='dark'?'#fff':'#7A8296',
           themeDarkBg:S.theme==='dark'?'#0A0F1A':'#F4F6F8', themeDarkFg:S.theme==='dark'?'#fff':'#7A8296',
           settingsIsFamily:isFam, settingsIsStaff:!isFam,
