@@ -6203,6 +6203,10 @@ class Component extends DCLogic {
     this._annFetch();
     this._docsFetch();
     this._planCustomFetch();
+    // Load every saved training session on startup so the training log & calendar populate
+    // immediately for each coach (not only when the Plans tab is opened).
+    try{ this._plansFetch(); }catch(e){}
+    try{ this._fitSessFetch(); }catch(e){}
     this._plansInt=setInterval(()=>{ if(this.state.view==='squad' && this.state.tab==='plans'){ this._plansFetch(); this._squadPlansFetch(); } }, 8000);
     // Staff accounts live in their own table (staff_accounts).
     this._staffFetch();
