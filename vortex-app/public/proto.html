@@ -3428,6 +3428,11 @@ if ('serviceWorker' in navigator) {
                     </div>
                   </div>
                   <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                    <p style="margin:0 0 8px;font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7A8296">Notifications</p>
+                    <p style="margin:0 0 10px;font-size:12px;color:#7A8296;line-height:1.5">Get a push alert on this device for new coach messages{{ pushRoleNote }}.</p>
+                    <button onclick="{{ onEnablePush }}" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:{{ pushBtnBg }};color:{{ pushBtnFg }};border:none;border-radius:11px;padding:12px;font-family:inherit;font-weight:700;font-size:13.5px;cursor:pointer"><i data-lucide="bell" style="width:16px;height:16px"></i>{{ pushBtnLabel }}</button>
+                  </div>
+                  <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
                     <p style="margin:0 0 11px;font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7A8296">My profile</p>
                     <input id="vx-set-photo" type="file" accept="image/*" onchange="{{ onSetPhoto }}" style="display:none">
                     <div style="display:flex;align-items:center;gap:13px;margin-bottom:11px">
@@ -3878,6 +3883,8 @@ class Component extends DCLogic {
     // Documents live in their own table (swimmer_docs), never the quota-limited blob. Keep a
     // tiny local cache (URLs only) for instant display; the table is the source of truth.
     this.swimmerDocs=this._loadJSON('vx_docs_cache', {});
+    // Web Push public (VAPID) key — safe to embed; the private key lives only in the server env.
+    this.VAPID_PUBLIC='BPnAfmRju94v7v00p3aq6W3hf3Y89au054VeOEn0LnQa9yLT_qqzwOHNkosYkOItc3S2WPEl676HR4S3vhpdUOE';
     this.sponsoredMap=this._loadJSON('vx_sponsored', {});
     this.swimmerPhotos=this._sanitizePhotos(this._loadJSON('vx_photos_cache', {}));  // table-backed; refreshed by _docsFetch
     this.fitnessTests=this._loadJSON('vx_fitness_tests', {});
@@ -3952,6 +3959,7 @@ class Component extends DCLogic {
       printPreviewOpen:false,
       staffEditId:null, staffForm:{name:'',pin:''}, staffAddOpen:false, staffAddForm:{name:'',user:'',pin:'',role:'Coach',phone:'',squadId:''}, meetsCalForm:{name:'',date:'',place:''},
       apiKey:this._loadJSON('vx_api_key',''), apiKeyDraft:'', settingsMsg:'',
+      pushOn:(function(){ try{ return localStorage.getItem('vx_push_on')==='1'; }catch(e){ return false; } })(),
       tpaceQuery:'', tpaceSwId:null, tpaceType:'1000', tpaceTime:'', tpaceErr:'',
       inbodyForm:{weight:'',fat:'',muscle:''},
       profileIbMsg:'', profileIbBusy:false,
@@ -5240,9 +5248,34 @@ class Component extends DCLogic {
     const rec={id:'fm'+Date.now()+'_'+Math.random().toString(36).slice(2,6), swimmer_id:swimmerId, sender, from_name:fromName, from_photo:fromPhoto, body, set_text:setText, video, ts:Date.now()};
     const by={...(this.famMessages||{})}; by[swimmerId]=[...(by[swimmerId]||[]), {id:rec.id, sender, fromName, fromPhoto, body, setText, video, ts:rec.ts}]; this.famMessages=by;
     this.setState({fmBody:'', fmSet:'', fmVideo:''});
-    if(sender==='staff') this.notify('family','message-circle', 'New message from '+fromName, (body||setText||'📹 Video to review').slice(0,80));
-    else this.notify('coach','message-circle', fromName+' (family) replied', (body||(video?'📹 sent a video':setText)).slice(0,80));
+    if(sender==='staff'){ this.notify('family','message-circle', 'New message from '+fromName, (body||setText||'📹 Video to review').slice(0,80));
+      this._pushNotify({swimmerIds:[swimmerId]}, 'New message from '+fromName, (body||setText||'📹 Video to review').slice(0,90), '/'); }
+    else { this.notify('coach','message-circle', fromName+' (family) replied', (body||(video?'📹 sent a video':setText)).slice(0,80));
+      this._pushNotify({role:'staff'}, fromName+' (family) replied', (body||(video?'📹 sent a video':setText)).slice(0,90), '/'); }
     try{ if(window.__vxInsert){ const ok=await window.__vxInsert('family_messages',[rec]); if(ok) await this._famMsgFetch(); } }catch(e){} }
+  // ---- Web Push: opt-in subscribe + trigger a notification via the /api/push/send endpoint ----
+  _urlB64ToUint8(base64){ const pad='='.repeat((4-base64.length%4)%4); const b=(base64+pad).replace(/-/g,'+').replace(/_/g,'/'); const raw=atob(b); const arr=new Uint8Array(raw.length); for(let i=0;i<raw.length;i++) arr[i]=raw.charCodeAt(i); return arr; }
+  async enablePush(){
+    try{
+      if(!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)){ this.setState({settingsMsg:'Notifications aren’t supported on this device/browser.'}); return; }
+      const perm=await Notification.requestPermission();
+      if(perm!=='granted'){ this.setState({settingsMsg:'Notifications permission was not granted.'}); return; }
+      const reg=await navigator.serviceWorker.ready;
+      const sub=await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:this._urlB64ToUint8(this.VAPID_PUBLIC) });
+      const j=sub.toJSON(); const acc=this._me?this._me():null; const fam=this.state.familyUser;
+      const swIds=fam?((fam.swimmerIds||[]).map(id=>String(id).split('::').pop())):[];
+      const rec={ id:j.endpoint, endpoint:j.endpoint, p256dh:(j.keys&&j.keys.p256dh)||'', auth:(j.keys&&j.keys.auth)||'',
+        role: fam?'family':((acc&&acc.role)||'staff'), account: fam?('fam:'+fam.id):((acc&&acc.id)||''), swimmer_ids:swIds, ts:Date.now() };
+      if(window.__vxUpsert) await window.__vxUpsert('push_subscriptions', [rec]);
+      try{ localStorage.setItem('vx_push_on','1'); }catch(e){}
+      this.setState({pushOn:true, settingsMsg:'Notifications enabled on this device ✓'});
+    }catch(err){ this.setState({settingsMsg:'Could not enable notifications: '+((err&&err.message)||'error')}); }
+  }
+  _pushNotify(target, title, message, url){
+    try{ const tok=(window.__VX_AUTH && window.__VX_AUTH.token)||''; if(!tok) return;
+      fetch('/api/push/send', { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+tok }, body: JSON.stringify({ ...(target||{}), title, message, url:url||'/' }) }).catch(()=>{});
+    }catch(e){}
+  }
   _famMsgEls(swimmerId, viewer){ const list=(this.famMessages||{})[swimmerId]||[];
     return list.map(m=>{ const mine=(viewer==='staff')?(m.sender==='staff'):(m.sender==='family');
       return { id:m.id, mine, notMine:!mine, align: mine?'flex-end':'flex-start', name:m.fromName, avatar:this.av(m.fromPhoto||null, (m.fromName||'?').slice(0,2).toUpperCase(), 24, 8, mine?'#0A0F1A':'#067EEA', '#fff', 9),
@@ -7175,6 +7208,8 @@ class Component extends DCLogic {
           onOpenSettings:()=>this.openSettings(), onCloseSettings:()=>this.closeSettings(), settingsOpen:!!S.settingsOpen,
           settingsMsg:S.settingsMsg||'', settingsMsgShow:!!S.settingsMsg,
           themeIsDark:S.theme==='dark', onThemeLight:()=>this.setTheme('light'), onThemeDark:()=>this.setTheme('dark'),
+          onEnablePush:()=>this.enablePush(), pushBtnLabel:S.pushOn?'Notifications on ✓ — tap to re-enable':'Enable notifications',
+          pushBtnBg:S.pushOn?'#0C7A4F':'var(--vx-blue)', pushBtnFg:'#fff', pushRoleNote: isFam?'':', family replies and new sign-ups',
           themeLightBg:S.theme!=='dark'?'#0A0F1A':'#F4F6F8', themeLightFg:S.theme!=='dark'?'#fff':'#7A8296',
           themeDarkBg:S.theme==='dark'?'#0A0F1A':'#F4F6F8', themeDarkFg:S.theme==='dark'?'#fff':'#7A8296',
           settingsIsFamily:isFam, settingsIsStaff:!isFam,
