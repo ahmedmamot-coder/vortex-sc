@@ -7142,7 +7142,7 @@ class Component extends DCLogic {
     let swFlat=this.allSwimmersFlat();
     if(S.swSquadFilter!=='all') swFlat=swFlat.filter(sw=>sw.squadId===S.swSquadFilter);
     if(swQ) swFlat=swFlat.filter(sw=>sw.name.toLowerCase().includes(swQ));
-    swFlat=swFlat.slice(0,60);
+    // No cap — show the whole roster so "All" lists everyone (and newly added swimmers appear).
     const swRows=swFlat.map(sw=>{ const editing=S.swEditId===(sw.squadId+'::'+sw.id); const gm=this.genMeta(sw.gender); const sq=this.squadById[sw.squadId];
       const editDraftGender = editing ? (S.swEditDraft?.gender ?? sw.gender) : sw.gender;
       const editDraftSquad = editing ? (S.swEditDraft?.squadId ?? sw.squadId) : sw.squadId;
