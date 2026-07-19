@@ -91,8 +91,29 @@ if ('serviceWorker' in navigator) {
   };
   // Install write-through sync UP FRONT so every write reaches the database.
   var origSet = localStorage.setItem.bind(localStorage);
+  var origRemove = localStorage.removeItem.bind(localStorage);
   window.__vxsetlocal = origSet; // write locally WITHOUT re-pushing (used by background pull)
-  localStorage.setItem = function(k,v){ origSet(k,v); if(SYNC.indexOf(k)>=0){ try{ origSet('__vxts_'+k, String(Date.now())); }catch(e){} } pushKey(k,v); };
+  // ---- One-time space reclaim ------------------------------------------------------------
+  // Old base64 files (documents, photos, meet/InBody PDFs, fitness images) that now live in
+  // Supabase Storage may still be sitting in localStorage, filling the ~5MB quota so that NEW
+  // saves silently fail and "disappear". Strip any leftover data: URLs to free that space.
+  function vxReclaim(){ try{ var keys=[]; for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k) keys.push(k); }
+    keys.forEach(function(k){ try{ var v=localStorage.getItem(k); if(!v || v.length<1500) return;
+      if(v.indexOf('data:')>=0){ var nv=v.replace(/"data:[^"]{200,}"/g,'""'); if(nv!==v){ origSet(k, nv); } } }catch(e){} }); }catch(e){} }
+  vxReclaim();
+  // Resilient write: try local, free space + retry on quota error, and ALWAYS push to the DB so
+  // data is never lost even if this device's storage is momentarily full.
+  localStorage.setItem = function(k,v){
+    var okLocal=false;
+    try{ origSet(k,v); okLocal=true; }catch(e){}
+    if(!okLocal){ // quota — drop timestamp markers (cheap to lose), reclaim base64, retry once
+      try{ var rm=[]; for(var i=0;i<localStorage.length;i++){ var kk=localStorage.key(i); if(kk && kk.indexOf('__vxts_')===0) rm.push(kk); } rm.forEach(function(x){ try{ origRemove(x); }catch(_){} }); }catch(_){}
+      vxReclaim();
+      try{ origSet(k,v); okLocal=true; }catch(e2){}
+    }
+    if(okLocal && SYNC.indexOf(k)>=0){ try{ origSet('__vxts_'+k, String(Date.now())); }catch(e){} }
+    pushKey(k,v);   // always sync to the database, even if the local write failed
+  };
   var booted = false;
   function hideSplash(){ setTimeout(function(){ var el=document.getElementById("vx-splash"); if(el){ el.style.opacity="0"; setTimeout(function(){ if(el.parentNode) el.parentNode.removeChild(el); }, 380); } }, 220); }
   function boot(){ if(booted) return; booted=true; var s=document.createElement("script"); s.src="assets/support.js"; s.onload=hideSplash; document.body.appendChild(s); }
