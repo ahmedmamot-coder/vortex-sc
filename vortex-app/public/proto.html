@@ -3072,7 +3072,8 @@ if ('serviceWorker' in navigator) {
                             </select>
                           </div>
                           <div style="border-top:1px solid #EEF1F5;padding-top:8px;margin-top:2px">
-                            <p style="margin:0 0 6px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">Personal bests</p>
+                            <p style="margin:0 0 3px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">Personal bests &amp; meet history</p>
+                            <p style="margin:0 0 7px;font-size:10.5px;color:#9AA2B4;line-height:1.4">Add each swim — event, course, time, meet &amp; date — then tap ＋. Add as many as you like (the same event at different meets is kept). All show in the profile; fastest per event becomes the PB.</p>
                             <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
                               <sc-for list="{{ swPbChips }}" as="pb" hint-placeholder-count="2">
                                 <span style="display:flex;align-items:center;gap:6px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border-radius:999px;padding:5px 6px 5px 11px;font-size:11.5px;font-weight:700">{{ pb.label }}<button onclick="{{ pb.onRemove }}" style="background:rgba(6,126,234,.18);border:none;border-radius:50%;width:16px;height:16px;color:var(--vx-blue-dark);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0"><i data-lucide="x" style="width:10px;height:10px"></i></button></span>
@@ -4380,11 +4381,16 @@ class Component extends DCLogic {
   aiSuggestAllGoals(swId, pbs, age){ const cur=(this.swimmerGoals[swId]=this.swimmerGoals[swId]||{}); pbs.forEach(p=>{ cur[p.event]={sec:this._aiSuggestSec(p.sec, age), source:'ai'}; }); this._saveGoals(); this.setState({goalMsg:'AI suggested goals for all events \u2713'}); }
   adminAddSwimmer(squadId, form){ if(!form.name.trim()) return; const first=form.name.trim().split(/\s+/)[0]; const last=form.name.trim().split(/\s+/).slice(1).join(' ');
     const initials=((first[0]||'')+(last[0]||first[1]||'')).toUpperCase();
-    const pbs=(form.pbs||[]).map(p=>({event:p.event, sec:p.sec, time:this.fmt(p.sec), drop:'', course:p.course||'L', courseLabel:p.courseLabel||(p.course==='S'?'SCM':'LCM'), meet:p.meet||'', meetDate:p.meetDate||''})).sort((a,b)=>a.sec-b.sec);
-    // Any PB tagged with a meet becomes a result row (so it shows in the swimmer's meet history)
-    // and, if that meet is new, gets added to the club meets list — synced to everyone.
-    const results=[]; const meetNames={};
-    pbs.forEach(p=>{ if(p.meet){ const dmy=p.meetDate?this._fmtDMY(p.meetDate):''; results.push({meet:p.meet, date:dmy||p.meetDate, event:p.event, time:p.time, sec:p.sec, place:null, course:p.course}); meetNames[p.meet]={date:p.meetDate, course:p.courseLabel}; } });
+    // Every entry is a swim in the swimmer's history. Same event can appear at several meets.
+    const entries=(form.pbs||[]).map(p=>({event:p.event, sec:p.sec, time:this.fmt(p.sec), course:p.course||'L', courseLabel:p.courseLabel||(p.course==='S'?'SCM':'LCM'), meet:(p.meet||'').trim(), meetDate:p.meetDate||''}));
+    // Full meet history → results rows (newest meet first). Each reflects in the profile.
+    const results=entries.slice().sort((a,b)=>{ const da=a.meetDate||'', db=b.meetDate||''; return db.localeCompare(da); })
+      .map(p=>({meet:p.meet||'Time trial', date:p.meetDate?this._fmtDMY(p.meetDate):'', event:p.event, time:p.time, sec:p.sec, place:null, course:p.course, courseLabel:p.courseLabel}));
+    // Personal bests = fastest swim per event (across all its meets/courses).
+    const bestByEvent={}; entries.forEach(p=>{ const cur=bestByEvent[p.event]; if(!cur||p.sec<cur.sec) bestByEvent[p.event]={event:p.event, sec:p.sec, time:p.time, drop:'', course:p.course, courseLabel:p.courseLabel, meet:p.meet, meetDate:p.meetDate}; });
+    const pbs=Object.values(bestByEvent).sort((a,b)=>a.sec-b.sec);
+    // Register any new meet in the club meets list — synced to everyone.
+    const meetNames={}; entries.forEach(p=>{ if(p.meet) meetNames[p.meet]={date:p.meetDate, course:p.courseLabel}; });
     Object.keys(meetNames).forEach(nm=>this._ensureMeet(nm, meetNames[nm].date, meetNames[nm].course));
     const top=pbs[0];
     const dobAge=this._ageFromDob(form.dob);
@@ -4402,11 +4408,17 @@ class Component extends DCLogic {
     this.customMeets=[meet, ...this.customMeets];
     this._saveJSON('vx_custom_meets', this.customMeets);
   }
-  swFormAddPb(){ const S=this.state; const sec=this.parseTimeStr(S.swPbTimeDraft); if(sec==null) return; const pbs=(S.swForm.pbs||[]).filter(p=>p.event!==S.swPbEventSel);
+  swFormAddPb(){ const S=this.state; const sec=this.parseTimeStr(S.swPbTimeDraft); if(sec==null) return;
+    // A full meet history: each add is its OWN result (same event may appear at several meets),
+    // so nothing overwrites — only an exact duplicate (same event+course+meet+time) is skipped.
     const courseCode=(S.swPbCourse==='LCM')?'L':'S'; // 'L' long, 'S' short — matches results data
-    pbs.push({event:S.swPbEventSel, sec, course:courseCode, courseLabel:(S.swPbCourse||'LCM'), meet:(S.swPbMeet||'').trim(), meetDate:(S.swPbMeetDate||'')});
+    const meet=(S.swPbMeet||'').trim(), meetDate=(S.swPbMeetDate||'');
+    const dup=(S.swForm.pbs||[]).some(p=>p.event===S.swPbEventSel && p.course===courseCode && (p.meet||'')===meet && p.sec===sec);
+    if(dup){ this.setState({swPbTimeDraft:''}); return; }
+    const pbs=(S.swForm.pbs||[]).slice();
+    pbs.push({event:S.swPbEventSel, sec, course:courseCode, courseLabel:(S.swPbCourse||'LCM'), meet, meetDate});
     this.setState({swForm:{...S.swForm, pbs}, swPbTimeDraft:'', swPbMeet:'', swPbMeetDate:''}); }
-  swFormRemovePb(ev){ const S=this.state; this.setState({swForm:{...S.swForm, pbs:(S.swForm.pbs||[]).filter(p=>p.event!==ev)}}); }
+  swFormRemovePb(idx){ const S=this.state; this.setState({swForm:{...S.swForm, pbs:(S.swForm.pbs||[]).filter((p,i)=>i!==idx)}}); }
   swEditOpen(squadId, id, sw){ this.setState({swEditId:squadId+'::'+id, swEditDraft:{name:sw.name, age:sw.age, dob:(sw.dob||'')}, swEditPbs:(sw.pbs||[]).map(p=>({event:p.event, sec:p.sec})), swEditPbEventSel:'50 Free', swEditPbTimeDraft:''}); }
   swEditAddPb(){ const S=this.state; const sec=this.parseTimeStr(S.swEditPbTimeDraft); if(sec==null) return; const pbs=(S.swEditPbs||[]).filter(p=>p.event!==S.swEditPbEventSel); pbs.push({event:S.swEditPbEventSel, sec}); this.setState({swEditPbs:pbs, swEditPbTimeDraft:''}); }
   swEditRemovePb(ev){ const S=this.state; this.setState({swEditPbs:(S.swEditPbs||[]).filter(p=>p.event!==ev)}); }
@@ -6712,7 +6724,7 @@ class Component extends DCLogic {
     const progressBest = secsAll.length ? this.fmt(Math.min(...secsAll)) : '\u2014';
     const swRank=(this.roster[S.squadId]||[]).findIndex(x=>x.id===swObj.id);
     const swimmerKpis=[{value:(swObj.pbs||[]).length, label:'PB events'},{value:(swObj.meetCount||0), label:'Meets'},{value:'#'+(swRank>=0?swRank+1:1), label:'Squad rank'}];
-    const swimmerResults=(swObj.results||[]).slice(0,6).map((r,i)=>{ const place=r.place||(i+1); const [mb,mf]=this.medal(place); return {event:r.event, meet:r.meet, place, time:r.time, medalBg:mb, medalFg:mf}; });
+    const swimmerResults=(swObj.results||[]).slice(0,10).map((r,i)=>{ const hasPlace=r.place!=null; const [mb,mf]=hasPlace?this.medal(r.place):['#EEF2F7','#5B6472']; const badge=hasPlace?String(r.place):(r.courseLabel?String(r.courseLabel).replace('M','').replace('Y',''):(r.course==='S'?'SC':'LC')); const sub=[r.meet, r.date].filter(Boolean).join(' · '); return {event:r.event, meet:sub||r.meet||'—', place:badge, time:r.time, medalBg:mb, medalFg:mf}; });
 
     // ---- nav ----
     const tabs=[{id:'group',icon:'users',label:'Group'},{id:'plans',icon:'list-checks',label:'Plans'},{id:'attend',icon:'calendar-check',label:'Attend'},{id:'results',icon:'medal',label:'Results'},{id:'more',icon:'layout-grid',label:'More'}];
@@ -7325,7 +7337,7 @@ class Component extends DCLogic {
     });
     const swEmpty = swRows.length===0;
     const genderB = (S.swForm.gender||'Boys')==='Boys';
-    const swPbChips=(S.swForm.pbs||[]).map(p=>({label:p.event+' \u00b7 '+this.fmt(p.sec)+' \u00b7 '+(p.courseLabel||(p.course==='S'?'SCM':'LCM'))+(p.meet?(' \u00b7 '+p.meet):''), onRemove:()=>this.swFormRemovePb(p.event)}));
+    const swPbChips=(S.swForm.pbs||[]).map((p,i)=>({label:p.event+' \u00b7 '+this.fmt(p.sec)+' \u00b7 '+(p.courseLabel||(p.course==='S'?'SCM':'LCM'))+(p.meet?(' \u00b7 '+p.meet):''), onRemove:()=>this.swFormRemovePb(i)}));
     const swPbEventOptions=this.EVENT_CATALOG().map(ev=>({value:ev, label:ev}));
     const swSquadOptions=this.squads.map(sq=>({value:sq.id, label:sq.name}));
     const swForm={ name:S.swForm.name, age:S.swForm.age, dob:S.swForm.dob||'', squadId:S.swForm.squadId||'', genderBBg:genderB?'var(--vx-blue)':'#F8FAFC', genderBFg:genderB?'#fff':'#3A4152', genderGBg:!genderB?'#E64B8B':'#F8FAFC', genderGFg:!genderB?'#fff':'#3A4152' };
