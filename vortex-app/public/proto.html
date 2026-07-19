@@ -3432,6 +3432,18 @@ if ('serviceWorker' in navigator) {
                     <p style="margin:0 0 10px;font-size:12px;color:#7A8296;line-height:1.5">Get a push alert on this device for new coach messages{{ pushRoleNote }}.</p>
                     <button onclick="{{ onEnablePush }}" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:{{ pushBtnBg }};color:{{ pushBtnFg }};border:none;border-radius:11px;padding:12px;font-family:inherit;font-weight:700;font-size:13.5px;cursor:pointer"><i data-lucide="bell" style="width:16px;height:16px"></i>{{ pushBtnLabel }}</button>
                   </div>
+                  <sc-if value="{{ canAnnounce }}" hint-placeholder-val="{{ false }}">
+                    <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                      <p style="margin:0 0 9px;font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7A8296">Send a notification</p>
+                      <div style="display:flex;gap:6px;margin-bottom:9px">
+                        <button onclick="{{ onAnnAll }}" style="flex:1;background:{{ annAllBg }};color:{{ annAllFg }};border:none;border-radius:10px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">Everyone</button>
+                        <button onclick="{{ onAnnFamily }}" style="flex:1;background:{{ annFamBg }};color:{{ annFamFg }};border:none;border-radius:10px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">Parents</button>
+                        <button onclick="{{ onAnnStaff }}" style="flex:1;background:{{ annStaffBg }};color:{{ annStaffFg }};border:none;border-radius:10px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">Coaches</button>
+                      </div>
+                      <textarea value="{{ annMsg }}" oninput="{{ onAnnMsg }}" placeholder="Write a short note to send as a push notification…" style="width:100%;min-height:64px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:11px 13px;font-family:inherit;font-size:13px;color:#0C1116;outline:none;box-sizing:border-box;resize:vertical"></textarea>
+                      <button onclick="{{ onSendAnn }}" style="margin-top:9px;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:#0A0F1A;color:#fff;border:none;border-radius:11px;padding:12px;font-family:inherit;font-weight:700;font-size:13.5px;cursor:pointer"><i data-lucide="send" style="width:15px;height:15px"></i>Send notification</button>
+                    </div>
+                  </sc-if>
                   <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
                     <p style="margin:0 0 11px;font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7A8296">My profile</p>
                     <input id="vx-set-photo" type="file" accept="image/*" onchange="{{ onSetPhoto }}" style="display:none">
@@ -3960,6 +3972,7 @@ class Component extends DCLogic {
       staffEditId:null, staffForm:{name:'',pin:''}, staffAddOpen:false, staffAddForm:{name:'',user:'',pin:'',role:'Coach',phone:'',squadId:''}, meetsCalForm:{name:'',date:'',place:''},
       apiKey:this._loadJSON('vx_api_key',''), apiKeyDraft:'', settingsMsg:'',
       pushOn:(function(){ try{ return localStorage.getItem('vx_push_on')==='1'; }catch(e){ return false; } })(),
+      annMsg:'', annAudience:'all',
       tpaceQuery:'', tpaceSwId:null, tpaceType:'1000', tpaceTime:'', tpaceErr:'',
       inbodyForm:{weight:'',fat:'',muscle:''},
       profileIbMsg:'', profileIbBusy:false,
@@ -4344,7 +4357,8 @@ class Component extends DCLogic {
     // One row per account (id = account id) — upsert never clobbers other accounts.
     if(window.__vxUpsert){ window.__vxUpsert('staff_accounts', [this._staffRow(id, o, isCustom)]).then(ok=>{ if(ok) this._staffFetch(); }); }
   }
-  meetsCalAdd(){ const f=this.state.meetsCalForm||{}; const name=(f.name||'').trim(); const date=(f.date||'').trim(); if(!name||!date) return; this.meetsCal.push({id:'mc_'+Date.now(), name:name, date:date, place:(f.place||'').trim(), pdf:f.pdf||'', pdfName:f.pdfName||''}); this.meetsCal.sort(function(a,b){return (a.date||'').localeCompare(b.date||'');}); this._saveJSON('vx_meets_cal', this.meetsCal); this.setState({meetsCalForm:{name:'',date:'',place:'',pdf:'',pdfName:''}}); }
+  meetsCalAdd(){ const f=this.state.meetsCalForm||{}; const name=(f.name||'').trim(); const date=(f.date||'').trim(); if(!name||!date) return; this.meetsCal.push({id:'mc_'+Date.now(), name:name, date:date, place:(f.place||'').trim(), pdf:f.pdf||'', pdfName:f.pdfName||''}); this.meetsCal.sort(function(a,b){return (a.date||'').localeCompare(b.date||'');}); this._saveJSON('vx_meets_cal', this.meetsCal); this.setState({meetsCalForm:{name:'',date:'',place:'',pdf:'',pdfName:''}});
+    this._pushNotify({all:true}, 'New meet: '+name, this.shortDate(date.split('-').reverse().join('/'))+((f.place||'').trim()?(' · '+(f.place||'').trim()):''), '/'); }
   meetsViewPdf(pdf, title){ if(!pdf) return; this._openDataUrl(pdf); }
   _esc(s){ return (''+(s==null?'':s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   // Open generated HTML / a stored file reliably on every platform. Android Chrome does NOT
@@ -5265,7 +5279,7 @@ class Component extends DCLogic {
       const j=sub.toJSON(); const acc=this._me?this._me():null; const fam=this.state.familyUser;
       const swIds=fam?((fam.swimmerIds||[]).map(id=>String(id).split('::').pop())):[];
       const rec={ id:j.endpoint, endpoint:j.endpoint, p256dh:(j.keys&&j.keys.p256dh)||'', auth:(j.keys&&j.keys.auth)||'',
-        role: fam?'family':((acc&&acc.role)||'staff'), account: fam?('fam:'+fam.id):((acc&&acc.id)||''), swimmer_ids:swIds, ts:Date.now() };
+        role: fam?'family':'staff', account: fam?('fam:'+fam.id):((acc&&acc.id)||''), swimmer_ids:swIds, ts:Date.now() };
       if(window.__vxUpsert) await window.__vxUpsert('push_subscriptions', [rec]);
       try{ localStorage.setItem('vx_push_on','1'); }catch(e){}
       this.setState({pushOn:true, settingsMsg:'Notifications enabled on this device ✓'});
@@ -5275,6 +5289,15 @@ class Component extends DCLogic {
     try{ const tok=(window.__VX_AUTH && window.__VX_AUTH.token)||''; if(!tok) return;
       fetch('/api/push/send', { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+tok }, body: JSON.stringify({ ...(target||{}), title, message, url:url||'/' }) }).catch(()=>{});
     }catch(e){}
+  }
+  // Staff broadcast: send a push note to Everyone / Parents / Coaches.
+  sendAnnouncement(){
+    const msg=(this.state.annMsg||'').trim(); if(!msg){ this.setState({settingsMsg:'Type a note to send.'}); return; }
+    const aud=this.state.annAudience||'all';
+    const target = aud==='family'?{role:'family'} : aud==='staff'?{role:'staff'} : {all:true};
+    const title = aud==='family'?'Note for parents' : aud==='staff'?'Note for coaches' : 'Vortex SC announcement';
+    this._pushNotify(target, title, msg, '/');
+    this.setState({annMsg:'', settingsMsg:'Notification sent to '+(aud==='family'?'parents':aud==='staff'?'coaches':'everyone')+' ✓'});
   }
   _famMsgEls(swimmerId, viewer){ const list=(this.famMessages||{})[swimmerId]||[];
     return list.map(m=>{ const mine=(viewer==='staff')?(m.sender==='staff'):(m.sender==='family');
@@ -5808,7 +5831,9 @@ class Component extends DCLogic {
     this.setState({savedPlanMsg:'Session saved for '+this.shortDate(date.split('-').reverse().join('/'))+' · '+slot+(time?(' '+time):'')+' ✓'});
     // Append a row (never overwrites another device's sessions), then refresh from the table.
     const row={ id, squad_id:squadId, title:rec.title, zone:rec.zone, total_m:rec.totalM, plan:planCopy, sday:date, ts:Date.now() };
-    try{ if(window.__vxInsert){ const ok=await window.__vxInsert('plan_sessions', [row]); if(ok) await this._plansFetch(); else this.setState({savedPlanMsg:'Saved on this device, but the database rejected it — run the plan_sessions SQL.'}); } }catch(e){} }
+    try{ if(window.__vxInsert){ const ok=await window.__vxInsert('plan_sessions', [row]); if(ok) await this._plansFetch(); else this.setState({savedPlanMsg:'Saved on this device, but the database rejected it — run the plan_sessions SQL.'}); } }catch(e){}
+    const sqName=(this.squadById[squadId]&&this.squadById[squadId].name)||'';
+    this._pushNotify({swimmerIds:(this.roster[squadId]||[]).map(s=>s.id)}, 'New training plan'+(sqName?(' · '+sqName):''), (rec.title||'Session')+' · '+this.shortDate(date.split('-').reverse().join('/')), '/'); }
   loadPlanSnapshot(squadId, id){ const rec=((this.savedPlans&&this.savedPlans[squadId])||[]).find(r=>r.id===id); if(!rec) return; this.mutatePlan(squadId, p=>{ p.title=rec.plan.title; p.zone=rec.plan.zone; p.sections=JSON.parse(JSON.stringify(rec.plan.sections)); }); this.setState({savedPlanMsg:'Loaded into the editor — change date/time and Save again to reschedule.', planSessDate:rec.date||this.todayISO(), planSessSlot:rec.slot||'AM', planSessTime:rec.time||''}); }
   async deletePlanSnapshot(squadId, id){ const list=((this.savedPlans&&this.savedPlans[squadId])||[]).filter(r=>r.id!==id); this.savedPlans={...(this.savedPlans||{}), [squadId]:list}; this.setState({});
     try{ if(window.__vxDelete){ await window.__vxDelete('plan_sessions', 'id=eq.'+encodeURIComponent(id)); await this._plansFetch(); } }catch(e){} }
@@ -7210,6 +7235,12 @@ class Component extends DCLogic {
           themeIsDark:S.theme==='dark', onThemeLight:()=>this.setTheme('light'), onThemeDark:()=>this.setTheme('dark'),
           onEnablePush:()=>this.enablePush(), pushBtnLabel:S.pushOn?'Notifications on ✓ — tap to re-enable':'Enable notifications',
           pushBtnBg:S.pushOn?'#0C7A4F':'var(--vx-blue)', pushBtnFg:'#fff', pushRoleNote: isFam?'':', family replies and new sign-ups',
+          canAnnounce: !isFam,
+          annMsg:S.annMsg||'', onAnnMsg:(e)=>this.setState({annMsg:e.target.value}), onSendAnn:()=>this.sendAnnouncement(),
+          onAnnAll:()=>this.setState({annAudience:'all'}), onAnnFamily:()=>this.setState({annAudience:'family'}), onAnnStaff:()=>this.setState({annAudience:'staff'}),
+          annAllBg:(S.annAudience||'all')==='all'?'var(--vx-blue)':'#F4F6F8', annAllFg:(S.annAudience||'all')==='all'?'#fff':'#7A8296',
+          annFamBg:S.annAudience==='family'?'var(--vx-blue)':'#F4F6F8', annFamFg:S.annAudience==='family'?'#fff':'#7A8296',
+          annStaffBg:S.annAudience==='staff'?'var(--vx-blue)':'#F4F6F8', annStaffFg:S.annAudience==='staff'?'#fff':'#7A8296',
           themeLightBg:S.theme!=='dark'?'#0A0F1A':'#F4F6F8', themeLightFg:S.theme!=='dark'?'#fff':'#7A8296',
           themeDarkBg:S.theme==='dark'?'#0A0F1A':'#F4F6F8', themeDarkFg:S.theme==='dark'?'#fff':'#7A8296',
           settingsIsFamily:isFam, settingsIsStaff:!isFam,
