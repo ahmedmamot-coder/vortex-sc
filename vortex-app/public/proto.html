@@ -3471,19 +3471,21 @@ if ('serviceWorker' in navigator) {
                   </div>
                   <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
                     <p style="margin:0 0 4px;font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7A8296">WhatsApp share contacts</p>
-                    <p style="margin:0 0 11px;font-size:11px;color:#9AA2B4;line-height:1.5">Save the coaches / group admins you share plans with. Numbers need the country code (digits only).</p>
+                    <p style="margin:0 0 11px;font-size:11px;color:#9AA2B4;line-height:1.5">Save a coach's number (with country code) <b>or</b> a WhatsApp group invite link. Sharing a plan opens that chat/group with the PDF ready to attach.</p>
                     <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:10px">
                       <sc-for list="{{ waList }}" as="w" hint-placeholder-count="0">
                         <div style="display:flex;align-items:center;gap:9px;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:10px;padding:9px 11px">
                           <i data-lucide="message-circle" style="width:15px;height:15px;color:#25D366;flex:none"></i>
-                          <span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;font-weight:700;color:#0C1116">{{ w.label }}</span><span style="display:block;font-size:11px;color:#7A8296">+{{ w.number }}</span></span>
+                          <span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;font-weight:700;color:#0C1116">{{ w.label }}</span><span style="display:block;font-size:11px;color:#7A8296">{{ w.sub }}</span></span>
                           <button onclick="{{ w.onRemove }}" style="flex:none;width:30px;height:30px;border-radius:8px;border:none;background:#FDECEC;color:#E5484D;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="trash-2" style="width:13px;height:13px"></i></button>
                         </div>
                       </sc-for>
                     </div>
                     <input value="{{ waLabel }}" oninput="{{ onWaLabel }}" placeholder="Name (e.g. Senior B group admin)" style="width:100%;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:10px 12px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none;box-sizing:border-box;margin-bottom:7px">
+                    <input value="{{ waNumber }}" oninput="{{ onWaNumber }}" placeholder="Number e.g. 9745xxxxxxx" type="tel" style="width:100%;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:10px 12px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none;box-sizing:border-box;margin-bottom:7px">
+                    <div style="display:flex;align-items:center;gap:7px;margin:0 2px 7px"><span style="flex:1;height:1px;background:#EEF1F5"></span><span style="font-size:10px;font-weight:700;color:#B9C0CC;letter-spacing:.05em">OR GROUP LINK</span><span style="flex:1;height:1px;background:#EEF1F5"></span></div>
                     <div style="display:flex;gap:7px">
-                      <input value="{{ waNumber }}" oninput="{{ onWaNumber }}" placeholder="Number e.g. 9745xxxxxxx" type="tel" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:10px 12px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                      <input value="{{ waLink }}" oninput="{{ onWaLink }}" placeholder="Paste WhatsApp group link (chat.whatsapp.com/…)" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:10px 12px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
                       <button onclick="{{ onAddWaTarget }}" style="flex:none;background:var(--vx-blue);color:#fff;border:none;border-radius:10px;padding:0 16px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer">Add</button>
                     </div>
                   </div>
@@ -3499,7 +3501,7 @@ if ('serviceWorker' in navigator) {
                   <p style="margin:0 0 13px;font-size:12px;color:#7A8296;line-height:1.5">Builds a PDF of the current session on your device. Use your phone's share sheet to send the PDF file straight into any WhatsApp chat or group, or pick a saved contact.</p>
                   <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:11px">
                     <sc-for list="{{ shareTargets }}" as="t" hint-placeholder-count="0">
-                      <button onclick="{{ t.onShare }}" style="display:flex;align-items:center;gap:10px;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:12px;padding:11px 13px;cursor:pointer;font-family:inherit;text-align:left"><span style="width:34px;height:34px;border-radius:9px;background:#DCF7E6;color:#128C4B;display:flex;align-items:center;justify-content:center;flex:none"><i data-lucide="message-circle" style="width:17px;height:17px"></i></span><span style="flex:1;min-width:0"><span style="display:block;font-size:13px;font-weight:700;color:#0C1116">{{ t.label }}</span><span style="display:block;font-size:11px;color:#7A8296">Send to +{{ t.number }}</span></span><i data-lucide="send" style="width:16px;height:16px;color:#25D366"></i></button>
+                      <button onclick="{{ t.onShare }}" style="display:flex;align-items:center;gap:10px;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:12px;padding:11px 13px;cursor:pointer;font-family:inherit;text-align:left"><span style="width:34px;height:34px;border-radius:9px;background:#DCF7E6;color:#128C4B;display:flex;align-items:center;justify-content:center;flex:none"><i data-lucide="message-circle" style="width:17px;height:17px"></i></span><span style="flex:1;min-width:0"><span style="display:block;font-size:13px;font-weight:700;color:#0C1116">{{ t.label }}</span><span style="display:block;font-size:11px;color:#7A8296">Send to {{ t.sub }}</span></span><i data-lucide="send" style="width:16px;height:16px;color:#25D366"></i></button>
                     </sc-for>
                   </div>
                   <button onclick="{{ onShareNative }}" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;background:#0A0F1A;color:#fff;border:none;border-radius:13px;padding:13px;font-family:inherit;font-weight:700;font-size:14px;cursor:pointer"><i data-lucide="share-2" style="width:17px;height:17px"></i>Share to a group / other app</button>
@@ -4023,7 +4025,7 @@ class Component extends DCLogic {
       aiKind:'season', aiPrompt:'', aiOut:null, aiLoading:false,
       loungeEditId:null, loungeEditText:'', commentDrafts:{}, reqOpen:false, reqTo:'', reqText:'', reqMsg:'',
       fmBody:'', fmSet:'', fmVideo:'',
-      theme:'light', settingsOpen:false, famProfileDraft:null, waLabel:'', waNumber:'', shareOpen:false, shareMsg:'',
+      theme:'light', settingsOpen:false, famProfileDraft:null, waLabel:'', waNumber:'', waLink:'', shareOpen:false, shareMsg:'',
     };
     try{ var _th=localStorage.getItem('vx_theme'); if(_th) this.state.theme=_th; }catch(e){}
     // Vortex Lounge chat is backed by its own table (lounge_posts), loaded via _loungeFetch().
@@ -4443,10 +4445,18 @@ class Component extends DCLogic {
   _waMap(){ return this.waTargets||{}; }
   _waFor(accId){ return (this._waMap()[accId]||[]); }
   addWaTarget(){ const acc=this._me(); const accId=this.state.familyUser?('fam:'+this.state.familyUser.id):acc.id;
-    const label=(this.state.waLabel||'').trim(); const number=(this.state.waNumber||'').replace(/[^\d]/g,'');
-    if(!label||number.length<8) return this.setState({settingsMsg:'Enter a name and a full number (with country code, digits only).'});
-    const map={...this._waMap()}; map[accId]=[...(map[accId]||[]), {id:'wa'+Date.now(), label, number}]; this.waTargets=map; this._saveJSON('vx_wa_targets', map);
-    this.setState({waLabel:'', waNumber:'', settingsMsg:'Contact saved ✓'}); }
+    const label=(this.state.waLabel||'').trim();
+    const linkRaw=(this.state.waLink||'').trim();
+    const number=(this.state.waNumber||'').replace(/[^\d]/g,'');
+    if(!label) return this.setState({settingsMsg:'Enter a name first.'});
+    let entry=null;
+    if(linkRaw){ let link=linkRaw; if(!/^https?:\/\//i.test(link)) link='https://'+link;
+      if(!/chat\.whatsapp\.com/i.test(link)) return this.setState({settingsMsg:'That isn’t a WhatsApp group invite link (should contain chat.whatsapp.com).'});
+      entry={id:'wa'+Date.now(), label, link}; }
+    else if(number.length>=8){ entry={id:'wa'+Date.now(), label, number}; }
+    else return this.setState({settingsMsg:'Enter a full number (with country code) OR a WhatsApp group link.'});
+    const map={...this._waMap()}; map[accId]=[...(map[accId]||[]), entry]; this.waTargets=map; this._saveJSON('vx_wa_targets', map);
+    this.setState({waLabel:'', waNumber:'', waLink:'', settingsMsg:'Saved ✓'}); }
   removeWaTarget(id){ const acc=this._me(); const accId=this.state.familyUser?('fam:'+this.state.familyUser.id):acc.id;
     const map={...this._waMap()}; map[accId]=(map[accId]||[]).filter(t=>t.id!==id); this.waTargets=map; this._saveJSON('vx_wa_targets', map); this.forceUpdate(); }
   // ---- Share the current plan as a real PDF file (native share sheet / download) ----
@@ -4455,6 +4465,18 @@ class Component extends DCLogic {
     this.setState({shareMsg:'Building PDF…'});
     let blob=null; try{ blob=this._buildPlanPdf(squadId); }catch(e){ blob=null; }
     if(!blob){ this.setState({shareOpen:false, shareMsg:'Could not build the PDF on this device.'}); return; }
+    // 0) A specific saved destination (a person's number OR a WhatsApp group link): download the PDF
+    //    and open that chat/group so you attach it there. (WhatsApp has no way to auto-post a file to
+    //    a group from a link — opening it is the closest possible.)
+    if(target && (target.number || target.link)){
+      try{ const durl=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=durl; a.download=fname; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>{ try{ URL.revokeObjectURL(durl); }catch(_){}}, 60000); }catch(e){}
+      const dest = target.link ? target.link : ('https://wa.me/'+target.number);
+      try{ const w=window.open(dest, '_blank'); if(!w) location.href=dest; }catch(e){}
+      this.setState({shareOpen:false, shareMsg: target.link
+        ? ('PDF downloaded — opening “'+target.label+'” group; tap the 📎 and attach it ✓')
+        : ('PDF downloaded — attach it in the chat with '+target.label+' ✓')});
+      return;
+    }
     // 1) Native share sheet with the actual PDF file attached (WhatsApp, Mail, AirDrop, …).
     try{ if(navigator.canShare){ const file=new File([blob], fname, {type:'application/pdf'});
       if(navigator.canShare({files:[file]})){ await navigator.share({files:[file], title:(plan.title||'Session'), text:(sq.name||'Squad')+' session plan'});
@@ -5654,7 +5676,7 @@ class Component extends DCLogic {
       window.open('https://wa.me/'+waNum+'?text='+waText, '_blank');
     }catch(e){}
     const _ar=this._famRegAuthRes||{}; const _hasSession=_ar.ok && _ar.j && _ar.j.access_token;
-    if(_hasSession && window.__vxSetAuth){ try{ window.__vxSetAuth(_ar.j); }catch(e){} this._postLoginRefresh(); }
+    if(_hasSession && window.__vxSetAuth){ try{ window.__vxSetAuth(_ar.j); }catch(e){} try{ this._pushSend({role:'staff'}, _signTitle, _signBody, '/'); }catch(e){} this._postLoginRefresh(); }
     if(_hasSession || _ar.netfail){ try{ localStorage.setItem('vx_session', JSON.stringify({type:'family', email:rec.email})); }catch(e){}
       this.setState({familyUser:rec, familyActiveIdx:0, screen:'app', view:'family', famErr:'', famBusy:false}); }
     else { this.setState({famBusy:false, famMode:'login', famPass:'', famPass2:'', famErr:'', famRegisteredMsg:'Account created! We emailed a confirmation link to '+email+'. Open it, then sign in.'}); }
@@ -7276,7 +7298,7 @@ class Component extends DCLogic {
       appThemeFilter: (S.theme==='dark' && (S.view==='squad'||S.view==='profile'||S.view==='admin'||S.view==='move')) ? 'invert(0.94) hue-rotate(180deg)' : 'none',
       ...(()=>{ const acc=this._me(); const isFam=!!S.familyUser; const accId=isFam?('fam:'+S.familyUser.id):acc.id;
         const d=isFam?(S.famProfileDraft||{}):(S.staffAccDraft||{});
-        const waList=this._waFor(accId).map(t=>({ id:t.id, label:t.label, number:t.number, onRemove:()=>this.removeWaTarget(t.id), onShare:()=>this.sharePlan(S.squadId, t) }));
+        const waList=this._waFor(accId).map(t=>({ id:t.id, label:t.label, number:t.number||'', isGroup:!!t.link, sub: t.link?'WhatsApp group':('+'+(t.number||'')), onRemove:()=>this.removeWaTarget(t.id), onShare:()=>this.sharePlan(S.squadId, t) }));
         return {
           onOpenSettings:()=>this.openSettings(), onCloseSettings:()=>this.closeSettings(), settingsOpen:!!S.settingsOpen,
           settingsMsg:S.settingsMsg||'', settingsMsgShow:!!S.settingsMsg,
@@ -7306,6 +7328,7 @@ class Component extends DCLogic {
           // WhatsApp share targets
           waList, waHasList:waList.length>0, waLabel:S.waLabel||'', onWaLabel:(e)=>this.setState({waLabel:e.target.value}),
           waNumber:S.waNumber||'', onWaNumber:(e)=>this.setState({waNumber:e.target.value}), onAddWaTarget:()=>this.addWaTarget(),
+          waLink:S.waLink||'', onWaLink:(e)=>this.setState({waLink:e.target.value}),
           // share panel
           shareOpen:!!S.shareOpen, onCloseShare:()=>this.setState({shareOpen:false}), shareMsg:S.shareMsg||'', shareMsgShow:!!S.shareMsg,
           shareTargets:waList, shareHasTargets:waList.length>0, onShareNative:()=>this.sharePlan(S.squadId, null),
