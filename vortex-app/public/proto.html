@@ -119,9 +119,13 @@ if ('serviceWorker' in navigator) {
   function boot(){ if(booted) return; booted=true; var s=document.createElement("script"); s.src="assets/support.js"; s.onload=hideSplash; document.body.appendChild(s); }
   setTimeout(boot, 2500);
   setTimeout(function(){ hideSplash(); }, 6000);
+  // In-memory mirror of the database, authoritative over localStorage. The app reads from this so
+  // a full/stale browser storage can never hide data that IS saved in Supabase.
+  window.__VX_PULLED = window.__VX_PULLED || {};
   function applyPull(rows, seed){
     var have = {};
     try { (rows||[]).forEach(function(r){ have[r.key]=true; if(r.value==null) return;
+      window.__VX_PULLED[r.key]=r.value; // DB copy → in-memory mirror
       // Only overwrite local with the server copy when the server is newer than the
       // last local write — otherwise a page refresh would wipe edits that were made
       // locally but hadn't finished uploading yet.
@@ -4199,8 +4203,16 @@ class Component extends DCLogic {
     try{ const r=await fetch(this._sbAuthUrl()+'/user', {method:'PUT', headers:{'apikey':this._sbAnon(),'Authorization':'Bearer '+this._recoveryToken,'Content-Type':'application/json'}, body:JSON.stringify({password:np})}); if(!r.ok) return this.setState({famErr:'This reset link has expired — request a new one.'}); }catch(e){ return this.setState({famErr:'Could not reach the server — try again.'}); }
     this._recoveryToken=null; this.setState({famMode:'login', famPass:'', famPass2:'', famErr:'', famResetOk:true});
   }
-  _loadJSON(key, fallback){ try{ const v=localStorage.getItem(key); return v==null?fallback:JSON.parse(v); }catch(e){ return fallback; } }
-  _saveJSON(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){} }
+  // Read from the in-memory database mirror first (authoritative), then localStorage (offline
+  // cache), then the fallback — so a full browser storage can never hide data saved in Supabase.
+  _loadJSON(key, fallback){
+    try{ const P=window.__VX_PULLED; if(P && Object.prototype.hasOwnProperty.call(P, key) && P[key]!=null){ return JSON.parse(JSON.stringify(P[key])); } }catch(e){}
+    try{ const v=localStorage.getItem(key); return v==null?fallback:JSON.parse(v); }catch(e){ return fallback; }
+  }
+  _saveJSON(key, val){
+    try{ if(window.__VX_PULLED) window.__VX_PULLED[key]=val; }catch(e){}   // keep the mirror current for in-session reads
+    try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){}       // best-effort local cache + DB push (via the setItem hook)
+  }
   _saveLocalOnly(key, val){ try{ (window.__vxsetlocal||localStorage.setItem.bind(localStorage))(key, JSON.stringify(val)); }catch(e){} }
 
   rebuildRoster(){
@@ -6183,7 +6195,7 @@ class Component extends DCLogic {
   _hydrateShared(){
     // Re-read shared stores from localStorage (freshly pulled) and re-render. We intentionally do
     // NOT touch the plan currently open in the editor (this.state.plans) to avoid clobbering an edit.
-    const J=(k,d)=>{ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return d; } };
+    const J=(k,d)=>{ try{ const P=window.__VX_PULLED; if(P && Object.prototype.hasOwnProperty.call(P,k) && P[k]!=null) return JSON.parse(JSON.stringify(P[k])); }catch(e){} try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return d; } };
     const g=(k,d)=>{ const v=J(k,undefined); return v==null?d:v; };
     this.customStaff=g('vx_staff_accounts', this.customStaff);
     this.accountOvr=g('vx_account_ovr', this.accountOvr);
