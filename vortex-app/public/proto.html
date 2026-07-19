@@ -1656,7 +1656,7 @@ if ('serviceWorker' in navigator) {
                         </label>
                         <span style="position:absolute;bottom:-4px;right:-4px;width:24px;height:24px;border-radius:50%;background:{{ swimmer.genBg }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;line-height:1;border:2.5px solid {{ profileHeaderBg }}">{{ swimmer.genIcon }}</span>
                       </span>
-                      <div style="flex:1"><h1 style="font-size:23px;font-weight:700;letter-spacing:-.02em;margin:0">{{ swimmer.name }}</h1><p style="margin:3px 0 0;font-size:12.5px;color:{{ profileHeaderSubFg }}">Age {{ swimmer.age }} · {{ squad.name }} · {{ swimmer.gender }}</p></div>
+                      <div style="flex:1"><h1 style="font-size:23px;font-weight:700;letter-spacing:-.02em;margin:0">{{ swimmer.name }}</h1><p style="margin:3px 0 0;font-size:12.5px;color:{{ profileHeaderSubFg }}">Age {{ swimmer.age }} · DOB {{ swimmer.dob }} · {{ squad.name }} · {{ swimmer.gender }}</p></div>
                     </div>
                     <div style="position:relative;display:flex;gap:8px;margin-top:15px">
                       <sc-for list="{{ swimmerKpis }}" as="k" hint-placeholder-count="3">
@@ -3029,6 +3029,7 @@ if ('serviceWorker' in navigator) {
                         <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05);display:flex;flex-direction:column;gap:8px">
                           <p style="margin:0;font-size:12.5px;font-weight:700;color:#0C1116">Add swimmer to {{ swSquadFilterName }}</p>
                           <input value="{{ swForm.name }}" oninput="{{ onSwFormName }}" placeholder="Full name" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:9px 11px;font-family:inherit;font-size:13px;color:#0C1116;outline:none">
+                          <input value="{{ swForm.dob }}" oninput="{{ onSwFormDob }}" placeholder="Date of birth — mm/dd/yyyy" inputmode="numeric" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:9px 11px;font-family:var(--font-mono);font-size:13px;color:#0C1116;outline:none">
                           <div style="display:flex;gap:8px">
                             <input value="{{ swForm.age }}" oninput="{{ onSwFormAge }}" type="number" placeholder="Age" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:9px 11px;font-family:inherit;font-size:13px;color:#0C1116;outline:none">
                             <button onclick="{{ onSwFormGenderB }}" style="flex:1;border-radius:10px;border:1px solid #E5E9F0;background:{{ swForm.genderBBg }};color:{{ swForm.genderBFg }};font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer">Boys</button>
@@ -3068,6 +3069,7 @@ if ('serviceWorker' in navigator) {
                             <sc-if value="{{ r.editing }}" hint-placeholder-val="{{ false }}">
                               <div style="display:flex;flex-direction:column;gap:7px;margin-top:8px">
                                 <input value="{{ r.editName }}" oninput="{{ r.onEditName }}" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                                <input value="{{ r.editDob }}" oninput="{{ r.onEditDob }}" placeholder="DOB mm/dd/yyyy" inputmode="numeric" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:var(--font-mono);font-size:12.5px;color:#0C1116;outline:none">
                                 <div style="display:flex;gap:7px">
                                   <input value="{{ r.editAge }}" oninput="{{ r.onEditAge }}" type="number" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
                                   <button onclick="{{ r.onEditGenderB }}" style="flex:1;border:1px solid #E5E9F0;border-radius:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer;background:{{ r.editGenderBBg }};color:{{ r.editGenderBFg }}">Boy</button>
@@ -4066,6 +4068,15 @@ class Component extends DCLogic {
   shortDate(d){ if(!d) return ''; const p=d.split('/'); const mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; const mi=parseInt(p[0],10)-1; return (mo[mi]||'')+' '+parseInt(p[1],10); }
   _timeAgo(iso){ if(!iso) return ''; const diff=Date.now()-new Date(iso).getTime(); const m=Math.floor(diff/60000); if(m<1) return 'just now'; if(m<60) return m+'m ago'; const h=Math.floor(m/60); if(h<24) return h+'h ago'; const d=Math.floor(h/24); return d+'d ago'; }
   dobFromAge(age){ const yr=new Date().getFullYear()-(parseInt(age,10)||0); return '01/01/'+yr; }
+  // Compute age from a date of birth (accepts mm/dd/yyyy or yyyy-mm-dd). Returns null if unparseable.
+  _ageFromDob(dob){ try{ const p=(''+(dob||'')).split(/[\/\-.]/); if(p.length!==3) return null; let mo,d,y;
+    if(p[0].length===4){ y=+p[0]; mo=+p[1]; d=+p[2]; } else { mo=+p[0]; d=+p[1]; y=+p[2]; }
+    if(!y||y<1900||!mo||!d) return null; const b=new Date(y, mo-1, d); if(isNaN(b.getTime())) return null;
+    const n=new Date(); let a=n.getFullYear()-b.getFullYear(); const m=n.getMonth()-b.getMonth(); if(m<0||(m===0&&n.getDate()<b.getDate())) a--;
+    return (a>=0 && a<120)? a : null; }catch(e){ return null; } }
+  // Age that reflects the DOB when present, else the stored age. DOB display, likewise.
+  _swAge(sw){ const a=this._ageFromDob(sw&&sw.dob); return a!=null? a : ((sw&&sw.age)||0); }
+  _swDob(sw){ return (sw&&sw.dob) || this.dobFromAge(sw&&sw.age); }
   vortexIdNumber(swId){ if(!this._vortexIdMap){ const map={}; this.allSwimmersFlat().forEach((sw,i)=>{ map[sw.id]=String(i+1).padStart(5,'0'); }); this._vortexIdMap=map; } return this._vortexIdMap[swId] || '00000'; }
   genMeta(g){ return g==='Girls' ? {icon:'\u2640', bg:'#E64B8B'} : {icon:'\u2642', bg:'#2F6BE0'}; }
   ageIn(sq, r){ const map={preteam:[5,6],advb:[7,8],adva:[9,10],junior:[11,12],seniorb:[13,13],seniora:[14,14],vortexb:[15,15],vortexa:[16,16],legend:[17,18]}; const [lo,hi]=map[sq]; return lo + Math.floor(r()*(hi-lo+1)); }
@@ -4308,14 +4319,15 @@ class Component extends DCLogic {
     const initials=((first[0]||'')+(last[0]||first[1]||'')).toUpperCase();
     const pbs=(form.pbs||[]).map(p=>({event:p.event, sec:p.sec, time:this.fmt(p.sec), drop:'', course:'L'})).sort((a,b)=>a.sec-b.sec);
     const top=pbs[0];
-    const sw={id:this._uid('sw'), first, last, name:form.name.trim(), initials, age:parseInt(form.age,10)||0, gender:form.gender||'Boys', pbs, results:[], meets:[], meetCount:0, topEvent:top?top.event:'—', topTime:top?top.time:'—', topSec:top?top.sec:999};
+    const dobAge=this._ageFromDob(form.dob);
+    const sw={id:this._uid('sw'), first, last, name:form.name.trim(), initials, dob:(form.dob||''), age:(dobAge!=null?dobAge:(parseInt(form.age,10)||0)), gender:form.gender||'Boys', pbs, results:[], meets:[], meetCount:0, topEvent:top?top.event:'—', topTime:top?top.time:'—', topSec:top?top.sec:999};
     this.rosterEdits.added[squadId]=[...(this.rosterEdits.added[squadId]||[]), sw];
     this.persistRosterEdits();
-    this.setState({swAddOpen:false, swForm:{name:'',age:'',gender:'Boys',pbs:[]}, swPbEventSel:'50 Free', swPbTimeDraft:''});
+    this.setState({swAddOpen:false, swForm:{name:'',age:'',dob:'',gender:'Boys',pbs:[]}, swPbEventSel:'50 Free', swPbTimeDraft:''});
   }
   swFormAddPb(){ const S=this.state; const sec=this.parseTimeStr(S.swPbTimeDraft); if(sec==null) return; const pbs=(S.swForm.pbs||[]).filter(p=>p.event!==S.swPbEventSel); pbs.push({event:S.swPbEventSel, sec}); this.setState({swForm:{...S.swForm, pbs}, swPbTimeDraft:''}); }
   swFormRemovePb(ev){ const S=this.state; this.setState({swForm:{...S.swForm, pbs:(S.swForm.pbs||[]).filter(p=>p.event!==ev)}}); }
-  swEditOpen(squadId, id, sw){ this.setState({swEditId:squadId+'::'+id, swEditDraft:{name:sw.name, age:sw.age}, swEditPbs:(sw.pbs||[]).map(p=>({event:p.event, sec:p.sec})), swEditPbEventSel:'50 Free', swEditPbTimeDraft:''}); }
+  swEditOpen(squadId, id, sw){ this.setState({swEditId:squadId+'::'+id, swEditDraft:{name:sw.name, age:sw.age, dob:(sw.dob||'')}, swEditPbs:(sw.pbs||[]).map(p=>({event:p.event, sec:p.sec})), swEditPbEventSel:'50 Free', swEditPbTimeDraft:''}); }
   swEditAddPb(){ const S=this.state; const sec=this.parseTimeStr(S.swEditPbTimeDraft); if(sec==null) return; const pbs=(S.swEditPbs||[]).filter(p=>p.event!==S.swEditPbEventSel); pbs.push({event:S.swEditPbEventSel, sec}); this.setState({swEditPbs:pbs, swEditPbTimeDraft:''}); }
   swEditRemovePb(ev){ const S=this.state; this.setState({swEditPbs:(S.swEditPbs||[]).filter(p=>p.event!==ev)}); }
   adminEditSwimmer(squadId, id, patch, newSquadId){
@@ -7137,8 +7149,10 @@ class Component extends DCLogic {
       const genderBEdit = editDraftGender!=='Girls';
       return { editing, name:sw.name, age:sw.age, squadName:sq.name, initials:sw.initials, genIcon:gm.icon, genBg:gm.bg, accent:sq.accent,
         editName: editing? (S.swEditDraft?.name ?? sw.name) : sw.name, editAge: editing? (S.swEditDraft?.age ?? sw.age) : sw.age,
+        editDob: editing? (S.swEditDraft?.dob ?? (sw.dob||'')) : (sw.dob||''),
         onEditName:(e)=>this.setState({swEditDraft:{...(S.swEditDraft||{name:sw.name,age:sw.age,gender:sw.gender,squadId:sw.squadId}), name:e.target.value}}),
         onEditAge:(e)=>this.setState({swEditDraft:{...(S.swEditDraft||{name:sw.name,age:sw.age,gender:sw.gender,squadId:sw.squadId}), age:e.target.value}}),
+        onEditDob:(e)=>{ const dob=e.target.value; const a=this._ageFromDob(dob); this.setState({swEditDraft:{...(S.swEditDraft||{name:sw.name,age:sw.age,gender:sw.gender,squadId:sw.squadId}), dob, age:(a!=null?String(a):(S.swEditDraft?.age ?? sw.age))}}); },
         onEditGenderB:()=>this.setState({swEditDraft:{...(S.swEditDraft||{name:sw.name,age:sw.age,gender:sw.gender,squadId:sw.squadId}), gender:'Boys'}}),
         onEditGenderG:()=>this.setState({swEditDraft:{...(S.swEditDraft||{name:sw.name,age:sw.age,gender:sw.gender,squadId:sw.squadId}), gender:'Girls'}}),
         editGenderBBg: genderBEdit?'var(--vx-blue)':'#F8FAFC', editGenderBFg: genderBEdit?'#fff':'#3A4152',
@@ -7148,7 +7162,7 @@ class Component extends DCLogic {
         onViewProfile:()=>this.setState({adminSection:null, view:'squad', squadId:editDraftSquad, tab:'group', swimmerId:sw.id}),
         onEdit:()=>this.swEditOpen(sw.squadId, sw.id, sw),
         onCancelEdit:()=>this.setState({swEditId:null, swEditDraft:null, swEditPbs:[]}),
-        onSave:()=>{ const d=this.state.swEditDraft||{}; this.adminEditSwimmer(sw.squadId, sw.id, {name:(d.name||sw.name).trim(), age:parseInt(d.age,10)||sw.age, gender:d.gender||sw.gender, pbs:this.state.swEditPbs}, d.squadId&&d.squadId!==sw.squadId?d.squadId:null); },
+        onSave:()=>{ const d=this.state.swEditDraft||{}; const dob=(d.dob!=null?d.dob:(sw.dob||'')); const a=this._ageFromDob(dob); this.adminEditSwimmer(sw.squadId, sw.id, {name:(d.name||sw.name).trim(), dob, age:(a!=null?a:(parseInt(d.age,10)||sw.age)), gender:d.gender||sw.gender, pbs:this.state.swEditPbs}, d.squadId&&d.squadId!==sw.squadId?d.squadId:null); },
         onDelete:()=>{ if(window.confirm('Remove '+sw.name+' from the roster?')) this.adminDeleteSwimmer(sw.squadId, sw.id); },
         editPbChips: editing ? (S.swEditPbs||[]).map(p=>({label:p.event+' \u00b7 '+this.fmt(p.sec), onRemove:()=>this.swEditRemovePb(p.event)})) : [],
         editPbEventOptions: this.EVENT_CATALOG().map(ev=>({value:ev, label:ev})),
@@ -7162,7 +7176,7 @@ class Component extends DCLogic {
     const genderB = (S.swForm.gender||'Boys')==='Boys';
     const swPbChips=(S.swForm.pbs||[]).map(p=>({label:p.event+' \u00b7 '+this.fmt(p.sec), onRemove:()=>this.swFormRemovePb(p.event)}));
     const swPbEventOptions=this.EVENT_CATALOG().map(ev=>({value:ev, label:ev}));
-    const swForm={ name:S.swForm.name, age:S.swForm.age, genderBBg:genderB?'var(--vx-blue)':'#F8FAFC', genderBFg:genderB?'#fff':'#3A4152', genderGBg:!genderB?'#E64B8B':'#F8FAFC', genderGFg:!genderB?'#fff':'#3A4152' };
+    const swForm={ name:S.swForm.name, age:S.swForm.age, dob:S.swForm.dob||'', genderBBg:genderB?'var(--vx-blue)':'#F8FAFC', genderBFg:genderB?'#fff':'#3A4152', genderGBg:!genderB?'#E64B8B':'#F8FAFC', genderGFg:!genderB?'#fff':'#3A4152' };
     const onSwAddSave=()=>{ const targetSquad = S.swSquadFilter==='all' ? (this.squadForAge(parseInt(S.swForm.age,10)||10)) : S.swSquadFilter; this.adminAddSwimmer(targetSquad, S.swForm); };
 
     // -- meets admin --
@@ -7543,7 +7557,7 @@ class Component extends DCLogic {
       shareNote:S.shareNote, shareNoteColor: S.shareNote?'#0C7A4F':'transparent',
       attendSummary, attendList,
       meetChips, selMeet, resultRows,
-      swimmer:{name:swObj.name, age:swObj.age, gender:swObj.gender, initials:swObj.initials, genIcon:this.genMeta(swObj.gender).icon, genBg:this.genMeta(swObj.gender).bg, progressBest,
+      swimmer:{name:swObj.name, age:this._swAge(swObj), dob:this._swDob(swObj), gender:swObj.gender, initials:swObj.initials, genIcon:this.genMeta(swObj.gender).icon, genBg:this.genMeta(swObj.gender).bg, progressBest,
         avatarEl: this.av(this.swimmerPhotos[swObj.id]||null, swObj.initials, 60, 17, 'rgba(255,255,255,.18)', '#fff', 20, 'rgba(255,255,255,.18)')},
       onPhotoChange:(e)=>this.handlePhotoUpload(e, swObj.id),
       showVortexId:S.showVortexId, onCloseVortexId:()=>this.setState({showVortexId:false, vortexIdFlipped:false}),
@@ -7587,7 +7601,7 @@ class Component extends DCLogic {
             name:swObj.name, initials:swObj.initials, avatarEl: this.av(this.swimmerPhotos[swObj.id]||null, swObj.initials, 72, 20, 'rgba(255,255,255,.18)', '#fff', 22, 'rgba(255,255,255,.3)'),
             squadName:squad.name, age:swObj.age, gender:swObj.gender, genIcon:this.genMeta(swObj.gender).icon, genBg:this.genMeta(swObj.gender).bg,
             accent:squad.accent, glow:squad.glow, isSponsored:sponsorOn,
-            dob: this.dobFromAge(swObj.age),
+            dob: this._swDob(swObj),
             idNumber: this.vortexIdNumber(swObj.id),
             season:'2025 / 2026',
           },
@@ -7749,7 +7763,7 @@ class Component extends DCLogic {
           onOpenVortexId:()=>this.setState({showVortexId:true}),
           vortexIdCard:{ name:sw.name, initials:sw.initials, avatarEl: this.av(this.swimmerPhotos[sw.id]||null, sw.initials, 72, 20, 'rgba(255,255,255,.18)', '#fff', 22, 'rgba(255,255,255,.3)'),
             squadName:sq.name, age:sw.age, gender:sw.gender, genIcon:gm.icon, genBg:gm.bg, accent:sq.accent, glow:sq.glow, isSponsored:!!meta.sponsored,
-            dob:this.dobFromAge(sw.age), idNumber:this.vortexIdNumber(sw.id), season:'2025 / 2026' },
+            dob:this._swDob(sw), idNumber:this.vortexIdNumber(sw.id), season:'2025 / 2026' },
           famEventChips, famProgEvent:selEvent||'—', famHasEvents:famEventChips.length>0,
           famCourseLcmBg: famCourse==='lcm'?sq.accent:'#fff', famCourseLcmFg: famCourse==='lcm'?'#fff':'#3A4152',
           famCourseScmBg: famCourse==='scm'?sq.accent:'#fff', famCourseScmFg: famCourse==='scm'?'#fff':'#3A4152',
@@ -7810,8 +7824,9 @@ class Component extends DCLogic {
       onExportRosterCsv:()=>this.exportRosterCsv(),
       adminBrand: S.adminSection==='brand', brandView,
       swQuery:S.swQuery, onSwQuery:(e)=>this.setState({swQuery:e.target.value}), swSquadChips, swSquadFilterName,
-      swAddOpen:S.swAddOpen, onSwAddOpen:()=>this.setState({swAddOpen:true, swForm:{name:'',age:'',gender:'Boys'}}), onSwAddCancel:()=>this.setState({swAddOpen:false}),
+      swAddOpen:S.swAddOpen, onSwAddOpen:()=>this.setState({swAddOpen:true, swForm:{name:'',age:'',dob:'',gender:'Boys'}}), onSwAddCancel:()=>this.setState({swAddOpen:false}),
       swForm, onSwFormName:(e)=>this.setState({swForm:{...S.swForm, name:e.target.value}}), onSwFormAge:(e)=>this.setState({swForm:{...S.swForm, age:e.target.value}}),
+      onSwFormDob:(e)=>{ const dob=e.target.value; const a=this._ageFromDob(dob); this.setState({swForm:{...S.swForm, dob, age: a!=null?String(a):S.swForm.age}}); },
       onSwFormGenderB:()=>this.setState({swForm:{...S.swForm, gender:'Boys'}}), onSwFormGenderG:()=>this.setState({swForm:{...S.swForm, gender:'Girls'}}),
       swPbChips, swPbEventOptions, swPbEventSel:S.swPbEventSel, swPbTimeDraft:S.swPbTimeDraft,
       onSwPbEventSel:(e)=>this.setState({swPbEventSel:e.target.value}), onSwPbTimeDraft:(e)=>this.setState({swPbTimeDraft:e.target.value}),
