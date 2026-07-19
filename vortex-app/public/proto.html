@@ -1691,7 +1691,7 @@ if ('serviceWorker' in navigator) {
                       <h2 style="font-size:11.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#7A8296;margin:0 2px 9px">Personal bests</h2>
                       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
                         <sc-for list="{{ swimmerPbs }}" as="p" hint-placeholder-count="4">
-                          <div style="position:relative;background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:12px 13px;box-shadow:0 2px 7px rgba(11,20,40,.05)"><span style="display:block;font-size:11px;color:#7A8296;font-weight:600">{{ p.event }}</span><span style="display:block;font-family:var(--font-mono);font-size:20px;font-weight:700;color:#0C1116;margin-top:3px;letter-spacing:-.01em">{{ p.time }}</span><span style="display:flex;align-items:center;gap:4px;font-size:10.5px;color:#1CB87A;font-weight:600;margin-top:3px"><i data-lucide="trending-down" style="width:13px;height:13px"></i>{{ p.drop }}</span><button onclick="{{ p.onShare }}" title="Download PB card" style="position:absolute;top:9px;right:9px;background:#F4F6F8;border:none;border-radius:8px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;cursor:pointer"><i data-lucide="share-2" style="width:13px;height:13px;color:#3A4152"></i></button></div>
+                          <div style="position:relative;background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:12px 13px;box-shadow:0 2px 7px rgba(11,20,40,.05)"><span style="display:block;font-size:11px;color:#7A8296;font-weight:600">{{ p.event }}</span><span style="display:block;font-family:var(--font-mono);font-size:20px;font-weight:700;color:#0C1116;margin-top:3px;letter-spacing:-.01em">{{ p.time }}</span><span style="display:block;font-size:9.5px;color:#9AA2B4;font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.meta }}</span><span style="display:flex;align-items:center;gap:4px;font-size:10.5px;color:#1CB87A;font-weight:600;margin-top:3px"><i data-lucide="trending-down" style="width:13px;height:13px"></i>{{ p.drop }}</span><button onclick="{{ p.onShare }}" title="Download PB card" style="position:absolute;top:9px;right:9px;background:#F4F6F8;border:none;border-radius:8px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;cursor:pointer"><i data-lucide="share-2" style="width:13px;height:13px;color:#3A4152"></i></button></div>
                         </sc-for>
                       </div>
                     </div>
@@ -3051,6 +3051,13 @@ if ('serviceWorker' in navigator) {
                             <button onclick="{{ onSwFormGenderB }}" style="flex:1;border-radius:10px;border:1px solid #E5E9F0;background:{{ swForm.genderBBg }};color:{{ swForm.genderBFg }};font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer">Boys</button>
                             <button onclick="{{ onSwFormGenderG }}" style="flex:1;border-radius:10px;border:1px solid #E5E9F0;background:{{ swForm.genderGBg }};color:{{ swForm.genderGFg }};font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer">Girls</button>
                           </div>
+                          <div style="display:flex;align-items:center;gap:8px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:0 11px">
+                            <i data-lucide="users" style="width:16px;height:16px;color:var(--vx-blue-dark);flex:none"></i>
+                            <select value="{{ swForm.squadId }}" onchange="{{ onSwFormSquad }}" style="flex:1;background:none;border:none;padding:10px 0;font-family:inherit;font-size:13px;color:#0C1116;outline:none">
+                              <option value="">Squad — auto by age</option>
+                              <sc-for list="{{ swSquadOptions }}" as="o" hint-placeholder-count="9"><option value="{{ o.value }}">{{ o.label }}</option></sc-for>
+                            </select>
+                          </div>
                           <div style="border-top:1px solid #EEF1F5;padding-top:8px;margin-top:2px">
                             <p style="margin:0 0 6px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">Personal bests</p>
                             <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
@@ -3058,11 +3065,18 @@ if ('serviceWorker' in navigator) {
                                 <span style="display:flex;align-items:center;gap:6px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border-radius:999px;padding:5px 6px 5px 11px;font-size:11.5px;font-weight:700">{{ pb.label }}<button onclick="{{ pb.onRemove }}" style="background:rgba(6,126,234,.18);border:none;border-radius:50%;width:16px;height:16px;color:var(--vx-blue-dark);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0"><i data-lucide="x" style="width:10px;height:10px"></i></button></span>
                               </sc-for>
                             </div>
-                            <div style="display:flex;gap:7px">
+                            <div style="display:flex;gap:7px;margin-bottom:6px">
                               <select value="{{ swPbEventSel }}" onchange="{{ onSwPbEventSel }}" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 8px;font-family:inherit;font-size:12px;color:#0C1116;outline:none">
                                 <option value="50 Free">50 Free</option><option value="100 Free">100 Free</option><option value="200 Free">200 Free</option><option value="400 Free">400 Free</option><option value="800 Free">800 Free</option><option value="1500 Free">1500 Free</option><option value="50 Back">50 Back</option><option value="100 Back">100 Back</option><option value="200 Back">200 Back</option><option value="50 Breast">50 Breast</option><option value="100 Breast">100 Breast</option><option value="200 Breast">200 Breast</option><option value="50 Fly">50 Fly</option><option value="100 Fly">100 Fly</option><option value="200 Fly">200 Fly</option><option value="100 IM">100 IM</option><option value="200 IM">200 IM</option><option value="400 IM">400 IM</option>
                               </select>
+                              <select value="{{ swPbCourse }}" onchange="{{ onSwPbCourse }}" style="flex:none;width:96px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 8px;font-family:inherit;font-size:12px;color:#0C1116;outline:none">
+                                <option value="LCM">Long (LCM)</option><option value="SCM">Short (SCM)</option><option value="SCY">Short (SCY)</option>
+                              </select>
                               <input value="{{ swPbTimeDraft }}" oninput="{{ onSwPbTimeDraft }}" placeholder="Time e.g. 27.50" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:var(--font-mono);font-size:12px;color:#0C1116;outline:none">
+                            </div>
+                            <div style="display:flex;gap:7px">
+                              <input value="{{ swPbMeet }}" oninput="{{ onSwPbMeet }}" placeholder="Meet name (optional)" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12px;color:#0C1116;outline:none">
+                              <input value="{{ swPbMeetDate }}" oninput="{{ onSwPbMeetDate }}" type="date" style="flex:none;width:130px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 8px;font-family:inherit;font-size:12px;color:#0C1116;outline:none">
                               <button onclick="{{ onSwPbAdd }}" style="flex:none;width:36px;background:var(--vx-ink);color:#fff;border:none;border-radius:9px;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="plus" style="width:16px;height:16px"></i></button>
                             </div>
                           </div>
@@ -4040,8 +4054,8 @@ class Component extends DCLogic {
       plans:_plans,
       family:this._loadFamily(), familyUser:null, familyActiveIdx:0,
       famMode:'login', famName:'', famEmail:'', famPass:'', famPass2:'', famPhone:'', famRole:'parent', famSearch:'', famPicked:[], famErr:'', famResetOk:false, famBusy:false, famRegisteredMsg:'',
-      adminSection:null, swQuery:'', swSquadFilter:'all', swEditId:null, swAddOpen:false, swForm:{name:'',age:'',gender:'Boys',pbs:[]},
-      swPbEventSel:'50 Free', swPbTimeDraft:'',
+      adminSection:null, swQuery:'', swSquadFilter:'all', swEditId:null, swAddOpen:false, swForm:{name:'',age:'',dob:'',gender:'Boys',squadId:'',pbs:[]},
+      swPbEventSel:'50 Free', swPbTimeDraft:'', swPbCourse:'LCM', swPbMeet:'', swPbMeetDate:'',
       swEditPbs:[], swEditPbEventSel:'50 Free', swEditPbTimeDraft:'',
       meetImportOpen:false, meetImportText:'', meetImportPreview:null, meetImportBusy:false, meetExpanded:null,
       hytekMode:'paste', hytekPdfBusy:false, hytekPdfLabel:'Choose a Hy-Tek PDF export\u2026',
@@ -4353,15 +4367,32 @@ class Component extends DCLogic {
   aiSuggestAllGoals(swId, pbs, age){ const cur=(this.swimmerGoals[swId]=this.swimmerGoals[swId]||{}); pbs.forEach(p=>{ cur[p.event]={sec:this._aiSuggestSec(p.sec, age), source:'ai'}; }); this._saveGoals(); this.setState({goalMsg:'AI suggested goals for all events \u2713'}); }
   adminAddSwimmer(squadId, form){ if(!form.name.trim()) return; const first=form.name.trim().split(/\s+/)[0]; const last=form.name.trim().split(/\s+/).slice(1).join(' ');
     const initials=((first[0]||'')+(last[0]||first[1]||'')).toUpperCase();
-    const pbs=(form.pbs||[]).map(p=>({event:p.event, sec:p.sec, time:this.fmt(p.sec), drop:'', course:'L'})).sort((a,b)=>a.sec-b.sec);
+    const pbs=(form.pbs||[]).map(p=>({event:p.event, sec:p.sec, time:this.fmt(p.sec), drop:'', course:p.course||'L', courseLabel:p.courseLabel||(p.course==='S'?'SCM':'LCM'), meet:p.meet||'', meetDate:p.meetDate||''})).sort((a,b)=>a.sec-b.sec);
+    // Any PB tagged with a meet becomes a result row (so it shows in the swimmer's meet history)
+    // and, if that meet is new, gets added to the club meets list — synced to everyone.
+    const results=[]; const meetNames={};
+    pbs.forEach(p=>{ if(p.meet){ const dmy=p.meetDate?this._fmtDMY(p.meetDate):''; results.push({meet:p.meet, date:dmy||p.meetDate, event:p.event, time:p.time, sec:p.sec, place:null, course:p.course}); meetNames[p.meet]={date:p.meetDate, course:p.courseLabel}; } });
+    Object.keys(meetNames).forEach(nm=>this._ensureMeet(nm, meetNames[nm].date, meetNames[nm].course));
     const top=pbs[0];
     const dobAge=this._ageFromDob(form.dob);
-    const sw={id:this._uid('sw'), first, last, name:form.name.trim(), initials, dob:(form.dob||''), age:(dobAge!=null?dobAge:(parseInt(form.age,10)||0)), gender:form.gender||'Boys', pbs, results:[], meets:[], meetCount:0, topEvent:top?top.event:'—', topTime:top?top.time:'—', topSec:top?top.sec:999};
+    const meetCount=Object.keys(meetNames).length;
+    const sw={id:this._uid('sw'), first, last, name:form.name.trim(), initials, dob:(form.dob||''), age:(dobAge!=null?dobAge:(parseInt(form.age,10)||0)), gender:form.gender||'Boys', pbs, results, meets:Object.keys(meetNames), meetCount, topEvent:top?top.event:'—', topTime:top?top.time:'—', topSec:top?top.sec:999};
     this.rosterEdits.added[squadId]=[...(this.rosterEdits.added[squadId]||[]), sw];
     this.persistRosterEdits();
-    this.setState({swAddOpen:false, swForm:{name:'',age:'',dob:'',gender:'Boys',pbs:[]}, swPbEventSel:'50 Free', swPbTimeDraft:''});
+    this.setState({swAddOpen:false, swForm:{name:'',age:'',dob:'',gender:'Boys',squadId:'',pbs:[]}, swPbEventSel:'50 Free', swPbTimeDraft:'', swPbCourse:'LCM', swPbMeet:'', swPbMeetDate:''});
   }
-  swFormAddPb(){ const S=this.state; const sec=this.parseTimeStr(S.swPbTimeDraft); if(sec==null) return; const pbs=(S.swForm.pbs||[]).filter(p=>p.event!==S.swPbEventSel); pbs.push({event:S.swPbEventSel, sec}); this.setState({swForm:{...S.swForm, pbs}, swPbTimeDraft:''}); }
+  // Add a meet to the club meets list if it isn't already there (matched by name), then sync.
+  _ensureMeet(name, isoDate, courseLabel){ name=(name||'').trim(); if(!name) return;
+    const exists=this.allMeets().some(m=>(m.name||'').trim().toLowerCase()===name.toLowerCase()); if(exists) return;
+    const dateStr=isoDate?this._fmtDMY(isoDate):'';
+    const meet={name, location:'', date:dateStr, course:courseLabel||'LCM', entries:0, events:[]};
+    this.customMeets=[meet, ...this.customMeets];
+    this._saveJSON('vx_custom_meets', this.customMeets);
+  }
+  swFormAddPb(){ const S=this.state; const sec=this.parseTimeStr(S.swPbTimeDraft); if(sec==null) return; const pbs=(S.swForm.pbs||[]).filter(p=>p.event!==S.swPbEventSel);
+    const courseCode=(S.swPbCourse==='LCM')?'L':'S'; // 'L' long, 'S' short — matches results data
+    pbs.push({event:S.swPbEventSel, sec, course:courseCode, courseLabel:(S.swPbCourse||'LCM'), meet:(S.swPbMeet||'').trim(), meetDate:(S.swPbMeetDate||'')});
+    this.setState({swForm:{...S.swForm, pbs}, swPbTimeDraft:'', swPbMeet:'', swPbMeetDate:''}); }
   swFormRemovePb(ev){ const S=this.state; this.setState({swForm:{...S.swForm, pbs:(S.swForm.pbs||[]).filter(p=>p.event!==ev)}}); }
   swEditOpen(squadId, id, sw){ this.setState({swEditId:squadId+'::'+id, swEditDraft:{name:sw.name, age:sw.age, dob:(sw.dob||'')}, swEditPbs:(sw.pbs||[]).map(p=>({event:p.event, sec:p.sec})), swEditPbEventSel:'50 Free', swEditPbTimeDraft:''}); }
   swEditAddPb(){ const S=this.state; const sec=this.parseTimeStr(S.swEditPbTimeDraft); if(sec==null) return; const pbs=(S.swEditPbs||[]).filter(p=>p.event!==S.swEditPbEventSel); pbs.push({event:S.swEditPbEventSel, sec}); this.setState({swEditPbs:pbs, swEditPbTimeDraft:''}); }
@@ -6655,7 +6686,7 @@ class Component extends DCLogic {
 
     // ---- profile ----
     const swObj=(this.roster[S.squadId]||[]).find(x=>x.id===S.swimmerId) || (this.roster[S.squadId]||[])[0] || {name:'',pbs:[],results:[],initials:'',age:'',gender:'',meetCount:0};
-    const swimmerPbs=(swObj.pbs||[]).slice(0,4).map(p=>({event:p.event, time:p.time, drop:p.drop, onShare:()=>this.shareBestTimeCard(swObj, p)}));
+    const swimmerPbs=(swObj.pbs||[]).slice(0,4).map(p=>{ const cl=p.courseLabel||(p.course==='S'?'SCM':'LCM'); const src=[cl]; if(p.meet) src.push(p.meet); return {event:p.event, time:p.time, drop:p.drop, meta:src.join(' · '), onShare:()=>this.shareBestTimeCard(swObj, p)}; });
     const swEvents=(swObj.pbs||[]).map(p=>p.event);
     const selEvent=(S.profileEvent && swEvents.includes(S.profileEvent)) ? S.profileEvent : (swEvents[0]||null);
     const eventChips=swEvents.map(ev=>({label:ev, onClick:()=>this.setState({profileEvent:ev}),
@@ -7281,10 +7312,11 @@ class Component extends DCLogic {
     });
     const swEmpty = swRows.length===0;
     const genderB = (S.swForm.gender||'Boys')==='Boys';
-    const swPbChips=(S.swForm.pbs||[]).map(p=>({label:p.event+' \u00b7 '+this.fmt(p.sec), onRemove:()=>this.swFormRemovePb(p.event)}));
+    const swPbChips=(S.swForm.pbs||[]).map(p=>({label:p.event+' \u00b7 '+this.fmt(p.sec)+' \u00b7 '+(p.courseLabel||(p.course==='S'?'SCM':'LCM'))+(p.meet?(' \u00b7 '+p.meet):''), onRemove:()=>this.swFormRemovePb(p.event)}));
     const swPbEventOptions=this.EVENT_CATALOG().map(ev=>({value:ev, label:ev}));
-    const swForm={ name:S.swForm.name, age:S.swForm.age, dob:S.swForm.dob||'', genderBBg:genderB?'var(--vx-blue)':'#F8FAFC', genderBFg:genderB?'#fff':'#3A4152', genderGBg:!genderB?'#E64B8B':'#F8FAFC', genderGFg:!genderB?'#fff':'#3A4152' };
-    const onSwAddSave=()=>{ const targetSquad = S.swSquadFilter==='all' ? (this.squadForAge(parseInt(S.swForm.age,10)||10)) : S.swSquadFilter; this.adminAddSwimmer(targetSquad, S.swForm); };
+    const swSquadOptions=this.squads.map(sq=>({value:sq.id, label:sq.name}));
+    const swForm={ name:S.swForm.name, age:S.swForm.age, dob:S.swForm.dob||'', squadId:S.swForm.squadId||'', genderBBg:genderB?'var(--vx-blue)':'#F8FAFC', genderBFg:genderB?'#fff':'#3A4152', genderGBg:!genderB?'#E64B8B':'#F8FAFC', genderGFg:!genderB?'#fff':'#3A4152' };
+    const onSwAddSave=()=>{ const targetSquad = S.swForm.squadId ? S.swForm.squadId : (S.swSquadFilter==='all' ? (this.squadForAge(parseInt(S.swForm.age,10)||10)) : S.swSquadFilter); this.adminAddSwimmer(targetSquad, S.swForm); };
 
     // -- meets admin --
     const meetImportChevron = S.meetImportOpen ? 'chevron-up' : 'chevron-down';
@@ -7944,11 +7976,15 @@ class Component extends DCLogic {
       onExportRosterCsv:()=>this.exportRosterCsv(),
       adminBrand: S.adminSection==='brand', brandView,
       swQuery:S.swQuery, onSwQuery:(e)=>this.setState({swQuery:e.target.value}), swSquadChips, swSquadFilterName,
-      swAddOpen:S.swAddOpen, onSwAddOpen:()=>this.setState({swAddOpen:true, swForm:{name:'',age:'',dob:'',gender:'Boys'}}), onSwAddCancel:()=>this.setState({swAddOpen:false}),
-      swForm, onSwFormName:(e)=>this.setState({swForm:{...S.swForm, name:e.target.value}}), onSwFormAge:(e)=>this.setState({swForm:{...S.swForm, age:e.target.value}}),
+      swAddOpen:S.swAddOpen, onSwAddOpen:()=>this.setState({swAddOpen:true, swForm:{name:'',age:'',dob:'',gender:'Boys',squadId:(S.swSquadFilter!=='all'?S.swSquadFilter:''),pbs:[]}, swPbCourse:'LCM', swPbMeet:'', swPbMeetDate:''}), onSwAddCancel:()=>this.setState({swAddOpen:false}),
+      swForm, swSquadOptions, onSwFormSquad:(e)=>this.setState({swForm:{...S.swForm, squadId:e.target.value}}),
+      onSwFormName:(e)=>this.setState({swForm:{...S.swForm, name:e.target.value}}), onSwFormAge:(e)=>this.setState({swForm:{...S.swForm, age:e.target.value}}),
       onSwFormDob:(e)=>{ const dob=e.target.value; const a=this._ageFromDob(dob); this.setState({swForm:{...S.swForm, dob, age: a!=null?String(a):S.swForm.age}}); },
       onSwFormGenderB:()=>this.setState({swForm:{...S.swForm, gender:'Boys'}}), onSwFormGenderG:()=>this.setState({swForm:{...S.swForm, gender:'Girls'}}),
       swPbChips, swPbEventOptions, swPbEventSel:S.swPbEventSel, swPbTimeDraft:S.swPbTimeDraft,
+      swPbCourse:S.swPbCourse||'LCM', onSwPbCourse:(e)=>this.setState({swPbCourse:e.target.value}),
+      swPbMeet:S.swPbMeet||'', onSwPbMeet:(e)=>this.setState({swPbMeet:e.target.value}),
+      swPbMeetDate:S.swPbMeetDate||'', onSwPbMeetDate:(e)=>this.setState({swPbMeetDate:e.target.value}),
       onSwPbEventSel:(e)=>this.setState({swPbEventSel:e.target.value}), onSwPbTimeDraft:(e)=>this.setState({swPbTimeDraft:e.target.value}),
       onSwPbAdd:()=>this.swFormAddPb(),
       onSwAddSave, swRows, swEmpty,
