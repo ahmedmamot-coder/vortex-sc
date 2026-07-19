@@ -3442,7 +3442,20 @@ if ('serviceWorker' in navigator) {
                         <button onclick="{{ onAnnStaff }}" style="flex:1;background:{{ annStaffBg }};color:{{ annStaffFg }};border:none;border-radius:10px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">Coaches</button>
                       </div>
                       <textarea value="{{ annMsg }}" oninput="{{ onAnnMsg }}" placeholder="Write a short note to send as a push notification…" style="width:100%;min-height:64px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:11px 13px;font-family:inherit;font-size:13px;color:#0C1116;outline:none;box-sizing:border-box;resize:vertical"></textarea>
-                      <button onclick="{{ onSendAnn }}" style="margin-top:9px;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:#0A0F1A;color:#fff;border:none;border-radius:11px;padding:12px;font-family:inherit;font-weight:700;font-size:13.5px;cursor:pointer"><i data-lucide="send" style="width:15px;height:15px"></i>Send notification</button>
+                      <button onclick="{{ onSendAnn }}" style="margin-top:9px;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:#0A0F1A;color:#fff;border:none;border-radius:11px;padding:12px;font-family:inherit;font-weight:700;font-size:13.5px;cursor:pointer"><i data-lucide="send" style="width:15px;height:15px"></i>{{ annSendLabel }}</button>
+                      <sc-if value="{{ annHasSent }}" hint-placeholder-val="{{ false }}">
+                        <div style="margin-top:12px;border-top:1px solid #EEF1F5;padding-top:11px">
+                          <p style="margin:0 0 8px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4">Sent</p>
+                          <sc-for list="{{ annSent }}" as="a" hint-placeholder-count="0">
+                            <div style="display:flex;align-items:flex-start;gap:9px;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:11px;padding:10px 11px;margin-bottom:6px">
+                              <span style="width:28px;height:28px;flex:none;border-radius:8px;background:#EAF1FF;color:var(--vx-blue-dark);display:flex;align-items:center;justify-content:center"><i data-lucide="megaphone" style="width:15px;height:15px"></i></span>
+                              <span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;color:#0C1116;font-weight:600;line-height:1.4">{{ a.body }}</span><span style="display:block;font-size:10.5px;color:#9AA2B4;margin-top:2px">{{ a.audienceLabel }} · {{ a.when }}</span></span>
+                              <button onclick="{{ a.onEdit }}" style="flex:none;width:26px;height:26px;border-radius:7px;border:none;background:#EEF1F5;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="pencil" style="width:13px;height:13px"></i></button>
+                              <button onclick="{{ a.onDelete }}" style="flex:none;width:26px;height:26px;border-radius:7px;border:none;background:#FBE4E4;color:#B42318;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="trash-2" style="width:13px;height:13px"></i></button>
+                            </div>
+                          </sc-for>
+                        </div>
+                      </sc-if>
                     </div>
                   </sc-if>
                   <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
@@ -3947,6 +3960,7 @@ class Component extends DCLogic {
     this.fitSaved={};
     this.famMessages={};
     this.signupAlerts=[];
+    this.announcements=[];
     this.waTargets=this._loadJSON('vx_wa_targets', {});
     this.loungeComments={};
     this.rebuildRoster();
@@ -4359,7 +4373,7 @@ class Component extends DCLogic {
     if(window.__vxUpsert){ window.__vxUpsert('staff_accounts', [this._staffRow(id, o, isCustom)]).then(ok=>{ if(ok) this._staffFetch(); }); }
   }
   meetsCalAdd(){ const f=this.state.meetsCalForm||{}; const name=(f.name||'').trim(); const date=(f.date||'').trim(); if(!name||!date) return; this.meetsCal.push({id:'mc_'+Date.now(), name:name, date:date, place:(f.place||'').trim(), pdf:f.pdf||'', pdfName:f.pdfName||''}); this.meetsCal.sort(function(a,b){return (a.date||'').localeCompare(b.date||'');}); this._saveJSON('vx_meets_cal', this.meetsCal); this.setState({meetsCalForm:{name:'',date:'',place:'',pdf:'',pdfName:''}});
-    this._pushNotify({all:true}, 'New meet: '+name, this.shortDate(date.split('-').reverse().join('/'))+((f.place||'').trim()?(' · '+(f.place||'').trim()):''), '/'); }
+    this._pushSend({all:true}, 'New meet: '+name, this.shortDate(date.split('-').reverse().join('/'))+((f.place||'').trim()?(' · '+(f.place||'').trim()):''), '/'); }
   meetsViewPdf(pdf, title){ if(!pdf) return; this._openDataUrl(pdf); }
   _esc(s){ return (''+(s==null?'':s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   // Open generated HTML / a stored file reliably on every platform. Android Chrome does NOT
@@ -4986,7 +5000,11 @@ class Component extends DCLogic {
     // Sign-up alerts are for the club admins (you) — shown alongside local notifications.
     let extra=[];
     if(kind==='coach' && this._isAdmin()) extra=(this.signupAlerts||[]).slice();
-    return [...extra, ...local].sort((a,b)=> new Date(b.at).getTime()-new Date(a.at).getTime());
+    // Staff announcements appear in the feed for their audience (all / parents / coaches).
+    const read=this._alertRead(), hidden=this._alertHidden();
+    let anns=(this.announcements||[]).filter(a=>{ if(hidden[a.id]) return false; if(a.audience==='all') return true; if(kind==='coach') return a.audience==='staff'; if(kind==='family') return a.audience==='family'; return false; })
+      .map(a=>({ id:a.id, audience:a.audience, icon:'megaphone', title:a.title, body:a.body, at:a.at, read:read[a.id]===true }));
+    return [...extra, ...anns, ...local].sort((a,b)=> new Date(b.at).getTime()-new Date(a.at).getTime());
   }
   openNotifs(){ this.setState({notifOpen:true}); const ids=this._notifCtxIds; if(ids && ids.length){ this.notifications=this.notifications.map(n=>ids.includes(n.id)?{...n, read:true}:n); this._saveJSON('vx_notifications', this.notifications);
     const rs=this._alertRead(); ids.forEach(id=>{ rs[id]=true; }); try{ localStorage.setItem('vx_alert_read', JSON.stringify(rs)); }catch(e){} this.signupAlerts=(this.signupAlerts||[]).map(a=>ids.includes(a.id)?{...a, read:true}:a); } }
@@ -5264,9 +5282,9 @@ class Component extends DCLogic {
     const by={...(this.famMessages||{})}; by[swimmerId]=[...(by[swimmerId]||[]), {id:rec.id, sender, fromName, fromPhoto, body, setText, video, ts:rec.ts}]; this.famMessages=by;
     this.setState({fmBody:'', fmSet:'', fmVideo:''});
     if(sender==='staff'){ this.notify('family','message-circle', 'New message from '+fromName, (body||setText||'📹 Video to review').slice(0,80));
-      this._pushNotify({swimmerIds:[swimmerId]}, 'New message from '+fromName, (body||setText||'📹 Video to review').slice(0,90), '/'); }
+      this._pushSend({swimmerIds:[swimmerId]}, 'New message from '+fromName, (body||setText||'📹 Video to review').slice(0,90), '/'); }
     else { this.notify('coach','message-circle', fromName+' (family) replied', (body||(video?'📹 sent a video':setText)).slice(0,80));
-      this._pushNotify({role:'staff'}, fromName+' (family) replied', (body||(video?'📹 sent a video':setText)).slice(0,90), '/'); }
+      this._pushSend({role:'staff'}, fromName+' (family) replied', (body||(video?'📹 sent a video':setText)).slice(0,90), '/'); }
     try{ if(window.__vxInsert){ const ok=await window.__vxInsert('family_messages',[rec]); if(ok) await this._famMsgFetch(); } }catch(e){} }
   // ---- Web Push: opt-in subscribe + trigger a notification via the /api/push/send endpoint ----
   _urlB64ToUint8(base64){ const pad='='.repeat((4-base64.length%4)%4); const b=(base64+pad).replace(/-/g,'+').replace(/_/g,'/'); const raw=atob(b); const arr=new Uint8Array(raw.length); for(let i=0;i<raw.length;i++) arr[i]=raw.charCodeAt(i); return arr; }
@@ -5297,20 +5315,36 @@ class Component extends DCLogic {
       this.setState({pushOn:true, pushMsg: ok ? 'Notifications enabled on this device ✓' : 'Enabled here, but saving to the server failed — run push.sql in Supabase.'});
     }catch(err){ set('Could not enable notifications: '+((err&&err.message)||'unknown error')); }
   }
-  _pushNotify(target, title, message, url){
+  _pushSend(target, title, message, url){
     try{ const tok=(window.__VX_AUTH && window.__VX_AUTH.token)||''; if(!tok) return;
       fetch('/api/push/send', { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+tok }, body: JSON.stringify({ ...(target||{}), title, message, url:url||'/' }) }).catch(()=>{});
     }catch(e){}
   }
-  // Staff broadcast: send a push note to Everyone / Parents / Coaches.
-  sendAnnouncement(){
-    const msg=(this.state.annMsg||'').trim(); if(!msg){ this.setState({settingsMsg:'Type a note to send.'}); return; }
-    const aud=this.state.annAudience||'all';
-    const target = aud==='family'?{role:'family'} : aud==='staff'?{role:'staff'} : {all:true};
-    const title = aud==='family'?'Note for parents' : aud==='staff'?'Note for coaches' : 'Vortex SC announcement';
-    this._pushNotify(target, title, msg, '/');
-    this.setState({annMsg:'', settingsMsg:'Notification sent to '+(aud==='family'?'parents':aud==='staff'?'coaches':'everyone')+' ✓'});
+  // Staff broadcast: a recorded note shown in everyone's Notifications feed (and pushed).
+  async _annFetch(){
+    if(!window.__vxSelect) return;
+    const rows=await window.__vxSelect('announcements', 'select=*&order=ts.desc&limit=100'); if(rows==null) return;
+    this.announcements=rows.map(r=>({ id:r.id, audience:r.audience||'all', title:r.title||'Announcement', body:r.body||'', sender:r.sender||'', ts:r.ts||Date.now(), at:new Date(r.ts||Date.now()).toISOString() }));
+    this.forceUpdate();
   }
+  async sendAnnouncement(){
+    const msg=(this.state.annMsg||'').trim(); if(!msg){ this.setState({settingsMsg:'Type a note to send.'}); return; }
+    const aud=this.state.annAudience||'all'; const editing=this.state.annEditId;
+    const me=this._me?this._me():null; const sender=(me&&me.label)||'Vortex SC';
+    const id=editing||('an'+Date.now()+'_'+Math.random().toString(36).slice(2,6));
+    const title = aud==='family'?'Note for parents' : aud==='staff'?'Note for coaches' : 'Vortex SC announcement';
+    const ts=Date.now();
+    if(editing){ this.announcements=(this.announcements||[]).map(a=>a.id===id?{...a, audience:aud, title, body:msg, ts, at:new Date(ts).toISOString()}:a); }
+    else { this.announcements=[{ id, audience:aud, title, body:msg, sender, ts, at:new Date(ts).toISOString() }, ...(this.announcements||[])]; }
+    if(window.__vxUpsert){ try{ await window.__vxUpsert('announcements', [{ id, audience:aud, title, body:msg, sender, ts, updated_at:new Date().toISOString() }]); await this._annFetch(); }catch(e){} }
+    const target = aud==='family'?{role:'family'} : aud==='staff'?{role:'staff'} : {all:true};
+    if(!editing) this._pushSend(target, title, msg, '/');   // push on first send only, not edits
+    this.setState({annMsg:'', annEditId:null, settingsMsg: editing ? 'Notification updated ✓' : ('Notification sent to '+(aud==='family'?'parents':aud==='staff'?'coaches':'everyone')+' ✓')});
+  }
+  editAnnouncement(id){ const a=(this.announcements||[]).find(x=>x.id===id); if(!a) return; this.setState({annMsg:a.body, annAudience:a.audience, annEditId:id, settingsMsg:''}); }
+  deleteAnnouncement(id){ this.announcements=(this.announcements||[]).filter(a=>a.id!==id);
+    if(window.__vxDelete){ try{ window.__vxDelete('announcements', 'id=eq.'+encodeURIComponent(id)); }catch(e){} }
+    if(this.state.annEditId===id) this.setState({annEditId:null, annMsg:''}); else this.forceUpdate(); }
   _famMsgEls(swimmerId, viewer){ const list=(this.famMessages||{})[swimmerId]||[];
     return list.map(m=>{ const mine=(viewer==='staff')?(m.sender==='staff'):(m.sender==='family');
       return { id:m.id, mine, notMine:!mine, align: mine?'flex-end':'flex-start', name:m.fromName, avatar:this.av(m.fromPhoto||null, (m.fromName||'?').slice(0,2).toUpperCase(), 24, 8, mine?'#0A0F1A':'#067EEA', '#fff', 9),
@@ -5845,7 +5879,7 @@ class Component extends DCLogic {
     const row={ id, squad_id:squadId, title:rec.title, zone:rec.zone, total_m:rec.totalM, plan:planCopy, sday:date, ts:Date.now() };
     try{ if(window.__vxInsert){ const ok=await window.__vxInsert('plan_sessions', [row]); if(ok) await this._plansFetch(); else this.setState({savedPlanMsg:'Saved on this device, but the database rejected it — run the plan_sessions SQL.'}); } }catch(e){}
     const sqName=(this.squadById[squadId]&&this.squadById[squadId].name)||'';
-    this._pushNotify({swimmerIds:(this.roster[squadId]||[]).map(s=>s.id)}, 'New training plan'+(sqName?(' · '+sqName):''), (rec.title||'Session')+' · '+this.shortDate(date.split('-').reverse().join('/')), '/'); }
+    this._pushSend({swimmerIds:(this.roster[squadId]||[]).map(s=>s.id)}, 'New training plan'+(sqName?(' · '+sqName):''), (rec.title||'Session')+' · '+this.shortDate(date.split('-').reverse().join('/')), '/'); }
   loadPlanSnapshot(squadId, id){ const rec=((this.savedPlans&&this.savedPlans[squadId])||[]).find(r=>r.id===id); if(!rec) return; this.mutatePlan(squadId, p=>{ p.title=rec.plan.title; p.zone=rec.plan.zone; p.sections=JSON.parse(JSON.stringify(rec.plan.sections)); }); this.setState({savedPlanMsg:'Loaded into the editor — change date/time and Save again to reschedule.', planSessDate:rec.date||this.todayISO(), planSessSlot:rec.slot||'AM', planSessTime:rec.time||''}); }
   async deletePlanSnapshot(squadId, id){ const list=((this.savedPlans&&this.savedPlans[squadId])||[]).filter(r=>r.id!==id); this.savedPlans={...(this.savedPlans||{}), [squadId]:list}; this.setState({});
     try{ if(window.__vxDelete){ await window.__vxDelete('plan_sessions', 'id=eq.'+encodeURIComponent(id)); await this._plansFetch(); } }catch(e){} }
@@ -6066,6 +6100,7 @@ class Component extends DCLogic {
     this._fitPlansFetch();
     this._famMsgFetch();
     this._alertsFetch();
+    this._annFetch();
     this._docsFetch();
     this._planCustomFetch();
     this._plansInt=setInterval(()=>{ if(this.state.view==='squad' && this.state.tab==='plans'){ this._plansFetch(); this._squadPlansFetch(); } }, 8000);
@@ -6098,6 +6133,7 @@ class Component extends DCLogic {
     try{ this._planCustomFetch(); }catch(e){}
     try{ this._famMsgFetch(); }catch(e){}
     try{ this._alertsFetch(); }catch(e){}
+    try{ this._annFetch(); }catch(e){}
     try{ if(this.state.tool==='fitness') this._fitPlansFetch(); }catch(e){}
     try{ if(this.state.tool==='season'){ this._seasonFetch(); this._plansFetch(); } }catch(e){}
   }
@@ -7254,6 +7290,9 @@ class Component extends DCLogic {
           annAllBg:(S.annAudience||'all')==='all'?'var(--vx-blue)':'#F4F6F8', annAllFg:(S.annAudience||'all')==='all'?'#fff':'#7A8296',
           annFamBg:S.annAudience==='family'?'var(--vx-blue)':'#F4F6F8', annFamFg:S.annAudience==='family'?'#fff':'#7A8296',
           annStaffBg:S.annAudience==='staff'?'var(--vx-blue)':'#F4F6F8', annStaffFg:S.annAudience==='staff'?'#fff':'#7A8296',
+          annSendLabel: S.annEditId?'Update notification':'Send notification',
+          annHasSent:(this.announcements||[]).length>0,
+          annSent:(this.announcements||[]).slice(0,8).map(a=>({ id:a.id, body:a.body, audienceLabel:(a.audience==='family'?'Parents':a.audience==='staff'?'Coaches':'Everyone'), when:this.notifTimeAgo(a.at), onEdit:()=>this.editAnnouncement(a.id), onDelete:()=>this.deleteAnnouncement(a.id) })),
           themeLightBg:S.theme!=='dark'?'#0A0F1A':'#F4F6F8', themeLightFg:S.theme!=='dark'?'#fff':'#7A8296',
           themeDarkBg:S.theme==='dark'?'#0A0F1A':'#F4F6F8', themeDarkFg:S.theme==='dark'?'#fff':'#7A8296',
           settingsIsFamily:isFam, settingsIsStaff:!isFam,
