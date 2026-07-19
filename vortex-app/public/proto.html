@@ -3431,6 +3431,7 @@ if ('serviceWorker' in navigator) {
                     <p style="margin:0 0 8px;font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7A8296">Notifications</p>
                     <p style="margin:0 0 10px;font-size:12px;color:#7A8296;line-height:1.5">Get a push alert on this device for new coach messages{{ pushRoleNote }}.</p>
                     <button onclick="{{ onEnablePush }}" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:{{ pushBtnBg }};color:{{ pushBtnFg }};border:none;border-radius:11px;padding:12px;font-family:inherit;font-weight:700;font-size:13.5px;cursor:pointer"><i data-lucide="bell" style="width:16px;height:16px"></i>{{ pushBtnLabel }}</button>
+                    <sc-if value="{{ pushMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:9px 2px 0;font-size:11.5px;font-weight:600;line-height:1.5;color:{{ pushMsgColor }}">{{ pushMsg }}</p></sc-if>
                   </div>
                   <sc-if value="{{ canAnnounce }}" hint-placeholder-val="{{ false }}">
                     <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
@@ -3972,7 +3973,7 @@ class Component extends DCLogic {
       staffEditId:null, staffForm:{name:'',pin:''}, staffAddOpen:false, staffAddForm:{name:'',user:'',pin:'',role:'Coach',phone:'',squadId:''}, meetsCalForm:{name:'',date:'',place:''},
       apiKey:this._loadJSON('vx_api_key',''), apiKeyDraft:'', settingsMsg:'',
       pushOn:(function(){ try{ return localStorage.getItem('vx_push_on')==='1'; }catch(e){ return false; } })(),
-      annMsg:'', annAudience:'all',
+      pushMsg:'', annMsg:'', annAudience:'all',
       tpaceQuery:'', tpaceSwId:null, tpaceType:'1000', tpaceTime:'', tpaceErr:'',
       inbodyForm:{weight:'',fat:'',muscle:''},
       profileIbMsg:'', profileIbBusy:false,
@@ -5270,20 +5271,31 @@ class Component extends DCLogic {
   // ---- Web Push: opt-in subscribe + trigger a notification via the /api/push/send endpoint ----
   _urlB64ToUint8(base64){ const pad='='.repeat((4-base64.length%4)%4); const b=(base64+pad).replace(/-/g,'+').replace(/_/g,'/'); const raw=atob(b); const arr=new Uint8Array(raw.length); for(let i=0;i<raw.length;i++) arr[i]=raw.charCodeAt(i); return arr; }
   async enablePush(){
+    const set=(m)=>this.setState({pushMsg:m});
     try{
-      if(!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)){ this.setState({settingsMsg:'Notifications aren’t supported on this device/browser.'}); return; }
+      const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent||'') || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+      const standalone=(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone===true;
+      if(!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)){
+        if(isIOS && !standalone) set('On iPhone/iPad: tap the Share button → “Add to Home Screen”, open the app from there, then tap Enable notifications.');
+        else set('This browser can’t do notifications. Use Chrome, or install the app to your Home Screen first.');
+        return;
+      }
+      if(isIOS && !standalone){ set('On iPhone/iPad, first add the app to your Home Screen (Share → Add to Home Screen) and open it from there — then notifications will work.'); return; }
+      set('Requesting permission…');
       const perm=await Notification.requestPermission();
-      if(perm!=='granted'){ this.setState({settingsMsg:'Notifications permission was not granted.'}); return; }
-      const reg=await navigator.serviceWorker.ready;
+      if(perm!=='granted'){ set(perm==='denied' ? 'Notifications are blocked for this site. Allow them in your browser settings, then try again.' : 'Permission was not granted.'); return; }
+      let reg=null; try{ reg=await navigator.serviceWorker.ready; }catch(e){}
+      if(!reg){ try{ await navigator.serviceWorker.register('/sw.js'); reg=await navigator.serviceWorker.ready; }catch(e){} }
+      if(!reg){ set('Could not start the notification service — reload the app and try again.'); return; }
       const sub=await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:this._urlB64ToUint8(this.VAPID_PUBLIC) });
-      const j=sub.toJSON(); const acc=this._me?this._me():null; const fam=this.state.familyUser;
+      const j=sub.toJSON(); let acc=null; try{ acc=this._me&&this._me(); }catch(e){} const fam=this.state.familyUser;
       const swIds=fam?((fam.swimmerIds||[]).map(id=>String(id).split('::').pop())):[];
       const rec={ id:j.endpoint, endpoint:j.endpoint, p256dh:(j.keys&&j.keys.p256dh)||'', auth:(j.keys&&j.keys.auth)||'',
         role: fam?'family':'staff', account: fam?('fam:'+fam.id):((acc&&acc.id)||''), swimmer_ids:swIds, ts:Date.now() };
-      if(window.__vxUpsert) await window.__vxUpsert('push_subscriptions', [rec]);
+      let ok=true; if(window.__vxUpsert){ ok=await window.__vxUpsert('push_subscriptions', [rec]); }
       try{ localStorage.setItem('vx_push_on','1'); }catch(e){}
-      this.setState({pushOn:true, settingsMsg:'Notifications enabled on this device ✓'});
-    }catch(err){ this.setState({settingsMsg:'Could not enable notifications: '+((err&&err.message)||'error')}); }
+      this.setState({pushOn:true, pushMsg: ok ? 'Notifications enabled on this device ✓' : 'Enabled here, but saving to the server failed — run push.sql in Supabase.'});
+    }catch(err){ set('Could not enable notifications: '+((err&&err.message)||'unknown error')); }
   }
   _pushNotify(target, title, message, url){
     try{ const tok=(window.__VX_AUTH && window.__VX_AUTH.token)||''; if(!tok) return;
@@ -7235,6 +7247,7 @@ class Component extends DCLogic {
           themeIsDark:S.theme==='dark', onThemeLight:()=>this.setTheme('light'), onThemeDark:()=>this.setTheme('dark'),
           onEnablePush:()=>this.enablePush(), pushBtnLabel:S.pushOn?'Notifications on ✓ — tap to re-enable':'Enable notifications',
           pushBtnBg:S.pushOn?'#0C7A4F':'var(--vx-blue)', pushBtnFg:'#fff', pushRoleNote: isFam?'':', family replies and new sign-ups',
+          pushMsg:S.pushMsg||'', pushMsgShow:!!S.pushMsg, pushMsgColor:/✓/.test(S.pushMsg||'')?'#0C7A4F':(/block|can’t|could not|not granted|failed/i.test(S.pushMsg||'')?'#B42318':'#3A4152'),
           canAnnounce: !isFam,
           annMsg:S.annMsg||'', onAnnMsg:(e)=>this.setState({annMsg:e.target.value}), onSendAnn:()=>this.sendAnnouncement(),
           onAnnAll:()=>this.setState({annAudience:'all'}), onAnnFamily:()=>this.setState({annAudience:'family'}), onAnnStaff:()=>this.setState({annAudience:'staff'}),
