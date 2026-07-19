@@ -35,7 +35,7 @@ if ('serviceWorker' in navigator) {
   var REST = SB_URL + "/rest/v1/club_state";
   var HEAD = { "apikey": SB_ANON, "Authorization": "Bearer " + SB_ANON, "Content-Type": "application/json" };
   // Every shared data type the club edits. The only key kept per-device is vx_api_key.
-  var SYNC = ["vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_attend_log","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos"];
+  var SYNC = ["vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_attend_log","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_sw_status"];
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
   window.__vxWriteTs = {};   // last time THIS device wrote each key (ms) — guards against stale pulls
@@ -1656,7 +1656,7 @@ if ('serviceWorker' in navigator) {
                         </label>
                         <span style="position:absolute;bottom:-4px;right:-4px;width:24px;height:24px;border-radius:50%;background:{{ swimmer.genBg }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;line-height:1;border:2.5px solid {{ profileHeaderBg }}">{{ swimmer.genIcon }}</span>
                       </span>
-                      <div style="flex:1"><h1 style="font-size:23px;font-weight:700;letter-spacing:-.02em;margin:0">{{ swimmer.name }}</h1><p style="margin:3px 0 0;font-size:12.5px;color:{{ profileHeaderSubFg }}">Age {{ swimmer.age }} · DOB {{ swimmer.dob }} · {{ squad.name }} · {{ swimmer.gender }}</p></div>
+                      <div style="flex:1"><span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><h1 style="font-size:23px;font-weight:700;letter-spacing:-.02em;margin:0">{{ swimmer.name }}</h1><sc-if value="{{ swimmer.inactive }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:4px;background:rgba(180,105,14,.9);color:#fff;font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:3px 8px;border-radius:999px"><i data-lucide="pause" style="width:11px;height:11px"></i>{{ swimmer.statusText }}</span></sc-if></span><p style="margin:3px 0 0;font-size:12.5px;color:{{ profileHeaderSubFg }}">Age {{ swimmer.age }} · DOB {{ swimmer.dob }} · {{ squad.name }} · {{ swimmer.gender }}</p></div>
                     </div>
                     <div style="position:relative;display:flex;gap:8px;margin-top:15px">
                       <sc-for list="{{ swimmerKpis }}" as="k" hint-placeholder-count="3">
@@ -1779,6 +1779,14 @@ if ('serviceWorker' in navigator) {
                       <h2 style="font-size:11.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#7A8296;margin:0 2px 9px">Coach notes &amp; wellbeing</h2>
                       <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05);display:flex;flex-direction:column;gap:12px">
                         <button onclick="{{ onToggleSponsor }}" style="display:flex;align-items:center;justify-content:space-between;background:{{ sponsorBg }};color:{{ sponsorFg }};border:none;border-radius:11px;padding:11px 13px;cursor:pointer;font-family:inherit"><span style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:12.5px"><i data-lucide="award" style="width:16px;height:16px"></i>{{ sponsorLabel }}</span><i data-lucide="chevron-right" style="width:15px;height:15px;opacity:.6"></i></button>
+                        <div>
+                          <p style="margin:0 0 7px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#9AA2B4;font-weight:700">Status · <span style="color:{{ swStatusColor }}">{{ swStatusLabel }}</span></p>
+                          <div style="display:flex;flex-wrap:wrap;gap:6px">
+                            <sc-for list="{{ swStatusOpts }}" as="st" hint-placeholder-count="5">
+                              <button onclick="{{ st.onClick }}" style="background:{{ st.bg }};color:{{ st.fg }};border:1px solid {{ st.border }};border-radius:9px;padding:7px 12px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">{{ st.label }}</button>
+                            </sc-for>
+                          </div>
+                        </div>
 
                         <div>
                           <p style="margin:0 0 7px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#9AA2B4;font-weight:700">Identity documents · restricted</p>
@@ -3061,6 +3069,7 @@ if ('serviceWorker' in navigator) {
                             <div style="display:flex;align-items:center;gap:10px">
                               <span style="position:relative;flex:none"><span style="width:36px;height:36px;border-radius:10px;background:{{ r.accent }};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px">{{ r.initials }}</span><span style="position:absolute;bottom:-3px;right:-3px;width:16px;height:16px;border-radius:50%;background:{{ r.genBg }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;border:2px solid #fff">{{ r.genIcon }}</span></span>
                               <span style="flex:1;min-width:0"><span style="display:block;font-weight:600;font-size:13px;color:#0C1116">{{ r.name }}</span><span style="display:block;font-size:11px;color:#7A8296">Age {{ r.age }} · {{ r.squadName }}</span></span>
+                              <sc-if value="{{ r.inactive }}" hint-placeholder-val="{{ false }}"><span style="flex:none;background:#FCEFDD;color:#B4690E;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;padding:3px 7px;border-radius:999px">{{ r.statusText }}</span></sc-if>
                               <button onclick="{{ r.onEdit }}" style="flex:none;width:30px;height:30px;border-radius:8px;border:none;background:#F4F6F8;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="pencil" style="width:14px;height:14px"></i></button>
                               <button onclick="{{ r.onDelete }}" style="flex:none;width:30px;height:30px;border-radius:8px;border:none;background:#FBE4E4;color:#B42318;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="trash-2" style="width:14px;height:14px"></i></button>
                             </div>
@@ -3929,6 +3938,7 @@ class Component extends DCLogic {
     this.rosterEdits=this._loadJSON('vx_roster_edits', {edits:{}, deleted:{}, added:{}});
     this.staffOverrides=this._loadJSON('vx_staff_ovr', {});
     this.tpaceTests=this._loadJSON('vx_tpace', {});
+    this.swimmerStatus=this._loadJSON('vx_sw_status', {});
     this.swimmerMeta=this._sanitizeMeta(this._loadJSON('vx_sw_meta', {}));
     // Proactively purge any old base64 that's bloating the blob (locally and, via sync, on the
     // server) so document/InBody saves stop hitting the storage quota.
@@ -4733,6 +4743,11 @@ class Component extends DCLogic {
     return out;
   }
   _saveSwMeta(swId, meta){ const clean=this._sanitizeMeta({...this.swimmerMeta, [swId]:meta}); this.swimmerMeta=clean; this._saveJSON('vx_sw_meta', clean); this.forceUpdate(); }
+  // Swimmer active/inactive status (traveling / break / sick / injured). Default = active.
+  _statusLabel(k){ return {travel:'Traveling', 'break':'On break', sick:'Sick', injured:'Injured', other:'Away'}[k] || 'Away'; }
+  _swStatus(swId){ const s=(this.swimmerStatus||{})[swId]; return s ? {active:s.active!==false, reason:s.reason||'', since:s.since||''} : {active:true, reason:'', since:''}; }
+  setSwStatus(swId, active, reason){ const m={...(this.swimmerStatus||{})}; if(active){ delete m[swId]; } else { m[swId]={active:false, reason:reason||'break', since:this.todayISO()}; }
+    this.swimmerStatus=m; this._saveJSON('vx_sw_status', m); this.forceUpdate(); }
   toggleSponsor(swId){ const on=!this._swMeta(swId).sponsored; const m={...(this.sponsoredMap||{})};
     if(on) m[swId]=true; else delete m[swId];
     this.sponsoredMap=m; this._saveJSON('vx_sponsored', m); this.forceUpdate(); }
@@ -6224,6 +6239,7 @@ class Component extends DCLogic {
     this.swimmerGoals=g('vx_swimmer_goals', this.swimmerGoals);
     this.squadGoals=g('vx_squad_goals', this.squadGoals);
     this.swimmerMeta=this._sanitizeMeta(g('vx_sw_meta', this.swimmerMeta));
+    this.swimmerStatus=g('vx_sw_status', this.swimmerStatus);
     this.sponsoredMap=g('vx_sponsored', this.sponsoredMap);
     // (Swimmer photos come from the swimmer_docs table now, not this synced blob — don't overwrite them here.)
     this.staffOverrides=g('vx_staff_ovr', this.staffOverrides);
@@ -7153,7 +7169,7 @@ class Component extends DCLogic {
       const editDraftGender = editing ? (S.swEditDraft?.gender ?? sw.gender) : sw.gender;
       const editDraftSquad = editing ? (S.swEditDraft?.squadId ?? sw.squadId) : sw.squadId;
       const genderBEdit = editDraftGender!=='Girls';
-      return { editing, name:sw.name, age:sw.age, squadName:sq.name, initials:sw.initials, genIcon:gm.icon, genBg:gm.bg, accent:sq.accent,
+      return { editing, name:sw.name, age:this._swAge(sw), squadName:sq.name, initials:sw.initials, genIcon:gm.icon, genBg:gm.bg, accent:sq.accent, inactive:!this._swStatus(sw.id).active, statusText:this._statusLabel(this._swStatus(sw.id).reason),
         editName: editing? (S.swEditDraft?.name ?? sw.name) : sw.name, editAge: editing? (S.swEditDraft?.age ?? sw.age) : sw.age,
         editDob: editing? (S.swEditDraft?.dob ?? (sw.dob||'')) : (sw.dob||''),
         onEditName:(e)=>this.setState({swEditDraft:{...(S.swEditDraft||{name:sw.name,age:sw.age,gender:sw.gender,squadId:sw.squadId}), name:e.target.value}}),
@@ -7563,7 +7579,7 @@ class Component extends DCLogic {
       shareNote:S.shareNote, shareNoteColor: S.shareNote?'#0C7A4F':'transparent',
       attendSummary, attendList,
       meetChips, selMeet, resultRows,
-      swimmer:{name:swObj.name, age:this._swAge(swObj), dob:this._swDob(swObj), gender:swObj.gender, initials:swObj.initials, genIcon:this.genMeta(swObj.gender).icon, genBg:this.genMeta(swObj.gender).bg, progressBest,
+      swimmer:{name:swObj.name, age:this._swAge(swObj), dob:this._swDob(swObj), gender:swObj.gender, initials:swObj.initials, inactive:!this._swStatus(swObj.id).active, statusText:this._statusLabel(this._swStatus(swObj.id).reason), genIcon:this.genMeta(swObj.gender).icon, genBg:this.genMeta(swObj.gender).bg, progressBest,
         avatarEl: this.av(this.swimmerPhotos[swObj.id]||null, swObj.initials, 60, 17, 'rgba(255,255,255,.18)', '#fff', 20, 'rgba(255,255,255,.18)')},
       onPhotoChange:(e)=>this.handlePhotoUpload(e, swObj.id),
       showVortexId:S.showVortexId, onCloseVortexId:()=>this.setState({showVortexId:false, vortexIdFlipped:false}),
@@ -7587,6 +7603,11 @@ class Component extends DCLogic {
         return {
           sponsorOn, sponsorBg: sponsorOn?'linear-gradient(135deg,#7A5A12,#C89B3C)':'#EEF1F5', sponsorFg: sponsorOn?'#fff':'#7A8296', sponsorLabel: sponsorOn?'VIP Sponsored athlete':'Mark as sponsored',
           onToggleSponsor:()=>this.toggleSponsor(swObj.id),
+          swStatusLabel: (()=>{ const s=this._swStatus(swObj.id); return s.active?'Active':(this._statusLabel(s.reason)+(s.since?(' · since '+this.shortDate(s.since.split('-').reverse().join('/'))):'')); })(),
+          swStatusColor: this._swStatus(swObj.id).active ? '#0C7A4F' : '#B4690E',
+          swStatusOpts: [{key:'active',label:'Active'},{key:'travel',label:'Traveling'},{key:'break',label:'Break'},{key:'sick',label:'Sick'},{key:'injured',label:'Injured'}].map(o=>{ const st=this._swStatus(swObj.id); const sel = o.key==='active' ? st.active : (!st.active && st.reason===o.key); const isAct=o.key==='active';
+            return { label:o.label, onClick:()=>this.setSwStatus(swObj.id, isAct, isAct?'':o.key),
+              bg: sel?(isAct?'#E4F3EC':'#FCEFDD'):'#F8FAFC', fg: sel?(isAct?'#0C7A4F':'#B4690E'):'#7A8296', border: sel?(isAct?'#B7E0C7':'#F0D9A8'):'#E5E9F0' }; }),
           isSponsored: sponsorOn,
           profileMsgThread:this._famMsgEls(swObj.id, 'staff'), profileMsgEmpty:((this.famMessages||{})[swObj.id]||[]).length===0,
           onSendFamMsg:()=>this.sendFamMsg(swObj.id, 'staff'),
