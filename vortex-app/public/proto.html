@@ -1536,15 +1536,16 @@ if ('serviceWorker' in navigator) {
                         </div>
                         <div style="display:flex;flex-direction:column;gap:7px">
                           <sc-for list="{{ attendList }}" as="a" hint-placeholder-count="10">
-                            <button onclick="{{ a.onCycle }}" style="display:flex;align-items:center;gap:11px;width:100%;text-align:left;background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:9px 11px;box-shadow:0 1px 4px rgba(11,20,40,.04);cursor:pointer">
+                            <div style="display:flex;align-items:center;gap:9px;width:100%;background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:9px 11px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
                               <span style="width:34px;height:34px;flex:none;border-radius:10px;background:{{ a.avBg }};color:{{ a.avFg }};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px">{{ a.initials }}</span>
-                              <span style="flex:1;font-weight:600;font-size:14px;color:#0C1116">{{ a.name }}</span>
-                              <span style="display:flex;align-items:center;gap:6px;background:{{ a.statusBg }};color:{{ a.statusColor }};padding:6px 11px;border-radius:999px;font-weight:700;font-size:12px">
+                              <span style="flex:1;min-width:0"><span style="display:block;font-weight:600;font-size:14px;color:#0C1116;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ a.name }}</span><sc-if value="{{ a.inactive }}" hint-placeholder-val="{{ false }}"><span style="display:block;font-size:10.5px;color:#B4690E;font-weight:700;margin-top:1px">{{ a.statusText }}</span></sc-if></span>
+                              <button onclick="{{ a.onToggleActive }}" title="Toggle active / inactive" style="display:flex;align-items:center;gap:5px;flex:none;background:{{ a.activeBg }};color:{{ a.activeColor }};border:none;padding:6px 10px;border-radius:999px;font-weight:700;font-size:11.5px;cursor:pointer"><i data-lucide="{{ a.activeIcon }}" style="width:13px;height:13px"></i>{{ a.activeLabel }}</button>
+                              <button onclick="{{ a.onCycle }}" style="display:flex;align-items:center;gap:6px;flex:none;background:{{ a.statusBg }};color:{{ a.statusColor }};padding:6px 11px;border:none;border-radius:999px;font-weight:700;font-size:12px;cursor:pointer">
                                 <sc-if value="{{ a.isPresent }}" hint-placeholder-val="{{ true }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><polyline points="20 6 9 17 4 12"></polyline></svg></sc-if>
                                 <sc-if value="{{ a.isAbsent }}" hint-placeholder-val="{{ false }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></sc-if>
                                 <sc-if value="{{ a.isLate }}" hint-placeholder-val="{{ false }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></sc-if>
-                                {{ a.statusLabel }}</span>
-                            </button>
+                                {{ a.statusLabel }}</button>
+                            </div>
                           </sc-for>
                         </div>
                       </sc-if>
@@ -6705,13 +6706,19 @@ class Component extends DCLogic {
     const onResetPlan=()=>{ if(window.confirm('Reset this squad\u2019s plan to the default template?')) this.resetPlan(S.squadId); };
 
     // ---- attend ----
-    const attList=(this.roster[S.squadId]||[]);
+    // Alphabetical, but keep each swimmer's original index (used as the no-record default seed).
+    const attList=(this.roster[S.squadId]||[]).map((sw,idx)=>({sw, idx})).sort((a,b)=>a.sw.name.localeCompare(b.sw.name));
     const statusMap={present:{label:'Present',icon:'check',color:'#0C7A4F',bg:'#DCF5EA'},absent:{label:'Absent',icon:'x',color:'#A52A2E',bg:'#FBE2E3'},late:{label:'Late',icon:'clock',color:'#9A6206',bg:'#FCEFD6'}};
     const attendCurDate = S.attendDateISO || this.todayISO();
     let cP=0,cA=0,cL=0;
-    const attendList=attList.map((sw,i)=>{ const st=this.getAttendStatus(S.squadId, attendCurDate, sw.id, i); if(st==='present')cP++; else if(st==='absent')cA++; else cL++; const sm=statusMap[st];
+    const attendList=attList.map(({sw, idx})=>{ const st=this.getAttendStatus(S.squadId, attendCurDate, sw.id, idx); if(st==='present')cP++; else if(st==='absent')cA++; else cL++; const sm=statusMap[st];
+      const stt=this._swStatus(sw.id); const isAct=stt.active;
       return {name:sw.name, initials:sw.initials, avBg:'#EEF1F5', avFg:'#5A657E', statusLabel:sm.label, statusIcon:sm.icon, statusColor:sm.color, statusBg:sm.bg,
-        isPresent: st==='present', isAbsent: st==='absent', isLate: st==='late', onCycle:()=>this.cycleAttend(sw.id)}; });
+        isPresent: st==='present', isAbsent: st==='absent', isLate: st==='late', onCycle:()=>this.cycleAttend(sw.id),
+        inactive:!isAct, statusText:this._statusLabel(stt.reason),
+        activeLabel: isAct?'Active':this._statusLabel(stt.reason), activeIcon: isAct?'user-check':'user-minus',
+        activeBg: isAct?'#DCF5EA':'#FCEFD6', activeColor: isAct?'#0C7A4F':'#B4690E',
+        onToggleActive:()=>this.setSwStatus(sw.id, !isAct, isAct?'break':'')}; });
     const attendSummary={present:cP, absent:cA, late:cL};
     const attendDateObj=new Date(attendCurDate+'T00:00:00');
     const dowNames=['SUN','MON','TUE','WED','THU','FRI','SAT'];
