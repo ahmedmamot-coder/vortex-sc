@@ -3118,23 +3118,46 @@ if ('serviceWorker' in navigator) {
                                 <select value="{{ r.editSquadId }}" onchange="{{ r.onEditSquad }}" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
                                   <sc-for list="{{ r.squadOptions }}" as="o" hint-placeholder-count="9"><option value="{{ o.value }}">{{ o.label }}</option></sc-for>
                                 </select>
+                                <div style="border-top:1px solid #EEF1F5;padding-top:7px">
+                                  <p style="margin:0 0 6px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">Status</p>
+                                  <div style="display:flex;flex-wrap:wrap;gap:5px">
+                                    <sc-for list="{{ r.editStatusOpts }}" as="so" hint-placeholder-count="5">
+                                      <button onclick="{{ so.onClick }}" style="background:{{ so.bg }};color:{{ so.fg }};border:none;border-radius:8px;padding:6px 11px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer">{{ so.label }}</button>
+                                    </sc-for>
+                                  </div>
+                                  <sc-if value="{{ r.statusInactive }}" hint-placeholder-val="{{ false }}">
+                                    <div style="display:flex;gap:6px;align-items:center;margin-top:7px">
+                                      <span style="font-size:10.5px;color:#7A8296;font-weight:700">From</span>
+                                      <input value="{{ r.editStatusFrom }}" oninput="{{ r.onEditStatusFrom }}" type="date" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:8px;padding:6px 8px;font-family:inherit;font-size:11px;color:#0C1116;outline:none">
+                                      <span style="font-size:10.5px;color:#7A8296;font-weight:700">To</span>
+                                      <input value="{{ r.editStatusTo }}" oninput="{{ r.onEditStatusTo }}" type="date" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:8px;padding:6px 8px;font-family:inherit;font-size:11px;color:#0C1116;outline:none">
+                                    </div>
+                                  </sc-if>
+                                </div>
                                 <div style="display:flex;gap:7px">
                                   <button onclick="{{ r.onSave }}" style="flex:1;background:var(--vx-blue);color:#fff;border:none;border-radius:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer;padding:8px 0">Save</button>
                                   <button onclick="{{ r.onCancelEdit }}" style="flex:none;width:38px;background:#F4F6F8;color:#7A8296;border:none;border-radius:9px;cursor:pointer"><i data-lucide="x" style="width:14px;height:14px"></i></button>
                                 </div>
                                 <button onclick="{{ r.onViewProfile }}" style="display:flex;align-items:center;justify-content:center;gap:7px;background:#fff;border:1px solid var(--vx-blue);color:var(--vx-blue-dark);border-radius:9px;padding:8px 0;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer"><i data-lucide="user-cog" style="width:13px;height:13px"></i>Open full profile — docs, InBody, fitness, sponsor</button>
                                 <div style="border-top:1px solid #EEF1F5;padding-top:7px">
-                                  <p style="margin:0 0 6px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">Personal bests</p>
+                                  <p style="margin:0 0 6px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">Personal bests &amp; meet history</p>
                                   <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:7px">
                                     <sc-for list="{{ r.editPbChips }}" as="pb" hint-placeholder-count="2">
                                       <span style="display:flex;align-items:center;gap:6px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border-radius:999px;padding:5px 6px 5px 11px;font-size:11px;font-weight:700">{{ pb.label }}<button onclick="{{ pb.onRemove }}" style="background:rgba(6,126,234,.18);border:none;border-radius:50%;width:15px;height:15px;color:var(--vx-blue-dark);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0"><i data-lucide="x" style="width:9px;height:9px"></i></button></span>
                                     </sc-for>
                                   </div>
-                                  <div style="display:flex;gap:6px">
+                                  <div style="display:flex;gap:6px;margin-bottom:6px">
                                     <select value="{{ r.editPbEventSel }}" onchange="{{ r.onEditPbEventSel }}" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:7px;font-family:inherit;font-size:11.5px;color:#0C1116;outline:none">
                                       <option value="50 Free">50 Free</option><option value="100 Free">100 Free</option><option value="200 Free">200 Free</option><option value="400 Free">400 Free</option><option value="800 Free">800 Free</option><option value="1500 Free">1500 Free</option><option value="50 Back">50 Back</option><option value="100 Back">100 Back</option><option value="200 Back">200 Back</option><option value="50 Breast">50 Breast</option><option value="100 Breast">100 Breast</option><option value="200 Breast">200 Breast</option><option value="50 Fly">50 Fly</option><option value="100 Fly">100 Fly</option><option value="200 Fly">200 Fly</option><option value="100 IM">100 IM</option><option value="200 IM">200 IM</option><option value="400 IM">400 IM</option>
                                     </select>
+                                    <select value="{{ r.editPbCourse }}" onchange="{{ r.onEditPbCourse }}" style="flex:none;width:86px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:7px 6px;font-family:inherit;font-size:11px;color:#0C1116;outline:none">
+                                      <option value="LCM">LCM</option><option value="SCM">SCM</option><option value="SCY">SCY</option>
+                                    </select>
                                     <input value="{{ r.editPbTimeDraft }}" oninput="{{ r.onEditPbTimeDraft }}" placeholder="Time" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:7px 9px;font-family:var(--font-mono);font-size:11.5px;color:#0C1116;outline:none">
+                                  </div>
+                                  <div style="display:flex;gap:6px">
+                                    <input value="{{ r.editPbMeet }}" oninput="{{ r.onEditPbMeet }}" placeholder="Competition name (optional)" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:7px 9px;font-family:inherit;font-size:11.5px;color:#0C1116;outline:none">
+                                    <input value="{{ r.editPbMeetDate }}" oninput="{{ r.onEditPbMeetDate }}" type="date" style="flex:none;width:120px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:7px 6px;font-family:inherit;font-size:11px;color:#0C1116;outline:none">
                                     <button onclick="{{ r.onEditPbAdd }}" style="flex:none;width:32px;background:var(--vx-ink);color:#fff;border:none;border-radius:9px;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="plus" style="width:14px;height:14px"></i></button>
                                   </div>
                                 </div>
@@ -4080,7 +4103,7 @@ class Component extends DCLogic {
       famVerify:null, famVerifyInput:'', famVerifyErr:'',
       adminSection:null, swQuery:'', swSquadFilter:'all', swDobFilter:false, swEditId:null, swAddOpen:false, swForm:{name:'',age:'',dob:'',gender:'Boys',squadId:'',pbs:[]},
       swPbEventSel:'50 Free', swPbTimeDraft:'', swPbCourse:'LCM', swPbMeet:'', swPbMeetDate:'',
-      swEditPbs:[], swEditPbEventSel:'50 Free', swEditPbTimeDraft:'',
+      swEditPbs:[], swEditPbEventSel:'50 Free', swEditPbTimeDraft:'', swEditPbCourse:'LCM', swEditPbMeet:'', swEditPbMeetDate:'',
       meetImportOpen:false, meetImportText:'', meetImportPreview:null, meetImportBusy:false, meetExpanded:null, meetEventsEditIdx:null,
       hytekMode:'paste', hytekPdfBusy:false, hytekPdfLabel:'Choose a Hy-Tek PDF export\u2026',
       calOpen:false, calName:'', calLocation:'', calDate:'', calCourse:'LCM', calErr:'',
@@ -4389,23 +4412,24 @@ class Component extends DCLogic {
   _aiSuggestSec(pbSec, age){ let pct = age<=10?0.985 : age<=13?0.975 : age<=15?0.965 : 0.955; return +(pbSec*pct).toFixed(2); }
   aiSuggestGoal(swId, event, pbSec, age){ const sec=this._aiSuggestSec(pbSec, age); this.setState({goalEditEvent:event, goalEditVal:this.fmt(sec), goalMsg:'AI suggested \u2014 review and save'}); }
   aiSuggestAllGoals(swId, pbs, age){ const cur=(this.swimmerGoals[swId]=this.swimmerGoals[swId]||{}); pbs.forEach(p=>{ cur[p.event]={sec:this._aiSuggestSec(p.sec, age), source:'ai'}; }); this._saveGoals(); this.setState({goalMsg:'AI suggested goals for all events \u2713'}); }
-  adminAddSwimmer(squadId, form){ if(!form.name.trim()) return; const first=form.name.trim().split(/\s+/)[0]; const last=form.name.trim().split(/\s+/).slice(1).join(' ');
-    const initials=((first[0]||'')+(last[0]||first[1]||'')).toUpperCase();
-    // Every entry is a swim in the swimmer's history. Same event can appear at several meets.
-    const entries=(form.pbs||[]).map(p=>({event:p.event, sec:p.sec, time:this.fmt(p.sec), course:p.course||'L', courseLabel:p.courseLabel||(p.course==='S'?'SCM':'LCM'), meet:(p.meet||'').trim(), meetDate:p.meetDate||''}));
-    // Full meet history → results rows (newest meet first). Each reflects in the profile.
+  // Shared derivation used by BOTH add & edit swimmer. Turns a list of swim entries
+  // (event/time/course/meet/date) into the swimmer's meet history (results), personal bests
+  // (fastest per event), and the set of meets — and registers any new meet, club-wide.
+  _deriveFromEntries(rawEntries){
+    const entries=(rawEntries||[]).map(p=>({event:p.event, sec:p.sec, time:this.fmt(p.sec), course:p.course||'L', courseLabel:p.courseLabel||(p.course==='S'?'SCM':'LCM'), meet:(p.meet||'').trim(), meetDate:p.meetDate||''}));
     const results=entries.slice().sort((a,b)=>{ const da=a.meetDate||'', db=b.meetDate||''; return db.localeCompare(da); })
-      .map(p=>({meet:p.meet||'Time trial', date:p.meetDate?this._fmtDMY(p.meetDate):'', event:p.event, time:p.time, sec:p.sec, place:null, course:p.course, courseLabel:p.courseLabel}));
-    // Personal bests = fastest swim per event (across all its meets/courses).
+      .map(p=>({meet:p.meet||'Time trial', date:p.meetDate?this._fmtDMY(p.meetDate):'', event:p.event, time:p.time, sec:p.sec, place:null, course:p.course, courseLabel:p.courseLabel, meetDate:p.meetDate}));
     const bestByEvent={}; entries.forEach(p=>{ const cur=bestByEvent[p.event]; if(!cur||p.sec<cur.sec) bestByEvent[p.event]={event:p.event, sec:p.sec, time:p.time, drop:'', course:p.course, courseLabel:p.courseLabel, meet:p.meet, meetDate:p.meetDate}; });
     const pbs=Object.values(bestByEvent).sort((a,b)=>a.sec-b.sec);
-    // Register any new meet in the club meets list — synced to everyone.
     const meetNames={}; entries.forEach(p=>{ if(p.meet) meetNames[p.meet]={date:p.meetDate, course:p.courseLabel}; });
     Object.keys(meetNames).forEach(nm=>this._ensureMeet(nm, meetNames[nm].date, meetNames[nm].course));
-    const top=pbs[0];
+    return { entries, results, pbs, meets:Object.keys(meetNames), meetCount:Object.keys(meetNames).length, top:pbs[0] };
+  }
+  adminAddSwimmer(squadId, form){ if(!form.name.trim()) return; const first=form.name.trim().split(/\s+/)[0]; const last=form.name.trim().split(/\s+/).slice(1).join(' ');
+    const initials=((first[0]||'')+(last[0]||first[1]||'')).toUpperCase();
+    const d=this._deriveFromEntries(form.pbs||[]); const top=d.top;
     const dobAge=this._ageFromDob(form.dob);
-    const meetCount=Object.keys(meetNames).length;
-    const sw={id:this._uid('sw'), first, last, name:form.name.trim(), initials, dob:(form.dob||''), age:(dobAge!=null?dobAge:(parseInt(form.age,10)||0)), gender:form.gender||'Boys', pbs, results, meets:Object.keys(meetNames), meetCount, topEvent:top?top.event:'—', topTime:top?top.time:'—', topSec:top?top.sec:999};
+    const sw={id:this._uid('sw'), first, last, name:form.name.trim(), initials, dob:(form.dob||''), age:(dobAge!=null?dobAge:(parseInt(form.age,10)||0)), gender:form.gender||'Boys', pbs:d.pbs, results:d.results, entries:d.entries, meets:d.meets, meetCount:d.meetCount, topEvent:top?top.event:'—', topTime:top?top.time:'—', topSec:top?top.sec:999};
     this.rosterEdits.added[squadId]=[...(this.rosterEdits.added[squadId]||[]), sw];
     this.persistRosterEdits();
     this.setState({swAddOpen:false, swForm:{name:'',age:'',dob:'',gender:'Boys',squadId:'',pbs:[]}, swPbEventSel:'50 Free', swPbTimeDraft:'', swPbCourse:'LCM', swPbMeet:'', swPbMeetDate:''});
@@ -4440,11 +4464,21 @@ class Component extends DCLogic {
     pbs.push({event:S.swPbEventSel, sec, course:courseCode, courseLabel:(S.swPbCourse||'LCM'), meet, meetDate});
     this.setState({swForm:{...S.swForm, pbs}, swPbTimeDraft:'', swPbMeet:'', swPbMeetDate:''}); }
   swFormRemovePb(idx){ const S=this.state; this.setState({swForm:{...S.swForm, pbs:(S.swForm.pbs||[]).filter((p,i)=>i!==idx)}}); }
-  swEditOpen(squadId, id, sw){ this.setState({swEditId:squadId+'::'+id, swEditDraft:{name:sw.name, age:sw.age, dob:(sw.dob||'')}, swEditPbs:(sw.pbs||[]).map(p=>({event:p.event, sec:p.sec})), swEditPbEventSel:'50 Free', swEditPbTimeDraft:''}); }
-  swEditAddPb(){ const S=this.state; const sec=this.parseTimeStr(S.swEditPbTimeDraft); if(sec==null) return; const pbs=(S.swEditPbs||[]).filter(p=>p.event!==S.swEditPbEventSel); pbs.push({event:S.swEditPbEventSel, sec}); this.setState({swEditPbs:pbs, swEditPbTimeDraft:''}); }
-  swEditRemovePb(ev){ const S=this.state; this.setState({swEditPbs:(S.swEditPbs||[]).filter(p=>p.event!==ev)}); }
+  // Load the swimmer's existing swim entries (full history) so editing keeps meet/course/date.
+  // Prefer stored entries; fall back to results, then to plain PBs for legacy swimmers.
+  _swEntries(sw){ if(Array.isArray(sw.entries)&&sw.entries.length) return sw.entries.map(p=>({event:p.event, sec:p.sec, course:p.course||'L', courseLabel:p.courseLabel||(p.course==='S'?'SCM':'LCM'), meet:p.meet||'', meetDate:p.meetDate||''}));
+    if(Array.isArray(sw.results)&&sw.results.length) return sw.results.map(r=>({event:r.event, sec:r.sec, course:r.course||'L', courseLabel:r.courseLabel||(r.course==='S'?'SCM':'LCM'), meet:(r.meet&&r.meet!=='Time trial')?r.meet:'', meetDate:r.meetDate||''}));
+    return (sw.pbs||[]).map(p=>({event:p.event, sec:p.sec, course:p.course||'L', courseLabel:p.courseLabel||(p.course==='S'?'SCM':'LCM'), meet:p.meet||'', meetDate:p.meetDate||''})); }
+  swEditOpen(squadId, id, sw){ this.setState({swEditId:squadId+'::'+id, swEditDraft:{name:sw.name, age:sw.age, dob:(sw.dob||''), gender:sw.gender, squadId:squadId}, swEditPbs:this._swEntries(sw), swEditPbEventSel:'50 Free', swEditPbTimeDraft:'', swEditPbCourse:'LCM', swEditPbMeet:'', swEditPbMeetDate:''}); }
+  swEditAddPb(){ const S=this.state; const sec=this.parseTimeStr(S.swEditPbTimeDraft); if(sec==null) return;
+    const courseCode=(S.swEditPbCourse==='LCM')?'L':'S'; const meet=(S.swEditPbMeet||'').trim(), meetDate=(S.swEditPbMeetDate||'');
+    const dup=(S.swEditPbs||[]).some(p=>p.event===S.swEditPbEventSel && p.course===courseCode && (p.meet||'')===meet && p.sec===sec);
+    if(dup){ this.setState({swEditPbTimeDraft:''}); return; }
+    const pbs=(S.swEditPbs||[]).slice(); pbs.push({event:S.swEditPbEventSel, sec, course:courseCode, courseLabel:(S.swEditPbCourse||'LCM'), meet, meetDate});
+    this.setState({swEditPbs:pbs, swEditPbTimeDraft:'', swEditPbMeet:'', swEditPbMeetDate:''}); }
+  swEditRemovePb(idx){ const S=this.state; this.setState({swEditPbs:(S.swEditPbs||[]).filter((p,i)=>i!==idx)}); }
   adminEditSwimmer(squadId, id, patch, newSquadId){
-    if(patch.pbs){ patch.pbs=patch.pbs.map(p=>({event:p.event, sec:p.sec, time:this.fmt(p.sec), drop:'', course:'L'})).sort((a,b)=>a.sec-b.sec); const top=patch.pbs[0]; patch.topEvent=top?top.event:'—'; patch.topTime=top?top.time:'—'; patch.topSec=top?top.sec:999; }
+    if(patch.pbs){ const d=this._deriveFromEntries(patch.pbs); const top=d.top; patch.pbs=d.pbs; patch.results=d.results; patch.entries=d.entries; patch.meets=d.meets; patch.meetCount=d.meetCount; patch.topEvent=top?top.event:'—'; patch.topTime=top?top.time:'—'; patch.topSec=top?top.sec:999; }
     const addedIdx=(this.rosterEdits.added[squadId]||[]).findIndex(s=>s.id===id);
     if(addedIdx>=0){
       this.rosterEdits.added[squadId]=this.rosterEdits.added[squadId].map(s=> s.id===id? {...s, ...patch, name:patch.name?patch.name.trim():s.name}:s);
@@ -6600,8 +6634,8 @@ class Component extends DCLogic {
     // ---- roster ----
     const rq=(S.rosterQuery||'').toLowerCase();
     const rlist=(this.roster[S.squadId]||[]);
-    const roster=rlist.filter(sw=>!rq||sw.name.toLowerCase().includes(rq)).map((sw,i)=>{
-      const avBg=i<3?squad.accent:'#EEF1F5', avFg=i<3?'#fff':'#5A657E';
+    const roster=rlist.filter(sw=>!rq||sw.name.toLowerCase().includes(rq)).slice().sort((a,b)=>a.name.localeCompare(b.name)).map((sw,i)=>{
+      const avBg=squad.accent, avFg='#fff';
       return {
       name:sw.name, age:sw.age, initials:sw.initials, topEvent:sw.topEvent, topTime:sw.topTime,
       avBg, avFg,
@@ -7349,6 +7383,7 @@ class Component extends DCLogic {
     if(swQ) swFlat=swFlat.filter(sw=>sw.name.toLowerCase().includes(swQ));
     const swMissingDobCount = swFlat.filter(sw=>!sw.dob).length;
     if(S.swDobFilter) swFlat=swFlat.filter(sw=>!sw.dob);
+    swFlat=swFlat.slice().sort((a,b)=>a.name.localeCompare(b.name));
     // No cap — show the whole roster so "All" lists everyone (and newly added swimmers appear).
     const swRows=swFlat.map(sw=>{ const editing=S.swEditId===(sw.squadId+'::'+sw.id); const gm=this.genMeta(sw.gender); const sq=this.squadById[sw.squadId];
       const editDraftGender = editing ? (S.swEditDraft?.gender ?? sw.gender) : sw.gender;
@@ -7371,12 +7406,21 @@ class Component extends DCLogic {
         onCancelEdit:()=>this.setState({swEditId:null, swEditDraft:null, swEditPbs:[]}),
         onSave:()=>{ const d=this.state.swEditDraft||{}; const dob=(d.dob!=null?d.dob:(sw.dob||'')); const a=this._ageFromDob(dob); this.adminEditSwimmer(sw.squadId, sw.id, {name:(d.name||sw.name).trim(), dob, age:(a!=null?a:(parseInt(d.age,10)||sw.age)), gender:d.gender||sw.gender, pbs:this.state.swEditPbs}, d.squadId&&d.squadId!==sw.squadId?d.squadId:null); },
         onDelete:()=>{ if(window.confirm('Remove '+sw.name+' from the roster?')) this.adminDeleteSwimmer(sw.squadId, sw.id); },
-        editPbChips: editing ? (S.swEditPbs||[]).map(p=>({label:p.event+' \u00b7 '+this.fmt(p.sec), onRemove:()=>this.swEditRemovePb(p.event)})) : [],
+        editPbChips: editing ? (S.swEditPbs||[]).map((p,i)=>({label:p.event+' \u00b7 '+this.fmt(p.sec)+' \u00b7 '+(p.courseLabel||(p.course==='S'?'SCM':'LCM'))+(p.meet?(' \u00b7 '+p.meet):''), onRemove:()=>this.swEditRemovePb(i)})) : [],
         editPbEventOptions: this.EVENT_CATALOG().map(ev=>({value:ev, label:ev})),
         editPbEventSel: S.swEditPbEventSel, editPbTimeDraft: S.swEditPbTimeDraft,
+        editPbCourse: S.swEditPbCourse||'LCM', onEditPbCourse:(e)=>this.setState({swEditPbCourse:e.target.value}),
+        editPbMeet: S.swEditPbMeet||'', onEditPbMeet:(e)=>this.setState({swEditPbMeet:e.target.value}),
+        editPbMeetDate: S.swEditPbMeetDate||'', onEditPbMeetDate:(e)=>this.setState({swEditPbMeetDate:e.target.value}),
         onEditPbEventSel:(e)=>this.setState({swEditPbEventSel:e.target.value}),
         onEditPbTimeDraft:(e)=>this.setState({swEditPbTimeDraft:e.target.value}),
         onEditPbAdd:()=>this.swEditAddPb(),
+        // active / inactive status (editable right here in the roster)
+        editStatusOpts: [{key:'active',label:'Active'},{key:'travel',label:'Traveling'},{key:'break',label:'Break'},{key:'sick',label:'Sick'},{key:'injured',label:'Injured'}].map(o=>{ const st=this._swStatus(sw.id); const sel = o.key==='active' ? st.active : (!st.active && st.reason===o.key); const isAct=o.key==='active';
+          return { label:o.label, sel, bg: sel?(isAct?'#0C7A4F':'#B4690E'):'#F4F6F8', fg: sel?'#fff':'#7A8296', onClick:()=>this.setSwStatus(sw.id, isAct, isAct?'':o.key) }; }),
+        statusInactive: !this._swStatus(sw.id).active,
+        editStatusFrom: this._swStatus(sw.id).from||'', editStatusTo: this._swStatus(sw.id).to||'',
+        onEditStatusFrom:(e)=>this.setSwStatusDate(sw.id,'from',e.target.value), onEditStatusTo:(e)=>this.setSwStatusDate(sw.id,'to',e.target.value),
       };
     });
     const swEmpty = swRows.length===0;
