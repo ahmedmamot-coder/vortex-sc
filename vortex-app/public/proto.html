@@ -905,6 +905,22 @@ if ('serviceWorker' in navigator) {
                           </div>
                         </div>
                       </sc-if>
+                      <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05);margin-bottom:16px">
+                        <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px"><i data-lucide="watch" style="width:14px;height:14px;color:var(--vx-blue-dark)"></i><p style="margin:0;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">Log from your band</p></div>
+                        <div style="display:flex;gap:6px;margin-bottom:6px">
+                          <input value="{{ famWearDate }}" oninput="{{ onFamWearDate }}" type="date" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-size:11.5px;color:#0C1116;outline:none">
+                          <input value="{{ famWearRecoveryIn }}" oninput="{{ onFamWearRecovery }}" placeholder="Rec %" type="number" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-size:11.5px;color:#0C1116;outline:none">
+                          <input value="{{ famWearRhrIn }}" oninput="{{ onFamWearRhr }}" placeholder="RHR" type="number" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-size:11.5px;color:#0C1116;outline:none">
+                        </div>
+                        <div style="display:flex;gap:6px">
+                          <input value="{{ famWearHrvIn }}" oninput="{{ onFamWearHrv }}" placeholder="HRV" type="number" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-size:11.5px;color:#0C1116;outline:none">
+                          <input value="{{ famWearSleepIn }}" oninput="{{ onFamWearSleep }}" placeholder="Sleep h" type="number" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-size:11.5px;color:#0C1116;outline:none">
+                          <input value="{{ famWearStrainIn }}" oninput="{{ onFamWearStrain }}" placeholder="Strain" type="number" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-size:11.5px;color:#0C1116;outline:none">
+                          <button onclick="{{ onFamWearAdd }}" style="flex:none;width:36px;background:var(--vx-blue);color:#fff;border:none;border-radius:9px;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="plus" style="width:16px;height:16px"></i></button>
+                        </div>
+                        <button onclick="{{ onFamWearConnect }}" style="margin-top:8px;width:100%;display:flex;align-items:center;justify-content:center;gap:7px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border:1.5px dashed var(--vx-blue);border-radius:9px;padding:10px;cursor:pointer;font-family:inherit;font-weight:700;font-size:11.5px"><i data-lucide="link" style="width:14px;height:14px"></i>Connect WHOOP (auto-sync)</button>
+                        <sc-if value="{{ famWearMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:7px 2px 0;font-size:11px;font-weight:600;color:#0C7A4F;line-height:1.4">{{ famWearMsg }}</p></sc-if>
+                      </div>
                       <sc-if value="{{ famHasPbs }}" hint-placeholder-val="{{ true }}">
                         <p style="margin:0 2px 8px;font-size:11.5px;font-weight:700;color:#7A8296;text-transform:uppercase;letter-spacing:.04em">Personal bests</p>
                         <div style="display:flex;flex-direction:column;gap:8px">
@@ -8041,7 +8057,7 @@ class Component extends DCLogic {
               wearStrainIn:S2.wearForm.strain, onWearStrain:(e)=>this.setState({wearForm:{...S2.wearForm,strain:e.target.value}}),
               onWearAdd:()=>{ this.saveWearable(swObj.id, S2.wearForm); this.setState({wearForm:{date:'',recovery:'',rhr:'',hrv:'',sleep:'',strain:''}, wearMsg:'Saved ✓ — synced to all devices'}); },
               wearMsg:S2.wearMsg, wearMsgShow:!!S2.wearMsg,
-              onWearConnect:()=>this.setState({wearMsg:'Auto-sync with WHOOP / Fitbit is set up in two steps (developer key + each family connects their band). For now, log the daily numbers here — they already sync to every device.'}),
+              onWearConnect:()=>{ try{ this._openUrl('/api/whoop/connect?sw='+encodeURIComponent(swObj.id)); }catch(e){} this.setState({wearMsg:'Opening WHOOP… approve access, then the readings fill in automatically. (Needs the WHOOP developer keys set in Vercel.)'}); },
             }; })(),
           fitRows:this._fitTests(swObj.id).slice(0,6).map((r,i)=>({
             dateLabel:this.shortDate(r.date.split('-').reverse().join('/')),
@@ -8160,6 +8176,15 @@ class Component extends DCLogic {
           famWearRecovery:_fwl&&_fwl.recovery!=null?String(_fwl.recovery):'—', famWearRecoveryPct:_fwl&&_fwl.recovery!=null?_fwl.recovery:0, famWearRecoveryColor:this._wearRecoveryColor(_fwl?_fwl.recovery:null),
           famWearRhr:_fwl&&_fwl.rhr!=null?String(_fwl.rhr):'—', famWearHrv:_fwl&&_fwl.hrv!=null?String(_fwl.hrv):'—', famWearSleep:_fwl&&_fwl.sleepH!=null?String(_fwl.sleepH):'—', famWearStrain:_fwl&&_fwl.strain!=null?String(_fwl.strain):'—',
           famWearLatestLabel:_fwl?('Updated '+this._fmtDMY(_fwl.date)):'',
+          famWearDate:S.wearForm.date, onFamWearDate:(e)=>this.setState({wearForm:{...S.wearForm,date:e.target.value}}),
+          famWearRecoveryIn:S.wearForm.recovery, onFamWearRecovery:(e)=>this.setState({wearForm:{...S.wearForm,recovery:e.target.value}}),
+          famWearRhrIn:S.wearForm.rhr, onFamWearRhr:(e)=>this.setState({wearForm:{...S.wearForm,rhr:e.target.value}}),
+          famWearHrvIn:S.wearForm.hrv, onFamWearHrv:(e)=>this.setState({wearForm:{...S.wearForm,hrv:e.target.value}}),
+          famWearSleepIn:S.wearForm.sleep, onFamWearSleep:(e)=>this.setState({wearForm:{...S.wearForm,sleep:e.target.value}}),
+          famWearStrainIn:S.wearForm.strain, onFamWearStrain:(e)=>this.setState({wearForm:{...S.wearForm,strain:e.target.value}}),
+          onFamWearAdd:()=>{ this.saveWearable(sw.id, S.wearForm); this.setState({wearForm:{date:'',recovery:'',rhr:'',hrv:'',sleep:'',strain:''}, wearMsg:'Saved ✓'}); },
+          onFamWearConnect:()=>{ try{ this._openUrl('/api/whoop/connect?sw='+encodeURIComponent(sw.id)+'&by='+encodeURIComponent((S.familyUser&&S.familyUser.id)||'')); }catch(e){} this.setState({wearMsg:'Opening WHOOP…'}); },
+          famWearMsg:S.wearMsg, famWearMsgShow:!!S.wearMsg,
           famMsgThread:this._famMsgEls(sw.id, 'family'), famMsgEmpty:((this.famMessages||{})[sw.id]||[]).length===0, onFamSendMsg:()=>this.sendFamMsg(sw.id, 'family'),
           // -- attendance (day/month/year) --
           famAttView, famAttShowDay:famAttView==='day', famAttShowMonth:famAttView==='month', famAttShowYear:famAttView==='year',
