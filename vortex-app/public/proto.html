@@ -885,6 +885,26 @@ if ('serviceWorker' in navigator) {
                         </div>
                       </sc-if>
 
+                      <sc-if value="{{ famWearHasData }}" hint-placeholder-val="{{ false }}">
+                        <div style="background:#0A0F1A;border-radius:16px;padding:15px;box-shadow:0 8px 22px rgba(11,20,40,.18);color:#fff;position:relative;overflow:hidden;margin-bottom:16px">
+                          <div style="position:absolute;top:-60px;right:-40px;width:150px;height:150px;border-radius:50%;background:radial-gradient(circle,rgba(34,215,215,.22),transparent 70%);pointer-events:none"></div>
+                          <div style="position:relative;display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                            <div style="display:flex;align-items:center;gap:8px"><i data-lucide="activity" style="width:16px;height:16px;color:#22D7D7"></i><span style="font-size:12.5px;font-weight:700">Recovery</span></div>
+                            <span style="font-size:10px;color:rgba(255,255,255,.5)">{{ famWearLatestLabel }}</span>
+                          </div>
+                          <div style="position:relative;display:flex;align-items:center;gap:14px">
+                            <div style="flex:none;width:70px;height:70px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:conic-gradient({{ famWearRecoveryColor }} {{ famWearRecoveryPct }}%,rgba(255,255,255,.12) 0)">
+                              <div style="width:56px;height:56px;border-radius:50%;background:#0A0F1A;display:flex;flex-direction:column;align-items:center;justify-content:center"><span style="font-size:19px;font-weight:800;color:{{ famWearRecoveryColor }};line-height:1">{{ famWearRecovery }}</span><span style="font-size:8px;color:rgba(255,255,255,.5);letter-spacing:.06em">RECOVERY</span></div>
+                            </div>
+                            <div style="flex:1;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                              <div style="background:rgba(255,255,255,.06);border-radius:10px;padding:7px 10px"><span style="display:block;font-size:9px;color:rgba(255,255,255,.5);letter-spacing:.05em">RESTING HR</span><span style="font-size:15px;font-weight:800">{{ famWearRhr }}<span style="font-size:9px;color:rgba(255,255,255,.5);font-weight:600"> bpm</span></span></div>
+                              <div style="background:rgba(255,255,255,.06);border-radius:10px;padding:7px 10px"><span style="display:block;font-size:9px;color:rgba(255,255,255,.5);letter-spacing:.05em">HRV</span><span style="font-size:15px;font-weight:800">{{ famWearHrv }}<span style="font-size:9px;color:rgba(255,255,255,.5);font-weight:600"> ms</span></span></div>
+                              <div style="background:rgba(255,255,255,.06);border-radius:10px;padding:7px 10px"><span style="display:block;font-size:9px;color:rgba(255,255,255,.5);letter-spacing:.05em">SLEEP</span><span style="font-size:15px;font-weight:800">{{ famWearSleep }}<span style="font-size:9px;color:rgba(255,255,255,.5);font-weight:600"> h</span></span></div>
+                              <div style="background:rgba(255,255,255,.06);border-radius:10px;padding:7px 10px"><span style="display:block;font-size:9px;color:rgba(255,255,255,.5);letter-spacing:.05em">STRAIN</span><span style="font-size:15px;font-weight:800">{{ famWearStrain }}</span></div>
+                            </div>
+                          </div>
+                        </div>
+                      </sc-if>
                       <sc-if value="{{ famHasPbs }}" hint-placeholder-val="{{ true }}">
                         <p style="margin:0 2px 8px;font-size:11.5px;font-weight:700;color:#7A8296;text-transform:uppercase;letter-spacing:.04em">Personal bests</p>
                         <div style="display:flex;flex-direction:column;gap:8px">
@@ -1876,6 +1896,61 @@ if ('serviceWorker' in navigator) {
                           <sc-if value="{{ profileIbMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:6px 2px 0;font-size:11px;font-weight:600;color:{{ profileIbMsgColor }}">{{ profileIbMsg }}</p></sc-if>
                         </div>
                       </div>
+                    </div>
+
+                    <div>
+                      <h2 style="font-size:11.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#7A8296;margin:0 2px 9px">Recovery &amp; wearables</h2>
+                      <div style="background:#0A0F1A;border-radius:16px;padding:15px;box-shadow:0 8px 22px rgba(11,20,40,.18);color:#fff;position:relative;overflow:hidden">
+                        <div style="position:absolute;top:-60px;right:-40px;width:150px;height:150px;border-radius:50%;background:radial-gradient(circle,rgba(34,215,215,.22),transparent 70%);pointer-events:none"></div>
+                        <div style="position:relative;display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                          <div style="display:flex;align-items:center;gap:8px"><i data-lucide="activity" style="width:16px;height:16px;color:#22D7D7"></i><span style="font-size:12.5px;font-weight:700">Live recovery</span></div>
+                          <span style="font-size:10px;color:rgba(255,255,255,.5)">{{ wearLatestLabel }}</span>
+                        </div>
+                        <div style="position:relative;display:flex;align-items:center;gap:14px;margin-bottom:14px">
+                          <div style="flex:none;width:70px;height:70px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:conic-gradient({{ wearRecoveryColor }} {{ wearRecoveryPct }}%,rgba(255,255,255,.12) 0)">
+                            <div style="width:56px;height:56px;border-radius:50%;background:#0A0F1A;display:flex;flex-direction:column;align-items:center;justify-content:center"><span style="font-size:19px;font-weight:800;color:{{ wearRecoveryColor }};line-height:1">{{ wearRecovery }}</span><span style="font-size:8px;color:rgba(255,255,255,.5);letter-spacing:.06em">RECOVERY</span></div>
+                          </div>
+                          <div style="flex:1;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                            <div style="background:rgba(255,255,255,.06);border-radius:10px;padding:7px 10px"><span style="display:block;font-size:9px;color:rgba(255,255,255,.5);letter-spacing:.05em">RESTING HR</span><span style="font-size:15px;font-weight:800">{{ wearRhr }}<span style="font-size:9px;color:rgba(255,255,255,.5);font-weight:600"> bpm</span></span></div>
+                            <div style="background:rgba(255,255,255,.06);border-radius:10px;padding:7px 10px"><span style="display:block;font-size:9px;color:rgba(255,255,255,.5);letter-spacing:.05em">HRV</span><span style="font-size:15px;font-weight:800">{{ wearHrv }}<span style="font-size:9px;color:rgba(255,255,255,.5);font-weight:600"> ms</span></span></div>
+                            <div style="background:rgba(255,255,255,.06);border-radius:10px;padding:7px 10px"><span style="display:block;font-size:9px;color:rgba(255,255,255,.5);letter-spacing:.05em">SLEEP</span><span style="font-size:15px;font-weight:800">{{ wearSleep }}<span style="font-size:9px;color:rgba(255,255,255,.5);font-weight:600"> h</span></span></div>
+                            <div style="background:rgba(255,255,255,.06);border-radius:10px;padding:7px 10px"><span style="display:block;font-size:9px;color:rgba(255,255,255,.5);letter-spacing:.05em">STRAIN</span><span style="font-size:15px;font-weight:800">{{ wearStrain }}</span></div>
+                          </div>
+                        </div>
+                        <sc-if value="{{ wearHasBars }}" hint-placeholder-val="{{ false }}">
+                          <div style="position:relative;display:flex;align-items:flex-end;gap:5px;height:50px;margin-bottom:4px">
+                            <sc-for list="{{ wearBars }}" as="b" hint-placeholder-count="7">
+                              <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%"><div style="width:100%;height:{{ b.h }}px;background:{{ b.color }};border-radius:4px"></div><span style="font-size:8px;color:rgba(255,255,255,.4)">{{ b.day }}</span></div>
+                            </sc-for>
+                          </div>
+                          <p style="position:relative;margin:0;font-size:9px;color:rgba(255,255,255,.4);text-align:center">7-day recovery trend</p>
+                        </sc-if>
+                      </div>
+                      <sc-if value="{{ profileCanEditWear }}" hint-placeholder-val="{{ true }}">
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05);margin-top:9px">
+                          <p style="margin:0 0 8px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">Log today's reading</p>
+                          <div style="display:flex;gap:6px;margin-bottom:6px">
+                            <input value="{{ wearDate }}" oninput="{{ onWearDate }}" type="date" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-size:11.5px;color:#0C1116;outline:none">
+                            <input value="{{ wearRecoveryIn }}" oninput="{{ onWearRecovery }}" placeholder="Rec %" type="number" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-size:11.5px;color:#0C1116;outline:none">
+                            <input value="{{ wearRhrIn }}" oninput="{{ onWearRhr }}" placeholder="RHR" type="number" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-size:11.5px;color:#0C1116;outline:none">
+                          </div>
+                          <div style="display:flex;gap:6px">
+                            <input value="{{ wearHrvIn }}" oninput="{{ onWearHrv }}" placeholder="HRV" type="number" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-size:11.5px;color:#0C1116;outline:none">
+                            <input value="{{ wearSleepIn }}" oninput="{{ onWearSleep }}" placeholder="Sleep h" type="number" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-size:11.5px;color:#0C1116;outline:none">
+                            <input value="{{ wearStrainIn }}" oninput="{{ onWearStrain }}" placeholder="Strain" type="number" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-size:11.5px;color:#0C1116;outline:none">
+                            <button onclick="{{ onWearAdd }}" style="flex:none;width:36px;background:var(--vx-blue);color:#fff;border:none;border-radius:9px;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="plus" style="width:16px;height:16px"></i></button>
+                          </div>
+                          <button onclick="{{ onWearConnect }}" style="margin-top:8px;width:100%;display:flex;align-items:center;justify-content:center;gap:7px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border:1.5px dashed var(--vx-blue);border-radius:9px;padding:10px;cursor:pointer;font-family:inherit;font-weight:700;font-size:11.5px"><i data-lucide="watch" style="width:14px;height:14px"></i>Connect WHOOP / Fitbit (auto-sync)</button>
+                          <sc-if value="{{ wearMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:7px 2px 0;font-size:11px;font-weight:600;color:#0C7A4F;line-height:1.4">{{ wearMsg }}</p></sc-if>
+                          <sc-if value="{{ wearHasRows }}" hint-placeholder-val="{{ false }}">
+                            <div style="margin-top:10px;border-top:1px solid #EEF1F5;padding-top:8px;display:flex;flex-direction:column;gap:5px">
+                              <sc-for list="{{ wearRows }}" as="w" hint-placeholder-count="3">
+                                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:9px;padding:7px 10px"><span style="min-width:0"><span style="display:block;font-size:11px;font-weight:700;color:#0C1116">{{ w.dateLabel }}</span><span style="display:block;font-size:10px;color:#7A8296;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ w.summary }}</span></span><button onclick="{{ w.onDelete }}" style="flex:none;width:24px;height:24px;border-radius:7px;border:none;background:#EEF1F5;color:#9AA2B4;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:13px;height:13px"></i></button></div>
+                              </sc-for>
+                            </div>
+                          </sc-if>
+                        </div>
+                      </sc-if>
                     </div>
 
                     <div>
@@ -4046,6 +4121,7 @@ class Component extends DCLogic {
     this.meetEntries=this._loadJSON('vx_meet_entries', {});
     this.customMeets=this._loadJSON('vx_custom_meets', []);
     this.meetEventsMap=this._loadJSON('vx_meet_events', {});
+    this.wearables=this._loadJSON('vx_wear_cache', {});
     this.eventRequests=this._loadJSON('vx_event_requests', []);
     this.swimmerGoals=this._loadJSON('vx_swimmer_goals', {});
     this.squadGoals=this._loadJSON('vx_squad_goals', {});
@@ -4118,6 +4194,7 @@ class Component extends DCLogic {
       tpaceQuery:'', tpaceSwId:null, tpaceType:'1000', tpaceTime:'', tpaceErr:'',
       inbodyForm:{weight:'',fat:'',muscle:''},
       profileIbMsg:'', profileIbBusy:false,
+      wearForm:{date:'',recovery:'',rhr:'',hrv:'',sleep:'',strain:''}, wearMsg:'',
       fitForm:{pushups:'',plankSec:'',vjump:'',sitreach:''},
       promoQuery:'',
       brandDraft:null,
@@ -4233,7 +4310,7 @@ class Component extends DCLogic {
   // navigation
   go(patch){ this.setState(patch); }
   openSquad(id){ this.setState({view:'squad', squadId:id, tab:'group', swimmerId:null, showSwitcher:false, tool:null}); try{ this._plansFetch(); }catch(e){} try{ this._squadPlansFetch(); }catch(e){} }
-  openSwimmer(id){ this.setState({view:'profile', swimmerId:id, profileEvent:null}); try{ this._famMsgFetch(); }catch(e){} try{ this._docsFetch(); }catch(e){} }
+  openSwimmer(id){ this.setState({view:'profile', swimmerId:id, profileEvent:null}); try{ this._famMsgFetch(); }catch(e){} try{ this._docsFetch(); }catch(e){} try{ this._wearFetch(); }catch(e){} }
   _fitnessLocked(){ const a=(this.accounts||[]).find(x=>x.id===this.state.pickedId)||{};
     // Locked to the Fitness Plan tool if their role mentions "fitness" OR the account is Coach Nedhal.
     if(a.id==='ahmed'||a.id==='sameh') return false; // club admins always have full access
@@ -4869,6 +4946,31 @@ class Component extends DCLogic {
     try{ this._saveLocalOnly('vx_docs_cache', map); this._saveLocalOnly('vx_photos_cache', photos); }catch(e){}
     this.forceUpdate();
   }
+  // ---- Wearables (WHOOP / Fitbit-style daily recovery, HR, sleep) ----------------------------
+  // Stored one row per swimmer per day in the wearable_readings table, so it syncs to every
+  // device/profile and never bloats the quota. this.wearables = { swId: [readings newest-first] }.
+  async _wearFetch(){
+    if(!window.__vxSelect) return;
+    const rows=await window.__vxSelect('wearable_readings', 'select=*&order=date.desc&limit=4000'); if(rows==null) return;
+    const map={}; rows.forEach(r=>{ if(!r.sw_id) return; (map[r.sw_id]=map[r.sw_id]||[]).push({date:r.date, recovery:r.recovery, rhr:r.rhr, hrv:r.hrv, sleepH:r.sleep_h, strain:r.strain, source:r.source||'manual'}); });
+    Object.keys(map).forEach(k=>map[k].sort((a,b)=>String(b.date).localeCompare(String(a.date))));
+    this.wearables=map; try{ this._saveLocalOnly('vx_wear_cache', map); }catch(e){} this.forceUpdate();
+  }
+  _wearList(swId){ return (this.wearables||{})[swId] || []; }
+  _wearLatest(swId){ return this._wearList(swId)[0] || null; }
+  // Last n readings in chronological (old→new) order for a metric, for the trend bars.
+  _wearSeries(swId, key, n){ const list=this._wearList(swId).slice(0, n||7).slice().reverse(); return list.map(r=>({date:r.date, v: r[key]})); }
+  async saveWearable(swId, f){ if(!swId) return;
+    const date=(f.date||this.todayISO());
+    const num=(v)=>{ if(v===''||v==null) return null; const n=parseFloat(v); return isNaN(n)?null:n; };
+    const reading={date, recovery:num(f.recovery)!=null?Math.round(num(f.recovery)):null, rhr:num(f.rhr)!=null?Math.round(num(f.rhr)):null, hrv:num(f.hrv)!=null?Math.round(num(f.hrv)):null, sleepH:num(f.sleep), strain:num(f.strain), source:f.source||'manual'};
+    const list=(this.wearables[swId]=this.wearables[swId]||[]).filter(r=>r.date!==date); list.unshift(reading); list.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+    this.wearables={...this.wearables, [swId]:list}; this.forceUpdate();
+    if(window.__vxUpsert){ try{ await window.__vxUpsert('wearable_readings', [{ id:swId+'_'+date, sw_id:swId, date, recovery:reading.recovery, rhr:reading.rhr, hrv:reading.hrv, sleep_h:reading.sleepH, strain:reading.strain, source:reading.source, ts:Date.now(), updated_at:new Date().toISOString() }]); }catch(e){} }
+  }
+  async deleteWearable(swId, date){ const list=this._wearList(swId).filter(r=>r.date!==date); this.wearables={...this.wearables, [swId]:list}; this.forceUpdate();
+    if(window.__vxDelete){ try{ await window.__vxDelete('wearable_readings', 'id=eq.'+encodeURIComponent(swId+'_'+date)); }catch(e){} } }
+  _wearRecoveryColor(v){ if(v==null) return '#9AA2B4'; return v>=67?'#0C7A4F':(v>=34?'#B4690E':'#C0362C'); }
   // Strip any heavy base64 out of the meta blob so it never exceeds the browser storage quota
   // (which was silently failing the save and making documents "reappear as missing"). Only the
   // small Supabase Storage URL + metadata is kept; old base64-only docs are cleared for re-upload.
@@ -6403,6 +6505,7 @@ class Component extends DCLogic {
     this._alertsFetch();
     this._annFetch();
     this._docsFetch();
+    this._wearFetch();
     this._planCustomFetch();
     // Load every saved training session on startup so the training log & calendar populate
     // immediately for each coach (not only when the Plans tab is opened).
@@ -7919,6 +8022,27 @@ class Component extends DCLogic {
           onProfileIbPdfClick:()=>{ const el=document.getElementById('vx-ib-pdf-'+swObj.id); if(el) el.click(); },
           onProfileIbPdf:(e)=>this.profileInbodyPdf(e, swObj.id),
           profileIbMsg:S2.profileIbMsg, profileIbMsgShow:!!S2.profileIbMsg, profileIbMsgColor: /fail|couldn|error/i.test(S2.profileIbMsg||'')?'#B42318':'#0C7A4F',
+          ...(()=>{ const wl=this._wearLatest(swObj.id); const recSeries=this._wearSeries(swObj.id,'recovery',7);
+            const wearBars=recSeries.map(p=>({ h: p.v!=null?Math.max(6,Math.round(p.v/100*44)):4, color:this._wearRecoveryColor(p.v), day:(p.date||'').slice(8), val: p.v!=null?(p.v+'%'):'—' }));
+            const wearRows=this._wearList(swObj.id).slice(0,8).map(r=>({ dateLabel:this._fmtDMY(r.date),
+              summary:[r.recovery!=null?('Rec '+r.recovery+'%'):null, r.rhr!=null?(r.rhr+' bpm'):null, r.hrv!=null?(r.hrv+' hrv'):null, r.sleepH!=null?(r.sleepH+'h'):null, r.strain!=null?('strain '+r.strain):null].filter(Boolean).join(' · ')||'Reading',
+              onDelete:()=>this.deleteWearable(swObj.id, r.date) }));
+            return {
+              wearHasData:!!wl, wearRecovery: wl&&wl.recovery!=null?String(wl.recovery):'—', wearRecoveryPct: wl&&wl.recovery!=null?wl.recovery:0, wearRecoveryColor:this._wearRecoveryColor(wl?wl.recovery:null), profileCanEditWear:true,
+              wearRhr: wl&&wl.rhr!=null?String(wl.rhr):'—', wearHrv: wl&&wl.hrv!=null?String(wl.hrv):'—',
+              wearSleep: wl&&wl.sleepH!=null?String(wl.sleepH):'—', wearStrain: wl&&wl.strain!=null?String(wl.strain):'—',
+              wearLatestLabel: wl?('Updated '+this._fmtDMY(wl.date)+(wl.source&&wl.source!=='manual'?(' · '+String(wl.source).toUpperCase()):'')):'No readings yet — log the first below',
+              wearBars, wearHasBars:wearBars.length>0, wearRows, wearHasRows:wearRows.length>0,
+              wearDate:S2.wearForm.date, onWearDate:(e)=>this.setState({wearForm:{...S2.wearForm,date:e.target.value}}),
+              wearRecoveryIn:S2.wearForm.recovery, onWearRecovery:(e)=>this.setState({wearForm:{...S2.wearForm,recovery:e.target.value}}),
+              wearRhrIn:S2.wearForm.rhr, onWearRhr:(e)=>this.setState({wearForm:{...S2.wearForm,rhr:e.target.value}}),
+              wearHrvIn:S2.wearForm.hrv, onWearHrv:(e)=>this.setState({wearForm:{...S2.wearForm,hrv:e.target.value}}),
+              wearSleepIn:S2.wearForm.sleep, onWearSleep:(e)=>this.setState({wearForm:{...S2.wearForm,sleep:e.target.value}}),
+              wearStrainIn:S2.wearForm.strain, onWearStrain:(e)=>this.setState({wearForm:{...S2.wearForm,strain:e.target.value}}),
+              onWearAdd:()=>{ this.saveWearable(swObj.id, S2.wearForm); this.setState({wearForm:{date:'',recovery:'',rhr:'',hrv:'',sleep:'',strain:''}, wearMsg:'Saved ✓ — synced to all devices'}); },
+              wearMsg:S2.wearMsg, wearMsgShow:!!S2.wearMsg,
+              onWearConnect:()=>this.setState({wearMsg:'Auto-sync with WHOOP / Fitbit is set up in two steps (developer key + each family connects their band). For now, log the daily numbers here — they already sync to every device.'}),
+            }; })(),
           fitRows:this._fitTests(swObj.id).slice(0,6).map((r,i)=>({
             dateLabel:this.shortDate(r.date.split('-').reverse().join('/')),
             summary:[r.pushups!=null?(r.pushups+' push-ups'):null, r.plankSec!=null?(r.plankSec+'s plank'):null, r.vjump!=null?(r.vjump+'cm jump'):null, r.sitreach!=null?(r.sitreach+'cm reach'):null].filter(Boolean).join(' · '),
@@ -8030,7 +8154,12 @@ class Component extends DCLogic {
         const famFitRows=this._fitTests(sw.id).slice(0,6).map(r=>({
           dateLabel:this.shortDate(r.date.split('-').reverse().join('/')),
           summary:[r.pushups!=null?(r.pushups+' push-ups'):null, r.plankSec!=null?(r.plankSec+'s plank'):null, r.vjump!=null?(r.vjump+'cm jump'):null, r.sitreach!=null?(r.sitreach+'cm reach'):null].filter(Boolean).join(' · ') }));
+        const _fwl=this._wearLatest(sw.id);
         return {famSwName:sw.name, famSwMeta:sq.name+' · Age '+sw.age+' · '+sq.coach, famSwInit:sw.initials, famGenIcon:gm.icon, famGenBg:gm.bg, famAccent:sq.accent, famPbs, famResults, famMeetsUpcoming:upcoming, famHasPbs:famPbs.length>0, famHasResults:famResults.length>0, famNoResults:famResults.length===0,
+          famWearHasData:!!_fwl,
+          famWearRecovery:_fwl&&_fwl.recovery!=null?String(_fwl.recovery):'—', famWearRecoveryPct:_fwl&&_fwl.recovery!=null?_fwl.recovery:0, famWearRecoveryColor:this._wearRecoveryColor(_fwl?_fwl.recovery:null),
+          famWearRhr:_fwl&&_fwl.rhr!=null?String(_fwl.rhr):'—', famWearHrv:_fwl&&_fwl.hrv!=null?String(_fwl.hrv):'—', famWearSleep:_fwl&&_fwl.sleepH!=null?String(_fwl.sleepH):'—', famWearStrain:_fwl&&_fwl.strain!=null?String(_fwl.strain):'—',
+          famWearLatestLabel:_fwl?('Updated '+this._fmtDMY(_fwl.date)):'',
           famMsgThread:this._famMsgEls(sw.id, 'family'), famMsgEmpty:((this.famMessages||{})[sw.id]||[]).length===0, onFamSendMsg:()=>this.sendFamMsg(sw.id, 'family'),
           // -- attendance (day/month/year) --
           famAttView, famAttShowDay:famAttView==='day', famAttShowMonth:famAttView==='month', famAttShowYear:famAttView==='year',
