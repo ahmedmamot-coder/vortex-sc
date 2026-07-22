@@ -1,5 +1,5 @@
 {
   "crons": [
-    { "path": "/api/whoop/sync", "schedule": "0 5 * * *" }
+    { "path": "/api/wearable/sync", "schedule": "0 5 * * *" }
   ]
 }

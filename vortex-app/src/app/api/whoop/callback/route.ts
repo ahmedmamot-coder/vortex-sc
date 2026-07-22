@@ -1,7 +1,7 @@
 // Step 2 of WHOOP linking: WHOOP redirects here with ?code=...&state=...
 // We exchange the code for tokens, store them (server-side only), pull the first
 // reading, then bounce the user back into the app.
-import { exchangeCode, saveConnection, whoopProfile, latestReading, upsertReading, haveService } from "@/lib/whoop";
+import { exchangeCode, saveWhoop, whoopProfile, latestReading, upsertReading, haveService } from "@/lib/whoop";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -19,10 +19,10 @@ export async function GET(request: Request) {
   if (!tok || !tok.access_token) return Response.redirect(appHome + "?whoop=error", 302);
 
   const uid = await whoopProfile(tok.access_token);
-  await saveConnection(sw, tok, uid, by);
+  await saveWhoop(sw, tok, uid, by);
 
   // Pull the first reading right away so the swimmer's card fills in immediately.
-  try { const r = await latestReading(tok.access_token); if (r) await upsertReading(sw, r); } catch {}
+  try { const r = await latestReading(tok.access_token); if (r) await upsertReading(sw, r, "whoop"); } catch {}
 
   return Response.redirect(appHome + "?whoop=connected", 302);
 }

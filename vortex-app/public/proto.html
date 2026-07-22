@@ -918,7 +918,17 @@ if ('serviceWorker' in navigator) {
                           <input value="{{ famWearStrainIn }}" oninput="{{ onFamWearStrain }}" placeholder="Strain" type="number" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-size:11.5px;color:#0C1116;outline:none">
                           <button onclick="{{ onFamWearAdd }}" style="flex:none;width:36px;background:var(--vx-blue);color:#fff;border:none;border-radius:9px;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="plus" style="width:16px;height:16px"></i></button>
                         </div>
-                        <button onclick="{{ onFamWearConnect }}" style="margin-top:8px;width:100%;display:flex;align-items:center;justify-content:center;gap:7px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border:1.5px dashed var(--vx-blue);border-radius:9px;padding:10px;cursor:pointer;font-family:inherit;font-weight:700;font-size:11.5px"><i data-lucide="link" style="width:14px;height:14px"></i>Connect WHOOP (auto-sync)</button>
+                        <sc-if value="{{ famWearConnected }}" hint-placeholder-val="{{ false }}">
+                          <div style="margin-top:8px;display:flex;align-items:center;gap:8px;background:#DCF5EA;border:1px solid #B6E7CF;border-radius:9px;padding:8px 11px">
+                            <i data-lucide="check-circle-2" style="width:15px;height:15px;color:#0C7A4F;flex:none"></i>
+                            <span style="flex:1;min-width:0;font-size:11px;font-weight:700;color:#0C7A4F">{{ famWearConnLabel }}</span>
+                            <button onclick="{{ onFamWearSyncNow }}" style="flex:none;display:flex;align-items:center;gap:5px;background:#0C7A4F;color:#fff;border:none;border-radius:7px;padding:5px 10px;font-family:inherit;font-weight:700;font-size:10.5px;cursor:pointer"><i data-lucide="refresh-cw" style="width:11px;height:11px"></i>Sync now</button>
+                          </div>
+                        </sc-if>
+                        <div style="display:flex;gap:6px;margin-top:8px">
+                          <button onclick="{{ onFamWearConnect }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border:1.5px dashed var(--vx-blue);border-radius:9px;padding:10px;cursor:pointer;font-family:inherit;font-weight:700;font-size:11px"><i data-lucide="watch" style="width:13px;height:13px"></i>WHOOP</button>
+                          <button onclick="{{ onFamWearConnectFitbit }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border:1.5px dashed var(--vx-blue);border-radius:9px;padding:10px;cursor:pointer;font-family:inherit;font-weight:700;font-size:11px"><i data-lucide="activity" style="width:13px;height:13px"></i>Fitbit</button>
+                        </div>
                         <sc-if value="{{ famWearMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:7px 2px 0;font-size:11px;font-weight:600;color:#0C7A4F;line-height:1.4">{{ famWearMsg }}</p></sc-if>
                       </div>
                       <sc-if value="{{ famHasPbs }}" hint-placeholder-val="{{ true }}">
@@ -1956,7 +1966,17 @@ if ('serviceWorker' in navigator) {
                             <input value="{{ wearStrainIn }}" oninput="{{ onWearStrain }}" placeholder="Strain" type="number" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-size:11.5px;color:#0C1116;outline:none">
                             <button onclick="{{ onWearAdd }}" style="flex:none;width:36px;background:var(--vx-blue);color:#fff;border:none;border-radius:9px;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="plus" style="width:16px;height:16px"></i></button>
                           </div>
-                          <button onclick="{{ onWearConnect }}" style="margin-top:8px;width:100%;display:flex;align-items:center;justify-content:center;gap:7px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border:1.5px dashed var(--vx-blue);border-radius:9px;padding:10px;cursor:pointer;font-family:inherit;font-weight:700;font-size:11.5px"><i data-lucide="watch" style="width:14px;height:14px"></i>Connect WHOOP / Fitbit (auto-sync)</button>
+                          <sc-if value="{{ wearConnected }}" hint-placeholder-val="{{ false }}">
+                            <div style="margin-top:8px;display:flex;align-items:center;gap:8px;background:#DCF5EA;border:1px solid #B6E7CF;border-radius:9px;padding:8px 11px">
+                              <i data-lucide="check-circle-2" style="width:15px;height:15px;color:#0C7A4F;flex:none"></i>
+                              <span style="flex:1;min-width:0;font-size:11px;font-weight:700;color:#0C7A4F;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ wearConnLabel }}</span>
+                              <button onclick="{{ onWearSyncNow }}" style="flex:none;display:flex;align-items:center;gap:5px;background:#0C7A4F;color:#fff;border:none;border-radius:7px;padding:5px 10px;font-family:inherit;font-weight:700;font-size:10.5px;cursor:pointer"><i data-lucide="refresh-cw" style="width:11px;height:11px"></i>Sync now</button>
+                            </div>
+                          </sc-if>
+                          <div style="display:flex;gap:6px;margin-top:8px">
+                            <button onclick="{{ onWearConnect }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border:1.5px dashed var(--vx-blue);border-radius:9px;padding:10px;cursor:pointer;font-family:inherit;font-weight:700;font-size:11px"><i data-lucide="watch" style="width:13px;height:13px"></i>WHOOP</button>
+                            <button onclick="{{ onWearConnectFitbit }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border:1.5px dashed var(--vx-blue);border-radius:9px;padding:10px;cursor:pointer;font-family:inherit;font-weight:700;font-size:11px"><i data-lucide="activity" style="width:13px;height:13px"></i>Fitbit</button>
+                          </div>
                           <sc-if value="{{ wearMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:7px 2px 0;font-size:11px;font-weight:600;color:#0C7A4F;line-height:1.4">{{ wearMsg }}</p></sc-if>
                           <sc-if value="{{ wearHasRows }}" hint-placeholder-val="{{ false }}">
                             <div style="margin-top:10px;border-top:1px solid #EEF1F5;padding-top:8px;display:flex;flex-direction:column;gap:5px">
@@ -4138,6 +4158,7 @@ class Component extends DCLogic {
     this.customMeets=this._loadJSON('vx_custom_meets', []);
     this.meetEventsMap=this._loadJSON('vx_meet_events', {});
     this.wearables=this._loadJSON('vx_wear_cache', {});
+    this.wearConn={};
     this.eventRequests=this._loadJSON('vx_event_requests', []);
     this.swimmerGoals=this._loadJSON('vx_swimmer_goals', {});
     this.squadGoals=this._loadJSON('vx_squad_goals', {});
@@ -4987,6 +5008,14 @@ class Component extends DCLogic {
   async deleteWearable(swId, date){ const list=this._wearList(swId).filter(r=>r.date!==date); this.wearables={...this.wearables, [swId]:list}; this.forceUpdate();
     if(window.__vxDelete){ try{ await window.__vxDelete('wearable_readings', 'id=eq.'+encodeURIComponent(swId+'_'+date)); }catch(e){} } }
   _wearRecoveryColor(v){ if(v==null) return '#9AA2B4'; return v>=67?'#0C7A4F':(v>=34?'#B4690E':'#C0362C'); }
+  // Which swimmers have a band linked (from the server; no tokens exposed).
+  async _wearStatusFetch(){ try{ const r=await fetch('/api/wearable/status'); if(!r.ok) return; const j=await r.json(); const map={}; (j.connected||[]).forEach(c=>{ map[c.sw_id]={provider:c.provider, updatedAt:c.updated_at}; }); this.wearConn=map; this.forceUpdate(); }catch(e){} }
+  _wearConn(swId){ return (this.wearConn||{})[swId]||null; }
+  async syncWearNow(swId){ this.setState({wearMsg:'Syncing from the band…'});
+    try{ const r=await fetch('/api/wearable/sync?sw='+encodeURIComponent(swId)); const j=r.ok?await r.json():null;
+      await this._wearFetch(); await this._wearStatusFetch();
+      this.setState({wearMsg: (j&&j.synced) ? 'Synced ✓' : 'Connected — no new reading yet. Try again after the band syncs to its app.'});
+    }catch(e){ this.setState({wearMsg:'Sync failed — check the band connection.'}); } }
   // Strip any heavy base64 out of the meta blob so it never exceeds the browser storage quota
   // (which was silently failing the save and making documents "reappear as missing"). Only the
   // small Supabase Storage URL + metadata is kept; old base64-only docs are cleared for re-upload.
@@ -6522,6 +6551,7 @@ class Component extends DCLogic {
     this._annFetch();
     this._docsFetch();
     this._wearFetch();
+    this._wearStatusFetch();
     this._planCustomFetch();
     // Load every saved training session on startup so the training log & calendar populate
     // immediately for each coach (not only when the Plans tab is opened).
@@ -8058,6 +8088,8 @@ class Component extends DCLogic {
               onWearAdd:()=>{ this.saveWearable(swObj.id, S2.wearForm); this.setState({wearForm:{date:'',recovery:'',rhr:'',hrv:'',sleep:'',strain:''}, wearMsg:'Saved ✓ — synced to all devices'}); },
               wearMsg:S2.wearMsg, wearMsgShow:!!S2.wearMsg,
               onWearConnect:()=>{ try{ this._openUrl('/api/whoop/connect?sw='+encodeURIComponent(swObj.id)); }catch(e){} this.setState({wearMsg:'Opening WHOOP… approve access, then the readings fill in automatically. (Needs the WHOOP developer keys set in Vercel.)'}); },
+              onWearConnectFitbit:()=>{ try{ this._openUrl('/api/fitbit/connect?sw='+encodeURIComponent(swObj.id)); }catch(e){} this.setState({wearMsg:'Opening Fitbit… approve access to auto-sync.'}); },
+              ...(()=>{ const wc=this._wearConn(swObj.id); return { wearConnected:!!wc, wearConnLabel: wc?('Connected · '+String(wc.provider||'band').toUpperCase()+(wc.updatedAt?(' · synced '+this._fmtDMY(String(wc.updatedAt).slice(0,10))):'')):'', onWearSyncNow:()=>this.syncWearNow(swObj.id) }; })(),
             }; })(),
           fitRows:this._fitTests(swObj.id).slice(0,6).map((r,i)=>({
             dateLabel:this.shortDate(r.date.split('-').reverse().join('/')),
@@ -8184,6 +8216,8 @@ class Component extends DCLogic {
           famWearStrainIn:S.wearForm.strain, onFamWearStrain:(e)=>this.setState({wearForm:{...S.wearForm,strain:e.target.value}}),
           onFamWearAdd:()=>{ this.saveWearable(sw.id, S.wearForm); this.setState({wearForm:{date:'',recovery:'',rhr:'',hrv:'',sleep:'',strain:''}, wearMsg:'Saved ✓'}); },
           onFamWearConnect:()=>{ try{ this._openUrl('/api/whoop/connect?sw='+encodeURIComponent(sw.id)+'&by='+encodeURIComponent((S.familyUser&&S.familyUser.id)||'')); }catch(e){} this.setState({wearMsg:'Opening WHOOP…'}); },
+          onFamWearConnectFitbit:()=>{ try{ this._openUrl('/api/fitbit/connect?sw='+encodeURIComponent(sw.id)+'&by='+encodeURIComponent((S.familyUser&&S.familyUser.id)||'')); }catch(e){} this.setState({wearMsg:'Opening Fitbit…'}); },
+          ...(()=>{ const wc=this._wearConn(sw.id); return { famWearConnected:!!wc, famWearConnLabel: wc?('Connected · '+String(wc.provider||'band').toUpperCase()):'', onFamWearSyncNow:()=>this.syncWearNow(sw.id) }; })(),
           famWearMsg:S.wearMsg, famWearMsgShow:!!S.wearMsg,
           famMsgThread:this._famMsgEls(sw.id, 'family'), famMsgEmpty:((this.famMessages||{})[sw.id]||[]).length===0, onFamSendMsg:()=>this.sendFamMsg(sw.id, 'family'),
           // -- attendance (day/month/year) --

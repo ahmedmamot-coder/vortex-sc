@@ -1,38 +1,12 @@
-// Server-only WHOOP + Supabase helpers. Uses the Supabase service-role key so it can
-// read/write the private wearable_connections table (tokens) and upsert readings.
-
-const SB_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://qhrpwiakobgcxfmcoyfg.supabase.co";
-const SB_SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+// WHOOP-specific OAuth + data. Shared Supabase helpers live in ./wearable.
+import { saveConnection, type ProviderToken, type Connection, type Reading } from "@/lib/wearable";
+export { haveService, getConnections, upsertReading } from "@/lib/wearable";
+export type { Connection, Reading } from "@/lib/wearable";
 
 const WHOOP_TOKEN = "https://api.prod.whoop.com/oauth/oauth2/token";
 const WHOOP_API = "https://api.prod.whoop.com/developer";
 
-export type WhoopToken = {
-  access_token: string;
-  refresh_token?: string;
-  expires_in?: number;
-  scope?: string;
-};
-
-export type Connection = {
-  sw_id: string;
-  provider: string;
-  access_token: string;
-  refresh_token: string | null;
-  expires_at: number | null;
-  provider_uid: string | null;
-  scope: string | null;
-};
-
-function sbHeaders() {
-  return { apikey: SB_SERVICE, Authorization: "Bearer " + SB_SERVICE, "Content-Type": "application/json" };
-}
-
-export function haveService() {
-  return !!SB_SERVICE;
-}
-
-export async function exchangeCode(code: string): Promise<WhoopToken | null> {
+export async function exchangeCode(code: string): Promise<ProviderToken | null> {
   const body = new URLSearchParams({
     grant_type: "authorization_code",
     code,
@@ -41,11 +15,10 @@ export async function exchangeCode(code: string): Promise<WhoopToken | null> {
     redirect_uri: process.env.WHOOP_REDIRECT_URI || "",
   });
   const r = await fetch(WHOOP_TOKEN, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body });
-  if (!r.ok) return null;
-  return (await r.json()) as WhoopToken;
+  return r.ok ? ((await r.json()) as ProviderToken) : null;
 }
 
-export async function refreshToken(refresh: string): Promise<WhoopToken | null> {
+export async function refreshToken(refresh: string): Promise<ProviderToken | null> {
   const body = new URLSearchParams({
     grant_type: "refresh_token",
     refresh_token: refresh,
@@ -54,42 +27,20 @@ export async function refreshToken(refresh: string): Promise<WhoopToken | null> 
     scope: "offline",
   });
   const r = await fetch(WHOOP_TOKEN, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body });
-  if (!r.ok) return null;
-  return (await r.json()) as WhoopToken;
+  return r.ok ? ((await r.json()) as ProviderToken) : null;
 }
 
-export async function saveConnection(swId: string, tok: WhoopToken, providerUid: string | null, by: string) {
-  const row = {
-    sw_id: swId,
-    provider: "whoop",
-    access_token: tok.access_token,
-    refresh_token: tok.refresh_token || null,
-    expires_at: Date.now() + (tok.expires_in ? tok.expires_in * 1000 : 3600 * 1000),
-    provider_uid: providerUid,
-    scope: tok.scope || null,
-    connected_by: by || null,
-    updated_at: new Date().toISOString(),
-  };
-  await fetch(SB_URL + "/rest/v1/wearable_connections", {
-    method: "POST",
-    headers: { ...sbHeaders(), Prefer: "resolution=merge-duplicates,return=minimal" },
-    body: JSON.stringify([row]),
-  });
+export async function saveWhoop(swId: string, tok: ProviderToken, uid: string | null, by: string) {
+  return saveConnection(swId, tok, uid, by, "whoop");
 }
 
-export async function getConnections(swId?: string): Promise<Connection[]> {
-  const q = swId ? "?sw_id=eq." + encodeURIComponent(swId) : "?select=*";
-  const r = await fetch(SB_URL + "/rest/v1/wearable_connections" + q, { headers: sbHeaders() });
-  return r.ok ? ((await r.json()) as Connection[]) : [];
-}
-
-// Make sure the access token is fresh; refresh + persist if it's within 60s of expiry.
+// Ensure a fresh access token; refresh + persist if within 60s of expiry.
 export async function freshToken(c: Connection): Promise<string | null> {
   if (c.expires_at && Date.now() < c.expires_at - 60000) return c.access_token;
   if (!c.refresh_token) return c.access_token || null;
   const t = await refreshToken(c.refresh_token);
   if (!t) return null;
-  await saveConnection(c.sw_id, t, c.provider_uid, "");
+  await saveConnection(c.sw_id, t, c.provider_uid, "", "whoop");
   return t.access_token;
 }
 
@@ -100,9 +51,6 @@ export async function whoopProfile(accessToken: string): Promise<string | null> 
   return j.user_id != null ? String(j.user_id) : null;
 }
 
-type Reading = { date: string; recovery: number | null; rhr: number | null; hrv: number | null; sleepH: number | null; strain: number | null };
-
-// Pull the most recent recovery (has recovery %, resting HR, HRV) and sleep, and the cycle strain.
 export async function latestReading(accessToken: string): Promise<Reading | null> {
   const rec = await fetch(WHOOP_API + "/v1/recovery?limit=1", { headers: { Authorization: "Bearer " + accessToken } });
   if (!rec.ok) return null;
@@ -131,25 +79,4 @@ export async function latestReading(accessToken: string): Promise<Reading | null
   }
 
   return { date, recovery, rhr, hrv, sleepH, strain };
-}
-
-export async function upsertReading(swId: string, r: Reading) {
-  const row = {
-    id: swId + "_" + r.date,
-    sw_id: swId,
-    date: r.date,
-    recovery: r.recovery,
-    rhr: r.rhr,
-    hrv: r.hrv,
-    sleep_h: r.sleepH,
-    strain: r.strain,
-    source: "whoop",
-    ts: Date.now(),
-    updated_at: new Date().toISOString(),
-  };
-  await fetch(SB_URL + "/rest/v1/wearable_readings", {
-    method: "POST",
-    headers: { ...sbHeaders(), Prefer: "resolution=merge-duplicates,return=minimal" },
-    body: JSON.stringify([row]),
-  });
 }
