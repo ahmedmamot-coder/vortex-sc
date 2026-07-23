@@ -1987,6 +1987,26 @@ if ('serviceWorker' in navigator) {
                           </sc-if>
                         </div>
                       </sc-if>
+                      <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05);margin-top:9px">
+                        <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px"><i data-lucide="heart-pulse" style="width:14px;height:14px;color:#C81E5B"></i><p style="margin:0;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">Training HR — log a set</p></div>
+                        <p style="margin:0 0 8px;font-size:10.5px;color:#9AA2B4;line-height:1.4">From a Polar Verity Sense (temple) or a wall pulse check. Enter the set's average &amp; max heart rate.</p>
+                        <div style="display:flex;gap:6px;margin-bottom:6px">
+                          <input value="{{ hrDate }}" oninput="{{ onHrDate }}" type="date" style="flex:none;width:120px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-size:11.5px;color:#0C1116;outline:none">
+                          <input value="{{ hrLabel }}" oninput="{{ onHrLabel }}" placeholder="Set e.g. 8x100 @1:30" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-size:11.5px;color:#0C1116;outline:none">
+                        </div>
+                        <div style="display:flex;gap:6px">
+                          <input value="{{ hrAvg }}" oninput="{{ onHrAvg }}" placeholder="Avg bpm" type="number" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-size:11.5px;color:#0C1116;outline:none">
+                          <input value="{{ hrMax }}" oninput="{{ onHrMax }}" placeholder="Max bpm" type="number" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-size:11.5px;color:#0C1116;outline:none">
+                          <button onclick="{{ onHrAdd }}" style="flex:none;width:36px;background:#C81E5B;color:#fff;border:none;border-radius:9px;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="plus" style="width:16px;height:16px"></i></button>
+                        </div>
+                        <sc-if value="{{ hrHasRows }}" hint-placeholder-val="{{ false }}">
+                          <div style="margin-top:10px;border-top:1px solid #EEF1F5;padding-top:8px;display:flex;flex-direction:column;gap:5px">
+                            <sc-for list="{{ hrRows }}" as="h" hint-placeholder-count="3">
+                              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:9px;padding:7px 10px"><span style="min-width:0"><span style="display:block;font-size:11px;font-weight:700;color:#0C1116;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ h.label }} · {{ h.metric }}</span><span style="display:block;font-size:10px;color:#7A8296">{{ h.dateLabel }}</span></span><button onclick="{{ h.onDelete }}" style="flex:none;width:24px;height:24px;border-radius:7px;border:none;background:#EEF1F5;color:#9AA2B4;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:13px;height:13px"></i></button></div>
+                            </sc-for>
+                          </div>
+                        </sc-if>
+                      </div>
                     </div>
 
                     <div>
@@ -4181,6 +4201,7 @@ class Component extends DCLogic {
     this.meetEventsMap=this._loadJSON('vx_meet_events', {});
     this.wearables=this._loadJSON('vx_wear_cache', {});
     this.wearConn={};
+    this.hrSets=this._loadJSON('vx_hrsets_cache', {});
     this.eventRequests=this._loadJSON('vx_event_requests', []);
     this.swimmerGoals=this._loadJSON('vx_swimmer_goals', {});
     this.squadGoals=this._loadJSON('vx_squad_goals', {});
@@ -4254,6 +4275,7 @@ class Component extends DCLogic {
       inbodyForm:{weight:'',fat:'',muscle:''},
       profileIbMsg:'', profileIbBusy:false,
       wearForm:{date:'',recovery:'',rhr:'',hrv:'',sleep:'',strain:''}, wearMsg:'',
+      hrSetForm:{date:'',label:'',avg:'',max:''},
       fitForm:{pushups:'',plankSec:'',vjump:'',sitreach:''},
       promoQuery:'',
       brandDraft:null,
@@ -5038,6 +5060,24 @@ class Component extends DCLogic {
       await this._wearFetch(); await this._wearStatusFetch();
       this.setState({wearMsg: (j&&j.synced) ? 'Synced ✓' : 'Connected — no new reading yet. Try again after the band syncs to its app.'});
     }catch(e){ this.setState({wearMsg:'Sync failed — check the band connection.'}); } }
+  // ---- Manually logged training HR sets (Verity Sense / wall check) --------------------------
+  async _hrSetsFetch(){ if(!window.__vxSelect) return;
+    const rows=await window.__vxSelect('hr_sets', 'select=*&order=date.desc&limit=4000'); if(rows==null) return;
+    const map={}; rows.forEach(r=>{ if(!r.sw_id) return; (map[r.sw_id]=map[r.sw_id]||[]).push({id:r.id, date:r.date, label:r.label||'', avg:r.avg_hr, max:r.max_hr, note:r.note||''}); });
+    Object.keys(map).forEach(k=>map[k].sort((a,b)=>String(b.date).localeCompare(String(a.date))));
+    this.hrSets=map; try{ this._saveLocalOnly('vx_hrsets_cache', map); }catch(e){} this.forceUpdate();
+  }
+  _hrSetList(swId){ return (this.hrSets||{})[swId] || []; }
+  async saveHrSet(swId, f){ if(!swId) return; const num=(v)=>{ if(v===''||v==null) return null; const n=parseInt(String(v).replace(/\D/g,''),10); return isNaN(n)?null:n; };
+    const avg=num(f.avg), max=num(f.max); if(avg==null && max==null) return;
+    const id='hr'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
+    const rec={id, date:(f.date||this.todayISO()), label:(f.label||'').trim(), avg, max, note:(f.note||'').trim()};
+    const list=(this.hrSets[swId]=this.hrSets[swId]||[]).slice(); list.unshift(rec); list.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+    this.hrSets={...this.hrSets, [swId]:list}; this.forceUpdate();
+    if(window.__vxInsert){ try{ await window.__vxInsert('hr_sets', [{ id, sw_id:swId, date:rec.date, label:rec.label, avg_hr:avg, max_hr:max, note:rec.note, ts:Date.now(), updated_at:new Date().toISOString() }]); }catch(e){} }
+  }
+  async deleteHrSet(swId, id){ const list=this._hrSetList(swId).filter(r=>r.id!==id); this.hrSets={...this.hrSets, [swId]:list}; this.forceUpdate();
+    if(window.__vxDelete){ try{ await window.__vxDelete('hr_sets', 'id=eq.'+encodeURIComponent(id)); }catch(e){} } }
   // Strip any heavy base64 out of the meta blob so it never exceeds the browser storage quota
   // (which was silently failing the save and making documents "reappear as missing"). Only the
   // small Supabase Storage URL + metadata is kept; old base64-only docs are cleared for re-upload.
@@ -6574,6 +6614,7 @@ class Component extends DCLogic {
     this._docsFetch();
     this._wearFetch();
     this._wearStatusFetch();
+    this._hrSetsFetch();
     this._planCustomFetch();
     // Load every saved training session on startup so the training log & calendar populate
     // immediately for each coach (not only when the Plans tab is opened).
@@ -8128,6 +8169,15 @@ class Component extends DCLogic {
               onWearConnect:()=>{ try{ this._openUrl('/api/whoop/connect?sw='+encodeURIComponent(swObj.id)); }catch(e){} this.setState({wearMsg:'Opening WHOOP… approve access, then the readings fill in automatically. (Needs the WHOOP developer keys set in Vercel.)'}); },
               onWearConnectFitbit:()=>{ try{ this._openUrl('/api/fitbit/connect?sw='+encodeURIComponent(swObj.id)); }catch(e){} this.setState({wearMsg:'Opening Fitbit… approve access to auto-sync.'}); },
               ...(()=>{ const wc=this._wearConn(swObj.id); return { wearConnected:!!wc, wearConnLabel: wc?('Connected · '+String(wc.provider||'band').toUpperCase()+(wc.updatedAt?(' · synced '+this._fmtDMY(String(wc.updatedAt).slice(0,10))):'')):'', onWearSyncNow:()=>this.syncWearNow(swObj.id) }; })(),
+              ...(()=>{ const rows=this._hrSetList(swObj.id).slice(0,10).map(r=>({ dateLabel:this._fmtDMY(r.date), label:r.label||'Set',
+                metric:[r.avg!=null?('avg '+r.avg):null, r.max!=null?('max '+r.max):null].filter(Boolean).join(' · ')+' bpm', note:r.note||'', hasNote:!!r.note,
+                onDelete:()=>this.deleteHrSet(swObj.id, r.id) }));
+                return { hrRows:rows, hrHasRows:rows.length>0,
+                  hrDate:S2.hrSetForm.date, onHrDate:(e)=>this.setState({hrSetForm:{...S2.hrSetForm,date:e.target.value}}),
+                  hrLabel:S2.hrSetForm.label, onHrLabel:(e)=>this.setState({hrSetForm:{...S2.hrSetForm,label:e.target.value}}),
+                  hrAvg:S2.hrSetForm.avg, onHrAvg:(e)=>this.setState({hrSetForm:{...S2.hrSetForm,avg:e.target.value}}),
+                  hrMax:S2.hrSetForm.max, onHrMax:(e)=>this.setState({hrSetForm:{...S2.hrSetForm,max:e.target.value}}),
+                  onHrAdd:()=>{ this.saveHrSet(swObj.id, S2.hrSetForm); this.setState({hrSetForm:{date:'',label:'',avg:'',max:''}}); } }; })(),
             }; })(),
           fitRows:this._fitTests(swObj.id).slice(0,6).map((r,i)=>({
             dateLabel:this.shortDate(r.date.split('-').reverse().join('/')),
