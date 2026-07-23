@@ -4777,7 +4777,7 @@ class Component extends DCLogic {
     this.accounts = this._baseAccounts.map(a=>({...a}));
     (this.customStaff||[]).forEach(_sa=>{ this.accounts.push({id:_sa.id, user:_sa.user, label:_sa.name, role:_sa.role, pin:_sa.pin, accent:'#2733D6', photo:'', initials:(_sa.name||'?').slice(0,2).toUpperCase(), squadId:_sa.squadId||''}); });
     const ovr=this.accountOvr||{};
-    this.accounts.forEach(a=>{ const o=ovr[a.id]; if(o){ if(o.label){ a.label=o.label; a.initials=(o.label||'?').slice(0,2).toUpperCase(); } if(o.user) a.user=o.user; if(o.pin) a.pin=o.pin; if(o.role) a.role=o.role; if(o.squadId!=null) a.squadId=o.squadId; if(o.photo) a.photo=o.photo; if(o.phone!=null) a.phone=o.phone; if(o.email!=null) a.email=o.email; if(o.bio!=null) a.bio=o.bio; } });
+    this.accounts.forEach(a=>{ const o=ovr[a.id]; if(o){ if(o.label){ a.label=o.label; a.initials=(o.label||'?').slice(0,2).toUpperCase(); } if(o.user) a.user=o.user; if(o.pin) a.pin=o.pin; if(o.role) a.role=o.role; if(o.squadId!=null) a.squadId=o.squadId; if(o.photo) a.photo=o.photo; if(o.phone!=null) a.phone=o.phone; if(o.email) a.email=o.email; if(o.bio!=null) a.bio=o.bio; } });
   }
   async _refreshAccountsFromDb(){
     // Newest staff & family come from their own tables.
