@@ -42,12 +42,28 @@ Rule of thumb: **schema/RLS/security changes → always test on a preview + stag
 | 2 | Automated backups (daily route + private bucket + cron) | ✅ shipped (run SQL + set env) |
 | 3 | Staging / preview flow | ✅ documented (this file) |
 | 4 | Coach "Today" dashboard (attendance · red recovery · next meet) | ✅ shipped |
+| 5 | Meet declarations end-to-end (approve → auto-enter → export CSV) | ✅ shipped |
+| 7 | Wellness / hydration daily check-ins | ✅ shipped |
+| 8 | Progress analytics — Top Improvers board | ✅ shipped (grows as dated history is entered) |
 | 10 | Calendar sync (meets → ICS feed) | ✅ shipped |
-| 7 | Wellness / hydration daily check-ins | ⏳ next |
-| 5 | Meet declarations end-to-end (family submit → coach approve → Hy-Tek) | ⏳ next (event requests exist; needs approval list + export) |
-| 8 | Progress analytics (PB progression, squad benchmarks, taper) | ⏳ next |
-| 9 | Arabic / multi-language (RTL) | ⏳ next (needs i18n string extraction) |
-| 6 | Break the single file into modules | ⏳ ongoing (biggest effort; do incrementally) |
+| 9 | Arabic / multi-language (RTL) | 📋 planned — needs a dedicated i18n pass (see below) |
+| 6 | Break the single file into modules | 📋 partial — routes/libs already modular; proto.html is a design-runtime artifact (see below) |
+
+### Why #9 and #6 are dedicated efforts, not quick wins
+
+- **#9 Arabic / RTL** — every user-facing string is currently hardcoded English inside the
+  markup and render bindings (many hundreds). Doing it right means: (a) extract all strings into
+  a dictionary, (b) route each through a `t(key)` lookup, (c) add an Arabic dictionary, (d) flip
+  layout with `dir="rtl"` and fix mirrored/absolutely-positioned elements. A rushed partial pass
+  makes the app look broken for parents, so this should be its own focused sprint. Recommended
+  first slice: the **login/register + family portal** (what parents see first), then squads/tools.
+
+- **#6 Modularize** — the Next.js side (API routes, `src/lib/*`) is **already modular**. The giant
+  file is `public/proto.html`, which is a **Claude Design runtime** artifact: its inline `<script>`
+  and `{{ }}` / `sc-for` / `sc-if` markup are read by that runtime as one unit, so it can't be
+  safely split without migrating off the design runtime to a normal component framework (React/Vue).
+  That migration is worthwhile long-term but is a project in itself — best planned deliberately,
+  on a branch, with the app fully re-tested.
 
 ## Notes on the two biggest efforts
 
