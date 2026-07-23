@@ -2439,6 +2439,7 @@ if ('serviceWorker' in navigator) {
                           <button onclick="{{ onAutoSeed }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border:none;border-radius:12px;padding:12px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer"><i data-lucide="shuffle" style="width:16px;height:16px"></i>Auto-seed by PB</button>
                           <button onclick="{{ onPrintProgram }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:#0A0F1A;color:#fff;border:none;border-radius:12px;padding:12px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer"><i data-lucide="printer" style="width:16px;height:16px"></i>Print heat sheet</button>
                         </div>
+                        <button onclick="{{ onExportEntries }}" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:#0C7A4F;color:#fff;border:none;border-radius:12px;padding:12px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer"><i data-lucide="download" style="width:16px;height:16px"></i>Export entries (CSV for Hy-Tek)</button>
                       </sc-if>
                     </div>
                   </sc-if>
@@ -5398,6 +5399,22 @@ class Component extends DCLogic {
     this.autoSeedMeet(meetName);   // heats & lanes assigned automatically by PB
   }
   entryRemove(meetName, idx){ const list=(this.meetEntries[meetName]||[]).slice(); list.splice(idx,1); this.meetEntries={...this.meetEntries, [meetName]:list}; this._saveJSON('vx_meet_entries', this.meetEntries); this.forceUpdate(); }
+  // Add one (swimmer × event) to a meet's declared entries if not already there, then re-seed.
+  entryAddOne(meetName, swId, event){ const flat=this.allSwimmersFlat(); const sw=flat.find(x=>x.id===swId); if(!sw) return;
+    const existing=(this.meetEntries[meetName]||[]); if(existing.some(e=>e.swId===swId&&e.event===event)) return;
+    const list=[...existing, {swId, name:sw.name, event, heat:1, lane:1}];
+    this.meetEntries={...this.meetEntries, [meetName]:list}; this._saveJSON('vx_meet_entries', this.meetEntries);
+    try{ this.autoSeedMeet(meetName); }catch(e){} }
+  // Export a meet's declared entries as CSV (Last, First, Gender, Age, Event, Seed time) — a
+  // clean list any meet host / Hy-Tek Team Manager can import.
+  exportMeetEntries(meetName){ const flat=this.allSwimmersFlat();
+    const rows=[['Last name','First name','Gender','Age','Event','Seed time']];
+    (this.meetEntries[meetName]||[]).slice()
+      .sort((a,b)=>{ const ea=a.event.localeCompare(b.event); return ea!==0?ea: (this._pbSecFor?0:0); })
+      .forEach(e=>{ const sw=flat.find(x=>x.id===e.swId)||{}; const parts=(sw.name||e.name||'').trim().split(/\s+/); const first=parts.shift()||''; const last=parts.join(' ')||first;
+        rows.push([last, first, sw.gender==='Girls'?'F':'M', this._swAge?this._swAge(sw):(sw.age||''), e.event, this._pbTimeFor(e.swId, e.event)]); });
+    this.exportCsv('vortex-entries-'+meetName.replace(/[^a-z0-9]+/gi,'-').toLowerCase()+'.csv', rows);
+  }
   ageFromDob(dobStr){ if(!dobStr) return 0; const d=new Date(dobStr+'T00:00:00'); const t=new Date(); let age=t.getFullYear()-d.getFullYear(); const m=t.getMonth()-d.getMonth(); if(m<0 || (m===0 && t.getDate()<d.getDate())) age--; return Math.max(0,age); }
   entryAddNewSwimmer(meetName){ const S=this.state;
     const name=S.entryNewName.trim();
@@ -5421,6 +5438,8 @@ class Component extends DCLogic {
     this.setState({famReqMsg:'Requested '+event+' for '+meetName+' \u2713'});
   }
   reqDecide(id, status){ const rec=this.eventRequests.find(r=>r.id===id); this.eventRequests=this.eventRequests.map(r=>r.id===id?{...r, status}:r); this._saveJSON('vx_event_requests', this.eventRequests);
+    // Approving a request now actually enters the swimmer — closing the loop end-to-end.
+    if(rec && status==='approved'){ try{ this.entryAddOne(rec.meetName, rec.swId, rec.event); }catch(e){} }
     if(rec && (status==='approved'||status==='declined')){
       this.notify('family_sw:'+rec.swId, status==='approved'?'check-circle-2':'x-circle', status==='approved'?'Event request approved':'Event request declined',
         rec.event+' at '+rec.meetName+' \u2014 '+(status==='approved'?'you\u2019re entered.':'not approved this time.'));
@@ -8660,7 +8679,7 @@ class Component extends DCLogic {
       entriesHeat:S.entriesHeat, onEntriesHeat:(e)=>this.setState({entriesHeat:e.target.value}),
       entriesLane:S.entriesLane, onEntriesLane:(e)=>this.setState({entriesLane:e.target.value}),
       onEntryAdd:()=>this.entryAdd(entryMeetName, S.squadId),
-      entryRows, entryHasRows: entryRows.length>0,
+      entryRows, entryHasRows: entryRows.length>0, onExportEntries:()=>this.exportMeetEntries(entryMeetName),
       entryNewOpen:S.entryNewOpen, entryNewToggleLabel: S.entryNewOpen?'Cancel':'+ New swimmer',
       onEntryNewToggle:()=>this.setState({entryNewOpen:!S.entryNewOpen, entryNewErr:''}),
       entryNewName:S.entryNewName, onEntryNewName:(e)=>this.setState({entryNewName:e.target.value}),
