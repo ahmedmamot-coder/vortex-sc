@@ -3792,6 +3792,8 @@ if ('serviceWorker' in navigator) {
                       <p style="margin:0 0 4px;font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7A8296">Data check · owner only</p>
                       <p style="margin:0 0 11px;font-size:11px;color:#9AA2B4;line-height:1.5">Live counts pulled straight from the database, so you can confirm everything really is saved — on every device, not just this one.</p>
                       <button onclick="{{ onRunDataCheck }}" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--vx-blue);color:#fff;border:none;border-radius:11px;padding:12px;font-family:inherit;font-weight:700;font-size:13.5px;cursor:pointer"><i data-lucide="database" style="width:15px;height:15px"></i>{{ dataCheckBtnLabel }}</button>
+                      <button onclick="{{ onFixCloudSignin }}" style="margin-top:8px;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:#0A0F1A;color:#fff;border:none;border-radius:11px;padding:12px;font-family:inherit;font-weight:700;font-size:13.5px;cursor:pointer"><i data-lucide="shield-check" style="width:15px;height:15px"></i>Fix / test cloud sign-in</button>
+                      <sc-if value="{{ authDbgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:9px 2px 0;font-size:11.5px;font-weight:600;line-height:1.5;color:{{ authDbgColor }}">{{ authDbg }}</p></sc-if>
                       <sc-if value="{{ dataCheckMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:9px 2px 0;font-size:11px;font-weight:600;color:#7A8296">{{ dataCheckMsg }}</p></sc-if>
                       <sc-if value="{{ dataCheckHasRows }}" hint-placeholder-val="{{ false }}">
                         <div style="margin-top:12px;border-top:1px solid #EEF1F5;padding-top:6px">
@@ -6339,6 +6341,27 @@ class Component extends DCLogic {
   // alongside their existing username+PIN login. Fire-and-forget and fully fault-tolerant — if
   // anything fails the coach is already logged in locally, so this can never block sign-in.
   // Requires the staff account to have an email; the password is derived from the account id+PIN.
+  // Owner-triggered: sign the current admin into Supabase and show the exact result, so we can
+  // diagnose why "Secure cloud sign-in" isn't turning green instead of guessing.
+  async fixCloudSignin(){
+    const acct=this.accounts.find(a=>a.id===this.state.pickedId);
+    if(!acct){ this._authDbg='No staff account selected.'; return this.forceUpdate(); }
+    const email=(''+(acct.email||'')).trim().toLowerCase();
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ this._authDbg='This account has no email (old app version still loaded — hard-refresh / reinstall the app).'; return this.forceUpdate(); }
+    const pw='vxsc_'+acct.id+'_'+((''+(acct.pin||'')).trim()||'0000');
+    this._authDbg='Signing in '+email+'…'; this.forceUpdate();
+    let r=await this._authPost('/token?grant_type=password', {email, password:pw});
+    if(r.ok && r.j && r.j.access_token){ window.__vxSetAuth(r.j); this._refetchAll(); this._authDbg='Signed in ✓ ('+email+')'; return this.forceUpdate(); }
+    // Not there (or wrong pw) → try to create it. With confirm-email OFF this returns a session.
+    let s=await this._authPost('/signup', {email, password:pw, data:{name:acct.label||'', staff:true, staff_id:acct.id}});
+    if(s.ok && s.j && s.j.access_token){ window.__vxSetAuth(s.j); this._refetchAll(); this._authDbg='Account created & signed in ✓ ('+email+')'; return this.forceUpdate(); }
+    // Both failed — surface the real reason.
+    const em=(s.j&&(s.j.msg||s.j.error_description||s.j.message))|| (r.j&&(r.j.error_description||r.j.msg))||'unknown';
+    if(/already|registered|exists/i.test(em)) this._authDbg='An old Auth user for '+email+' exists with a different password. In Supabase → Authentication → Users, DELETE '+email+', then tap this again.';
+    else if(/signups? not allowed|disabled/i.test(em)) this._authDbg='Sign-ups are disabled in Supabase (Auth → turn ON "Allow new users to sign up").';
+    else this._authDbg='Sign-in failed: token '+r.status+', signup '+s.status+' — '+em;
+    this.forceUpdate();
+  }
   _staffAuthEnsure(acct){
     try{
       if(!acct || !window.__vxSetAuth) return;
@@ -8017,6 +8040,8 @@ class Component extends DCLogic {
           annHasSent:(this.announcements||[]).length>0,
           annSent:(this.announcements||[]).slice(0,8).map(a=>({ id:a.id, body:a.body, audienceLabel:(a.audience==='family'?'Parents':a.audience==='staff'?'Coaches':'Everyone'), when:this.notifTimeAgo(a.at), onEdit:()=>this.editAnnouncement(a.id), onDelete:()=>this.deleteAnnouncement(a.id) })),
           canDataCheck: this._isAdmin(), onRunDataCheck:()=>this.runDataCheck(),
+          onFixCloudSignin:()=>this.fixCloudSignin(),
+          authDbg:this._authDbg||'', authDbgShow:!!this._authDbg, authDbgColor: /✓/.test(this._authDbg||'')?'#0C7A4F':(/fail|exists|disabled|no email|old app/i.test(this._authDbg||'')?'#B42318':'#7A8296'),
           dataCheckBtnLabel: S.dataCheckRunning?'Checking…':'Run data check',
           dataCheckMsg:S.dataCheckMsg||'', dataCheckMsgShow:!!S.dataCheckMsg,
           dataCheckHasRows:!!(this._dataCheck && this._dataCheck.rows && this._dataCheck.rows.length),
