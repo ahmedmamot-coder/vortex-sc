@@ -765,7 +765,7 @@ if ('serviceWorker' in navigator) {
                     <button onclick="{{ onGoHub }}" style="position:relative;width:37px;height:37px;border-radius:11px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#fff"><i data-lucide="arrow-left" style="width:18px;height:18px"></i></button>
                     <img src="assets/b798adf9.png" alt="Vortex" style="position:absolute;top:calc(max(env(safe-area-inset-top), 44px) + 4px);right:18px;width:30px;height:30px;object-fit:contain;z-index:2">
                     <h1 style="position:relative;font-size:22px;font-weight:700;letter-spacing:-.02em;margin:14px 0 3px">Tools &amp; AI</h1>
-                    <p style="position:relative;margin:0;font-size:13px;color:rgba(255,255,255,.6)">Working club-wide across all 272 swimmers.</p>
+                    <p style="position:relative;margin:0;font-size:13px;color:rgba(255,255,255,.6)">Working club-wide across all {{ clubSwimmerCount }} swimmers.</p>
                   </div>
                   <div style="padding:16px 15px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
                     <sc-for list="{{ toolTiles }}" as="t" hint-placeholder-count="8">
@@ -6949,7 +6949,7 @@ class Component extends DCLogic {
     }));
 
     // ---- admin ----
-    const adminStats=[{value:'272', label:'Swimmers'},{value:'9', label:'Squads'},{value:'2,608', label:'Results'}];
+    const adminStats=[{value:String(this.allSwimmersFlat().length), label:'Swimmers'},{value:String(this.squads.length), label:'Squads'},{value:String(this.allMeets().length), label:'Meets'}];
     const maxCount=Math.max(...this.squads.map(s=>s.count));
     const squadBars=this.squads.map(s=>({count:s.count, h:Math.round(18+ (s.count/maxCount)*84), accent:s.accent, short:s.short}));
     const attendRing={pct:'87%', dash:(0.87*326.7).toFixed(1)+' 326.7'};
@@ -7194,7 +7194,7 @@ class Component extends DCLogic {
 
     // ---- tool overlay content ----
     const toolTitleMap={insights:'Insights',boards:'Boards',video:'Video Analysis',lounge:'Vortex Lounge',goals:'Season Goals',ai:'AI Assistants',review:'AI Plan Review',clock:'Pace Clock',talent:'Talent Board',recovery:'Recovery Board',improvers:'Top Improvers',relay:'Relay Builder',zoneeng:'Zone Engine',sponsors:'Sponsors',tpace:'T-Pace Tests',promo:'Level-Up Review',entries:'Meet Entries',fitness:'Fitness Plan',inbody:'InBody Import',season:'Season Plan'};
-    const toolScope = S.toolScopeClub ? 'Club-wide · 272 swimmers' : squad.name+' · '+squad.count+' swimmers';
+    const toolScope = S.toolScopeClub ? ('Club-wide · '+this.allSwimmersFlat().length+' swimmers') : squad.name+' · '+squad.count+' swimmers';
 
     // ---- Talent / Move-up board ----
     const squadMaxAge={preteam:7,advb:9,adva:11,junior:13,seniorb:13,seniora:14,vortexb:15,vortexa:16,legend:99};
@@ -7785,7 +7785,7 @@ class Component extends DCLogic {
 
     // ---- admin section overlay ----
     const adminTitleMap={swimmers:'Swimmers',meets:'Meets',staff:'Staff',settings:'Settings',brand:'Club Configuration'};
-    const adminSubMap={swimmers:'272 swimmers · 9 squads', meets:this.allMeets().length+' meets on record', staff:'Admins, coaches & staff · names, usernames & PINs', settings:'API key · reset data', brand:'Brand · zone method · locale · currency'};
+    const adminSubMap={swimmers:this.allSwimmersFlat().length+' swimmers · '+this.squads.length+' squads', meets:this.allMeets().length+' meets on record', staff:'Admins, coaches & staff · names, usernames & PINs', settings:'API key · reset data', brand:'Brand · zone method · locale · currency'};
     const onCloseAdmin=()=>this.setState({adminSection:null, swEditId:null, swAddOpen:false, staffEditId:null, meetImportOpen:false, meetImportPreview:null, meetExpanded:null});
 
     // -- swimmers admin --
@@ -8071,6 +8071,7 @@ class Component extends DCLogic {
       batteryPct: S.batteryPct || '100%', batteryWidth: S.batteryWidth || '100%',
 
       showHub:S.view==='hub', showAdmin:S.view==='admin', showMove:S.view==='move', showToolsHome:S.view==='tools', showHandbook:S.view==='handbook',
+      clubSwimmerCount: this.allSwimmersFlat().length,
       showSquad:S.view==='squad', showProfile:S.view==='profile', showNav:S.view==='squad', showFamily:S.view==='family',
       ...(()=>{ const acc=this.accounts.find(a=>a.id===S.pickedId)||{}; const isAdm=!!(acc.id==='ahmed'||acc.id==='sameh'); const lockSq=acc.squadId?this.squadById[acc.squadId]:null;
         // ---- coach "Today" dashboard (attendance · red recovery · next meet · unread) ----
@@ -8089,10 +8090,10 @@ class Component extends DCLogic {
         let unread=0; const fm=this.famMessages||{}; scopeSw.forEach(sw=>{ const t=fm[sw.id]; if(t&&t.length&&t[t.length-1].sender==='family') unread++; });
         return {
           hubUserName: acc.label||'', hubUserRole: acc.role||'', hubUserAvatar: this.av(acc.photo||null, acc.initials||'?', 54, 15, acc.accent||'#067EEA', '#fff', 20),
-          clubStatLine: isAdm ? '272 swimmers across 9 squads · 2,570 results · 10 meets. 3 squads training this morning.'
+          clubStatLine: isAdm ? (this.allSwimmersFlat().length+' swimmers across '+this.squads.length+' squads · '+this.allMeets().length+' meets on record.')
             : (lockSq ? (lockSq.count+' swimmers · '+lockSq.name+' · '+lockSq.coach) : 'Welcome back.'),
           toolsSpan: isAdm ? 'auto' : 'span 2',
-          toolsSubLabel: isAdm ? 'Club-wide · 272 swimmers' : (lockSq ? (lockSq.name+' · '+lockSq.count+' swimmers') : 'Your squad'),
+          toolsSubLabel: isAdm ? ('Club-wide · '+this.allSwimmersFlat().length+' swimmers') : (lockSq ? (lockSq.name+' · '+lockSq.count+' swimmers') : 'Your squad'),
           dashAttendPct:String(dashAttendPct)+'%', dashAttendSub:present+' of '+total+' present',
           dashRed:String(redCount), dashRedIsZero:redCount===0, dashRedSub: redCount? 'need lighter load' : 'all recovered',
           dashUnread:String(unread), dashUnreadIsZero:unread===0, dashUnreadSub: unread? 'awaiting reply' : 'all replied',
