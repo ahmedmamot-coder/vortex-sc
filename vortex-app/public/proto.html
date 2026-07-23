@@ -4139,17 +4139,17 @@ class Component extends DCLogic {
     const PH = 'assets/logo-mark.png';
     this.PH = PH;
     this._baseAccounts = [
-      {id:'ahmed', user:'ahmed', label:'Ahmed Mamo', role:'Technical Director · full access', pin:'7777', accent:'#067EEA', photo:'assets/director-ahmed.jpg', initials:'AM', recommended:true},
-      {id:'sameh', user:'sameh', label:'Sameh', role:'Administrator · full access', pin:'1234', accent:'#3B23C7', photo:'', initials:'S'},
-      {id:'fathy', user:'fathy', label:'Coach Fathy', role:'Pre-Team coach', pin:'1111', accent:'#22C1DA', photo:'assets/coach-fathy.jpg', initials:'CF', squadId:'preteam'},
-      {id:'matuze', user:'matuze', label:'Coach Matuze', role:'Advanced B coach', pin:'1111', accent:'#1BA5E6', photo:'', initials:'CM', squadId:'advb'},
-      {id:'sherif', user:'sherif', label:'Coach Sherif', role:'Advanced A coach', pin:'1111', accent:'#067EEA', photo:'', initials:'CS', squadId:'adva'},
-      {id:'reda', user:'reda', label:'Coach Reda', role:'Junior coach', pin:'1111', accent:'#2A63E0', photo:'', initials:'CR', squadId:'junior'},
-      {id:'chafik', user:'chafik', label:'Coach Chafik', role:'Senior B coach', pin:'1111', accent:'#2733D6', photo:'assets/coach-chafik.jpg', initials:'CC', squadId:'seniorb'},
-      {id:'baisher', user:'baisher', label:'Coach Baisher', role:'Senior A coach', pin:'1111', accent:'#3B23C7', photo:'', initials:'CB', squadId:'seniora'},
-      {id:'wassim', user:'wassim', label:'Coach Wassim', role:'Vortex B coach', pin:'1111', accent:'#5D22CF', photo:'', initials:'CW', squadId:'vortexb'},
-      {id:'mahmoud', user:'mahmoud', label:'Coach Mahmoud', role:'Vortex A coach', pin:'1111', accent:'#8A22D5', photo:'assets/coach-mahmoud.jpg', initials:'CM', squadId:'vortexa'},
-      {id:'martin', user:'martin', label:'Coach Martin', role:'Legend coach', pin:'1111', accent:'#1B22E4', photo:'assets/coach-martin.jpg', initials:'CM', squadId:'legend'},
+      {id:'ahmed', user:'ahmed', label:'Ahmed Mamo', role:'Technical Director · full access', pin:'7777', accent:'#067EEA', photo:'assets/director-ahmed.jpg', initials:'AM', recommended:true, email:'ahmedmamot@gmail.com'},
+      {id:'sameh', user:'sameh', label:'Sameh', role:'Administrator · full access', pin:'1234', accent:'#3B23C7', photo:'', initials:'S', email:'sameh@vortexswimmingclub.com'},
+      {id:'fathy', user:'fathy', label:'Coach Fathy', role:'Pre-Team coach', pin:'1111', accent:'#22C1DA', photo:'assets/coach-fathy.jpg', initials:'CF', squadId:'preteam', email:'fathy@vortexswimmingclub.com'},
+      {id:'matuze', user:'matuze', label:'Coach Matuze', role:'Advanced B coach', pin:'1111', accent:'#1BA5E6', photo:'', initials:'CM', squadId:'advb', email:'matuze@vortexswimmingclub.com'},
+      {id:'sherif', user:'sherif', label:'Coach Sherif', role:'Advanced A coach', pin:'1111', accent:'#067EEA', photo:'', initials:'CS', squadId:'adva', email:'sherif@vortexswimmingclub.com'},
+      {id:'reda', user:'reda', label:'Coach Reda', role:'Junior coach', pin:'1111', accent:'#2A63E0', photo:'', initials:'CR', squadId:'junior', email:'reda@vortexswimmingclub.com'},
+      {id:'chafik', user:'chafik', label:'Coach Chafik', role:'Senior B coach', pin:'1111', accent:'#2733D6', photo:'assets/coach-chafik.jpg', initials:'CC', squadId:'seniorb', email:'chafik@vortexswimmingclub.com'},
+      {id:'baisher', user:'baisher', label:'Coach Baisher', role:'Senior A coach', pin:'1111', accent:'#3B23C7', photo:'', initials:'CB', squadId:'seniora', email:'baisher@vortexswimmingclub.com'},
+      {id:'wassim', user:'wassim', label:'Coach Wassim', role:'Vortex B coach', pin:'1111', accent:'#5D22CF', photo:'', initials:'CW', squadId:'vortexb', email:'wassim@vortexswimmingclub.com'},
+      {id:'mahmoud', user:'mahmoud', label:'Coach Mahmoud', role:'Vortex A coach', pin:'1111', accent:'#8A22D5', photo:'assets/coach-mahmoud.jpg', initials:'CM', squadId:'vortexa', email:'mahmoud@vortexswimmingclub.com'},
+      {id:'martin', user:'martin', label:'Coach Martin', role:'Legend coach', pin:'1111', accent:'#1B22E4', photo:'assets/coach-martin.jpg', initials:'CM', squadId:'legend', email:'martin@vortexswimmingclub.com'},
     ];
     try { this.customStaff = JSON.parse(localStorage.getItem('vx_staff_accounts')||'[]'); } catch(e){ this.customStaff = []; }
     try { this.accountOvr = JSON.parse(localStorage.getItem('vx_account_ovr')||'{}'); } catch(e){ this.accountOvr = {}; }
@@ -5947,6 +5947,10 @@ class Component extends DCLogic {
       ['Announcements', db.announcements],
       ['Push subscriptions', db.push_subscriptions],
     ].map(r=>({ label:r[0], value:num(r[1]), warn:(r[1]===-1) }));
+    // Secure cloud sign-in status — confirms this admin carries a Supabase JWT (needed before
+    // the RLS lockdown; if this shows "not signed in", do NOT apply the lockdown yet).
+    const _a=window.__VX_AUTH; const _signed=!!(_a && _a.token && _a.exp && Date.now()<_a.exp);
+    rows.unshift({ label:'Secure cloud sign-in', value:_signed?('✓ '+(_a.email||'signed in')):'— not signed in', warn:!_signed });
     this._dataCheck = { rows, at:new Date().toISOString() };
     this.setState({dataCheckRunning:false, dataCheckMsg:'Checked '+new Date().toLocaleTimeString()});
   }
