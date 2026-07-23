@@ -939,6 +939,27 @@ if ('serviceWorker' in navigator) {
                         </div>
                         <sc-if value="{{ famWearMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:7px 2px 0;font-size:11px;font-weight:600;color:#0C7A4F;line-height:1.4">{{ famWearMsg }}</p></sc-if>
                       </div>
+                      <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05);margin-bottom:16px">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px">
+                          <div style="display:flex;align-items:center;gap:7px"><i data-lucide="smile" style="width:14px;height:14px;color:#0C7A4F"></i><p style="margin:0;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">Daily check-in</p></div>
+                          <sc-if value="{{ wellHasReadiness }}" hint-placeholder-val="{{ false }}"><span style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:800;color:{{ wellReadinessColor }}">{{ wellReadiness }}<span style="font-size:8.5px;color:#9AA2B4;font-weight:700"> READY</span></span></sc-if>
+                        </div>
+                        <sc-if value="{{ wellDoneToday }}" hint-placeholder-val="{{ false }}"><p style="margin:0 0 8px;font-size:10.5px;color:#0C7A4F;font-weight:600">✓ Done today — tap to update.</p></sc-if>
+                        <div style="display:flex;flex-direction:column;gap:8px">
+                          <sc-for list="{{ wellMetrics }}" as="m" hint-placeholder-count="5">
+                            <div style="display:flex;align-items:center;gap:8px">
+                              <span style="flex:none;width:96px;font-size:11px;color:#3A4152;font-weight:600">{{ m.label }}</span>
+                              <div style="flex:1;display:flex;gap:4px">
+                                <sc-for list="{{ m.dots }}" as="d" hint-placeholder-count="5">
+                                  <button onclick="{{ d.onClick }}" style="flex:1;background:{{ d.bg }};color:{{ d.fg }};border:none;border-radius:7px;padding:7px 0;font-family:inherit;font-weight:700;font-size:11px;cursor:pointer">{{ d.n }}</button>
+                                </sc-for>
+                              </div>
+                            </div>
+                          </sc-for>
+                        </div>
+                        <button onclick="{{ onWellSave }}" style="margin-top:10px;width:100%;background:#0C7A4F;color:#fff;border:none;border-radius:10px;padding:11px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer">Save check-in</button>
+                        <sc-if value="{{ wellMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:7px 2px 0;font-size:11px;font-weight:600;color:#0C7A4F">{{ wellMsg }}</p></sc-if>
+                      </div>
                       <sc-if value="{{ famHasPbs }}" hint-placeholder-val="{{ true }}">
                         <p style="margin:0 2px 8px;font-size:11.5px;font-weight:700;color:#7A8296;text-transform:uppercase;letter-spacing:.04em">Personal bests</p>
                         <div style="display:flex;flex-direction:column;gap:8px">
@@ -2858,6 +2879,7 @@ if ('serviceWorker' in navigator) {
                         <button onclick="{{ r.onClick }}" style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:11px 13px;cursor:pointer;font-family:inherit;text-align:left;box-shadow:0 2px 7px rgba(11,20,40,.05)">
                           <span style="flex:none;width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:conic-gradient({{ r.recoveryColor }} {{ r.recoveryPct }}%,#EEF1F5 0)"><span style="width:34px;height:34px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:800;color:{{ r.recoveryColor }}">{{ r.recovery }}</span></span>
                           <span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:14px;color:#0C1116">{{ r.name }}</span><span style="display:block;font-size:11.5px;color:#7A8296;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.squadName }} · {{ r.sub }}</span><sc-if value="{{ r.hasHr }}" hint-placeholder-val="{{ false }}"><span style="display:flex;align-items:center;gap:4px;font-size:10.5px;color:#C81E5B;font-weight:700;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><i data-lucide="heart-pulse" style="width:11px;height:11px"></i>{{ r.hrLine }}</span></sc-if></span>
+                          <sc-if value="{{ r.hasWell }}" hint-placeholder-val="{{ false }}"><span style="flex:none;font-size:10px;font-weight:800;color:{{ r.wellColor }};margin-right:4px">{{ r.wellReady }}</span></sc-if>
                           <i data-lucide="chevron-right" style="width:16px;height:16px;color:#9AA2B4"></i>
                         </button>
                       </sc-for>
@@ -4228,6 +4250,7 @@ class Component extends DCLogic {
     this.wearables=this._loadJSON('vx_wear_cache', {});
     this.wearConn={};
     this.hrSets=this._loadJSON('vx_hrsets_cache', {});
+    this.wellness=this._loadJSON('vx_wellness_cache', {});
     this.eventRequests=this._loadJSON('vx_event_requests', []);
     this.swimmerGoals=this._loadJSON('vx_swimmer_goals', {});
     this.squadGoals=this._loadJSON('vx_squad_goals', {});
@@ -4302,6 +4325,7 @@ class Component extends DCLogic {
       profileIbMsg:'', profileIbBusy:false,
       wearForm:{date:'',recovery:'',rhr:'',hrv:'',sleep:'',strain:''}, wearMsg:'',
       hrSetForm:{date:'',label:'',avg:'',max:''}, hrFilter:'',
+      wellForm:{sleep:0,energy:0,soreness:0,mood:0,hydration:0}, wellMsg:'',
       fitForm:{pushups:'',plankSec:'',vjump:'',sitreach:''},
       promoQuery:'',
       brandDraft:null,
@@ -5113,6 +5137,28 @@ class Component extends DCLogic {
   }
   async deleteHrSet(swId, id){ const list=this._hrSetList(swId).filter(r=>r.id!==id); this.hrSets={...this.hrSets, [swId]:list}; this.forceUpdate();
     if(window.__vxDelete){ try{ await window.__vxDelete('hr_sets', 'id=eq.'+encodeURIComponent(id)); }catch(e){} } }
+  // ---- Daily wellness check-ins (sleep/energy/soreness/mood/hydration 1-5) -------------------
+  async _wellnessFetch(){ if(!window.__vxSelect) return;
+    const rows=await window.__vxSelect('wellness_checkins', 'select=*&order=date.desc&limit=6000'); if(rows==null) return;
+    const map={}; rows.forEach(r=>{ if(!r.sw_id) return; (map[r.sw_id]=map[r.sw_id]||[]).push({date:r.date, sleep:r.sleep, energy:r.energy, soreness:r.soreness, mood:r.mood, hydration:r.hydration, note:r.note||''}); });
+    Object.keys(map).forEach(k=>map[k].sort((a,b)=>String(b.date).localeCompare(String(a.date))));
+    this.wellness=map; try{ this._saveLocalOnly('vx_wellness_cache', map); }catch(e){} this.forceUpdate();
+  }
+  _wellList(swId){ return (this.wellness||{})[swId]||[]; }
+  _wellLatest(swId){ return this._wellList(swId)[0]||null; }
+  _wellForDate(swId, date){ return this._wellList(swId).find(r=>r.date===date)||null; }
+  // A 0-100 "readiness" from a check-in: sleep+energy+mood+hydration high, soreness low.
+  _wellReadiness(w){ if(!w) return null; const g=(v)=>v?((v-1)/4):0; const bad=(v)=>v?((5-v)/4):0;
+    const parts=[g(w.sleep), g(w.energy), g(w.mood), g(w.hydration), bad(w.soreness)].filter((v,i)=>{ const src=[w.sleep,w.energy,w.mood,w.hydration,w.soreness][i]; return src!=null && src!==0; });
+    if(!parts.length) return null; return Math.round(parts.reduce((a,b)=>a+b,0)/parts.length*100); }
+  async saveWellness(swId, f){ if(!swId) return; const date=(f.date||this.todayISO());
+    const v=(x)=>{ const n=parseInt(x,10); return (n>=1&&n<=5)?n:null; };
+    const rec={date, sleep:v(f.sleep), energy:v(f.energy), soreness:v(f.soreness), mood:v(f.mood), hydration:v(f.hydration), note:(f.note||'').trim()};
+    if(rec.sleep==null&&rec.energy==null&&rec.soreness==null&&rec.mood==null&&rec.hydration==null) return;
+    const list=(this.wellness[swId]=this.wellness[swId]||[]).filter(r=>r.date!==date); list.unshift(rec); list.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+    this.wellness={...this.wellness, [swId]:list}; this.forceUpdate();
+    if(window.__vxUpsert){ try{ await window.__vxUpsert('wellness_checkins', [{ id:swId+'_'+date, sw_id:swId, date, sleep:rec.sleep, energy:rec.energy, soreness:rec.soreness, mood:rec.mood, hydration:rec.hydration, note:rec.note, ts:Date.now(), updated_at:new Date().toISOString() }]); }catch(e){} }
+  }
   // Strip any heavy base64 out of the meta blob so it never exceeds the browser storage quota
   // (which was silently failing the save and making documents "reappear as missing"). Only the
   // small Supabase Storage URL + metadata is kept; old base64-only docs are cleared for re-upload.
@@ -6650,6 +6696,7 @@ class Component extends DCLogic {
     this._wearFetch();
     this._wearStatusFetch();
     this._hrSetsFetch();
+    this._wellnessFetch();
     this._planCustomFetch();
     // Load every saved training session on startup so the training log & calendar populate
     // immediately for each coach (not only when the Plans tab is opened).
@@ -7081,16 +7128,18 @@ class Component extends DCLogic {
 
     // ---- Recovery Board (WHOOP/Fitbit) — who is run-down, worst first ----
     const recoveryPool = S.toolScopeClub ? this.allSwimmersFlat() : (this.roster[S.squadId]||[]).map(sw=>({...sw, squadId:S.squadId, squadName:squad.name}));
-    const recoveryAll = recoveryPool.map(sw=>{ const wl=this._wearLatest(sw.id); const wc=this._wearConn(sw.id); const hs=this._hrSetList(sw.id)[0]||null; return {sw, wl, wc, hs}; }).filter(x=>x.wl || x.wc || x.hs);
+    const recoveryAll = recoveryPool.map(sw=>{ const wl=this._wearLatest(sw.id); const wc=this._wearConn(sw.id); const hs=this._hrSetList(sw.id)[0]||null; const wk=this._wellLatest(sw.id); return {sw, wl, wc, hs, wk}; }).filter(x=>x.wl || x.wc || x.hs || x.wk);
     const recoveryRows = recoveryAll
       .sort((a,b)=>{ const av=(a.wl&&a.wl.recovery!=null)?a.wl.recovery:999, bv=(b.wl&&b.wl.recovery!=null)?b.wl.recovery:999; return av-bv; })
-      .map(({sw, wl, wc, hs})=>{ const rec=wl?wl.recovery:null; const col=this._wearRecoveryColor(rec);
+      .map(({sw, wl, wc, hs, wk})=>{ const rec=wl?wl.recovery:null; const col=this._wearRecoveryColor(rec);
         const hrLine = hs ? ([hs.avg!=null?('avg '+hs.avg):null, hs.max!=null?('max '+hs.max):null].filter(Boolean).join(' · ')+' bpm'+(hs.label?(' · '+hs.label):'')) : '';
+        const rd=this._wellReadiness(wk);
         return { id:sw.id, name:sw.name, squadName:sw.squadName, initials:sw.initials,
           recovery: rec!=null?String(rec):'—', recoveryPct: rec!=null?rec:0, recoveryColor:col,
           low: rec!=null && rec<34, mid: rec!=null && rec>=34 && rec<67,
           sub:[ wl&&wl.rhr!=null?(wl.rhr+' bpm'):null, wl&&wl.hrv!=null?(wl.hrv+' hrv'):null, wl&&wl.sleepH!=null?(wl.sleepH+'h sleep'):null ].filter(Boolean).join(' · ') || (wc?('Connected · '+String(wc.provider||'band').toUpperCase()):'No reading yet'),
           hrLine, hasHr: !!hrLine,
+          wellReady: rd!=null?('feels '+rd):'', hasWell: rd!=null, wellColor: rd==null?'#9AA2B4':(rd>=67?'#0C7A4F':rd>=40?'#B4690E':'#C0362C'),
           connected: !!wc,
           onClick:()=>{ this.setState({tool:null, view:'squad', squadId:sw.squadId, tab:'group', swimmerId:sw.id}); this.openSwimmer(sw.id); } }; });
     const recoveryEmpty = recoveryRows.length===0;
@@ -8376,6 +8425,16 @@ class Component extends DCLogic {
           onFamWearConnectFitbit:()=>{ try{ this._openUrl('/api/fitbit/connect?sw='+encodeURIComponent(sw.id)+'&by='+encodeURIComponent((S.familyUser&&S.familyUser.id)||'')); }catch(e){} this.setState({wearMsg:'Opening Fitbit…'}); },
           ...(()=>{ const wc=this._wearConn(sw.id); return { famWearConnected:!!wc, famWearConnLabel: wc?('Connected · '+String(wc.provider||'band').toUpperCase()):'', onFamWearSyncNow:()=>this.syncWearNow(sw.id) }; })(),
           famWearMsg:S.wearMsg, famWearMsgShow:!!S.wearMsg,
+          ...(()=>{ const wt=this.todayISO(); const ex=this._wellForDate(sw.id, wt); const wf=S.wellForm;
+            const cur=(k)=> (wf[k]||(ex?ex[k]:0)||0);
+            const defs=[{k:'sleep',l:'Sleep'},{k:'energy',l:'Energy'},{k:'mood',l:'Mood'},{k:'hydration',l:'Hydration'},{k:'soreness',l:'Soreness',inv:true}];
+            const metrics=defs.map(m=>{ const val=cur(m.k); const good=m.inv?(val&&val<=2):(val>=3);
+              const col=!val?'#CBD2DE':(good?'#0C7A4F':(m.inv?(val>=4?'#C0362C':'#B4690E'):(val<=2?'#B4690E':'#0C7A4F')));
+              return { label:m.l+(m.inv?' (less=better)':''), dots:[1,2,3,4,5].map(n=>({ bg: val===n?col:'#F1F4F8', fg: val===n?'#fff':'#7A8296', n:String(n), onClick:()=>this.setState({wellForm:{...S.wellForm,[m.k]:n}}) })) }; });
+            const lat=this._wellLatest(sw.id); const rd=this._wellReadiness(ex||lat);
+            return { wellMetrics:metrics, wellDoneToday:!!ex, wellReadiness: rd!=null?String(rd):'—', wellReadinessColor: rd==null?'#9AA2B4':(rd>=67?'#0C7A4F':rd>=40?'#B4690E':'#C0362C'), wellHasReadiness: rd!=null,
+              onWellSave:()=>{ this.saveWellness(sw.id, S.wellForm); this.setState({wellForm:{sleep:0,energy:0,soreness:0,mood:0,hydration:0}, wellMsg:'Thanks — check-in saved ✓'}); },
+              wellMsg:S.wellMsg, wellMsgShow:!!S.wellMsg }; })(),
           famMsgThread:this._famMsgEls(sw.id, 'family'), famMsgEmpty:((this.famMessages||{})[sw.id]||[]).length===0, onFamSendMsg:()=>this.sendFamMsg(sw.id, 'family'),
           // -- attendance (day/month/year) --
           famAttView, famAttShowDay:famAttView==='day', famAttShowMonth:famAttView==='month', famAttShowYear:famAttView==='year',
