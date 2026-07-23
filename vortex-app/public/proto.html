@@ -38,6 +38,12 @@ if ('serviceWorker' in navigator) {
   var SYNC = ["vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_attend_log","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_meet_events","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_sw_status"];
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
+  // Auth-retry queue: if a write is rejected because we weren't signed in yet (401/403 under the
+  // RLS lockdown), stash it and replay it the moment a token arrives — so a save made in the
+  // split-second right after login is never lost.
+  window.__vxAuthQ = [];
+  function _vxQueue(fn){ try{ if(window.__vxAuthQ.length<200) window.__vxAuthQ.push(fn); }catch(e){} }
+  window.__vxFlushAuthQ = function(){ var q=window.__vxAuthQ||[]; window.__vxAuthQ=[]; for(var i=0;i<q.length;i++){ try{ q[i](); }catch(e){} } };
   window.__vxWriteTs = {};   // last time THIS device wrote each key (ms) — guards against stale pulls
   // ---- Auth session (Supabase GoTrue) ----------------------------------------------------
   // When a user is signed in, every data request carries THEIR JWT, so the database can
@@ -50,7 +56,7 @@ if ('serviceWorker' in navigator) {
   var _refreshTimer=null;
   function _scheduleRefresh(){ if(_refreshTimer) clearTimeout(_refreshTimer); var a=window.__VX_AUTH; if(!a||!a.refresh) return; var due=a.exp - Date.now() - 60000; if(due<0) due=0; if(due>3000000) due=3000000; _refreshTimer=setTimeout(_doRefresh, due); }
   function _doRefresh(){ var a=window.__VX_AUTH; if(!a||!a.refresh) return; fetch(SB_URL+"/auth/v1/token?grant_type=refresh_token", { method:"POST", headers:{ "apikey":SB_ANON, "Content-Type":"application/json" }, body: JSON.stringify({ refresh_token:a.refresh }) }).then(function(r){ return r.ok? r.json():null; }).then(function(j){ if(j && j.access_token){ window.__vxSetAuth(j); } else { _saveAuth(null); } }).catch(function(){}); }
-  window.__vxSetAuth = function(session){ if(!session || !session.access_token) return; var exp=Date.now() + ((session.expires_in? session.expires_in*1000 : 3600000)); _saveAuth({ token:session.access_token, refresh:session.refresh_token||null, exp:exp, uid:(session.user&&session.user.id)||null, email:(session.user&&session.user.email)||null }); _scheduleRefresh(); };
+  window.__vxSetAuth = function(session){ if(!session || !session.access_token) return; var exp=Date.now() + ((session.expires_in? session.expires_in*1000 : 3600000)); _saveAuth({ token:session.access_token, refresh:session.refresh_token||null, exp:exp, uid:(session.user&&session.user.id)||null, email:(session.user&&session.user.email)||null }); _scheduleRefresh(); try{ window.__vxFlushAuthQ(); }catch(e){} };
   window.__vxClearAuth = function(){ if(_refreshTimer) clearTimeout(_refreshTimer); _saveAuth(null); };
   window.__vxAuthUid = function(){ return window.__VX_AUTH ? window.__VX_AUTH.uid : null; };
   try{ var _ra=localStorage.getItem('vx_auth'); if(_ra){ var _pa=JSON.parse(_ra); if(_pa && _pa.token){ window.__VX_AUTH=_pa; if(_pa.exp && Date.now() > (_pa.exp - 60000)) _doRefresh(); else _scheduleRefresh(); } } }catch(e){}
@@ -61,7 +67,7 @@ if ('serviceWorker' in navigator) {
     try {
       fetch(REST, { method:"POST", headers: dyn({"Prefer":"resolution=merge-duplicates,return=minimal"}),
         body: JSON.stringify([{ key:k, value:val, updated_at:new Date().toISOString() }]) })
-      .then(function(r){ window.__vxSyncOk = r.ok; if(!r.ok){ r.text().then(function(t){ try{ console.warn("vx sync HTTP "+r.status+" on "+k+": "+t); }catch(e){} }); } })
+      .then(function(r){ window.__vxSyncOk = r.ok; if(!r.ok){ if(r.status===401||r.status===403){ _vxQueue(function(){ pushKey(k, v); }); } r.text().then(function(t){ try{ console.warn("vx sync HTTP "+r.status+" on "+k+": "+t); }catch(e){} }); } })
       .catch(function(e){ window.__vxSyncOk=false; try{ console.warn("vx sync network error on "+k, e); }catch(x){} });
     } catch(e){}
   }
@@ -74,13 +80,13 @@ if ('serviceWorker' in navigator) {
   window.__VX_SB = { url: SB_URL, anon: SB_ANON, head: HEAD };
   // Generic table helpers — used by the Lounge chat, where each message is its own row
   // (append-only INSERT), so posts can never overwrite each other.
-  window.__vxInsert = function(table, rows){ return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":"return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(!r.ok){ r.text().then(function(t){ try{console.warn("vx insert "+table+" HTTP "+r.status+": "+t);}catch(e){} }); } return r.ok; }).catch(function(){ return false; }); };
+  window.__vxInsert = function(table, rows){ return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":"return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(!r.ok){ if(r.status===401||r.status===403){ _vxQueue(function(){ window.__vxInsert(table, rows); }); } r.text().then(function(t){ try{console.warn("vx insert "+table+" HTTP "+r.status+": "+t);}catch(e){} }); } return r.ok; }).catch(function(){ return false; }); };
   window.__vxSelect = function(table, qs){ return fetch(SB_URL+"/rest/v1/"+table+(qs?("?"+qs):""), { headers: dyn() }).then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; }); };
   // Exact row count for a table (owner Data-Check panel). Uses PostgREST's Content-Range header
   // (Prefer: count=exact) so we never download the rows themselves. Returns a number, or -1 on error.
   window.__vxCount = function(table, qs){ return fetch(SB_URL+"/rest/v1/"+table+"?select=id"+(qs?("&"+qs):""), { method:"HEAD", headers: dyn({"Prefer":"count=exact","Range-Unit":"items","Range":"0-0"}) }).then(function(r){ var cr=r.headers.get("content-range")||""; var m=cr.split("/"); var n=m.length>1?parseInt(m[1],10):NaN; return isNaN(n)?(r.ok?0:-1):n; }).catch(function(){ return -1; }); };
-  window.__vxDelete = function(table, qs){ return fetch(SB_URL+"/rest/v1/"+table+"?"+qs, { method:"DELETE", headers: dyn() }).then(function(r){ return r.ok; }).catch(function(){ return false; }); };
-  window.__vxUpsert = function(table, rows){ return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":"resolution=merge-duplicates,return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(!r.ok){ r.text().then(function(t){ try{console.warn("vx upsert "+table+" HTTP "+r.status+": "+t);}catch(e){} }); } return r.ok; }).catch(function(){ return false; }); };
+  window.__vxDelete = function(table, qs){ return fetch(SB_URL+"/rest/v1/"+table+"?"+qs, { method:"DELETE", headers: dyn() }).then(function(r){ if(!r.ok && (r.status===401||r.status===403)){ _vxQueue(function(){ window.__vxDelete(table, qs); }); } return r.ok; }).catch(function(){ return false; }); };
+  window.__vxUpsert = function(table, rows){ return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":"resolution=merge-duplicates,return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(!r.ok){ if(r.status===401||r.status===403){ _vxQueue(function(){ window.__vxUpsert(table, rows); }); } r.text().then(function(t){ try{console.warn("vx upsert "+table+" HTTP "+r.status+": "+t);}catch(e){} }); } return r.ok; }).catch(function(){ return false; }); };
   // Upload a file (photo/video) to the public "vx-media" Storage bucket and return its public URL,
   // or null on failure. Used for fitness-exercise demo photos & videos so large files never sit in
   // the sync blob. Requires the vx-media bucket + anon policies (see setup notes).
@@ -6284,7 +6290,7 @@ class Component extends DCLogic {
       window.open('https://wa.me/'+waNum+'?text='+waText, '_blank');
     }catch(e){}
     const _ar=this._famRegAuthRes||{}; const _hasSession=_ar.ok && _ar.j && _ar.j.access_token;
-    if(_hasSession && window.__vxSetAuth){ try{ window.__vxSetAuth(_ar.j); }catch(e){} try{ this._pushSend({role:'staff'}, _signTitle, _signBody, '/'); }catch(e){} this._postLoginRefresh(); }
+    if(_hasSession && window.__vxSetAuth){ try{ window.__vxSetAuth(_ar.j); }catch(e){} try{ this._pushSend({role:'staff'}, _signTitle, _signBody, '/'); }catch(e){} this._refetchAll(); this._postLoginRefresh(); }
     if(_hasSession || _ar.netfail){ try{ localStorage.setItem('vx_session', JSON.stringify({type:'family', email:rec.email})); }catch(e){}
       this.setState({familyUser:rec, familyActiveIdx:0, screen:'app', view:'family', famErr:'', famBusy:false}); }
     else { this.setState({famBusy:false, famMode:'login', famPass:'', famPass2:'', famErr:'', famRegisteredMsg:'Account created! We emailed a confirmation link to '+email+'. Open it, then sign in.'}); }
@@ -6298,6 +6304,7 @@ class Component extends DCLogic {
     const res=await this._authPost('/token?grant_type=password', {email, password:pass});
     if(res.ok && res.j && res.j.access_token){
       if(window.__vxSetAuth){ try{ window.__vxSetAuth(res.j); }catch(e){} }
+      this._refetchAll();
       this._postLoginRefresh();
       try{ await this._familyFetch(); }catch(e){}
       let rec=(this.family||[]).find(f=>(f.email||'').trim().toLowerCase()===email);
@@ -6320,6 +6327,14 @@ class Component extends DCLogic {
   // are blocked by row-level security), reload once so boot re-runs carrying the user's JWT and
   // loads everything. While policies are open, boot already has data, so this never fires.
   _postLoginRefresh(){ try{ if(window.__vxBootEmpty && !this._authReloaded){ this._authReloaded=true; setTimeout(function(){ try{ location.reload(); }catch(e){} }, 400); } }catch(e){} }
+  // Re-pull everything now that we hold a real token. Essential once the RLS lockdown is on:
+  // the per-row tables (plans, docs, health, messages…) are read at boot as ANON and come back
+  // empty; this re-fetches them with the signed-in user's JWT so their data appears.
+  _refetchAll(){
+    try{ if(window.__vxRepull) window.__vxRepull(); }catch(e){}
+    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_wearFetch','_wearStatusFetch','_hrSetsFetch','_wellnessFetch','_planCustomFetch','_familyFetch']
+      .forEach((f)=>{ try{ if(typeof this[f]==='function') this[f](); }catch(e){} });
+  }
   // Stage B: give a signed-in staff member a real Supabase Auth session (JWT) in the background,
   // alongside their existing username+PIN login. Fire-and-forget and fully fault-tolerant — if
   // anything fails the coach is already logged in locally, so this can never block sign-in.
@@ -6332,11 +6347,11 @@ class Component extends DCLogic {
       const pin=(''+(acct.pin||'')).trim();
       const pw='vxsc_'+acct.id+'_'+(pin||'0000');             // deterministic so the same PIN re-authenticates
       this._authPost('/token?grant_type=password', {email, password:pw}).then((res)=>{
-        if(res && res.ok && res.j && res.j.access_token){ window.__vxSetAuth(res.j); this._postLoginRefresh(); return; }
+        if(res && res.ok && res.j && res.j.access_token){ window.__vxSetAuth(res.j); this._refetchAll(); this._postLoginRefresh(); return; }
         // Not provisioned in Auth yet → create the account, then a session (if confirmation is off).
         this._authPost('/signup?redirect_to='+encodeURIComponent(location.origin+location.pathname),
           {email, password:pw, data:{name:acct.label||'', role:acct.role||'Coach', staff:true, staff_id:acct.id}}
-        ).then((sr)=>{ if(sr && sr.ok && sr.j && sr.j.access_token){ window.__vxSetAuth(sr.j); this._postLoginRefresh(); } }).catch(()=>{});
+        ).then((sr)=>{ if(sr && sr.ok && sr.j && sr.j.access_token){ window.__vxSetAuth(sr.j); this._refetchAll(); this._postLoginRefresh(); } }).catch(()=>{});
       }).catch(()=>{});
     }catch(e){}
   }
