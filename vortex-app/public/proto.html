@@ -1990,6 +1990,17 @@ if ('serviceWorker' in navigator) {
                       <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05);margin-top:9px">
                         <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px"><i data-lucide="heart-pulse" style="width:14px;height:14px;color:#C81E5B"></i><p style="margin:0;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">Training HR — log a set</p></div>
                         <p style="margin:0 0 8px;font-size:10.5px;color:#9AA2B4;line-height:1.4">From a Polar Verity Sense (temple) or a wall pulse check. Enter the set's average &amp; max heart rate.</p>
+                        <sc-if value="{{ hrHasChart }}" hint-placeholder-val="{{ false }}">
+                          <div style="background:#FBF3F6;border:1px solid #F3D9E3;border-radius:11px;padding:10px 11px 8px;margin-bottom:9px">
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px"><span style="font-size:9.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#C81E5B">Avg / max HR trend</span><span style="font-size:9px;color:#B98BA0">90–200 bpm</span></div>
+                            <div style="display:flex;align-items:flex-end;gap:5px;height:46px">
+                              <sc-for list="{{ hrChart }}" as="c" hint-placeholder-count="6">
+                                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%"><div style="width:100%;display:flex;flex-direction:column;justify-content:flex-end;height:100%"><div style="width:100%;height:{{ c.capH }}px;background:#F0B9CE;border-radius:4px 4px 0 0"></div><div style="width:100%;height:{{ c.avgH }}px;background:#C81E5B;border-radius:0 0 4px 4px"></div></div><span style="font-size:8px;color:#B98BA0">{{ c.day }}</span></div>
+                              </sc-for>
+                            </div>
+                            <p style="margin:6px 0 0;font-size:9px;color:#B98BA0;text-align:center">Solid = average · light = up to max. A lower bar for the same set = fitter.</p>
+                          </div>
+                        </sc-if>
                         <div style="display:flex;gap:6px;margin-bottom:6px">
                           <input value="{{ hrDate }}" oninput="{{ onHrDate }}" type="date" style="flex:none;width:120px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-size:11.5px;color:#0C1116;outline:none">
                           <input value="{{ hrLabel }}" oninput="{{ onHrLabel }}" placeholder="Set e.g. 8x100 @1:30" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-size:11.5px;color:#0C1116;outline:none">
@@ -2831,7 +2842,7 @@ if ('serviceWorker' in navigator) {
                       <sc-for list="{{ recoveryRows }}" as="r" hint-placeholder-count="6">
                         <button onclick="{{ r.onClick }}" style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:11px 13px;cursor:pointer;font-family:inherit;text-align:left;box-shadow:0 2px 7px rgba(11,20,40,.05)">
                           <span style="flex:none;width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:conic-gradient({{ r.recoveryColor }} {{ r.recoveryPct }}%,#EEF1F5 0)"><span style="width:34px;height:34px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:800;color:{{ r.recoveryColor }}">{{ r.recovery }}</span></span>
-                          <span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:14px;color:#0C1116">{{ r.name }}</span><span style="display:block;font-size:11.5px;color:#7A8296;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.squadName }} · {{ r.sub }}</span></span>
+                          <span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:14px;color:#0C1116">{{ r.name }}</span><span style="display:block;font-size:11.5px;color:#7A8296;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.squadName }} · {{ r.sub }}</span><sc-if value="{{ r.hasHr }}" hint-placeholder-val="{{ false }}"><span style="display:flex;align-items:center;gap:4px;font-size:10.5px;color:#C81E5B;font-weight:700;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><i data-lucide="heart-pulse" style="width:11px;height:11px"></i>{{ r.hrLine }}</span></sc-if></span>
                           <i data-lucide="chevron-right" style="width:16px;height:16px;color:#9AA2B4"></i>
                         </button>
                       </sc-for>
@@ -7046,14 +7057,16 @@ class Component extends DCLogic {
 
     // ---- Recovery Board (WHOOP/Fitbit) — who is run-down, worst first ----
     const recoveryPool = S.toolScopeClub ? this.allSwimmersFlat() : (this.roster[S.squadId]||[]).map(sw=>({...sw, squadId:S.squadId, squadName:squad.name}));
-    const recoveryAll = recoveryPool.map(sw=>{ const wl=this._wearLatest(sw.id); const wc=this._wearConn(sw.id); return {sw, wl, wc}; }).filter(x=>x.wl || x.wc);
+    const recoveryAll = recoveryPool.map(sw=>{ const wl=this._wearLatest(sw.id); const wc=this._wearConn(sw.id); const hs=this._hrSetList(sw.id)[0]||null; return {sw, wl, wc, hs}; }).filter(x=>x.wl || x.wc || x.hs);
     const recoveryRows = recoveryAll
       .sort((a,b)=>{ const av=(a.wl&&a.wl.recovery!=null)?a.wl.recovery:999, bv=(b.wl&&b.wl.recovery!=null)?b.wl.recovery:999; return av-bv; })
-      .map(({sw, wl, wc})=>{ const rec=wl?wl.recovery:null; const col=this._wearRecoveryColor(rec);
+      .map(({sw, wl, wc, hs})=>{ const rec=wl?wl.recovery:null; const col=this._wearRecoveryColor(rec);
+        const hrLine = hs ? ([hs.avg!=null?('avg '+hs.avg):null, hs.max!=null?('max '+hs.max):null].filter(Boolean).join(' · ')+' bpm'+(hs.label?(' · '+hs.label):'')) : '';
         return { id:sw.id, name:sw.name, squadName:sw.squadName, initials:sw.initials,
           recovery: rec!=null?String(rec):'—', recoveryPct: rec!=null?rec:0, recoveryColor:col,
           low: rec!=null && rec<34, mid: rec!=null && rec>=34 && rec<67,
           sub:[ wl&&wl.rhr!=null?(wl.rhr+' bpm'):null, wl&&wl.hrv!=null?(wl.hrv+' hrv'):null, wl&&wl.sleepH!=null?(wl.sleepH+'h sleep'):null ].filter(Boolean).join(' · ') || (wc?('Connected · '+String(wc.provider||'band').toUpperCase()):'No reading yet'),
+          hrLine, hasHr: !!hrLine,
           connected: !!wc,
           onClick:()=>{ this.setState({tool:null, view:'squad', squadId:sw.squadId, tab:'group', swimmerId:sw.id}); this.openSwimmer(sw.id); } }; });
     const recoveryEmpty = recoveryRows.length===0;
@@ -8172,7 +8185,11 @@ class Component extends DCLogic {
               ...(()=>{ const rows=this._hrSetList(swObj.id).slice(0,10).map(r=>({ dateLabel:this._fmtDMY(r.date), label:r.label||'Set',
                 metric:[r.avg!=null?('avg '+r.avg):null, r.max!=null?('max '+r.max):null].filter(Boolean).join(' · ')+' bpm', note:r.note||'', hasNote:!!r.note,
                 onDelete:()=>this.deleteHrSet(swObj.id, r.id) }));
-                return { hrRows:rows, hrHasRows:rows.length>0,
+                // avg/max HR over time — bottom baseline 90bpm, top 200bpm, oldest→newest.
+                const chartH=46, base=90, span=110; const clampH=(v)=>v==null?0:Math.max(0,Math.min(chartH,Math.round((v-base)/span*chartH)));
+                const series=this._hrSetList(swObj.id).slice(0,8).slice().reverse();
+                const hrChart=series.map(r=>{ const a=clampH(r.avg), m=clampH(r.max); return { avgH:a, capH:Math.max(0,m-a), day:(r.date||'').slice(8), avg:r.avg!=null?String(r.avg):'' }; });
+                return { hrRows:rows, hrHasRows:rows.length>0, hrChart, hrHasChart:hrChart.length>=2,
                   hrDate:S2.hrSetForm.date, onHrDate:(e)=>this.setState({hrSetForm:{...S2.hrSetForm,date:e.target.value}}),
                   hrLabel:S2.hrSetForm.label, onHrLabel:(e)=>this.setState({hrSetForm:{...S2.hrSetForm,label:e.target.value}}),
                   hrAvg:S2.hrSetForm.avg, onHrAvg:(e)=>this.setState({hrSetForm:{...S2.hrSetForm,avg:e.target.value}}),
