@@ -2887,6 +2887,25 @@ if ('serviceWorker' in navigator) {
                     </div>
                   </sc-if>
 
+                  <sc-if value="{{ toolImprovers }}" hint-placeholder-val="{{ true }}">
+                    <div style="display:flex;flex-direction:column;gap:12px">
+                      <div style="background:linear-gradient(135deg,#0C7A4F,#12A0AE);color:#fff;border-radius:16px;padding:16px;display:flex;align-items:center;gap:12px">
+                        <span style="width:42px;height:42px;flex:none;border-radius:12px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center"><i data-lucide="trending-down" style="width:22px;height:22px"></i></span>
+                        <div><p style="margin:0;font-size:14px;font-weight:800">Top Improvers</p><p style="margin:2px 0 0;font-size:12px;color:rgba(255,255,255,.8)">{{ improverScopeLabel }} · biggest time drops</p></div>
+                      </div>
+                      <sc-if value="{{ improverEmpty }}" hint-placeholder-val="{{ false }}">
+                        <div style="text-align:center;padding:36px 20px;color:#9AA2B4"><i data-lucide="trending-down" style="width:30px;height:30px"></i><p style="font-size:12.5px;margin-top:10px;line-height:1.5">No improvements to show yet.<br>Add each swim with its meet date (profile → meet history) and drops appear here automatically.</p></div>
+                      </sc-if>
+                      <sc-for list="{{ improverRows }}" as="r" hint-placeholder-count="6">
+                        <button onclick="{{ r.onClick }}" style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:11px 13px;cursor:pointer;font-family:inherit;text-align:left;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                          <span style="width:42px;height:42px;flex:none;border-radius:12px;background:#DCF5EA;color:#0C7A4F;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px">{{ r.initials }}</span>
+                          <span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:14px;color:#0C1116">{{ r.name }}</span><span style="display:block;font-size:11.5px;color:#7A8296;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.squadName }} · {{ r.event }} · {{ r.line }}</span></span>
+                          <span style="flex:none;text-align:right"><span style="display:block;font-family:var(--font-mono);font-weight:800;font-size:15px;color:#0C7A4F">{{ r.dropStr }}</span><span style="display:block;font-size:8.5px;letter-spacing:.05em;text-transform:uppercase;color:#B9C0CC">faster</span></span>
+                        </button>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+
                   <sc-if value="{{ toolRelay }}" hint-placeholder-val="{{ true }}">
                     <div style="display:flex;flex-direction:column;gap:16px">
                       <div style="background:linear-gradient(135deg,#0C7A4F,#12A0AE);color:#fff;border-radius:16px;padding:16px;display:flex;align-items:center;gap:12px">
@@ -6938,6 +6957,7 @@ class Component extends DCLogic {
       {id:'sponsors', icon:'crown', title:'Sponsors', sub:'VIP sponsored swimmers directory', tint:'rgba(200,155,60,.16)', color:'#9A6206'},
       {id:'talent', icon:'star', title:'Talent Board', sub:'Move-up candidates by age & PB', tint:'rgba(6,126,234,.1)', color:'#067EEA'},
       {id:'recovery', icon:'heart-pulse', title:'Recovery Board', sub:'WHOOP/Fitbit · who is run-down', tint:'rgba(200,30,91,.1)', color:'#C81E5B'},
+      {id:'improvers', icon:'trending-down', title:'Top Improvers', sub:'Biggest time drops this season', tint:'rgba(12,122,79,.1)', color:'#0C7A4F'},
       {id:'relay', icon:'users-round', title:'Relay Builder', sub:'Fastest lineup by stroke', tint:'rgba(12,122,79,.1)', color:'#0C7A4F'},
       {id:'season', icon:'calendar-range', title:'Season Plan', sub:'Phases · weeks · peak & taper', tint:'rgba(124,77,255,.12)', color:'#7C4DFF'},
     ];
@@ -7131,7 +7151,7 @@ class Component extends DCLogic {
     const mainPadBottom = (S.view==='squad') ? '92px' : '0px';
 
     // ---- tool overlay content ----
-    const toolTitleMap={insights:'Insights',boards:'Boards',video:'Video Analysis',lounge:'Vortex Lounge',goals:'Season Goals',ai:'AI Assistants',review:'AI Plan Review',clock:'Pace Clock',talent:'Talent Board',recovery:'Recovery Board',relay:'Relay Builder',zoneeng:'Zone Engine',sponsors:'Sponsors',tpace:'T-Pace Tests',promo:'Level-Up Review',entries:'Meet Entries',fitness:'Fitness Plan',inbody:'InBody Import',season:'Season Plan'};
+    const toolTitleMap={insights:'Insights',boards:'Boards',video:'Video Analysis',lounge:'Vortex Lounge',goals:'Season Goals',ai:'AI Assistants',review:'AI Plan Review',clock:'Pace Clock',talent:'Talent Board',recovery:'Recovery Board',improvers:'Top Improvers',relay:'Relay Builder',zoneeng:'Zone Engine',sponsors:'Sponsors',tpace:'T-Pace Tests',promo:'Level-Up Review',entries:'Meet Entries',fitness:'Fitness Plan',inbody:'InBody Import',season:'Season Plan'};
     const toolScope = S.toolScopeClub ? 'Club-wide · 272 swimmers' : squad.name+' · '+squad.count+' swimmers';
 
     // ---- Talent / Move-up board ----
@@ -7163,6 +7183,18 @@ class Component extends DCLogic {
           onClick:()=>{ this.setState({tool:null, view:'squad', squadId:sw.squadId, tab:'group', swimmerId:sw.id}); this.openSwimmer(sw.id); } }; });
     const recoveryEmpty = recoveryRows.length===0;
     const recoveryLowCount = recoveryRows.filter(r=>r.low).length;
+
+    // ---- Top Improvers — biggest time drop per swimmer, from their dated meet history ----
+    const improvePool = S.toolScopeClub ? this.allSwimmersFlat() : (this.roster[S.squadId]||[]).map(sw=>({...sw, squadId:S.squadId, squadName:squad.name}));
+    const improverRows = improvePool.map(sw=>{
+      const src=(Array.isArray(sw.entries)&&sw.entries.length)?sw.entries:(sw.results||[]);
+      const byEv={}; src.forEach(r=>{ if(r.sec==null) return; const d=r.meetDate||''; if(!d) return; (byEv[r.event]=byEv[r.event]||[]).push({sec:r.sec, d, time:r.time||this.fmt(r.sec)}); });
+      let best=null;
+      Object.keys(byEv).forEach(ev=>{ const l=byEv[ev].slice().sort((a,b)=>String(a.d).localeCompare(String(b.d))); if(l.length<2) return; const first=l[0], last=l[l.length-1]; const drop=+(first.sec-last.sec).toFixed(2); if(drop>0.01 && (!best||drop>best.drop)) best={event:ev, drop, from:first.time, to:last.time}; });
+      return best? { id:sw.id, name:sw.name, squadName:sw.squadName, initials:sw.initials, event:best.event, dropStr:'−'+this.fmt(best.drop), line:best.from+' → '+best.to, drop:best.drop,
+        onClick:()=>{ this.setState({tool:null, view:'squad', squadId:sw.squadId, tab:'group', swimmerId:sw.id}); this.openSwimmer(sw.id); } } : null;
+    }).filter(Boolean).sort((a,b)=>b.drop-a.drop).slice(0,50);
+    const improverEmpty = improverRows.length===0;
 
     // ---- Relay Builder (per age group × gender · medley + freestyle · from PBs) ----
     const relayPool = S.toolScopeClub ? this.allSwimmersFlat() : (this.roster[S.squadId]||[]).map(sw=>({...sw, squadId:S.squadId, squadName:squad.name}));
@@ -8619,6 +8651,7 @@ class Component extends DCLogic {
       toolEntries:S.tool==='entries', toolFitness:S.tool==='fitness', toolInbody:S.tool==='inbody', toolSponsors:S.tool==='sponsors',
       toolTalent:S.tool==='talent', talentRows, talentEmpty, talentScopeLabel:toolScope,
       toolRecovery:S.tool==='recovery', recoveryRows, recoveryEmpty, recoveryScopeLabel:toolScope, recoveryLowCount, recoveryHasLow:recoveryLowCount>0,
+      toolImprovers:S.tool==='improvers', improverRows, improverEmpty, improverScopeLabel:toolScope,
       toolRelay:S.tool==='relay', relayGroups, relayHasGroups, relayScopeLabel:toolScope, ...relayPicker,
       toolSeason:S.tool==='season',
       seasonName:season.name, onSeasonName:(e)=>this.setSeasonField(S.squadId,'name',e.target.value),
