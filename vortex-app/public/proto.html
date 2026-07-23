@@ -571,6 +571,14 @@ if ('serviceWorker' in navigator) {
                   </div>
 
                   <div style="position:relative;z-index:1;padding:16px 15px 22px;display:flex;flex-direction:column;gap:16px;margin-top:-16px">
+                    <div style="background:#fff;border:1px solid #E5E9F0;border-radius:20px;padding:14px;box-shadow:0 12px 30px rgba(11,20,40,.08)">
+                      <p style="margin:0 0 11px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#7A8296">Today at a glance</p>
+                      <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+                        <button onclick="{{ onDashAttend }}" style="text-align:left;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:14px;padding:11px 12px;cursor:pointer;font-family:inherit"><span style="display:flex;align-items:center;gap:7px;margin-bottom:5px"><i data-lucide="clipboard-check" style="width:14px;height:14px;color:#0C7A4F"></i><span style="font-size:10.5px;font-weight:700;color:#7A8296">Attendance</span></span><span style="display:block;font-size:22px;font-weight:800;color:#0C1116;line-height:1">{{ dashAttendPct }}</span><span style="display:block;font-size:10.5px;color:#9AA2B4;margin-top:2px">{{ dashAttendSub }}</span></button>
+                        <button onclick="{{ onDashRecovery }}" style="text-align:left;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:14px;padding:11px 12px;cursor:pointer;font-family:inherit"><span style="display:flex;align-items:center;gap:7px;margin-bottom:5px"><i data-lucide="heart-pulse" style="width:14px;height:14px;color:#C81E5B"></i><span style="font-size:10.5px;font-weight:700;color:#7A8296">Red recovery</span></span><span style="display:block;font-size:22px;font-weight:800;color:#0C1116;line-height:1">{{ dashRed }}</span><span style="display:block;font-size:10.5px;color:#9AA2B4;margin-top:2px">{{ dashRedSub }}</span></button>
+                        <button onclick="{{ onDashMeets }}" style="text-align:left;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:14px;padding:11px 12px;cursor:pointer;font-family:inherit;grid-column:span 2"><span style="display:flex;align-items:center;gap:7px;margin-bottom:5px"><i data-lucide="calendar-days" style="width:14px;height:14px;color:#067EEA"></i><span style="font-size:10.5px;font-weight:700;color:#7A8296">Next meet</span></span><span style="display:block;font-size:14px;font-weight:800;color:#0C1116;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ dashMeetName }}</span><span style="display:block;font-size:10.5px;color:#9AA2B4;margin-top:2px">{{ dashMeetSub }}</span></button>
+                      </div>
+                    </div>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
                       <sc-if value="{{ isAdminUser }}" hint-placeholder-val="{{ true }}">
                       <button onclick="{{ onGoAdmin }}" style="text-align:left;background:#fff;border:1px solid #E5E9F0;border-radius:22px;padding:16px;box-shadow:0 12px 30px rgba(11,20,40,.08);cursor:pointer;grid-column:span 2;display:flex;align-items:center;gap:13px">
@@ -5094,8 +5102,11 @@ class Component extends DCLogic {
     this.hrSets={...this.hrSets, [swId]:list}; this.forceUpdate();
     if(window.__vxInsert){ try{ await window.__vxInsert('hr_sets', [{ id, sw_id:swId, date:rec.date, label:rec.label, avg_hr:avg, max_hr:max, note:rec.note, ts:Date.now(), updated_at:new Date().toISOString() }]); }catch(e){} }
     // Flag an unusually high max HR to staff (in-app feed + push), so no red-line goes unnoticed.
-    if(max!=null && max>195){ const swm=this.allSwimmersFlat().find(s=>s.id===swId); const nm=swm?swm.name:'A swimmer';
-      const body=nm+' hit '+max+' bpm max'+(rec.label?(' on '+rec.label):'')+' — check they recover well.';
+    // Threshold is age-adjusted: the estimated max HR ≈ 207 − 0.7×age (Gellish formula).
+    const swmA=this.allSwimmersFlat().find(s=>s.id===swId); const _age=swmA?parseInt(this._swAge(swmA),10):0;
+    const estMax = _age>0 ? Math.round(207 - 0.7*_age) : 195;
+    if(max!=null && max>estMax){ const nm=swmA?swmA.name:'A swimmer';
+      const body=nm+' hit '+max+' bpm max'+(rec.label?(' on '+rec.label):'')+' — above their estimated max ('+estMax+'). Check recovery.';
       try{ this.notify('coach', 'heart-pulse', 'High max HR', body); }catch(e){}
       try{ this._pushSend({role:'staff'}, 'High max HR — '+nm, body, '/'); }catch(e){}
     }
@@ -7918,12 +7929,33 @@ class Component extends DCLogic {
       showHub:S.view==='hub', showAdmin:S.view==='admin', showMove:S.view==='move', showToolsHome:S.view==='tools', showHandbook:S.view==='handbook',
       showSquad:S.view==='squad', showProfile:S.view==='profile', showNav:S.view==='squad', showFamily:S.view==='family',
       ...(()=>{ const acc=this.accounts.find(a=>a.id===S.pickedId)||{}; const isAdm=!!(acc.id==='ahmed'||acc.id==='sameh'); const lockSq=acc.squadId?this.squadById[acc.squadId]:null;
+        // ---- coach "Today" dashboard (attendance · red recovery · next meet · unread) ----
+        const scopeIds = isAdm ? this.squads.map(s=>s.id) : (acc.squadId?[acc.squadId]:this.squads.map(s=>s.id));
+        const today=this.todayISO();
+        let present=0, total=0; scopeIds.forEach(sid=>{ (this.roster[sid]||[]).forEach((sw,idx)=>{ total++; if(this.getAttendStatus(sid, today, sw.id, idx)==='present') present++; }); });
+        const dashAttendPct = total? Math.round(present/total*100) : 0;
+        const scopeSw = isAdm ? this.allSwimmersFlat() : (acc.squadId?(this.roster[acc.squadId]||[]).map(sw=>({...sw, squadId:acc.squadId})):this.allSwimmersFlat());
+        let redCount=0; scopeSw.forEach(sw=>{ const wl=this._wearLatest(sw.id); if(wl && wl.recovery!=null && wl.recovery<34) redCount++; });
+        // next upcoming meet
+        const _pm=(s)=>{ if(!s) return null; let m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); if(m) return new Date(+m[3],+m[1]-1,+m[2]); const mo={jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11}; m=s.match(/^(\d{1,2})\s+([A-Za-z]{3})[a-z]*\s+(\d{4})$/); if(m && mo[m[2].toLowerCase()]!=null) return new Date(+m[3],mo[m[2].toLowerCase()],+m[1]); return null; };
+        const tnow=new Date(today+'T00:00:00');
+        const future=this.allMeets().map(mm=>({mm, d:_pm(mm.date)})).filter(x=>x.d && x.d>=tnow).sort((a,b)=>a.d-b.d);
+        const nextMeet=future[0]?future[0].mm:(this.allMeets()[0]||null);
+        // unread: swimmers whose last family message awaits a coach reply
+        let unread=0; const fm=this.famMessages||{}; scopeSw.forEach(sw=>{ const t=fm[sw.id]; if(t&&t.length&&t[t.length-1].sender==='family') unread++; });
         return {
           hubUserName: acc.label||'', hubUserRole: acc.role||'', hubUserAvatar: this.av(acc.photo||null, acc.initials||'?', 54, 15, acc.accent||'#067EEA', '#fff', 20),
           clubStatLine: isAdm ? '272 swimmers across 9 squads · 2,570 results · 10 meets. 3 squads training this morning.'
             : (lockSq ? (lockSq.count+' swimmers · '+lockSq.name+' · '+lockSq.coach) : 'Welcome back.'),
           toolsSpan: isAdm ? 'auto' : 'span 2',
           toolsSubLabel: isAdm ? 'Club-wide · 272 swimmers' : (lockSq ? (lockSq.name+' · '+lockSq.count+' swimmers') : 'Your squad'),
+          dashAttendPct:String(dashAttendPct)+'%', dashAttendSub:present+' of '+total+' present',
+          dashRed:String(redCount), dashRedIsZero:redCount===0, dashRedSub: redCount? 'need lighter load' : 'all recovered',
+          dashUnread:String(unread), dashUnreadIsZero:unread===0, dashUnreadSub: unread? 'awaiting reply' : 'all replied',
+          dashMeetName: nextMeet?nextMeet.name:'No meet scheduled', dashMeetSub: nextMeet?((nextMeet.course||'')+' · '+(nextMeet.date||'')):'—', dashHasMeet:!!nextMeet,
+          onDashAttend:()=>this.setState({view:'squad', squadId:(acc.squadId||this.state.squadId||'seniora'), tab:'attend'}),
+          onDashRecovery:()=>this.setState({view:'tools', tool:'recovery', toolScopeClub:isAdm}),
+          onDashMeets:()=>this.setState({view:'squad', squadId:(acc.squadId||this.state.squadId||'seniora'), tab:'more'}),
         };
       })(),
       onGoAdmin:()=>this.setState({view:'admin'}), onGoTools:()=>{ const a=this.accounts.find(x=>x.id===S.pickedId)||{}; const adm=!!(a.id==='ahmed'||a.id==='sameh'); this.setState({view:'tools', toolScopeClub:adm}); }, onGoMove:()=>this.setState({view:'move'}),
