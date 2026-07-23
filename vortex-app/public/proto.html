@@ -1990,6 +1990,13 @@ if ('serviceWorker' in navigator) {
                       <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05);margin-top:9px">
                         <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px"><i data-lucide="heart-pulse" style="width:14px;height:14px;color:#C81E5B"></i><p style="margin:0;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">Training HR — log a set</p></div>
                         <p style="margin:0 0 8px;font-size:10.5px;color:#9AA2B4;line-height:1.4">From a Polar Verity Sense (temple) or a wall pulse check. Enter the set's average &amp; max heart rate.</p>
+                        <sc-if value="{{ hrHasFilters }}" hint-placeholder-val="{{ false }}">
+                          <div class="vx-scroll" style="display:flex;gap:5px;overflow-x:auto;margin-bottom:8px;padding-bottom:2px">
+                            <sc-for list="{{ hrFilterChips }}" as="fc" hint-placeholder-count="3">
+                              <button onclick="{{ fc.onClick }}" style="flex:none;background:{{ fc.bg }};color:{{ fc.fg }};border:1px solid {{ fc.border }};border-radius:999px;padding:5px 11px;font-family:inherit;font-size:10.5px;font-weight:700;cursor:pointer;white-space:nowrap">{{ fc.label }}</button>
+                            </sc-for>
+                          </div>
+                        </sc-if>
                         <sc-if value="{{ hrHasChart }}" hint-placeholder-val="{{ false }}">
                           <div style="background:#FBF3F6;border:1px solid #F3D9E3;border-radius:11px;padding:10px 11px 8px;margin-bottom:9px">
                             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px"><span style="font-size:9.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#C81E5B">Avg / max HR trend</span><span style="font-size:9px;color:#B98BA0">90–200 bpm</span></div>
@@ -4286,7 +4293,7 @@ class Component extends DCLogic {
       inbodyForm:{weight:'',fat:'',muscle:''},
       profileIbMsg:'', profileIbBusy:false,
       wearForm:{date:'',recovery:'',rhr:'',hrv:'',sleep:'',strain:''}, wearMsg:'',
-      hrSetForm:{date:'',label:'',avg:'',max:''},
+      hrSetForm:{date:'',label:'',avg:'',max:''}, hrFilter:'',
       fitForm:{pushups:'',plankSec:'',vjump:'',sitreach:''},
       promoQuery:'',
       brandDraft:null,
@@ -5086,6 +5093,12 @@ class Component extends DCLogic {
     const list=(this.hrSets[swId]=this.hrSets[swId]||[]).slice(); list.unshift(rec); list.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
     this.hrSets={...this.hrSets, [swId]:list}; this.forceUpdate();
     if(window.__vxInsert){ try{ await window.__vxInsert('hr_sets', [{ id, sw_id:swId, date:rec.date, label:rec.label, avg_hr:avg, max_hr:max, note:rec.note, ts:Date.now(), updated_at:new Date().toISOString() }]); }catch(e){} }
+    // Flag an unusually high max HR to staff (in-app feed + push), so no red-line goes unnoticed.
+    if(max!=null && max>195){ const swm=this.allSwimmersFlat().find(s=>s.id===swId); const nm=swm?swm.name:'A swimmer';
+      const body=nm+' hit '+max+' bpm max'+(rec.label?(' on '+rec.label):'')+' — check they recover well.';
+      try{ this.notify('coach', 'heart-pulse', 'High max HR', body); }catch(e){}
+      try{ this._pushSend({role:'staff'}, 'High max HR — '+nm, body, '/'); }catch(e){}
+    }
   }
   async deleteHrSet(swId, id){ const list=this._hrSetList(swId).filter(r=>r.id!==id); this.hrSets={...this.hrSets, [swId]:list}; this.forceUpdate();
     if(window.__vxDelete){ try{ await window.__vxDelete('hr_sets', 'id=eq.'+encodeURIComponent(id)); }catch(e){} } }
@@ -8182,14 +8195,21 @@ class Component extends DCLogic {
               onWearConnect:()=>{ try{ this._openUrl('/api/whoop/connect?sw='+encodeURIComponent(swObj.id)); }catch(e){} this.setState({wearMsg:'Opening WHOOP… approve access, then the readings fill in automatically. (Needs the WHOOP developer keys set in Vercel.)'}); },
               onWearConnectFitbit:()=>{ try{ this._openUrl('/api/fitbit/connect?sw='+encodeURIComponent(swObj.id)); }catch(e){} this.setState({wearMsg:'Opening Fitbit… approve access to auto-sync.'}); },
               ...(()=>{ const wc=this._wearConn(swObj.id); return { wearConnected:!!wc, wearConnLabel: wc?('Connected · '+String(wc.provider||'band').toUpperCase()+(wc.updatedAt?(' · synced '+this._fmtDMY(String(wc.updatedAt).slice(0,10))):'')):'', onWearSyncNow:()=>this.syncWearNow(swObj.id) }; })(),
-              ...(()=>{ const rows=this._hrSetList(swObj.id).slice(0,10).map(r=>({ dateLabel:this._fmtDMY(r.date), label:r.label||'Set',
-                metric:[r.avg!=null?('avg '+r.avg):null, r.max!=null?('max '+r.max):null].filter(Boolean).join(' · ')+' bpm', note:r.note||'', hasNote:!!r.note,
-                onDelete:()=>this.deleteHrSet(swObj.id, r.id) }));
+              ...(()=>{ const all=this._hrSetList(swObj.id); const flt=(S2.hrFilter||'');
+                const filtered = flt ? all.filter(r=>(r.label||'')===flt) : all;
+                const rows=filtered.slice(0,10).map(r=>({ dateLabel:this._fmtDMY(r.date), label:r.label||'Set',
+                  metric:[r.avg!=null?('avg '+r.avg):null, r.max!=null?('max '+r.max):null].filter(Boolean).join(' · ')+' bpm', note:r.note||'', hasNote:!!r.note,
+                  onDelete:()=>this.deleteHrSet(swObj.id, r.id) }));
+                // distinct set labels → filter chips (only when there are named sets to compare)
+                const labels=[]; all.forEach(r=>{ const l=(r.label||'').trim(); if(l && labels.indexOf(l)<0) labels.push(l); });
+                const hrFilterChips=[{key:'',label:'All'}].concat(labels.map(l=>({key:l,label:l}))).map(o=>({ label:o.label, sel:flt===o.key,
+                  bg: flt===o.key?'#C81E5B':'#F8FAFC', fg: flt===o.key?'#fff':'#7A8296', border: flt===o.key?'#C81E5B':'#E5E9F0', onClick:()=>this.setState({hrFilter:o.key}) }));
                 // avg/max HR over time — bottom baseline 90bpm, top 200bpm, oldest→newest.
                 const chartH=46, base=90, span=110; const clampH=(v)=>v==null?0:Math.max(0,Math.min(chartH,Math.round((v-base)/span*chartH)));
-                const series=this._hrSetList(swObj.id).slice(0,8).slice().reverse();
+                const series=filtered.slice(0,8).slice().reverse();
                 const hrChart=series.map(r=>{ const a=clampH(r.avg), m=clampH(r.max); return { avgH:a, capH:Math.max(0,m-a), day:(r.date||'').slice(8), avg:r.avg!=null?String(r.avg):'' }; });
                 return { hrRows:rows, hrHasRows:rows.length>0, hrChart, hrHasChart:hrChart.length>=2,
+                  hrFilterChips, hrHasFilters:labels.length>0,
                   hrDate:S2.hrSetForm.date, onHrDate:(e)=>this.setState({hrSetForm:{...S2.hrSetForm,date:e.target.value}}),
                   hrLabel:S2.hrSetForm.label, onHrLabel:(e)=>this.setState({hrSetForm:{...S2.hrSetForm,label:e.target.value}}),
                   hrAvg:S2.hrSetForm.avg, onHrAvg:(e)=>this.setState({hrSetForm:{...S2.hrSetForm,avg:e.target.value}}),
