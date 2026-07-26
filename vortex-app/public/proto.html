@@ -4508,10 +4508,12 @@ class Component extends DCLogic {
   }
   // Load attendance from the per-row table and overlay it onto the local log (per-row is
   // authoritative, so it can't be clobbered by another device's blob).
-  async _attendFetch(){ if(!window.__vxSelect) return;
+  async _attendFetch(dayFilter){ if(!window.__vxSelect) return;
     // One-time: push any existing local marks up to the table so nothing from before is lost.
     if(!this._attendMigrated){ this._attendMigrated=true; try{ this._attendMigrate(); }catch(e){} }
-    const rows=await window.__vxSelect('attendance_marks', 'select=squad_id,day,sw_id,status&limit=100000'); if(rows==null) return;
+    // A day filter (used by the live poll) fetches just that date — small & fast.
+    const qs='select=squad_id,day,sw_id,status&limit=100000'+(dayFilter?('&day=eq.'+encodeURIComponent(dayFilter)):'');
+    const rows=await window.__vxSelect('attendance_marks', qs); if(rows==null) return;
     const log=JSON.parse(JSON.stringify(this.attendLog||{}));
     rows.forEach(r=>{ if(!r.squad_id||!r.day||!r.sw_id) return; (log[r.squad_id]=log[r.squad_id]||{}); (log[r.squad_id][r.day]=log[r.squad_id][r.day]||{}); log[r.squad_id][r.day][r.sw_id]=r.status; });
     this.attendLog=log; try{ this._saveLocalOnly('vx_attend_log', log); }catch(e){} this.forceUpdate();
@@ -6784,6 +6786,9 @@ class Component extends DCLogic {
     // Lounge chat: load now, and poll fast while the Lounge is open so messages arrive live.
     this._loungeFetch();
     this._loungeInt=setInterval(()=>{ if(this.state.tool==='lounge') this._loungeFetch(); }, 6000);
+    // Live attendance: while a coach (or a family) is looking at the attendance view, re-pull the
+    // currently-viewed day every few seconds so another device's taps appear almost immediately.
+    this._attendInt=setInterval(()=>{ const s=this.state; if((s.view==='squad'&&s.tab==='attend')||(s.view==='family'&&s.famTab==='attend')){ const day = s.view==='family' ? (s.famAttDateISO||this.todayISO()) : this.curAttendDate(); try{ this._attendFetch(day); }catch(e){} } }, 4000);
     // Saved training-log sessions live in their own table too.
     this._plansFetch();
     this._squadPlansFetch();
@@ -6881,7 +6886,7 @@ class Component extends DCLogic {
     const v=this._activeVideo();
     if((v?v.id:null) !== this._lastActiveVideoId) this._rebuildPlayer();
   }
-  componentWillUnmount(){ clearInterval(this._clock); clearTimeout(this._t); clearInterval(this._statusInt); clearInterval(this._syncInt); clearInterval(this._loungeInt); clearInterval(this._plansInt); clearInterval(this._staffInt); try{ document.removeEventListener('visibilitychange', this._onVis); }catch(e){} window.removeEventListener('beforeprint', this._onBeforePrint); window.removeEventListener('afterprint', this._onAfterPrint); window.removeEventListener('online', this._onStatusEvt); window.removeEventListener('offline', this._onStatusEvt); if(this._battery){ try{ this._battery.removeEventListener('levelchange', this._onStatusEvt); this._battery.removeEventListener('chargingchange', this._onStatusEvt); }catch(e){} } }
+  componentWillUnmount(){ clearInterval(this._clock); clearTimeout(this._t); clearInterval(this._statusInt); clearInterval(this._syncInt); clearInterval(this._loungeInt); clearInterval(this._attendInt); clearInterval(this._plansInt); clearInterval(this._staffInt); try{ document.removeEventListener('visibilitychange', this._onVis); }catch(e){} window.removeEventListener('beforeprint', this._onBeforePrint); window.removeEventListener('afterprint', this._onAfterPrint); window.removeEventListener('online', this._onStatusEvt); window.removeEventListener('offline', this._onStatusEvt); if(this._battery){ try{ this._battery.removeEventListener('levelchange', this._onStatusEvt); this._battery.removeEventListener('chargingchange', this._onStatusEvt); }catch(e){} } }
   _icons(){ clearTimeout(this._t); this._t=setTimeout(()=>{ try{ window.lucide && window.lucide.createIcons(); }catch(e){} }, 30); }
 
   parseSet(txt, dist){ txt=String(txt||''); let reps=1; const rm=txt.match(/(\d+)\s*[\u00d7xX]\s*(\d+)/); if(rm) reps=parseInt(rm[1])||1; let interval=null; const im=txt.match(/@\s*(\d+):(\d{2})/); if(im) interval=parseInt(im[1])*60+parseInt(im[2]); else { const im2=txt.match(/@\s*:(\d{2})/); if(im2) interval=parseInt(im2[1]); } if(!interval){ const per = reps>1 ? Math.round((+dist||100)/reps) : (+dist||100); interval = Math.max(20, Math.round(per*1.6)); } return {reps, interval}; }
