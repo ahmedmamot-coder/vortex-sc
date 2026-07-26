@@ -4468,7 +4468,7 @@ class Component extends DCLogic {
 
   // navigation
   go(patch){ this.setState(patch); }
-  openSquad(id){ this.setState({view:'squad', squadId:id, tab:'group', swimmerId:null, showSwitcher:false, tool:null}); try{ this._plansFetch(); }catch(e){} try{ this._squadPlansFetch(); }catch(e){} }
+  openSquad(id){ this.setState({view:'squad', squadId:id, tab:'group', swimmerId:null, showSwitcher:false, tool:null}); try{ this._plansFetch(); }catch(e){} try{ this._squadPlansFetch(); }catch(e){} try{ this._attendFetch(); }catch(e){} }
   openSwimmer(id){ this.setState({view:'profile', swimmerId:id, profileEvent:null}); try{ this._famMsgFetch(); }catch(e){} try{ this._docsFetch(); }catch(e){} try{ this._wearFetch(); }catch(e){} }
   _fitnessLocked(){ const a=(this.accounts||[]).find(x=>x.id===this.state.pickedId)||{};
     // Locked to the Fitness Plan tool if their role mentions "fitness" OR the account is Coach Nedhal.
@@ -4490,7 +4490,9 @@ class Component extends DCLogic {
     const rec = this.attendLog[squadId] && this.attendLog[squadId][dateISO] && this.attendLog[squadId][dateISO][swId];
     if(rec) return rec;
     const today=this.todayISO();
-    if(dateISO===today){ return (idx%7===3?'absent':(idx%5===2?'late':'present')); }
+    // Today: anyone not yet marked defaults to PRESENT (standard register behaviour) — no more
+    // random-looking statuses that made it seem like marks weren't saving.
+    if(dateISO===today) return 'present';
     if(dateISO<today) return this.seededDayStatus(squadId, dateISO, swId, idx);
     return 'present';
   }
@@ -4499,6 +4501,16 @@ class Component extends DCLogic {
     this.attendLog[squadId][dateISO]=this.attendLog[squadId][dateISO]||{};
     this.attendLog[squadId][dateISO][swId]=status;
     this._saveJSON('vx_attend_log', this.attendLog);
+    // Also write one independent row so concurrent coaches/devices never overwrite each other.
+    if(window.__vxUpsert){ try{ window.__vxUpsert('attendance', [{ id:squadId+'_'+dateISO+'_'+swId, squad_id:squadId, date:dateISO, sw_id:swId, status:status, ts:Date.now(), updated_at:new Date().toISOString() }]); }catch(e){} }
+  }
+  // Load attendance from the per-row table and overlay it onto the local log (per-row is
+  // authoritative, so it can't be clobbered by another device's blob).
+  async _attendFetch(){ if(!window.__vxSelect) return;
+    const rows=await window.__vxSelect('attendance', 'select=squad_id,date,sw_id,status&limit=100000'); if(rows==null) return;
+    const log=JSON.parse(JSON.stringify(this.attendLog||{}));
+    rows.forEach(r=>{ if(!r.squad_id||!r.date||!r.sw_id) return; (log[r.squad_id]=log[r.squad_id]||{}); (log[r.squad_id][r.date]=log[r.squad_id][r.date]||{}); log[r.squad_id][r.date][r.sw_id]=r.status; });
+    this.attendLog=log; try{ this._saveLocalOnly('vx_attend_log', log); }catch(e){} this.forceUpdate();
   }
   cycleAttend(id){ const sq=this.state.squadId; const date=this.curAttendDate(); const list=(this.roster[sq]||[]); const idx=list.findIndex(s=>s.id===id);
     const cur=this.getAttendStatus(sq, date, id, idx<0?0:idx);
@@ -6334,7 +6346,7 @@ class Component extends DCLogic {
   // empty; this re-fetches them with the signed-in user's JWT so their data appears.
   _refetchAll(){
     try{ if(window.__vxRepull) window.__vxRepull(); }catch(e){}
-    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_wearFetch','_wearStatusFetch','_hrSetsFetch','_wellnessFetch','_planCustomFetch','_familyFetch']
+    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_wearFetch','_wearStatusFetch','_hrSetsFetch','_wellnessFetch','_attendFetch','_planCustomFetch','_familyFetch']
       .forEach((f)=>{ try{ if(typeof this[f]==='function') this[f](); }catch(e){} });
   }
   // Stage B: give a signed-in staff member a real Supabase Auth session (JWT) in the background,
@@ -6777,6 +6789,7 @@ class Component extends DCLogic {
     this._wearStatusFetch();
     this._hrSetsFetch();
     this._wellnessFetch();
+    this._attendFetch();
     this._planCustomFetch();
     // Load every saved training session on startup so the training log & calendar populate
     // immediately for each coach (not only when the Plans tab is opened).
