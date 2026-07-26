@@ -35,7 +35,7 @@ if ('serviceWorker' in navigator) {
   var REST = SB_URL + "/rest/v1/club_state";
   var HEAD = { "apikey": SB_ANON, "Authorization": "Bearer " + SB_ANON, "Content-Type": "application/json" };
   // Every shared data type the club edits. The only key kept per-device is vx_api_key.
-  var SYNC = ["vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_meet_events","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_sw_status"];
+  var SYNC = ["vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_meet_events","vx_meet_cuts","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_sw_status"];
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
   // Auth-retry queue: if a write is rejected because we weren't signed in yet (401/403 under the
@@ -2978,6 +2978,37 @@ if ('serviceWorker' in navigator) {
                     </div>
                   </sc-if>
 
+                  <sc-if value="{{ toolStandards }}" hint-placeholder-val="{{ true }}">
+                    <div style="display:flex;flex-direction:column;gap:12px">
+                      <div style="background:linear-gradient(135deg,#0C7A4F,#0A5A3B);color:#fff;border-radius:16px;padding:16px;display:flex;align-items:center;gap:12px">
+                        <span style="width:42px;height:42px;flex:none;border-radius:12px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center"><i data-lucide="badge-check" style="width:22px;height:22px"></i></span>
+                        <div style="flex:1"><p style="margin:0;font-size:14px;font-weight:800">Meet Standards</p><p style="margin:2px 0 0;font-size:12px;color:rgba(255,255,255,.8)">{{ stdMeetName }} · {{ stdEventsWithCut }} cuts · {{ stdTotalQual }} qualifications</p></div>
+                      </div>
+                      <sc-if value="{{ stdEmpty }}" hint-placeholder-val="{{ false }}">
+                        <div style="text-align:center;padding:36px 20px;color:#9AA2B4"><i data-lucide="badge-check" style="width:30px;height:30px"></i><p style="font-size:12.5px;margin-top:10px;line-height:1.5">No meets yet — add a meet first, then set its cut times here.</p></div>
+                      </sc-if>
+                      <div class="vx-scroll" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:2px">
+                        <sc-for list="{{ stdMeetChips }}" as="mc" hint-placeholder-count="3">
+                          <button onclick="{{ mc.onClick }}" style="flex:none;background:{{ mc.bg }};color:{{ mc.fg }};border:1px solid {{ mc.border }};border-radius:999px;padding:6px 13px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap">{{ mc.label }}</button>
+                        </sc-for>
+                      </div>
+                      <button onclick="{{ onStdExport }}" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:#0C7A4F;color:#fff;border:none;border-radius:11px;padding:11px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer"><i data-lucide="download" style="width:15px;height:15px"></i>Export meet-ready sheet</button>
+                      <p style="margin:0 2px;font-size:10.5px;color:#9AA2B4;line-height:1.5">Type the cut time for each event (e.g. 27.50 or 1:08.40). Swimmers whose PB beats the cut are counted qualified.</p>
+                      <div style="display:flex;flex-direction:column;gap:7px">
+                        <sc-for list="{{ stdRows }}" as="e" hint-placeholder-count="8">
+                          <div style="background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:10px 12px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
+                            <div style="display:flex;align-items:center;gap:9px">
+                              <span style="flex:1;font-size:13px;font-weight:700;color:#0C1116">{{ e.event }}</span>
+                              <input value="{{ e.cut }}" oninput="{{ e.onCut }}" placeholder="cut" style="flex:none;width:84px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:8px;padding:7px 8px;font-family:var(--font-mono);font-size:12px;color:#0C1116;outline:none;text-align:center">
+                              <span style="flex:none;min-width:34px;text-align:center;font-size:12px;font-weight:800;color:#0C7A4F">{{ e.qualCount }}</span>
+                            </div>
+                            <sc-if value="{{ e.hasCut }}" hint-placeholder-val="{{ false }}"><p style="margin:6px 0 0;font-size:10.5px;color:#7A8296;line-height:1.5">✓ {{ e.qualNames }}</p></sc-if>
+                          </div>
+                        </sc-for>
+                      </div>
+                    </div>
+                  </sc-if>
+
                   <sc-if value="{{ toolRelay }}" hint-placeholder-val="{{ true }}">
                     <div style="display:flex;flex-direction:column;gap:16px">
                       <div style="background:linear-gradient(135deg,#0C7A4F,#12A0AE);color:#fff;border-radius:16px;padding:16px;display:flex;align-items:center;gap:12px">
@@ -2996,6 +3027,7 @@ if ('serviceWorker' in navigator) {
                               <sc-for list="{{ grp.medleyRows }}" as="m" hint-placeholder-count="4">
                                 <button onclick="{{ m.onEdit }}" style="display:flex;align-items:center;gap:11px;padding:11px 13px;border:none;border-bottom:1px solid #EEF1F5;background:none;width:100%;text-align:left;cursor:pointer;font-family:inherit"><span style="flex:none;min-width:44px;height:26px;padding:0 7px;border-radius:8px;background:{{ m.badgeBg }};color:{{ m.badgeFg }};display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:800">{{ m.stroke }}</span><span style="flex:1;min-width:0;font-size:13px;font-weight:600;color:#0C1116;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ m.name }}</span><span style="flex:none;font-family:var(--font-mono);font-size:12.5px;color:#7A8296">{{ m.time }}</span><i data-lucide="pencil" style="width:13px;height:13px;color:#C7CDDA;flex:none"></i></button>
                               </sc-for>
+                              <sc-if value="{{ grp.medleyHasTotal }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;justify-content:space-between;padding:9px 13px;background:#F5F8FF"><span style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:{{ grp.accent }}">Predicted total</span><span style="font-family:var(--font-mono);font-size:14px;font-weight:800;color:#0C1116">{{ grp.medleyTotal }}</span></div></sc-if>
                             </div>
                             <p style="margin:0 2px 6px;font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#9AA2B4">Freestyle relay</p>
                             <sc-if value="{{ grp.hasFree }}" hint-placeholder-val="{{ true }}">
@@ -3003,6 +3035,7 @@ if ('serviceWorker' in navigator) {
                                 <sc-for list="{{ grp.freeRelayRows }}" as="f" hint-placeholder-count="4">
                                   <button onclick="{{ f.onEdit }}" style="display:flex;align-items:center;gap:11px;padding:11px 13px;border:none;border-bottom:1px solid #EEF1F5;background:none;width:100%;text-align:left;cursor:pointer;font-family:inherit"><span style="flex:none;width:30px;height:26px;border-radius:8px;background:{{ f.badgeBg }};color:{{ f.badgeFg }};display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:800">L{{ f.leg }}</span><span style="flex:1;min-width:0;font-size:13px;font-weight:600;color:#0C1116;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ f.name }}</span><span style="flex:none;font-family:var(--font-mono);font-size:12.5px;color:#7A8296">{{ f.time }}</span><i data-lucide="pencil" style="width:13px;height:13px;color:#C7CDDA;flex:none"></i></button>
                                 </sc-for>
+                                <sc-if value="{{ grp.freeHasTotal }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;justify-content:space-between;padding:9px 13px;background:#F5F8FF"><span style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:{{ grp.accent }}">Predicted total</span><span style="font-family:var(--font-mono);font-size:14px;font-weight:800;color:#0C1116">{{ grp.freeTotal }}</span></div></sc-if>
                               </div>
                             </sc-if>
                             <sc-if value="{{ grp.freeEmpty }}" hint-placeholder-val="{{ false }}">
@@ -4343,6 +4376,7 @@ class Component extends DCLogic {
     this.meetEventsMap=this._loadJSON('vx_meet_events', {});
     this.wearables=this._loadJSON('vx_wear_cache', {});
     this.wearConn={};
+    this.meetCuts=this._loadJSON('vx_meet_cuts', {});
     this.hrSets=this._loadJSON('vx_hrsets_cache', {});
     this.wellness=this._loadJSON('vx_wellness_cache', {});
     this.eventRequests=this._loadJSON('vx_event_requests', []);
@@ -4769,6 +4803,10 @@ class Component extends DCLogic {
     this.customMeets=[meet, ...this.customMeets];
     this._saveJSON('vx_custom_meets', this.customMeets);
   }
+  // ---- Meet qualifying / cut times --------------------------------------------------------
+  _cutSec(meetName, event){ const m=(this.meetCuts||{})[meetName]; const t=m&&m[event]; if(!t) return null; const sec=this.parseTimeStr(t); return (sec!=null?sec:null); }
+  setMeetCut(meetName, event, timeStr){ const t=(timeStr||'').trim(); const map={...(this.meetCuts||{})}; const meet={...(map[meetName]||{})};
+    if(t){ meet[event]=t; } else { delete meet[event]; } map[meetName]=meet; this.meetCuts=map; this._saveJSON('vx_meet_cuts', map); this.forceUpdate(); }
   // The event program for a meet: an admin-edited override (works for imported meets too),
   // else the meet's own events list. Used by the meets panel and the family event-request chips.
   _meetEvents(m){ if(!m) return []; const ov=(this.meetEventsMap||{})[m.name]; if(Array.isArray(ov)) return ov; return (Array.isArray(m.events)?m.events:[]); }
@@ -6263,7 +6301,10 @@ class Component extends DCLogic {
     const fCand=Object.keys(freeBest).map(id=>freeBest[id]).sort((a,b)=>a.sec-b.sec);
     legs.forEach(n=>{ if(fAssign[n]) return; const pick=fCand.find(c=>!fUsed.has(c.id)); if(pick){ fAssign[n]=pick; fUsed.add(pick.id); } });
     const freeRelayRows=legs.filter(n=>fAssign[n]).map(n=>({leg:n, legId:'F-'+n, name:fAssign[n].name, time:fAssign[n].time, edited:!!ov['F-'+n], badgeBg, badgeFg, onEdit:()=>this.openRelayPicker(groupKey, gender, band, 'F-'+n, 'Free', 'free')}));
-    return {medleyRows, freeRelayRows, hasFree:freeRelayRows.length>0};
+    // Predicted total = sum of the 4 legs (only when the lineup is complete).
+    const medleyComplete=strokes.every(st=>assign[st]); const medleyTotal = medleyComplete ? this.fmt(strokes.reduce((s,st)=>s+assign[st].sec,0)) : null;
+    const freeComplete=fAssign[1]&&fAssign[2]&&fAssign[3]&&fAssign[4]; const freeTotal = freeComplete ? this.fmt([1,2,3,4].reduce((s,n)=>s+fAssign[n].sec,0)) : null;
+    return {medleyRows, freeRelayRows, hasFree:freeRelayRows.length>0, medleyTotal, freeTotal};
   }
   openRelayPicker(groupKey, gender, band, legId, stroke, kind){ this.setState({relayPickerOpen:true, relayPickerKey:groupKey, relayPickerGender:gender, relayPickerBand:band, relayPickerLegId:legId, relayPickerStroke:stroke, relayPickerKind:kind}); }
   closeRelayPicker(){ this.setState({relayPickerOpen:false}); }
@@ -6950,7 +6991,7 @@ class Component extends DCLogic {
     // (Swimmer photos come from the swimmer_docs table now, not this synced blob — don't overwrite them here.)
     this.staffOverrides=g('vx_staff_ovr', this.staffOverrides);
     this.meetStatus=g('vx_meet_status', this.meetStatus); this.meetEntries=g('vx_meet_entries', this.meetEntries);
-    this.customMeets=g('vx_custom_meets', this.customMeets); this.eventRequests=g('vx_event_requests', this.eventRequests);
+    this.customMeets=g('vx_custom_meets', this.customMeets); this.eventRequests=g('vx_event_requests', this.eventRequests); this.meetCuts=g('vx_meet_cuts', this.meetCuts);
     this.academyTrials=g('vx_academy_trials', this.academyTrials); this.academyFees=g('vx_academy_fees', this.academyFees); this.invoices=g('vx_invoices', this.invoices);
     this.brandConfig=g('vx_brand', this.brandConfig); this.notifications=g('vx_notifications', this.notifications);
     this.tpaceTests=g('vx_tpace', this.tpaceTests); this.fitnessTests=g('vx_fitness_tests', this.fitnessTests);
@@ -7117,6 +7158,7 @@ class Component extends DCLogic {
       {id:'recovery', icon:'heart-pulse', title:'Recovery Board', sub:'WHOOP/Fitbit · who is run-down', tint:'rgba(200,30,91,.1)', color:'#C81E5B'},
       {id:'improvers', icon:'trending-down', title:'Top Improvers', sub:'Biggest time drops this season', tint:'rgba(12,122,79,.1)', color:'#0C7A4F'},
       {id:'rankings', icon:'list-ordered', title:'Rankings', sub:'Fastest per event vs squad average', tint:'rgba(6,126,234,.1)', color:'#067EEA'},
+      {id:'standards', icon:'badge-check', title:'Meet Standards', sub:'Cut times · who has qualified', tint:'rgba(12,122,79,.1)', color:'#0C7A4F'},
       {id:'relay', icon:'users-round', title:'Relay Builder', sub:'Fastest lineup by stroke', tint:'rgba(12,122,79,.1)', color:'#0C7A4F'},
       {id:'season', icon:'calendar-range', title:'Season Plan', sub:'Phases · weeks · peak & taper', tint:'rgba(124,77,255,.12)', color:'#7C4DFF'},
     ];
@@ -7310,7 +7352,7 @@ class Component extends DCLogic {
     const mainPadBottom = (S.view==='squad') ? '92px' : '0px';
 
     // ---- tool overlay content ----
-    const toolTitleMap={insights:'Insights',boards:'Boards',video:'Video Analysis',lounge:'Vortex Lounge',goals:'Season Goals',ai:'AI Assistants',review:'AI Plan Review',clock:'Pace Clock',talent:'Talent Board',recovery:'Recovery Board',improvers:'Top Improvers',rankings:'Rankings',relay:'Relay Builder',zoneeng:'Zone Engine',sponsors:'Sponsors',tpace:'T-Pace Tests',promo:'Level-Up Review',entries:'Meet Entries',fitness:'Fitness Plan',inbody:'InBody Import',season:'Season Plan'};
+    const toolTitleMap={insights:'Insights',boards:'Boards',video:'Video Analysis',lounge:'Vortex Lounge',goals:'Season Goals',ai:'AI Assistants',review:'AI Plan Review',clock:'Pace Clock',talent:'Talent Board',recovery:'Recovery Board',improvers:'Top Improvers',rankings:'Rankings',standards:'Meet Standards',relay:'Relay Builder',zoneeng:'Zone Engine',sponsors:'Sponsors',tpace:'T-Pace Tests',promo:'Level-Up Review',entries:'Meet Entries',fitness:'Fitness Plan',inbody:'InBody Import',season:'Season Plan'};
     const toolScope = S.toolScopeClub ? ('Club-wide · '+this.allSwimmersFlat().length+' swimmers') : squad.name+' · '+squad.count+' swimmers';
 
     // ---- Talent / Move-up board ----
@@ -7381,6 +7423,25 @@ class Component extends DCLogic {
       bg: ev===rankEvent?'#0A0F1A':'#F8FAFC', fg: ev===rankEvent?'#fff':'#7A8296', border: ev===rankEvent?'#0A0F1A':'#E5E9F0' }));
     const rankEmpty = rankRows.length===0;
 
+    // ---- Meet Standards / cut times — set a cut per event, see who's qualified, export ----
+    const stdMeets = this.allMeets();
+    const stdMeetIdx = Math.min(S.standardsMeetIdx||0, Math.max(0, stdMeets.length-1));
+    const stdMeet = stdMeets[stdMeetIdx]; const stdMeetName = stdMeet ? stdMeet.name : '';
+    const stdMeetChips = stdMeets.map((m,i)=>({ label:m.name, onClick:()=>this.setState({standardsMeetIdx:i}), bg:i===stdMeetIdx?'#0A0F1A':'#F8FAFC', fg:i===stdMeetIdx?'#fff':'#7A8296', border:i===stdMeetIdx?'#0A0F1A':'#E5E9F0' }));
+    const stdEvents = this._meetEvents(stdMeet); const stdEventList = (stdEvents&&stdEvents.length)?stdEvents:this.EVENT_CATALOG();
+    const stdPool = this.allSwimmersFlat(); let stdTotalQual=0;
+    const stdRows = stdEventList.map(ev=>{ const cutStr = ((this.meetCuts||{})[stdMeetName]||{})[ev] || ''; const cutSec=this._cutSec(stdMeetName, ev);
+      let qualified=[]; if(cutSec!=null){ stdPool.forEach(sw=>{ const pb=(sw.pbs||[]).find(p=>p.event===ev); if(pb && pb.sec<=cutSec) qualified.push({name:sw.name, sec:pb.sec}); }); qualified.sort((a,b)=>a.sec-b.sec); }
+      stdTotalQual+=qualified.length;
+      return { event:ev, cut:cutStr, hasCut:cutSec!=null, qualCount:String(qualified.length), qualNames: qualified.slice(0,24).map(q=>q.name).join(', ')||'—',
+        onCut:(e)=>this.setMeetCut(stdMeetName, ev, e.target.value) }; });
+    const stdEventsWithCut = stdRows.filter(r=>r.hasCut).length;
+    const stdEmpty = stdMeets.length===0;
+    const onStdExport=()=>{ const rows=[['Swimmer','Squad','Age','Event','Seed (PB)','Cut','Qualified']]; const flat=this.allSwimmersFlat();
+      stdEventList.forEach(ev=>{ const cutSec=this._cutSec(stdMeetName, ev); if(cutSec==null) return; const cutStr=((this.meetCuts||{})[stdMeetName]||{})[ev]||'';
+        flat.forEach(sw=>{ const pb=(sw.pbs||[]).find(p=>p.event===ev); if(pb && pb.sec<=cutSec) rows.push([sw.name, sw.squadName||'', this._swAge?this._swAge(sw):(sw.age||''), ev, pb.time||this.fmt(pb.sec), cutStr, 'YES']); }); });
+      this.exportCsv('vortex-meet-ready-'+(stdMeetName||'meet').replace(/[^a-z0-9]+/gi,'-').toLowerCase()+'.csv', rows); };
+
     // ---- Relay Builder (per age group × gender · medley + freestyle · from PBs) ----
     const relayPool = S.toolScopeClub ? this.allSwimmersFlat() : (this.roster[S.squadId]||[]).map(sw=>({...sw, squadId:S.squadId, squadName:squad.name}));
     const strokeOf=ev=>/free/i.test(ev)?'Free':/back/i.test(ev)?'Back':/breast/i.test(ev)?'Breast':/fly/i.test(ev)?'Fly':null;
@@ -7397,7 +7458,8 @@ class Component extends DCLogic {
       const hasMedley=built.medleyRows.some(r=>r.has);
       if(!hasMedley && !built.hasFree) return;
       relayGroups.push({ key:groupKey, title:g.label+' · '+band, count:pool.length+' swimmers', accent:g.accent,
-        medleyRows:built.medleyRows, freeRelayRows:built.freeRelayRows, hasFree:built.hasFree, freeEmpty:!built.hasFree });
+        medleyRows:built.medleyRows, freeRelayRows:built.freeRelayRows, hasFree:built.hasFree, freeEmpty:!built.hasFree,
+        medleyTotal:built.medleyTotal||'', medleyHasTotal:!!built.medleyTotal, freeTotal:built.freeTotal||'', freeHasTotal:!!built.freeTotal });
     }); });
     const relayHasGroups=relayGroups.length>0;
     // relay leg picker
@@ -8840,6 +8902,7 @@ class Component extends DCLogic {
       toolTalent:S.tool==='talent', talentRows, talentEmpty, talentScopeLabel:toolScope,
       toolRecovery:S.tool==='recovery', recoveryRows, recoveryEmpty, recoveryScopeLabel:toolScope, recoveryLowCount, recoveryHasLow:recoveryLowCount>0,
       toolImprovers:S.tool==='improvers', improverRows, improverEmpty, improverScopeLabel:toolScope,
+      toolStandards:S.tool==='standards', stdRows, stdEmpty, stdMeetName, stdMeetChips, stdEventsWithCut, stdTotalQual, onStdExport,
       toolRankings:S.tool==='rankings', rankRows, rankEmpty, rankScopeLabel:toolScope, rankEvent, rankEventChips, rankAvgLabel, rankCount:rankSwimmerCount,
       rankByAge:!!S.rankByAge, onRankToggleAge:()=>this.setState({rankByAge:!S.rankByAge}), rankAgeBtnLabel: S.rankByAge?'Grouped by age':'Overall', rankAgeBtnBg: S.rankByAge?'#0A0F1A':'#F4F6F8', rankAgeBtnFg: S.rankByAge?'#fff':'#3A4152', onRankExport,
       toolRelay:S.tool==='relay', relayGroups, relayHasGroups, relayScopeLabel:toolScope, ...relayPicker,
