@@ -4502,14 +4502,14 @@ class Component extends DCLogic {
     this.attendLog[squadId][dateISO][swId]=status;
     this._saveJSON('vx_attend_log', this.attendLog);
     // Also write one independent row so concurrent coaches/devices never overwrite each other.
-    if(window.__vxUpsert){ try{ window.__vxUpsert('attendance', [{ id:squadId+'_'+dateISO+'_'+swId, squad_id:squadId, date:dateISO, sw_id:swId, status:status, ts:Date.now(), updated_at:new Date().toISOString() }]); }catch(e){} }
+    if(window.__vxUpsert){ try{ window.__vxUpsert('attendance_marks', [{ id:squadId+'_'+dateISO+'_'+swId, squad_id:squadId, day:dateISO, sw_id:swId, status:status, ts:Date.now(), updated_at:new Date().toISOString() }]); }catch(e){} }
   }
   // Load attendance from the per-row table and overlay it onto the local log (per-row is
   // authoritative, so it can't be clobbered by another device's blob).
   async _attendFetch(){ if(!window.__vxSelect) return;
-    const rows=await window.__vxSelect('attendance', 'select=squad_id,date,sw_id,status&limit=100000'); if(rows==null) return;
+    const rows=await window.__vxSelect('attendance_marks', 'select=squad_id,day,sw_id,status&limit=100000'); if(rows==null) return;
     const log=JSON.parse(JSON.stringify(this.attendLog||{}));
-    rows.forEach(r=>{ if(!r.squad_id||!r.date||!r.sw_id) return; (log[r.squad_id]=log[r.squad_id]||{}); (log[r.squad_id][r.date]=log[r.squad_id][r.date]||{}); log[r.squad_id][r.date][r.sw_id]=r.status; });
+    rows.forEach(r=>{ if(!r.squad_id||!r.day||!r.sw_id) return; (log[r.squad_id]=log[r.squad_id]||{}); (log[r.squad_id][r.day]=log[r.squad_id][r.day]||{}); log[r.squad_id][r.day][r.sw_id]=r.status; });
     this.attendLog=log; try{ this._saveLocalOnly('vx_attend_log', log); }catch(e){} this.forceUpdate();
   }
   cycleAttend(id){ const sq=this.state.squadId; const date=this.curAttendDate(); const list=(this.roster[sq]||[]); const idx=list.findIndex(s=>s.id===id);

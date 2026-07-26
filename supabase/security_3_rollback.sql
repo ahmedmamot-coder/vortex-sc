@@ -11,7 +11,7 @@ declare
     'club_state','family_accounts','staff_accounts',
     'plan_sessions','fitness_sessions','squad_plans','season_plans','fitness_plans',
     'swimmer_docs','push_subscriptions','announcements','family_messages','signup_alerts',
-    'lounge_posts','lounge_comments','wearable_readings','hr_sets','wellness_checkins','attendance'
+    'lounge_posts','lounge_comments','wearable_readings','hr_sets','wellness_checkins','attendance_marks'
   ];
 begin
   foreach t in array all_t loop
