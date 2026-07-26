@@ -3528,7 +3528,7 @@ if ('serviceWorker' in navigator) {
                     <div style="display:flex;flex-direction:column;gap:11px">
                       <button onclick="{{ onMeetImportToggle }}" style="display:flex;align-items:center;gap:11px;background:#0A0F1A;color:#fff;border:none;border-radius:15px;padding:14px;cursor:pointer;font-family:inherit;text-align:left">
                         <span style="width:38px;height:38px;flex:none;border-radius:11px;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center"><i data-lucide="upload" style="width:18px;height:18px"></i></span>
-                        <span style="flex:1"><span style="display:block;font-weight:700;font-size:13.5px">Import Hy-Tek results</span><span style="display:block;font-size:11.5px;opacity:.6;margin-top:1px">Paste text or upload a PDF — merges swimmers &amp; PBs</span></span>
+                        <span style="flex:1"><span style="display:block;font-weight:700;font-size:13.5px">Import Hy-Tek results</span><span style="display:block;font-size:11.5px;opacity:.6;margin-top:1px">Paste text, or upload a PDF / Hy-Tek .hy3 / results .zip — merges swimmers &amp; PBs</span></span>
                         <i data-lucide="{{ meetImportChevron }}" style="width:18px;height:18px;opacity:.5"></i>
                       </button>
 
@@ -3537,7 +3537,7 @@ if ('serviceWorker' in navigator) {
                           <p style="margin:0 2px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#9AA2B4;font-weight:700">Paste Hy-Tek text</p>
                           <textarea value="{{ meetImportText }}" oninput="{{ onMeetImportText }}" placeholder="Paste Hy-Tek Team Manager export text here…" style="width:100%;height:110px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:10px;font-family:var(--font-mono);font-size:11.5px;color:#0C1116;outline:none;resize:vertical;box-sizing:border-box"></textarea>
                           <p style="margin:6px 2px 0;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#9AA2B4;font-weight:700">Or upload a PDF</p>
-                          <input id="vx-hytek-pdf-input" type="file" accept="application/pdf" onchange="{{ onHytekPdfChange }}" style="display:none">
+                          <input id="vx-hytek-pdf-input" type="file" accept="application/pdf,.hy3,.cl2,.sd3,.zip,.txt" onchange="{{ onHytekPdfChange }}" style="display:none">
                           <button onclick="{{ onHytekPdfClick }}" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border:1.5px dashed var(--vx-blue);border-radius:10px;padding:14px;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px"><i data-lucide="file-up" style="width:16px;height:16px"></i> {{ hytekPdfLabel }}</button>
                           <button onclick="{{ onMeetImportPreview }}" style="background:var(--vx-blue-tint);color:var(--vx-blue-dark);border:none;border-radius:10px;padding:10px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer">Preview import</button>
                           <sc-if value="{{ meetImportHasPreview }}" hint-placeholder-val="{{ false }}">
@@ -4465,7 +4465,7 @@ class Component extends DCLogic {
       swPbEventSel:'50 Free', swPbTimeDraft:'', swPbCourse:'LCM', swPbMeet:'', swPbMeetDate:'',
       swEditPbs:[], swEditPbEventSel:'50 Free', swEditPbTimeDraft:'', swEditPbCourse:'LCM', swEditPbMeet:'', swEditPbMeetDate:'',
       meetImportOpen:false, meetImportText:'', meetImportPreview:null, meetImportBusy:false, meetExpanded:null, meetEventsEditIdx:null,
-      hytekMode:'paste', hytekPdfBusy:false, hytekPdfLabel:'Choose a Hy-Tek PDF export\u2026',
+      hytekMode:'paste', hytekPdfBusy:false, hytekPdfLabel:'Choose a Hy-Tek file (PDF, .hy3 or .zip)\u2026',
       calOpen:false, calName:'', calLocation:'', calDate:'', calCourse:'LCM', calErr:'',
       showVortexId:false,
       compBuildOpen:false, compName:'', compLocation:'', compDate:'', compCourse:'LCM', compEvents:[], compErr:'',
@@ -6228,8 +6228,58 @@ class Component extends DCLogic {
     }
     return swimmers;
   }
+  meetParseHy3(txt){
+    // Hy-Tek MM "results" data file (.hy3). Fixed-width, stateful:
+    //   B1 = meet, D1 = athlete, E1 = individual event, E2 = the swum time, F* = relays (skipped).
+    // Time fields are TOTAL SECONDS (e.g. "115.27" = 1:55.27). Course is meet-level.
+    const lines=(txt||'').split('\n');
+    const STROKE={A:'Free',B:'Back',C:'Breast',D:'Fly',E:'IM'};
+    const lc=txt.toLowerCase();
+    const meetCourse = /short course/.test(lc) ? (/yard/.test(lc)?'Y':'S') : 'L';
+    const mkdate=(s)=>{ if(!s||s.length!==8) return ''; return parseInt(s.slice(0,2),10)+'/'+parseInt(s.slice(2,4),10)+'/'+s.slice(4); };
+    let meetName='Imported meet';
+    const swimmers=[]; let cur=null, ev=null;
+    for(const raw of lines){
+      const code=raw.slice(0,2);
+      if(code==='B1'){ const nm=raw.slice(2,47).trim(); if(nm) meetName=nm; }
+      else if(code==='D1'){
+        const gender = raw.charAt(2)==='F' ? 'G' : 'B';
+        const last=raw.slice(8,28).trim(), first=raw.slice(28,48).trim();
+        let age=0; const m=raw.slice(48).match(/(\d{3})(\d{2})(\d{2})(\d{4})\s+(\d{1,3})/); if(m) age=parseInt(m[5],10);
+        cur={name:(first+' '+last).trim(), first, last, age, gender, results:[]}; swimmers.push(cur); ev=null;
+      }
+      else if(code==='E1' && cur){
+        const dist=parseInt(raw.slice(18,21),10);
+        ev={dist:isNaN(dist)?null:dist, stroke:STROKE[raw.charAt(21)]||null};
+      }
+      else if(code==='E2' && cur && ev){
+        let tm=raw.slice(5,12).trim(); if(/[LSY]$/.test(tm)) tm=tm.slice(0,-1);
+        const sec=parseFloat(tm);
+        const dm=raw.slice(80,96).match(/(\d{8})/); const date=dm?mkdate(dm[1]):'';
+        const valid = !isNaN(sec) && sec>0 && ev.stroke!=null && ev.dist!=null;
+        if(valid) cur.results.push({date, meet:meetName, sec:+sec.toFixed(2), timeStr:tm, course:meetCourse, dist:ev.dist, stroke:ev.stroke, place:null, relay:false, valid:true});
+        ev=null;
+      }
+    }
+    return swimmers;
+  }
+  _looksHy3(txt){ return /(^|\n)A1\d/.test(txt) && /(^|\n)D1[MF ]/.test(txt) || /(^|\n)E2[MF ] /.test(txt); }
+  _readHyZip(file){
+    return new Promise(async (resolve,reject)=>{
+      try{
+        if(!window.JSZip){ await new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'; s.onload=res; s.onerror=()=>rej(new Error('Could not load the zip reader')); document.head.appendChild(s); }); }
+        const zip=await window.JSZip.loadAsync(await file.arrayBuffer());
+        let target=null; // prefer .hy3, then .cl2/.sd3
+        zip.forEach((p,e)=>{ if(p.toLowerCase().endsWith('.hy3')) target=e; });
+        if(!target) zip.forEach((p,e)=>{ const q=p.toLowerCase(); if(!target && (q.endsWith('.cl2')||q.endsWith('.sd3'))) target=e; });
+        if(!target) return reject(new Error('No Hy-Tek results file (.hy3) found inside the zip'));
+        resolve(await target.async('string'));
+      }catch(err){ reject(err); }
+    });
+  }
   meetImportPreview(){
-    const parsed=this.meetParseHytek(this.state.meetImportText||'');
+    const txt=this.state.meetImportText||'';
+    const parsed = this._looksHy3(txt) ? this.meetParseHy3(txt) : this.meetParseHytek(txt);
     let newSwimmers=0, updatedSwimmers=0, newResults=0;
     const flat=this.allSwimmersFlat();
     parsed.forEach(p=>{ const match=flat.find(f=>f.name.toLowerCase()===p.name.trim().toLowerCase()); if(match) updatedSwimmers++; else newSwimmers++; p.results.forEach(r=>{ if(r.valid) newResults++; }); });
@@ -6274,8 +6324,21 @@ class Component extends DCLogic {
   async handleHytekPdf(e){
     const file = e.target.files && e.target.files[0]; e.target.value='';
     if(!file) return;
+    const nm=(file.name||'').toLowerCase(); const ext=nm.slice(nm.lastIndexOf('.')+1);
     this.setState({hytekPdfBusy:true, hytekPdfLabel:'Reading '+file.name+'\u2026'});
     try{
+      if(ext==='zip'){
+        const text=await this._readHyZip(file);
+        if(!text.trim()) throw new Error('The zip had no readable results file');
+        this.setState({hytekPdfBusy:false, hytekPdfLabel:'Loaded '+file.name+' \u2713', meetImportText:text});
+        this.meetImportPreview(); return;
+      }
+      if(ext==='hy3'||ext==='cl2'||ext==='sd3'||ext==='txt'){
+        const text=await file.text();
+        if(!text.trim()) throw new Error('That file was empty');
+        this.setState({hytekPdfBusy:false, hytekPdfLabel:'Loaded '+file.name+' \u2713', meetImportText:text});
+        this.meetImportPreview(); return;
+      }
       if(!window.pdfjsLib) throw new Error('PDF engine unavailable');
       window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
       const buf = await file.arrayBuffer();
