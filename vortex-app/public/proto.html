@@ -93,14 +93,17 @@ if ('serviceWorker' in navigator) {
   window.__vxRealtime = function(table, onChange){
     try{
       if(!('WebSocket' in window)) return null;
+      var tables = Array.isArray(table) ? table : [table];
+      var key = tables.join(",");
       var wss = SB_URL.replace(/^http/,'ws') + "/realtime/v1/websocket?apikey=" + encodeURIComponent(SB_ANON) + "&vsn=1.0.0";
-      var ws=null, hb=null, ref=0, tries=0, topic="realtime:vx_"+table, alive=true;
+      var ws=null, hb=null, ref=0, tries=0, topic="realtime:vx_"+(tables.length>1?("grp"+tables.length):tables[0]), alive=true;
       function nref(){ return String(++ref); }
       function connect(){
         if(!alive || tries>40) return; tries++;
         try{ ws = new WebSocket(wss); }catch(e){ return; }
         ws.onopen = function(){ tries=0; try{
-          ws.send(JSON.stringify({ topic:topic, event:"phx_join", ref:nref(), payload:{ config:{ postgres_changes:[{ event:"*", schema:"public", table:table }] }, access_token:_curTok() } }));
+          var changes = tables.map(function(t){ return { event:"*", schema:"public", table:t }; });
+          ws.send(JSON.stringify({ topic:topic, event:"phx_join", ref:nref(), payload:{ config:{ postgres_changes:changes }, access_token:_curTok() } }));
           hb = setInterval(function(){ try{ ws.send(JSON.stringify({ topic:"phoenix", event:"heartbeat", ref:nref(), payload:{} })); }catch(e){} }, 25000);
         }catch(e){} };
         ws.onmessage = function(ev){ try{ var d=JSON.parse(ev.data); var t=(d&&d.payload&&(d.payload.type||d.payload.event))||d.event;
@@ -111,7 +114,7 @@ if ('serviceWorker' in navigator) {
       connect();
       var handle = { stop:function(){ alive=false; try{ clearInterval(hb); ws && ws.close(); }catch(e){} },
         setToken:function(){ try{ if(ws && ws.readyState===1) ws.send(JSON.stringify({ topic:topic, event:"access_token", ref:nref(), payload:{ access_token:_curTok() } })); }catch(e){} } };
-      window.__vxRT = window.__vxRT || {}; window.__vxRT[table]=handle;
+      window.__vxRT = window.__vxRT || {}; window.__vxRT[key]=handle;
       return handle;
     }catch(e){ return null; }
   };
@@ -6390,6 +6393,16 @@ class Component extends DCLogic {
     ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_wearFetch','_wearStatusFetch','_hrSetsFetch','_wellnessFetch','_attendFetch','_planCustomFetch','_familyFetch']
       .forEach((f)=>{ try{ if(typeof this[f]==='function') this[f](); }catch(e){} });
   }
+  // Throttled "something changed on the server → refresh the whole app". Driven by realtime
+  // (instant) and a slow fallback poll. Re-pulls the shared blob + all per-row tables.
+  _liveRefresh(){
+    const now=Date.now();
+    if(this._liveLast && now-this._liveLast<1500){ if(!this._liveTimer){ this._liveTimer=setTimeout(()=>{ this._liveTimer=null; this._liveRefresh(); }, 1600); } return; }
+    this._liveLast=now;
+    try{ if(window.__vxRepull) window.__vxRepull(); }catch(e){}
+    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_wellnessFetch','_hrSetsFetch','_wearFetch','_planCustomFetch']
+      .forEach((f)=>{ try{ if(typeof this[f]==='function') this[f](); }catch(e){} });
+  }
   // Stage B: give a signed-in staff member a real Supabase Auth session (JWT) in the background,
   // alongside their existing username+PIN login. Fire-and-forget and fully fault-tolerant — if
   // anything fails the coach is already logged in locally, so this can never block sign-in.
@@ -6822,6 +6835,12 @@ class Component extends DCLogic {
     // Truly live: subscribe to the attendance table over a websocket. On any change, re-pull the
     // viewed day instantly. Falls back to the poll above if realtime isn't available.
     try{ if(window.__vxRealtime){ window.__vxRealtime('attendance_marks', ()=>{ const s=this.state; const day = s.view==='family' ? (s.famAttDateISO||this.todayISO()) : this.curAttendDate(); try{ this._attendFetch(day); }catch(e){} }); } }catch(e){}
+    // Make the WHOLE app live: one websocket watching the shared store + all per-row tables.
+    // Any change anywhere → a throttled refresh, so plans, results, messages, meets, goals,
+    // recovery, etc. update across devices with no manual refresh.
+    try{ if(window.__vxRealtime){ window.__vxRealtime(['club_state','plan_sessions','squad_plans','season_plans','fitness_sessions','fitness_plans','family_messages','announcements','lounge_posts','lounge_comments','signup_alerts','swimmer_docs','wearable_readings','hr_sets','wellness_checkins','family_accounts','staff_accounts'], ()=>{ try{ this._liveRefresh(); }catch(e){} }); } }catch(e){}
+    // Fallback poll so the app stays fresh even if realtime is unavailable.
+    this._liveInt=setInterval(()=>{ try{ this._liveRefresh(); }catch(e){} }, 25000);
     // Saved training-log sessions live in their own table too.
     this._plansFetch();
     this._squadPlansFetch();
@@ -6921,7 +6940,7 @@ class Component extends DCLogic {
     // Remember where we are, so a page refresh returns to the SAME screen (not the hub).
     try{ const s=this.state; if(s.screen==='app'){ const nav={view:s.view, squadId:s.squadId, tab:s.tab, tool:s.tool||null, swimmerId:s.swimmerId||null, adminSection:s.adminSection||null, famTab:s.famTab||null, familyActiveIdx:s.familyActiveIdx||0}; const j=JSON.stringify(nav); if(j!==this._lastNavJson){ this._lastNavJson=j; localStorage.setItem('vx_nav', j); } } }catch(e){}
   }
-  componentWillUnmount(){ clearInterval(this._clock); clearTimeout(this._t); clearInterval(this._statusInt); clearInterval(this._syncInt); clearInterval(this._loungeInt); clearInterval(this._attendInt); clearInterval(this._plansInt); clearInterval(this._staffInt); try{ document.removeEventListener('visibilitychange', this._onVis); }catch(e){} window.removeEventListener('beforeprint', this._onBeforePrint); window.removeEventListener('afterprint', this._onAfterPrint); window.removeEventListener('online', this._onStatusEvt); window.removeEventListener('offline', this._onStatusEvt); if(this._battery){ try{ this._battery.removeEventListener('levelchange', this._onStatusEvt); this._battery.removeEventListener('chargingchange', this._onStatusEvt); }catch(e){} } }
+  componentWillUnmount(){ clearInterval(this._clock); clearTimeout(this._t); clearInterval(this._statusInt); clearInterval(this._syncInt); clearInterval(this._loungeInt); clearInterval(this._attendInt); clearInterval(this._liveInt); clearInterval(this._plansInt); clearInterval(this._staffInt); try{ document.removeEventListener('visibilitychange', this._onVis); }catch(e){} window.removeEventListener('beforeprint', this._onBeforePrint); window.removeEventListener('afterprint', this._onAfterPrint); window.removeEventListener('online', this._onStatusEvt); window.removeEventListener('offline', this._onStatusEvt); if(this._battery){ try{ this._battery.removeEventListener('levelchange', this._onStatusEvt); this._battery.removeEventListener('chargingchange', this._onStatusEvt); }catch(e){} } }
   _icons(){ clearTimeout(this._t); this._t=setTimeout(()=>{ try{ window.lucide && window.lucide.createIcons(); }catch(e){} }, 30); }
 
   parseSet(txt, dist){ txt=String(txt||''); let reps=1; const rm=txt.match(/(\d+)\s*[\u00d7xX]\s*(\d+)/); if(rm) reps=parseInt(rm[1])||1; let interval=null; const im=txt.match(/@\s*(\d+):(\d{2})/); if(im) interval=parseInt(im[1])*60+parseInt(im[2]); else { const im2=txt.match(/@\s*:(\d{2})/); if(im2) interval=parseInt(im2[1]); } if(!interval){ const per = reps>1 ? Math.round((+dist||100)/reps) : (+dist||100); interval = Math.max(20, Math.round(per*1.6)); } return {reps, interval}; }
