@@ -27,3 +27,10 @@ create policy attm_lk_select on public.attendance_marks for select to authentica
 create policy attm_lk_insert on public.attendance_marks for insert to authenticated with check (true);
 create policy attm_lk_update on public.attendance_marks for update to authenticated using (true) with check (true);
 create policy attm_lk_delete on public.attendance_marks for delete to authenticated using (true);
+
+-- Enable live (realtime) push so other devices update the instant a mark changes.
+do $$ begin
+  if not exists (select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename='attendance_marks') then
+    execute 'alter publication supabase_realtime add table public.attendance_marks';
+  end if;
+end $$;
