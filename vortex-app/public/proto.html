@@ -35,7 +35,7 @@ if ('serviceWorker' in navigator) {
   var REST = SB_URL + "/rest/v1/club_state";
   var HEAD = { "apikey": SB_ANON, "Authorization": "Bearer " + SB_ANON, "Content-Type": "application/json" };
   // Every shared data type the club edits. The only key kept per-device is vx_api_key.
-  var SYNC = ["vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_attend_log","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_meet_events","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_sw_status"];
+  var SYNC = ["vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_meet_events","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_sw_status"];
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
   // Auth-retry queue: if a write is rejected because we weren't signed in yet (401/403 under the
@@ -4500,17 +4500,25 @@ class Component extends DCLogic {
     this.attendLog[squadId]=this.attendLog[squadId]||{};
     this.attendLog[squadId][dateISO]=this.attendLog[squadId][dateISO]||{};
     this.attendLog[squadId][dateISO][swId]=status;
-    this._saveJSON('vx_attend_log', this.attendLog);
-    // Also write one independent row so concurrent coaches/devices never overwrite each other.
+    // Local cache only (NOT the synced blob — attendance now lives in its own Supabase table so
+    // concurrent coaches/devices can never overwrite each other).
+    try{ this._saveLocalOnly('vx_attend_log', this.attendLog); }catch(e){}
+    // The real save: one independent row in Supabase.
     if(window.__vxUpsert){ try{ window.__vxUpsert('attendance_marks', [{ id:squadId+'_'+dateISO+'_'+swId, squad_id:squadId, day:dateISO, sw_id:swId, status:status, ts:Date.now(), updated_at:new Date().toISOString() }]); }catch(e){} }
   }
   // Load attendance from the per-row table and overlay it onto the local log (per-row is
   // authoritative, so it can't be clobbered by another device's blob).
   async _attendFetch(){ if(!window.__vxSelect) return;
+    // One-time: push any existing local marks up to the table so nothing from before is lost.
+    if(!this._attendMigrated){ this._attendMigrated=true; try{ this._attendMigrate(); }catch(e){} }
     const rows=await window.__vxSelect('attendance_marks', 'select=squad_id,day,sw_id,status&limit=100000'); if(rows==null) return;
     const log=JSON.parse(JSON.stringify(this.attendLog||{}));
     rows.forEach(r=>{ if(!r.squad_id||!r.day||!r.sw_id) return; (log[r.squad_id]=log[r.squad_id]||{}); (log[r.squad_id][r.day]=log[r.squad_id][r.day]||{}); log[r.squad_id][r.day][r.sw_id]=r.status; });
     this.attendLog=log; try{ this._saveLocalOnly('vx_attend_log', log); }catch(e){} this.forceUpdate();
+  }
+  _attendMigrate(){ if(!window.__vxUpsert) return; const log=this.attendLog||{}; const batch=[];
+    Object.keys(log).forEach(sq=>{ const days=log[sq]||{}; Object.keys(days).forEach(day=>{ const marks=days[day]||{}; Object.keys(marks).forEach(sw=>{ const st=marks[sw]; if(st) batch.push({id:sq+'_'+day+'_'+sw, squad_id:sq, day:day, sw_id:sw, status:st, ts:Date.now(), updated_at:new Date().toISOString()}); }); }); });
+    for(let i=0;i<batch.length;i+=500){ try{ window.__vxUpsert('attendance_marks', batch.slice(i,i+500)); }catch(e){} }
   }
   cycleAttend(id){ const sq=this.state.squadId; const date=this.curAttendDate(); const list=(this.roster[sq]||[]); const idx=list.findIndex(s=>s.id===id);
     const cur=this.getAttendStatus(sq, date, id, idx<0?0:idx);
@@ -5941,7 +5949,7 @@ class Component extends DCLogic {
     };
     let db = {};
     if(C){
-      const tables = ['plan_sessions','fitness_sessions','squad_plans','season_plans','fitness_plans','family_accounts','staff_accounts','swimmer_docs','push_subscriptions','announcements','family_messages','lounge_posts','lounge_comments','signup_alerts'];
+      const tables = ['attendance_marks','plan_sessions','fitness_sessions','squad_plans','season_plans','fitness_plans','family_accounts','staff_accounts','swimmer_docs','push_subscriptions','announcements','family_messages','lounge_posts','lounge_comments','signup_alerts'];
       try{
         const res = await Promise.all(tables.map(t=>C(t)));
         tables.forEach((t,i)=>{ db[t]=res[i]; });
@@ -5952,6 +5960,7 @@ class Component extends DCLogic {
       ['Squads', local.squads],
       ['Meets', local.meets],
       ['Meet entries', local.entries],
+      ['Attendance marks (saved)', db.attendance_marks],
       ['Saved plan sessions', db.plan_sessions],
       ['Saved fitness sessions', db.fitness_sessions],
       ['Squad plans', db.squad_plans],
@@ -6840,7 +6849,7 @@ class Component extends DCLogic {
     this.family=g('vx_family', this.family);
     this.meetsCal=g('vx_meets_cal', this.meetsCal);
     this.savedPlans=g('vx_saved_plans', this.savedPlans);
-    this.attendLog=g('vx_attend_log', this.attendLog);
+    this.attendLog=g('vx_attend_log', this.attendLog); try{ this._attendFetch(); }catch(e){}
     this.swimmerGoals=g('vx_swimmer_goals', this.swimmerGoals);
     this.squadGoals=g('vx_squad_goals', this.squadGoals);
     this.swimmerMeta=this._sanitizeMeta(g('vx_sw_meta', this.swimmerMeta));
