@@ -997,6 +997,18 @@ if ('serviceWorker' in navigator) {
                         <button onclick="{{ onWellSave }}" style="margin-top:10px;width:100%;background:#0C7A4F;color:#fff;border:none;border-radius:10px;padding:11px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer">Save check-in</button>
                         <sc-if value="{{ wellMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:7px 2px 0;font-size:11px;font-weight:600;color:#0C7A4F">{{ wellMsg }}</p></sc-if>
                       </div>
+                      <sc-if value="{{ famQualHas }}" hint-placeholder-val="{{ false }}">
+                        <p style="margin:0 2px 8px;font-size:11.5px;font-weight:700;color:#7A8296;text-transform:uppercase;letter-spacing:.04em">Qualified for</p>
+                        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px">
+                          <sc-for list="{{ famQualRows }}" as="q" hint-placeholder-count="1">
+                            <div style="display:flex;align-items:center;gap:11px;background:#F0FBF5;border:1px solid #BEEBD3;border-radius:13px;padding:11px 13px">
+                              <span style="width:30px;height:30px;flex:none;border-radius:9px;background:#0C7A4F;color:#fff;display:flex;align-items:center;justify-content:center"><i data-lucide="badge-check" style="width:16px;height:16px"></i></span>
+                              <span style="flex:1;min-width:0"><span style="display:block;font-size:13px;font-weight:700;color:#0C1116">{{ q.meet }}</span><span style="display:block;font-size:11px;color:#0C7A4F;font-weight:600">{{ q.events }}</span></span>
+                              <span style="flex:none;font-size:11px;font-weight:800;color:#0C7A4F">{{ q.count }} ✓</span>
+                            </div>
+                          </sc-for>
+                        </div>
+                      </sc-if>
                       <sc-if value="{{ famHasPbs }}" hint-placeholder-val="{{ true }}">
                         <p style="margin:0 2px 8px;font-size:11.5px;font-weight:700;color:#7A8296;text-transform:uppercase;letter-spacing:.04em">Personal bests</p>
                         <div style="display:flex;flex-direction:column;gap:8px">
@@ -1813,6 +1825,20 @@ if ('serviceWorker' in navigator) {
                         </sc-for>
                       </div>
                     </div>
+                    <sc-if value="{{ swQualHas }}" hint-placeholder-val="{{ false }}">
+                      <div>
+                        <h2 style="font-size:11.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#7A8296;margin:0 2px 9px">Qualified for</h2>
+                        <div style="display:flex;flex-direction:column;gap:8px">
+                          <sc-for list="{{ swQualRows }}" as="q" hint-placeholder-count="2">
+                            <div style="display:flex;align-items:center;gap:11px;background:#F0FBF5;border:1px solid #BEEBD3;border-radius:13px;padding:11px 13px">
+                              <span style="width:30px;height:30px;flex:none;border-radius:9px;background:#0C7A4F;color:#fff;display:flex;align-items:center;justify-content:center"><i data-lucide="badge-check" style="width:16px;height:16px"></i></span>
+                              <span style="flex:1;min-width:0"><span style="display:block;font-size:13px;font-weight:700;color:#0C1116">{{ q.meet }}</span><span style="display:block;font-size:11px;color:#0C7A4F;font-weight:600">{{ q.events }}</span></span>
+                              <span style="flex:none;font-size:11px;font-weight:800;color:#0C7A4F">{{ q.count }} ✓</span>
+                            </div>
+                          </sc-for>
+                        </div>
+                      </div>
+                    </sc-if>
                     <div style="display:flex;align-items:center;justify-content:space-between;margin:0 2px 9px"><h2 style="font-size:13px;font-weight:700;color:#0C1116;margin:0">{{ progEvent }} · progression</h2></div>
                     <div class="vx-scroll" style="display:flex;gap:6px;overflow-x:auto;margin:0 0 12px;padding-bottom:2px">
                       <sc-for list="{{ eventChips }}" as="e" hint-placeholder-count="5">
@@ -4805,6 +4831,12 @@ class Component extends DCLogic {
   }
   // ---- Meet qualifying / cut times --------------------------------------------------------
   _cutSec(meetName, event){ const m=(this.meetCuts||{})[meetName]; const t=m&&m[event]; if(!t) return null; const sec=this.parseTimeStr(t); return (sec!=null?sec:null); }
+  // Which meets a swimmer has already qualified for (PB beats a set cut), and in which events.
+  _swQualified(sw){ const out=[]; const cuts=this.meetCuts||{};
+    Object.keys(cuts).forEach(meet=>{ const evs=cuts[meet]||{}; const hit=[];
+      Object.keys(evs).forEach(ev=>{ const cs=this.parseTimeStr(evs[ev]); const pb=(sw.pbs||[]).find(p=>p.event===ev); if(cs!=null && pb && pb.sec<=cs) hit.push(ev); });
+      if(hit.length) out.push({meet, events:hit}); });
+    return out; }
   setMeetCut(meetName, event, timeStr){ const t=(timeStr||'').trim(); const map={...(this.meetCuts||{})}; const meet={...(map[meetName]||{})};
     if(t){ meet[event]=t; } else { delete meet[event]; } map[meetName]=meet; this.meetCuts=map; this._saveJSON('vx_meet_cuts', map); this.forceUpdate(); }
   // The event program for a meet: an admin-edited override (works for imported meets too),
@@ -7330,6 +7362,8 @@ class Component extends DCLogic {
     // ---- profile ----
     const swObj=(this.roster[S.squadId]||[]).find(x=>x.id===S.swimmerId) || (this.roster[S.squadId]||[])[0] || {name:'',pbs:[],results:[],initials:'',age:'',gender:'',meetCount:0};
     const swimmerPbs=(swObj.pbs||[]).slice(0,4).map(p=>{ const cl=p.courseLabel||(p.course==='S'?'SCM':'LCM'); const src=[cl]; if(p.meet) src.push(p.meet); return {event:p.event, time:p.time, drop:p.drop, meta:src.join(' · '), onShare:()=>this.shareBestTimeCard(swObj, p)}; });
+    const swQualRows=this._swQualified(swObj).map(q=>({meet:q.meet, events:q.events.join(' · '), count:String(q.events.length)}));
+    const swQualHas=swQualRows.length>0;
     const swEvents=(swObj.pbs||[]).map(p=>p.event);
     const selEvent=(S.profileEvent && swEvents.includes(S.profileEvent)) ? S.profileEvent : (swEvents[0]||null);
     const eventChips=swEvents.map(ev=>({label:ev, onClick:()=>this.setState({profileEvent:ev}),
@@ -8482,7 +8516,7 @@ class Component extends DCLogic {
       eventChips, progEvent:selEvent||'—',
       lcmChart:{ hasData:lcmSeries.hasData, noData:!lcmSeries.hasData, best:lcmSeries.best||'—', linePts:lcmSeries.linePts, lineArea:lcmSeries.lineArea, dots:lcmSeries.dots, caption:lcmSeries.caption, drop:lcmSeries.drop, swims:lcmSeries.swims },
       scmChart:{ hasData:scmSeries.hasData, noData:!scmSeries.hasData, best:scmSeries.best||'—', linePts:scmSeries.linePts, lineArea:scmSeries.lineArea, dots:scmSeries.dots, caption:scmSeries.caption, drop:scmSeries.drop, swims:scmSeries.swims },
-      swimmerKpis, swimmerPbs, swimmerResults, onBackToSquad:()=>this.setState({view:'squad', tab:'group'}),
+      swimmerKpis, swimmerPbs, swimmerResults, swQualRows, swQualHas, onBackToSquad:()=>this.setState({view:'squad', tab:'group'}),
       // ---- profile enrichments: sponsorship, identity docs, InBody ----
       ...(()=>{ const meta=this._swMeta(swObj.id); const S2=S;
         const sponsorOn=!!meta.sponsored;
@@ -8715,6 +8749,7 @@ class Component extends DCLogic {
           famWearRecovery:_fwl&&_fwl.recovery!=null?String(_fwl.recovery):'—', famWearRecoveryPct:_fwl&&_fwl.recovery!=null?_fwl.recovery:0, famWearRecoveryColor:this._wearRecoveryColor(_fwl?_fwl.recovery:null),
           famWearRhr:_fwl&&_fwl.rhr!=null?String(_fwl.rhr):'—', famWearHrv:_fwl&&_fwl.hrv!=null?String(_fwl.hrv):'—', famWearSleep:_fwl&&_fwl.sleepH!=null?String(_fwl.sleepH):'—', famWearStrain:_fwl&&_fwl.strain!=null?String(_fwl.strain):'—',
           famWearLatestLabel:_fwl?('Updated '+this._fmtDMY(_fwl.date)):'',
+          famQualRows:this._swQualified(sw).map(q=>({meet:q.meet, events:q.events.join(' · '), count:String(q.events.length)})), famQualHas:this._swQualified(sw).length>0,
           famWearDate:S.wearForm.date, onFamWearDate:(e)=>this.setState({wearForm:{...S.wearForm,date:e.target.value}}),
           famWearRecoveryIn:S.wearForm.recovery, onFamWearRecovery:(e)=>this.setState({wearForm:{...S.wearForm,recovery:e.target.value}}),
           famWearRhrIn:S.wearForm.rhr, onFamWearRhr:(e)=>this.setState({wearForm:{...S.wearForm,rhr:e.target.value}}),
