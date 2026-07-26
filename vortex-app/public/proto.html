@@ -2943,6 +2943,30 @@ if ('serviceWorker' in navigator) {
                     </div>
                   </sc-if>
 
+                  <sc-if value="{{ toolRankings }}" hint-placeholder-val="{{ true }}">
+                    <div style="display:flex;flex-direction:column;gap:12px">
+                      <div style="background:linear-gradient(135deg,#3F9CFF,#0768D6);color:#fff;border-radius:16px;padding:16px;display:flex;align-items:center;gap:12px">
+                        <span style="width:42px;height:42px;flex:none;border-radius:12px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center"><i data-lucide="list-ordered" style="width:22px;height:22px"></i></span>
+                        <div style="flex:1"><p style="margin:0;font-size:14px;font-weight:800">Rankings — {{ rankEvent }}</p><p style="margin:2px 0 0;font-size:12px;color:rgba(255,255,255,.8)">{{ rankScopeLabel }} · {{ rankCount }} ranked · avg {{ rankAvgLabel }}</p></div>
+                      </div>
+                      <div class="vx-scroll" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:2px">
+                        <sc-for list="{{ rankEventChips }}" as="ec" hint-placeholder-count="8">
+                          <button onclick="{{ ec.onClick }}" style="flex:none;background:{{ ec.bg }};color:{{ ec.fg }};border:1px solid {{ ec.border }};border-radius:999px;padding:6px 12px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap">{{ ec.label }}</button>
+                        </sc-for>
+                      </div>
+                      <sc-if value="{{ rankEmpty }}" hint-placeholder-val="{{ false }}">
+                        <div style="text-align:center;padding:36px 20px;color:#9AA2B4"><i data-lucide="list-ordered" style="width:30px;height:30px"></i><p style="font-size:12.5px;margin-top:10px;line-height:1.5">No swimmers have a PB in {{ rankEvent }} yet.<br>Pick another event above.</p></div>
+                      </sc-if>
+                      <sc-for list="{{ rankRows }}" as="r" hint-placeholder-count="8">
+                        <button onclick="{{ r.onClick }}" style="display:flex;align-items:center;gap:11px;background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:10px 12px;cursor:pointer;font-family:inherit;text-align:left;box-shadow:0 1px 4px rgba(11,20,40,.04)">
+                          <span style="width:30px;height:30px;flex:none;border-radius:9px;background:{{ r.medalBg }};color:{{ r.medalFg }};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12.5px">{{ r.rank }}</span>
+                          <span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:13.5px;color:#0C1116;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.name }}</span><span style="display:block;font-size:11px;color:#7A8296">{{ r.squadName }} · {{ r.gap }}</span></span>
+                          <span style="flex:none;font-family:var(--font-mono);font-weight:800;font-size:14px;color:#0C1116">{{ r.time }}</span>
+                        </button>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+
                   <sc-if value="{{ toolRelay }}" hint-placeholder-val="{{ true }}">
                     <div style="display:flex;flex-direction:column;gap:16px">
                       <div style="background:linear-gradient(135deg,#0C7A4F,#12A0AE);color:#fff;border-radius:16px;padding:16px;display:flex;align-items:center;gap:12px">
@@ -7081,6 +7105,7 @@ class Component extends DCLogic {
       {id:'talent', icon:'star', title:'Talent Board', sub:'Move-up candidates by age & PB', tint:'rgba(6,126,234,.1)', color:'#067EEA'},
       {id:'recovery', icon:'heart-pulse', title:'Recovery Board', sub:'WHOOP/Fitbit · who is run-down', tint:'rgba(200,30,91,.1)', color:'#C81E5B'},
       {id:'improvers', icon:'trending-down', title:'Top Improvers', sub:'Biggest time drops this season', tint:'rgba(12,122,79,.1)', color:'#0C7A4F'},
+      {id:'rankings', icon:'list-ordered', title:'Rankings', sub:'Fastest per event vs squad average', tint:'rgba(6,126,234,.1)', color:'#067EEA'},
       {id:'relay', icon:'users-round', title:'Relay Builder', sub:'Fastest lineup by stroke', tint:'rgba(12,122,79,.1)', color:'#0C7A4F'},
       {id:'season', icon:'calendar-range', title:'Season Plan', sub:'Phases · weeks · peak & taper', tint:'rgba(124,77,255,.12)', color:'#7C4DFF'},
     ];
@@ -7274,7 +7299,7 @@ class Component extends DCLogic {
     const mainPadBottom = (S.view==='squad') ? '92px' : '0px';
 
     // ---- tool overlay content ----
-    const toolTitleMap={insights:'Insights',boards:'Boards',video:'Video Analysis',lounge:'Vortex Lounge',goals:'Season Goals',ai:'AI Assistants',review:'AI Plan Review',clock:'Pace Clock',talent:'Talent Board',recovery:'Recovery Board',improvers:'Top Improvers',relay:'Relay Builder',zoneeng:'Zone Engine',sponsors:'Sponsors',tpace:'T-Pace Tests',promo:'Level-Up Review',entries:'Meet Entries',fitness:'Fitness Plan',inbody:'InBody Import',season:'Season Plan'};
+    const toolTitleMap={insights:'Insights',boards:'Boards',video:'Video Analysis',lounge:'Vortex Lounge',goals:'Season Goals',ai:'AI Assistants',review:'AI Plan Review',clock:'Pace Clock',talent:'Talent Board',recovery:'Recovery Board',improvers:'Top Improvers',rankings:'Rankings',relay:'Relay Builder',zoneeng:'Zone Engine',sponsors:'Sponsors',tpace:'T-Pace Tests',promo:'Level-Up Review',entries:'Meet Entries',fitness:'Fitness Plan',inbody:'InBody Import',season:'Season Plan'};
     const toolScope = S.toolScopeClub ? ('Club-wide · '+this.allSwimmersFlat().length+' swimmers') : squad.name+' · '+squad.count+' swimmers';
 
     // ---- Talent / Move-up board ----
@@ -7318,6 +7343,21 @@ class Component extends DCLogic {
         onClick:()=>{ this.setState({tool:null, view:'squad', squadId:sw.squadId, tab:'group', swimmerId:sw.id}); this.openSwimmer(sw.id); } } : null;
     }).filter(Boolean).sort((a,b)=>b.drop-a.drop).slice(0,50);
     const improverEmpty = improverRows.length===0;
+
+    // ---- Rankings — every swimmer ranked by PB in a chosen event, vs the squad average ----
+    const rankEvent = S.rankEvent || '50 Free';
+    const rankPool = S.toolScopeClub ? this.allSwimmersFlat() : (this.roster[S.squadId]||[]).map(sw=>({...sw, squadId:S.squadId, squadName:squad.name}));
+    const rankEntries = rankPool.map(sw=>{ const pb=(sw.pbs||[]).find(p=>p.event===rankEvent); return pb ? {sw, sec:pb.sec, time:pb.time||this.fmt(pb.sec)} : null; }).filter(Boolean).sort((a,b)=>a.sec-b.sec);
+    const rankLeaderSec = rankEntries.length ? rankEntries[0].sec : 0;
+    const rankAvgSec = rankEntries.length ? rankEntries.reduce((s,e)=>s+e.sec,0)/rankEntries.length : 0;
+    const rankRows = rankEntries.map((e,i)=>{ const medalBg = i===0?'#F6D879':(i===1?'#D7DCE3':(i===2?'#E7C08B':'#EEF2F7')); const medalFg = i<3?'#3A2E00':'#5B6472';
+      return { rank:i+1, id:e.sw.id, name:e.sw.name, squadName:e.sw.squadName, initials:e.sw.initials, time:e.time,
+        gap: i===0?'fastest':('+'+this.fmt(e.sec-rankLeaderSec)), medalBg, medalFg, fast: e.sec<=rankAvgSec,
+        onClick:()=>{ this.setState({tool:null, view:'squad', squadId:e.sw.squadId, tab:'group', swimmerId:e.sw.id}); this.openSwimmer(e.sw.id); } }; });
+    const rankAvgLabel = rankEntries.length ? this.fmt(rankAvgSec) : '—';
+    const rankEventChips = this.EVENT_CATALOG().map(ev=>({ label:ev, onClick:()=>this.setState({rankEvent:ev}),
+      bg: ev===rankEvent?'#0A0F1A':'#F8FAFC', fg: ev===rankEvent?'#fff':'#7A8296', border: ev===rankEvent?'#0A0F1A':'#E5E9F0' }));
+    const rankEmpty = rankRows.length===0;
 
     // ---- Relay Builder (per age group × gender · medley + freestyle · from PBs) ----
     const relayPool = S.toolScopeClub ? this.allSwimmersFlat() : (this.roster[S.squadId]||[]).map(sw=>({...sw, squadId:S.squadId, squadName:squad.name}));
@@ -8778,6 +8818,7 @@ class Component extends DCLogic {
       toolTalent:S.tool==='talent', talentRows, talentEmpty, talentScopeLabel:toolScope,
       toolRecovery:S.tool==='recovery', recoveryRows, recoveryEmpty, recoveryScopeLabel:toolScope, recoveryLowCount, recoveryHasLow:recoveryLowCount>0,
       toolImprovers:S.tool==='improvers', improverRows, improverEmpty, improverScopeLabel:toolScope,
+      toolRankings:S.tool==='rankings', rankRows, rankEmpty, rankScopeLabel:toolScope, rankEvent, rankEventChips, rankAvgLabel, rankCount:rankRows.length,
       toolRelay:S.tool==='relay', relayGroups, relayHasGroups, relayScopeLabel:toolScope, ...relayPicker,
       toolSeason:S.tool==='season',
       seasonName:season.name, onSeasonName:(e)=>this.setSeasonField(S.squadId,'name',e.target.value),
