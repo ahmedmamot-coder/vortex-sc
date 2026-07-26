@@ -2954,15 +2954,26 @@ if ('serviceWorker' in navigator) {
                           <button onclick="{{ ec.onClick }}" style="flex:none;background:{{ ec.bg }};color:{{ ec.fg }};border:1px solid {{ ec.border }};border-radius:999px;padding:6px 12px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap">{{ ec.label }}</button>
                         </sc-for>
                       </div>
+                      <div style="display:flex;gap:8px">
+                        <button onclick="{{ onRankToggleAge }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:7px;background:{{ rankAgeBtnBg }};color:{{ rankAgeBtnFg }};border:none;border-radius:11px;padding:10px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer"><i data-lucide="cake" style="width:14px;height:14px"></i>{{ rankAgeBtnLabel }}</button>
+                        <button onclick="{{ onRankExport }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:7px;background:#0C7A4F;color:#fff;border:none;border-radius:11px;padding:10px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer"><i data-lucide="download" style="width:14px;height:14px"></i>Export sheet</button>
+                      </div>
                       <sc-if value="{{ rankEmpty }}" hint-placeholder-val="{{ false }}">
                         <div style="text-align:center;padding:36px 20px;color:#9AA2B4"><i data-lucide="list-ordered" style="width:30px;height:30px"></i><p style="font-size:12.5px;margin-top:10px;line-height:1.5">No swimmers have a PB in {{ rankEvent }} yet.<br>Pick another event above.</p></div>
                       </sc-if>
                       <sc-for list="{{ rankRows }}" as="r" hint-placeholder-count="8">
-                        <button onclick="{{ r.onClick }}" style="display:flex;align-items:center;gap:11px;background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:10px 12px;cursor:pointer;font-family:inherit;text-align:left;box-shadow:0 1px 4px rgba(11,20,40,.04)">
-                          <span style="width:30px;height:30px;flex:none;border-radius:9px;background:{{ r.medalBg }};color:{{ r.medalFg }};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12.5px">{{ r.rank }}</span>
-                          <span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:13.5px;color:#0C1116;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.name }}</span><span style="display:block;font-size:11px;color:#7A8296">{{ r.squadName }} · {{ r.gap }}</span></span>
-                          <span style="flex:none;font-family:var(--font-mono);font-weight:800;font-size:14px;color:#0C1116">{{ r.time }}</span>
-                        </button>
+                        <div>
+                          <sc-if value="{{ r.isHeader }}" hint-placeholder-val="{{ false }}">
+                            <p style="margin:8px 2px 2px;font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#067EEA">{{ r.label }}</p>
+                          </sc-if>
+                          <sc-if value="{{ r.isSwimmer }}" hint-placeholder-val="{{ true }}">
+                            <button onclick="{{ r.onClick }}" style="display:flex;align-items:center;gap:11px;width:100%;background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:10px 12px;cursor:pointer;font-family:inherit;text-align:left;box-shadow:0 1px 4px rgba(11,20,40,.04)">
+                              <span style="width:30px;height:30px;flex:none;border-radius:9px;background:{{ r.medalBg }};color:{{ r.medalFg }};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12.5px">{{ r.rank }}</span>
+                              <span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:13.5px;color:#0C1116;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.name }}</span><span style="display:block;font-size:11px;color:#7A8296">{{ r.squadName }} · {{ r.gap }}</span></span>
+                              <span style="flex:none;font-family:var(--font-mono);font-weight:800;font-size:14px;color:#0C1116">{{ r.time }}</span>
+                            </button>
+                          </sc-if>
+                        </div>
                       </sc-for>
                     </div>
                   </sc-if>
@@ -7350,11 +7361,22 @@ class Component extends DCLogic {
     const rankEntries = rankPool.map(sw=>{ const pb=(sw.pbs||[]).find(p=>p.event===rankEvent); return pb ? {sw, sec:pb.sec, time:pb.time||this.fmt(pb.sec)} : null; }).filter(Boolean).sort((a,b)=>a.sec-b.sec);
     const rankLeaderSec = rankEntries.length ? rankEntries[0].sec : 0;
     const rankAvgSec = rankEntries.length ? rankEntries.reduce((s,e)=>s+e.sec,0)/rankEntries.length : 0;
-    const rankRows = rankEntries.map((e,i)=>{ const medalBg = i===0?'#F6D879':(i===1?'#D7DCE3':(i===2?'#E7C08B':'#EEF2F7')); const medalFg = i<3?'#3A2E00':'#5B6472';
-      return { rank:i+1, id:e.sw.id, name:e.sw.name, squadName:e.sw.squadName, initials:e.sw.initials, time:e.time,
-        gap: i===0?'fastest':('+'+this.fmt(e.sec-rankLeaderSec)), medalBg, medalFg, fast: e.sec<=rankAvgSec,
-        onClick:()=>{ this.setState({tool:null, view:'squad', squadId:e.sw.squadId, tab:'group', swimmerId:e.sw.id}); this.openSwimmer(e.sw.id); } }; });
+    const _medal=(i)=>({ bg:i===0?'#F6D879':(i===1?'#D7DCE3':(i===2?'#E7C08B':'#EEF2F7')), fg:i<3?'#3A2E00':'#5B6472' });
+    const _rankRow=(e,i,leadSec,gapLabel)=>{ const m=_medal(i); return { isHeader:false, isSwimmer:true, rank:i+1, id:e.sw.id, name:e.sw.name, squadName:e.sw.squadName, initials:e.sw.initials, time:e.time,
+      gap: i===0?gapLabel:('+'+this.fmt(e.sec-leadSec)), medalBg:m.bg, medalFg:m.fg,
+      onClick:()=>{ this.setState({tool:null, view:'squad', squadId:e.sw.squadId, tab:'group', swimmerId:e.sw.id}); this.openSwimmer(e.sw.id); } }; };
+    const rankByAge = !!S.rankByAge;
+    let rankRows;
+    if(rankByAge){ const byAge={}; rankEntries.forEach(e=>{ const a=this._swAge?this._swAge(e.sw):(e.sw.age||0); (byAge[a]=byAge[a]||[]).push(e); });
+      rankRows=[]; Object.keys(byAge).map(Number).sort((a,b)=>a-b).forEach(a=>{ const list=byAge[a].slice().sort((x,y)=>x.sec-y.sec);
+        rankRows.push({isHeader:true, isSwimmer:false, id:'h'+a, label:'Age '+a+' · '+list.length});
+        list.forEach((e,i)=>rankRows.push(_rankRow(e,i,list[0].sec,'age best'))); });
+    } else { rankRows = rankEntries.map((e,i)=>_rankRow(e,i,rankLeaderSec,'fastest')); }
+    const rankSwimmerCount = rankEntries.length;
     const rankAvgLabel = rankEntries.length ? this.fmt(rankAvgSec) : '—';
+    const onRankExport=()=>{ const rows=[['Rank','Name','Squad','Age','Event',rankEvent+' PB']];
+      rankEntries.forEach((e,i)=>rows.push([String(i+1), e.sw.name, e.sw.squadName||'', this._swAge?this._swAge(e.sw):(e.sw.age||''), rankEvent, e.time]));
+      this.exportCsv('vortex-rankings-'+rankEvent.replace(/[^a-z0-9]+/gi,'-').toLowerCase()+'.csv', rows); };
     const rankEventChips = this.EVENT_CATALOG().map(ev=>({ label:ev, onClick:()=>this.setState({rankEvent:ev}),
       bg: ev===rankEvent?'#0A0F1A':'#F8FAFC', fg: ev===rankEvent?'#fff':'#7A8296', border: ev===rankEvent?'#0A0F1A':'#E5E9F0' }));
     const rankEmpty = rankRows.length===0;
@@ -8818,7 +8840,8 @@ class Component extends DCLogic {
       toolTalent:S.tool==='talent', talentRows, talentEmpty, talentScopeLabel:toolScope,
       toolRecovery:S.tool==='recovery', recoveryRows, recoveryEmpty, recoveryScopeLabel:toolScope, recoveryLowCount, recoveryHasLow:recoveryLowCount>0,
       toolImprovers:S.tool==='improvers', improverRows, improverEmpty, improverScopeLabel:toolScope,
-      toolRankings:S.tool==='rankings', rankRows, rankEmpty, rankScopeLabel:toolScope, rankEvent, rankEventChips, rankAvgLabel, rankCount:rankRows.length,
+      toolRankings:S.tool==='rankings', rankRows, rankEmpty, rankScopeLabel:toolScope, rankEvent, rankEventChips, rankAvgLabel, rankCount:rankSwimmerCount,
+      rankByAge:!!S.rankByAge, onRankToggleAge:()=>this.setState({rankByAge:!S.rankByAge}), rankAgeBtnLabel: S.rankByAge?'Grouped by age':'Overall', rankAgeBtnBg: S.rankByAge?'#0A0F1A':'#F4F6F8', rankAgeBtnFg: S.rankByAge?'#fff':'#3A4152', onRankExport,
       toolRelay:S.tool==='relay', relayGroups, relayHasGroups, relayScopeLabel:toolScope, ...relayPicker,
       toolSeason:S.tool==='season',
       seasonName:season.name, onSeasonName:(e)=>this.setSeasonField(S.squadId,'name',e.target.value),
