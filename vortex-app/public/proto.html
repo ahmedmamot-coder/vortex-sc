@@ -5089,14 +5089,29 @@ class Component extends DCLogic {
       this.setState({shareOpen:false, shareMsg:'PDF downloaded — attach it in any chat ✓'}); return;
     }catch(e){ this.setState({shareOpen:false, shareMsg:'Could not export the PDF on this device.'}); }
   }
-  // Loads a CDN script but NEVER hangs — rejects on error or after `ms`, so the caller
-  // can fall back instead of leaving the user staring at a dead button.
-  _loadScriptOnce(src, ms){ return new Promise((res,rej)=>{
-    let done=false; const finish=(fn,arg)=>{ if(done) return; done=true; clearTimeout(t); fn(arg); };
-    const s=document.createElement('script'); s.src=src;
-    s.onload=()=>finish(res); s.onerror=()=>finish(rej,new Error('Could not load '+src));
-    const t=setTimeout(()=>finish(rej,new Error('Timed out loading '+src)), ms||8000);
-    document.head.appendChild(s); }); }
+  // Loads a CDN script ONCE (the promise is cached, so repeat shares are instant) and
+  // NEVER hangs — rejects on error or after `ms` so the caller can fall back.
+  _loadScriptOnce(src, ms){
+    this._scriptP=this._scriptP||{};
+    if(this._scriptP[src]) return this._scriptP[src];
+    const p=new Promise((res,rej)=>{
+      let done=false; const finish=(fn,arg)=>{ if(done) return; done=true; clearTimeout(t); fn(arg); };
+      const s=document.createElement('script'); s.src=src; s.async=true;
+      s.onload=()=>finish(res); s.onerror=()=>finish(rej,new Error('Could not load '+src));
+      const t=setTimeout(()=>finish(rej,new Error('Timed out loading '+src)), ms||8000);
+      document.head.appendChild(s);
+    });
+    p.catch(()=>{ delete this._scriptP[src]; });   // let a failed load be retried later
+    this._scriptP[src]=p; return p;
+  }
+  // Start fetching the PDF renderer as soon as the share sheet opens, so the file is
+  // ready the moment a destination is tapped instead of downloading on demand.
+  _warmPdfLibs(){
+    try{
+      if(!window.html2canvas) this._loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js').catch(()=>{});
+      if(!(window.jspdf&&window.jspdf.jsPDF)) this._loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js').catch(()=>{});
+    }catch(e){}
+  }
   // Build the shared PDF by rasterising the very same sheet the print preview shows, then
   // fitting it onto ONE A4 page — so the shared file matches the preview exactly.
   async _buildPlanPdfExact(squadId){
@@ -5115,7 +5130,10 @@ class Component extends DCLogic {
     host.innerHTML=this._planSheetHTML(plan, sq, meta);
     document.body.appendChild(host);
     try{
-      const canvas=await window.html2canvas(host, {scale:2, backgroundColor:'#ffffff', useCORS:true, logging:false});
+      // ~150dpi across A4 is plenty for a training sheet and is much faster on a phone
+      // than a blind 2x raster (which on a long session is a huge canvas).
+      const scale=Math.min(2, Math.max(1.25, 1240/Math.max(1, host.scrollWidth)));
+      const canvas=await window.html2canvas(host, {scale, backgroundColor:'#ffffff', useCORS:true, logging:false, imageTimeout:4000});
       const jsPDF=window.jspdf.jsPDF; const pdf=new jsPDF({unit:'mm', format:'a4', orientation:'portrait'});
       const PW=210, PH=297, M=10; const availW=PW-2*M, availH=PH-2*M;
       let w=availW, h=canvas.height*w/canvas.width;
@@ -8764,7 +8782,7 @@ class Component extends DCLogic {
           onPlanCalNext:()=>{ let m=calM+1,y=calY; if(m>11){m=0;y++;} this.setState({planCalM:m,planCalY:y}); },
           planCalDaySel:!!daySel, planCalSelLabel:selLabel, onPlanCalClearDay:()=>this.setState({planCalDay:null}),
           planCalDaySessions:daySessions, planCalDayHasSessions:daySessions.length>0, planCalDayKm:daySelKm }; })(),
-      onShareWhatsapp:()=>this.setState({shareOpen:true, shareMsg:''}), onPrintPlan:()=>this.setState({printPreviewOpen:true}), onOpenPaceClock:()=>this.openTool('clock', false),
+      onShareWhatsapp:()=>{ this._warmPdfLibs(); this.setState({shareOpen:true, shareMsg:''}); }, onPrintPlan:()=>this.setState({printPreviewOpen:true}), onOpenPaceClock:()=>this.openTool('clock', false),
       onSubmitPlanReview:()=>this.submitPlanForReview(S.squadId, squad.name),
       onClosePrintPreview:()=>this.setState({printPreviewOpen:false}), onConfirmPrint:()=>{ this._printEscape(); setTimeout(()=>window.print(), 30); }, printPreviewOpen:S.printPreviewOpen,
       printSheet:{ accent:squad.accent, clubName:this.brandConfig.clubName||'Vortex Swimming Club', squadName:squad.name, printDate:new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}), zoneLabel:(zoneRows[zi]?zoneRows[zi].code+' \u00b7 '+zoneRows[zi].name:zName), title:sessionTitle||'Session', coach:squad.coach, total:planTotalN.toLocaleString(),
