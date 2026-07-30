@@ -1461,7 +1461,10 @@ if ('serviceWorker' in navigator) {
                             <button onclick="{{ onPlanSlotPM }}" style="padding:6px 12px;border:none;border-radius:8px;background:{{ planSlotPMBg }};color:{{ planSlotPMFg }};font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">PM</button>
                           </span>
                           <span style="display:flex;align-items:center;gap:5px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:6px 9px;flex:1;min-width:96px"><i data-lucide="clock" style="width:15px;height:15px;color:#7A8296"></i><input value="{{ planSessTime }}" oninput="{{ onPlanSessTime }}" type="time" style="border:none;outline:none;background:none;font-family:var(--font-mono);font-size:12.5px;font-weight:700;color:#0C1116;flex:1;min-width:0"></span>
+                          <span style="display:flex;align-items:center;gap:5px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:6px 9px" title="Average pace per 100m — used to time sets that have no send-off"><i data-lucide="gauge" style="width:15px;height:15px;color:#7A8296"></i><input value="{{ planPace100 }}" oninput="{{ onPlanPace100 }}" placeholder="2:00" style="width:46px;border:none;outline:none;background:none;font-family:var(--font-mono);font-size:12.5px;font-weight:700;color:#0C1116;text-align:center"><span style="font-size:10px;color:#9AA2B4;font-weight:700">/100m</span></span>
+                          <span style="display:flex;align-items:center;gap:5px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:6px 9px" title="Changeover time between sets — kit, instructions, turnaround"><i data-lucide="hourglass" style="width:15px;height:15px;color:#7A8296"></i><input value="{{ planSetGap }}" oninput="{{ onPlanSetGap }}" placeholder="0:00" style="width:44px;border:none;outline:none;background:none;font-family:var(--font-mono);font-size:12.5px;font-weight:700;color:#0C1116;text-align:center"><span style="font-size:10px;color:#9AA2B4;font-weight:700">gap</span></span>
                         </div>
+                        <div style="display:flex;align-items:center;gap:6px;margin-top:8px;background:#F3EEFF;border:1px solid #DBCBFB;border-radius:10px;padding:7px 9px"><i data-lucide="clock" style="width:14px;height:14px;color:#7C4DFF"></i><span style="font-size:11.5px;font-weight:700;color:#5B34C9">Finishes {{ planTimeWindow }}</span></div>
                         <input id="vx-pdf-input" type="file" accept="application/pdf" onchange="{{ onPdfFileChange }}" style="display:none">
                         <button onclick="{{ onImportPdfClick }}" style="margin-top:11px;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border:1.5px dashed var(--vx-blue);border-radius:11px;padding:10px;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px"><i data-lucide="file-up" style="width:16px;height:16px"></i> Import plan from PDF</button>
                         <sc-if value="{{ pdfImportMsg }}" hint-placeholder-val="{{ false }}"><p style="margin:8px 2px 0;font-size:11.5px;font-weight:600;color:{{ pdfImportMsgColor }}">{{ pdfImportMsg }}</p></sc-if>
@@ -3778,13 +3781,15 @@ if ('serviceWorker' in navigator) {
                       <div style="text-align:right"><div style="font-weight:700;font-size:14px;color:{{ printSheet.accent }}">{{ printSheet.squadName }}</div><div style="font-size:11px;color:#7A8296">{{ printSheet.printDate }}</div></div>
                     </div>
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-                      <div><div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#9AA2B4;font-weight:700">Session · {{ printSheet.zoneLabel }}</div><div style="font-size:20px;font-weight:700;color:#0C1116;margin-top:2px">{{ printSheet.title }}</div><div style="font-size:12px;color:#7A8296;margin-top:2px">{{ printSheet.coach }}</div></div>
+                      <div><div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#9AA2B4;font-weight:700">Session · {{ printSheet.zoneLabel }}</div><div style="font-size:20px;font-weight:700;color:#0C1116;margin-top:2px">{{ printSheet.title }}</div><div style="font-size:12px;color:#7A8296;margin-top:2px">{{ printSheet.coach }}</div><div style="font-family:monospace;font-size:12px;font-weight:700;color:{{ printSheet.accent }};margin-top:3px">{{ printSheet.timeWindow }}</div></div>
                       <div style="text-align:right"><div style="font-size:26px;font-weight:700;color:{{ printSheet.accent }};font-family:monospace">{{ printSheet.total }}</div><div style="font-size:11px;color:#9AA2B4;text-transform:uppercase;letter-spacing:.06em">metres</div></div>
                     </div>
                     <sc-for list="{{ printSheet.sections }}" as="pvsec" hint-placeholder-count="4">
                       <div style="margin-bottom:14px">
-                        <div style="display:flex;align-items:center;gap:7px;margin-bottom:7px"><span style="width:9px;height:9px;border-radius:50%;background:{{ pvsec.dot }}"></span><span style="font-weight:700;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#0C1116">{{ pvsec.title }}</span><sc-if value="{{ pvsec.isRounds }}" hint-placeholder-val="{{ false }}"><span style="font-family:monospace;font-weight:800;font-size:12px;color:#fff;background:#7C4DFF;border-radius:6px;padding:1px 6px">{{ pvsec.roundsLabel }}</span></sc-if><span style="font-size:12px;color:#9AA2B4">· {{ pvsec.subtotal }}m</span></div>
-                        <table style="width:100%;border-collapse:collapse">
+                        <div style="display:flex;align-items:center;gap:7px;margin-bottom:7px"><span style="width:9px;height:9px;border-radius:50%;background:{{ pvsec.dot }}"></span><span style="font-weight:700;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#0C1116">{{ pvsec.title }}</span><span style="font-size:12px;color:#9AA2B4">· {{ pvsec.subtotal }}m</span><span style="margin-left:auto;font-family:monospace;font-size:11px;font-weight:700;color:#7A8296">{{ pvsec.startLabel }}</span></div>
+                        <div style="display:flex;align-items:stretch;gap:7px">
+                        <sc-if value="{{ pvsec.isRounds }}" hint-placeholder-val="{{ false }}"><div style="flex:none;width:26px;display:flex;align-items:center;justify-content:center;border:2.5px solid #7C4DFF;border-right:none;border-radius:7px 0 0 7px"><span style="font-family:monospace;font-weight:800;font-size:12px;color:#7C4DFF">{{ pvsec.roundsLabel }}</span></div></sc-if>
+                        <table style="flex:1;width:100%;border-collapse:collapse">
                           <sc-for list="{{ pvsec.sets }}" as="pvset" hint-placeholder-count="3">
                             <tr style="border-bottom:2px solid #C9B8F5">
                               <td style="padding:7px 8px 7px 0;font-family:monospace;font-weight:700;color:{{ printSheet.accent }};width:56px;vertical-align:top">{{ pvset.dist }}m<sc-if value="{{ pvset.hasDistSend }}" hint-placeholder-val="{{ false }}"><br><span style="font-size:9.5px;color:#2733D6;font-weight:700">{{ pvset.distSend }}</span></sc-if><sc-if value="{{ pvset.zoneCode }}" hint-placeholder-val="{{ false }}"><br><span style="font-size:9px;color:#9AA2B4;font-weight:700">{{ pvset.zoneCode }}</span></sc-if></td>
@@ -3801,10 +3806,11 @@ if ('serviceWorker' in navigator) {
                                 <sc-if value="{{ pvset.hasRest }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#9A6206;font-weight:700;margin-top:2px">Rest: {{ pvset.restStr }}</div></sc-if>
                                 <sc-if value="{{ pvset.hasHr }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#C81E4B;font-weight:700;margin-top:2px">{{ pvset.hrStr }}</div></sc-if>
                               </td>
-                              <td style="padding:7px 0 7px 8px;font-family:monospace;font-weight:700;color:#0C1116;text-align:right;width:64px;white-space:nowrap;vertical-align:top">{{ pvset.setMetres }}m</td>
+                              <td style="padding:7px 0 7px 8px;text-align:right;width:74px;white-space:nowrap;vertical-align:top"><span style="display:block;font-family:monospace;font-weight:700;font-size:11px;color:#7A8296">{{ pvset.timeLabel }}</span><span style="display:block;font-family:monospace;font-weight:700;color:#0C1116">{{ pvset.setMetres }}m</span></td>
                             </tr>
                           </sc-for>
                         </table>
+                        </div>
                       </div>
                     </sc-for>
                     </sc-if>
@@ -4196,13 +4202,15 @@ if ('serviceWorker' in navigator) {
       <div style="text-align:right"><div style="font-weight:700;font-size:14px;color:{{ printSheet.accent }}">{{ printSheet.squadName }}</div><div style="font-size:11px;color:#7A8296">{{ printSheet.printDate }}</div></div>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-      <div><div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#9AA2B4;font-weight:700">Session · {{ printSheet.zoneLabel }}</div><div style="font-size:20px;font-weight:700;color:#0C1116;margin-top:2px">{{ printSheet.title }}</div><div style="font-size:12px;color:#7A8296;margin-top:2px">{{ printSheet.coach }}</div></div>
+      <div><div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#9AA2B4;font-weight:700">Session · {{ printSheet.zoneLabel }}</div><div style="font-size:20px;font-weight:700;color:#0C1116;margin-top:2px">{{ printSheet.title }}</div><div style="font-size:12px;color:#7A8296;margin-top:2px">{{ printSheet.coach }}</div><div style="font-family:monospace;font-size:12px;font-weight:700;color:{{ printSheet.accent }};margin-top:3px">{{ printSheet.timeWindow }}</div></div>
       <div style="text-align:right"><div style="font-size:26px;font-weight:700;color:{{ printSheet.accent }};font-family:monospace">{{ printSheet.total }}</div><div style="font-size:11px;color:#9AA2B4;text-transform:uppercase;letter-spacing:.06em">metres</div></div>
     </div>
     <sc-for list="{{ printSheet.sections }}" as="psec" hint-placeholder-count="4">
       <div style="margin-bottom:14px;break-inside:avoid">
-        <div style="display:flex;align-items:center;gap:7px;margin-bottom:7px"><span style="width:9px;height:9px;border-radius:50%;background:{{ psec.dot }}"></span><span style="font-weight:700;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#0C1116">{{ psec.title }}</span><sc-if value="{{ psec.isRounds }}" hint-placeholder-val="{{ false }}"><span style="font-family:monospace;font-weight:800;font-size:12px;color:#fff;background:#7C4DFF;border-radius:6px;padding:1px 6px">{{ psec.roundsLabel }}</span></sc-if><span style="font-size:12px;color:#9AA2B4">· {{ psec.subtotal }}m</span></div>
-        <table style="width:100%;border-collapse:collapse">
+        <div style="display:flex;align-items:center;gap:7px;margin-bottom:7px"><span style="width:9px;height:9px;border-radius:50%;background:{{ psec.dot }}"></span><span style="font-weight:700;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#0C1116">{{ psec.title }}</span><span style="font-size:12px;color:#9AA2B4">· {{ psec.subtotal }}m</span><span style="margin-left:auto;font-family:monospace;font-size:11px;font-weight:700;color:#7A8296">{{ psec.startLabel }}</span></div>
+        <div style="display:flex;align-items:stretch;gap:7px">
+        <sc-if value="{{ psec.isRounds }}" hint-placeholder-val="{{ false }}"><div style="flex:none;width:26px;display:flex;align-items:center;justify-content:center;border:2.5px solid #7C4DFF;border-right:none;border-radius:7px 0 0 7px"><span style="font-family:monospace;font-weight:800;font-size:12px;color:#7C4DFF">{{ psec.roundsLabel }}</span></div></sc-if>
+        <table style="flex:1;width:100%;border-collapse:collapse">
           <sc-for list="{{ psec.sets }}" as="pset" hint-placeholder-count="3">
             <tr style="border-bottom:2px solid #C9B8F5">
               <td style="padding:7px 8px 7px 0;font-family:monospace;font-weight:700;color:{{ printSheet.accent }};width:56px;vertical-align:top">{{ pset.dist }}m<sc-if value="{{ pset.hasDistSend }}" hint-placeholder-val="{{ false }}"><br><span style="font-size:9.5px;color:#2733D6;font-weight:700">{{ pset.distSend }}</span></sc-if><sc-if value="{{ pset.zoneCode }}" hint-placeholder-val="{{ false }}"><br><span style="font-size:9px;color:#9AA2B4;font-weight:700">{{ pset.zoneCode }}</span></sc-if></td>
@@ -4219,10 +4227,11 @@ if ('serviceWorker' in navigator) {
                 <sc-if value="{{ pset.hasRest }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#9A6206;font-weight:700;margin-top:2px">Rest: {{ pset.restStr }}</div></sc-if>
                 <sc-if value="{{ pset.hasHr }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#C81E4B;font-weight:700;margin-top:2px">{{ pset.hrStr }}</div></sc-if>
               </td>
-              <td style="padding:7px 0 7px 8px;font-family:monospace;font-weight:700;color:#0C1116;text-align:right;width:64px;white-space:nowrap;vertical-align:top">{{ pset.setMetres }}m</td>
+              <td style="padding:7px 0 7px 8px;text-align:right;width:74px;white-space:nowrap;vertical-align:top"><span style="display:block;font-family:monospace;font-weight:700;font-size:11px;color:#7A8296">{{ pset.timeLabel }}</span><span style="display:block;font-family:monospace;font-weight:700;color:#0C1116">{{ pset.setMetres }}m</span></td>
             </tr>
           </sc-for>
         </table>
+        </div>
       </div>
     </sc-for>
     </sc-if>
@@ -5107,14 +5116,17 @@ class Component extends DCLogic {
     const meta2=[]; meta2.push(plan.poolName||'Hamad Aquatic Center'); meta2.push(courseMap[plan.course||'SCM']);
     if(Number(plan.rpe)>0) meta2.push('Intensity RPE '+Number(plan.rpe));
     text(ML, y, meta2.join('  -  '), 'n', 10, grey); nl(20);
-    (plan.sections||[]).forEach(sec=>{
+    const clk=this._planClock(plan, this.state.planSessTime);
+    text(ML, y, 'Session '+this._fmtClockAmPm(clk.startSec)+' - '+this._fmtClockAmPm(clk.endSec)+'  ('+this._fmtDur(clk.endSec-clk.startSec)+')', 'b', 10, accent); nl(18);
+    (plan.sections||[]).forEach((sec,si)=>{
       const secRounds=Math.max(1,Number(sec.rounds)||1);
+      const secClk=clk.sections[si]||{times:[], startSec:clk.startSec};
       let sub=0; (sec.sets||[]).forEach(s=>sub+=(Number(s.dist)||0)*(Number(s.reps)||1)*(Number(s.circuit)||1)); sub*=secRounds;
       if(y<BOT+46){ pages.push(ops); ops=[]; y=TOP; }
-      text(ML, y, (sec.title||'Section').toUpperCase()+(secRounds>1?('   x'+secRounds+' ROUNDS'):''), 'b', 11, accent);
+      text(ML, y, (sec.title||'Section').toUpperCase()+(secRounds>1?('   '+secRounds+'x ROUNDS'):''), 'b', 11, accent);
       text(RIGHT-64, y, sub.toLocaleString()+'m', 'b', 10, grey); nl(7);
       rect(ML, y+2, RIGHT-ML, 1.2, accent); nl(12);
-      (sec.sets||[]).forEach(s=>{
+      (sec.sets||[]).forEach((s,sxi)=>{
         const reps=Number(s.reps)||1, dist=Number(s.dist)||0, rounds=Number(s.circuit)||1;
         const distLabel=(rounds>1?(rounds+'x('+(reps>1?(reps+'x'+dist):dist)+')'):(reps>1?(reps+'x'+dist):(''+dist)))+'m'+(s.sendoff?(' @ '+s.sendoff):'');
         const tot=reps*dist*rounds;
@@ -5122,7 +5134,8 @@ class Component extends DCLogic {
         const descX=ML+80, descW=RIGHT-66-descX; const descLines=this._pdfWrap(s.txt||'', descW, 10.5);
         text(ML, y, distLabel, 'b', 10.5, accent);
         text(descX, y, descLines.length?descLines[0]:'', 'n', 10.5, dark);
-        text(RIGHT-62, y, tot.toLocaleString()+'m', 'n', 10, grey); nl(14);
+        text(RIGHT-62, y, this._fmtClockAmPm(secClk.times[sxi]!=null?secClk.times[sxi]:secClk.startSec), 'b', 8.5, grey); nl(11);
+        text(RIGHT-62, y, tot.toLocaleString()+'m', 'n', 10, grey); nl(3);
         for(let i=1;i<descLines.length;i++){ text(descX, y, descLines[i], 'n', 10.5, dark); nl(13); }
         if(tags.length){ text(descX, y, tags.join('   -   '), 'n', 8.5, grey); nl(13); }
         nl(3);
@@ -6678,6 +6691,35 @@ class Component extends DCLogic {
   stepSetField(id, secId, setId, field, delta, min, step){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); const s=sec&&(sec.sets||[]).find(x=>x.id===setId); if(!s)return; const cur=Number(s[field])|| (field==='reps'?1:0); s[field]=Math.max(min, cur+delta*step); }); }
   stepSetCircuit(id, secId, setId, delta){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); const s=sec&&(sec.sets||[]).find(x=>x.id===setId); if(!s)return; const cur=Number(s.circuit)||1; s.circuit=Math.max(1, cur+delta); }); }
   stepSectionRounds(id, secId, delta){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); if(!sec)return; const cur=Number(sec.rounds)||1; sec.rounds=Math.max(1, Math.min(9, cur+delta)); }); }
+  // ---- Session clock: work out the exact time every set starts / the session ends ----
+  // A set's duration is exact when it has a send-off (the interval already covers swim + rest).
+  // Without one we estimate: swim time at the squad's pace per 100m, plus the set's rest.
+  _planStartSec(plan, timeStr){ const t=String(timeStr||(plan&&plan._time)||'').trim();
+    const m=t.match(/^(\d{1,2}):(\d{2})/); if(m){ const h=parseInt(m[1],10)||0, mi=parseInt(m[2],10)||0; if(h<24&&mi<60) return h*3600+mi*60; }
+    return 18*3600; }
+  _planPace100(plan){ const p=this._restToSec(plan&&plan.pace100); return p>0?p:120; }
+  _setDurSec(s, pace100){
+    const reps=Math.max(1,Number(s.reps)||1), dist=Math.max(0,Number(s.dist)||0), rounds=Math.max(1,Number(s.circuit)||1);
+    const send=this._restToSec(s.sendoff);
+    const per = send>0 ? send : (Math.round(dist/100*(pace100||120))+this._restToSec(s.rest));
+    return per*reps*rounds; }
+  _fmtClockAmPm(sec){ sec=Math.round(sec)%86400; if(sec<0) sec+=86400;
+    const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60); const ap=h>=12?'PM':'AM'; let hh=h%12; if(hh===0) hh=12;
+    return hh+':'+String(m).padStart(2,'0')+' '+ap; }
+  _fmtDur(sec){ const mins=Math.max(0,Math.round(sec/60)); const h=Math.floor(mins/60), m=mins%60; return h? (h+'h '+m+'m') : (m+'m'); }
+  // Walk a whole plan and return the clock time each set starts, plus the session end.
+  // "gap" is the changeover time between sets (kit, instructions) — set per plan.
+  _planClock(plan, timeStr){
+    const pace100=this._planPace100(plan); const start=this._planStartSec(plan, timeStr);
+    const gap=this._restToSec(plan&&plan.setGap);
+    let clock=start; const secs=[]; let first=true;
+    (plan&&plan.sections||[]).forEach(sec=>{
+      const rounds=Math.max(1,Number(sec.rounds)||1); const times=[]; let c=clock;
+      (sec.sets||[]).forEach(s=>{ if(!first) c+=gap; first=false; times.push(c); c+=this._setDurSec(s, pace100); });
+      const oneRound=c-clock; clock=clock+oneRound*rounds;
+      secs.push({startSec:(times.length?times[0]:c), endSec:clock, times});
+    });
+    return {startSec:start, endSec:clock, sections:secs}; }
   // ---- Ladder / Pyramid generator ----
   _paceToSec(p){ p=String(p==null?'':p).trim(); var mm=p.match(/(\d+)\s*:\s*(\d+)/); if(mm){ return (parseInt(mm[1],10)||0)*60+(parseInt(mm[2],10)||0); } var only=p.match(/(\d+)/); return only?(parseInt(only[1],10)||0):0; }
   _secToClock(sec){ sec=Math.max(0,Math.round(sec)); var m=Math.floor(sec/60), s=sec%60; return m+':'+String(s).padStart(2,'0'); }
@@ -6790,24 +6832,29 @@ class Component extends DCLogic {
   _planSheetHTML(plan, sq, meta){
     const accent=sq.accent||'#067EEA'; const esc=(x)=>this._esc(x==null?'':String(x));
     const secs=plan.sections||[];
+    const clk=this._planClock(plan, (meta&&meta.startTime)||'');
+    const timeWindow=this._fmtClockAmPm(clk.startSec)+' – '+this._fmtClockAmPm(clk.endSec)+' · '+this._fmtDur(clk.endSec-clk.startSec);
     let h='';
     h+='<div style="display:flex;align-items:center;gap:12px;border-bottom:3px solid '+accent+';padding-bottom:14px;margin-bottom:18px">'
       +'<img src="assets/b798adf9.png" alt="Vortex SC" style="width:44px;height:44px">'
       +'<div style="flex:1"><div style="font-family:\'Funnel Display\',sans-serif;font-weight:700;font-size:22px;color:#0C1116;letter-spacing:-.02em">'+esc(meta.clubName)+'</div><div style="font-size:12px;color:#7A8296;font-weight:600;letter-spacing:.04em;text-transform:uppercase">Session plan</div></div>'
       +'<div style="text-align:right"><div style="font-weight:700;font-size:14px;color:'+accent+'">'+esc(meta.squadName)+'</div><div style="font-size:11px;color:#7A8296">'+esc(meta.printDate)+'</div></div></div>';
     h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">'
-      +'<div><div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#9AA2B4;font-weight:700">Session'+(meta.zoneLabel?(' · '+esc(meta.zoneLabel)):'')+'</div><div style="font-size:20px;font-weight:700;color:#0C1116;margin-top:2px">'+esc(meta.title)+'</div>'+(meta.coach?('<div style="font-size:12px;color:#7A8296;margin-top:2px">'+esc(meta.coach)+'</div>'):'')+'</div>'
+      +'<div><div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#9AA2B4;font-weight:700">Session'+(meta.zoneLabel?(' · '+esc(meta.zoneLabel)):'')+'</div><div style="font-size:20px;font-weight:700;color:#0C1116;margin-top:2px">'+esc(meta.title)+'</div>'+(meta.coach?('<div style="font-size:12px;color:#7A8296;margin-top:2px">'+esc(meta.coach)+'</div>'):'')+'<div style="font-family:monospace;font-size:12px;font-weight:700;color:'+accent+';margin-top:3px">'+esc(timeWindow)+'</div></div>'
       +'<div style="text-align:right"><div style="font-size:26px;font-weight:700;color:'+accent+';font-family:monospace">'+this.planMetres(plan).toLocaleString()+'</div><div style="font-size:11px;color:#9AA2B4;text-transform:uppercase;letter-spacing:.06em">metres</div></div></div>';
     secs.forEach((sec,si)=>{
       const secRounds=Math.max(1,Number(sec.rounds)||1);
       let sub=0; (sec.sets||[]).forEach(s=>sub+=(Number(s.dist)||0)*(Number(s.reps)||1)*(Number(s.circuit)||1)); sub*=secRounds;
       const dot = si===0?'#22C1DA' : si===(secs.length-1)?'#9AA2B4' : accent;
+      const secClk=clk.sections[si]||{times:[], startSec:clk.startSec};
       h+='<div style="margin-bottom:14px;break-inside:avoid">';
       h+='<div style="display:flex;align-items:center;gap:7px;margin-bottom:7px"><span style="width:9px;height:9px;border-radius:50%;background:'+dot+'"></span><span style="font-weight:700;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#0C1116">'+esc(sec.title||'Section')+'</span>'
-        +(secRounds>1?('<span style="font-family:monospace;font-weight:800;font-size:12px;color:#fff;background:#7C4DFF;border-radius:6px;padding:1px 6px">×'+secRounds+'</span>'):'')
-        +'<span style="font-size:12px;color:#9AA2B4">· '+sub.toLocaleString()+'m</span></div>';
-      h+='<table style="width:100%;border-collapse:collapse">';
-      (sec.sets||[]).forEach(s=>{
+        +'<span style="font-size:12px;color:#9AA2B4">· '+sub.toLocaleString()+'m</span>'
+        +'<span style="margin-left:auto;font-family:monospace;font-size:11px;font-weight:700;color:#7A8296">'+esc(this._fmtClockAmPm(secClk.startSec))+'</span></div>';
+      h+='<div style="display:flex;align-items:stretch;gap:7px">';
+      if(secRounds>1) h+='<div style="flex:none;width:26px;display:flex;align-items:center;justify-content:center;border:2.5px solid #7C4DFF;border-right:none;border-radius:7px 0 0 7px"><span style="font-family:monospace;font-weight:800;font-size:12px;color:#7C4DFF">'+secRounds+'×</span></div>';
+      h+='<table style="flex:1;width:100%;border-collapse:collapse">';
+      (sec.sets||[]).forEach((s,sxi)=>{
         const reps=Number(s.reps)||1, dist=Number(s.dist)||0, rounds=Number(s.circuit)||1;
         const distLabel=(rounds>1?(rounds+'×('+(reps>1?(reps+'×'+dist):dist)+')'):(reps>1?(reps+'×'+dist):(''+dist)));
         const setMetres=reps*dist*rounds;
@@ -6828,9 +6875,11 @@ class Component extends DCLogic {
         h+='<tr style="border-bottom:2px solid #C9B8F5">'
           +'<td style="padding:7px 8px 7px 0;font-family:monospace;font-weight:700;color:'+accent+';width:56px;vertical-align:top">'+esc(distLabel)+'m'+leftSend+leftZone+'</td>'
           +'<td style="padding:7px 0;color:#3A4152;font-size:13px;vertical-align:top">'+esc(s.txt||'')+d+'</td>'
-          +'<td style="padding:7px 0 7px 8px;font-family:monospace;font-weight:700;color:#0C1116;text-align:right;width:64px;white-space:nowrap;vertical-align:top">'+setMetres.toLocaleString()+'m</td></tr>';
+          +'<td style="padding:7px 0 7px 8px;text-align:right;width:74px;white-space:nowrap;vertical-align:top">'
+            +'<span style="display:block;font-family:monospace;font-weight:700;font-size:11px;color:#7A8296">'+esc(this._fmtClockAmPm(secClk.times[sxi]!=null?secClk.times[sxi]:secClk.startSec))+'</span>'
+            +'<span style="display:block;font-family:monospace;font-weight:700;color:#0C1116">'+setMetres.toLocaleString()+'m</span></td></tr>';
       });
-      h+='</table></div>';
+      h+='</table></div></div>';
     });
     h+='<div style="margin-top:22px;padding-top:12px;border-top:1px solid #EEF1F5;display:flex;align-items:center;justify-content:space-between">'
       +'<span style="font-size:10.5px;color:#9AA2B4">Generated from the Vortex SC coaching app</span>'
@@ -6863,7 +6912,7 @@ class Component extends DCLogic {
     const rec=(this.savedPlans[squadId]||[]).find(r=>r.id===id); if(!rec) return;
     const sq=this.squadById[squadId]||{name:'',accent:'#067EEA'}; const plan=rec.plan||{};
     const dl=new Date(rec.date+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
-    const meta={ clubName:(this.brandConfig&&this.brandConfig.clubName)||'Vortex Swimming Club', squadName:sq.name, printDate:dl, title:rec.title||plan.title||'Session', zoneLabel:rec.zone||plan.zone||'', coach:sq.coach||'' };
+    const meta={ clubName:(this.brandConfig&&this.brandConfig.clubName)||'Vortex Swimming Club', squadName:sq.name, printDate:dl, title:rec.title||plan.title||'Session', zoneLabel:rec.zone||plan.zone||'', coach:sq.coach||'', startTime:rec.time||plan._time||'' };
     this._openPlanSheet((rec.title||'Session')+' — '+sq.name, this._planSheetHTML(plan, sq, meta));
   }
   async handlePdfImport(e, squadId){
@@ -7346,17 +7395,21 @@ class Component extends DCLogic {
     // ---- plans (editable, persisted per squad) ----
     const plan=this.getPlan(S.squadId);
     let planTotalN=0;
+    const planClock=this._planClock(plan, S.planSessTime);
     const planSections=(plan.sections||[]).map((sm,smi)=>{
       const sets=sm.sets||[];
       const secRounds=Math.max(1, Number(sm.rounds)||1);
+      const secClock=planClock.sections[smi]||{times:[], startSec:planClock.startSec, endSec:planClock.startSec};
       let sub=0; sets.forEach(s=>sub+=(Number(s.dist)||0)*(Number(s.reps)||1)*(Number(s.circuit)||1)); sub*=secRounds; planTotalN+=sub;
       const dot = smi===0?'#22C1DA' : smi===(plan.sections.length-1)?'#9AA2B4' : squad.accent;
-      return { id:sm.id, title:sm.title, dot, subtotal:sub, rounds:secRounds, isRounds:secRounds>1, roundsLabel:'×'+secRounds,
+      return { id:sm.id, title:sm.title, dot, subtotal:sub, rounds:secRounds, isRounds:secRounds>1, roundsLabel:secRounds+'×',
+        startLabel:this._fmtClockAmPm(secClock.startSec), endLabel:this._fmtClockAmPm(secClock.endSec),
         onRoundsDec:()=>this.stepSectionRounds(S.squadId, sm.id, -1), onRoundsInc:()=>this.stepSectionRounds(S.squadId, sm.id, 1),
         onTitle:(e)=>this.renameSection(S.squadId, sm.id, e.target.value),
         onRemoveSection:()=>this.removeSection(S.squadId, sm.id),
-        sets:sets.map(s=>{ const reps=Number(s.reps)||1; const dist=Number(s.dist)||0; return {
+        sets:sets.map((s,sxi)=>{ const reps=Number(s.reps)||1; const dist=Number(s.dist)||0; return {
           id:s.id, dist:dist, reps:reps, txt:s.txt, rest:s.rest||'', hr:s.hr||'', zone:(s.zone||''), circuit:(Number(s.circuit)||1), isCircuit:(Number(s.circuit)||1)>1, setMetres:(reps*dist*(Number(s.circuit)||1)),
+          timeLabel:this._fmtClockAmPm(secClock.times[sxi]!=null?secClock.times[sxi]:secClock.startSec),
           onCircuitDec:()=>this.stepSetCircuit(S.squadId,sm.id,s.id,-1), onCircuitInc:()=>this.stepSetCircuit(S.squadId,sm.id,s.id,1),
           onOpenSwimmers:()=>this.openSwimmerPicker(sm.id,s.id), hasSetSwimmers:(s.swimmers||[]).length>0,
           setSwimmers:(s.swimmers||[]).map(sw=>({name:(sw.name||'').split(' ')[0]||sw.initials, initials:sw.initials, onRemove:()=>this.toggleSetSwimmer(sm.id,s.id,sw)})),
@@ -8597,6 +8650,9 @@ class Component extends DCLogic {
       planSlotPMBg:S.planSessSlot==='PM'?'#6D28D9':'#fff', planSlotPMFg:S.planSessSlot==='PM'?'#fff':'#3A4152',
       onPlanSlotAM:()=>this.setState({planSessSlot:'AM'}), onPlanSlotPM:()=>this.setState({planSessSlot:'PM'}),
       planSessTime:S.planSessTime, onPlanSessTime:(e)=>this.setState({planSessTime:e.target.value}),
+      planPace100:plan.pace100||'', onPlanPace100:(e)=>this.setPlanMeta(S.squadId,'pace100',e.target.value),
+      planSetGap:plan.setGap||'', onPlanSetGap:(e)=>this.setPlanMeta(S.squadId,'setGap',e.target.value),
+      planTimeWindow:this._fmtClockAmPm(planClock.startSec)+' – '+this._fmtClockAmPm(planClock.endSec)+' · '+this._fmtDur(planClock.endSec-planClock.startSec),
       ...(()=>{ const sp=(this.savedPlans[S.squadId]||[]); const iso=(d)=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
         const now=new Date(); const weekIso=iso(new Date(now.getTime()-6*86400000)); const yIso=now.getFullYear()+'-01-01';
         let weekM=0,seasonM=0,weekN=0,seasonN=0; sp.forEach(r=>{ if(r.date>=yIso){seasonM+=r.totalM;seasonN++;} if(r.date>=weekIso){weekM+=r.totalM;weekN++;} });
@@ -8629,7 +8685,8 @@ class Component extends DCLogic {
       onSubmitPlanReview:()=>this.submitPlanForReview(S.squadId, squad.name),
       onClosePrintPreview:()=>this.setState({printPreviewOpen:false}), onConfirmPrint:()=>{ this._printEscape(); setTimeout(()=>window.print(), 30); }, printPreviewOpen:S.printPreviewOpen,
       printSheet:{ accent:squad.accent, clubName:this.brandConfig.clubName||'Vortex Swimming Club', squadName:squad.name, printDate:new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}), zoneLabel:(zoneRows[zi]?zoneRows[zi].code+' \u00b7 '+zoneRows[zi].name:zName), title:sessionTitle||'Session', coach:squad.coach, total:planTotalN.toLocaleString(),
-        sections: planSections.map(ps=>({ title:ps.title, dot:ps.dot, subtotal:ps.subtotal, isRounds:ps.isRounds, roundsLabel:ps.roundsLabel, sets: ps.sets.map(st=>{ const onEquip=(st.equip||[]).filter(e=>e.on).map(e=>e.label); const onTypes=(st.types||[]).filter(e=>e.on).map(e=>e.label); const onStrokes=(st.strokes||[]).filter(e=>e.on).map(e=>e.label); const onLabels=(st.labels||[]).filter(e=>e.on).map(e=>e.label); const setSw=(st.setSwimmers||[]).map(e=>e.name); const onGroups=(st.setGroups||[]).filter(e=>e.on).map(e=>e.label); const rounds=Number(st.circuit)||1; return {dist:(rounds>1?(rounds+'×('+(st.reps>1?(st.reps+'×'+st.dist):st.dist)+')'):(st.reps>1?(st.reps+'×'+st.dist):st.dist)), hasDistSend:!!st.sendoffVal, distSend:('@ '+(st.sendoffVal||'')), setMetres:(Number(st.setMetres)||0).toLocaleString(), txt:st.txt, hasStrokes:onStrokes.length>0, strokesStr:onStrokes.join('/'), hasTypes:onTypes.length>0, typesStr:onTypes.join(', '), hasLabels:onLabels.length>0, labelsStr:onLabels.join(', '), hasGroups:onGroups.length>0, groupsStr:onGroups.join(', '), hasSwimmers:setSw.length>0, swimmersStr:setSw.join(', '), hasEquip:onEquip.length>0, equipStr:onEquip.join(', '), hasSendoff:!!st.sendoffVal, sendoffStr:st.sendoffVal||'', hasRest:!!st.rest, restStr:st.rest||'', hasHr:!!(st.hrFromVal||st.hrToVal), hrStr:(st.hrFromVal||st.hrToVal)?('HR '+(st.hrFromVal||'?')+(st.hrToVal?('-'+st.hrToVal):'')):'', zoneCode:st.zone||'', hasZone:!!st.zone, zoneStr:st.zone||''}; }) })) },
+        timeWindow:this._fmtClockAmPm(planClock.startSec)+' \u2013 '+this._fmtClockAmPm(planClock.endSec)+' \u00b7 '+this._fmtDur(planClock.endSec-planClock.startSec),
+        sections: planSections.map(ps=>({ title:ps.title, dot:ps.dot, subtotal:ps.subtotal, isRounds:ps.isRounds, roundsLabel:ps.roundsLabel, sets: ps.sets.map(st=>{ const onEquip=(st.equip||[]).filter(e=>e.on).map(e=>e.label); const onTypes=(st.types||[]).filter(e=>e.on).map(e=>e.label); const onStrokes=(st.strokes||[]).filter(e=>e.on).map(e=>e.label); const onLabels=(st.labels||[]).filter(e=>e.on).map(e=>e.label); const setSw=(st.setSwimmers||[]).map(e=>e.name); const onGroups=(st.setGroups||[]).filter(e=>e.on).map(e=>e.label); const rounds=Number(st.circuit)||1; return {dist:(rounds>1?(rounds+'×('+(st.reps>1?(st.reps+'×'+st.dist):st.dist)+')'):(st.reps>1?(st.reps+'×'+st.dist):st.dist)), hasDistSend:!!st.sendoffVal, distSend:('@ '+(st.sendoffVal||'')), timeLabel:st.timeLabel, setMetres:(Number(st.setMetres)||0).toLocaleString(), txt:st.txt, hasStrokes:onStrokes.length>0, strokesStr:onStrokes.join('/'), hasTypes:onTypes.length>0, typesStr:onTypes.join(', '), hasLabels:onLabels.length>0, labelsStr:onLabels.join(', '), hasGroups:onGroups.length>0, groupsStr:onGroups.join(', '), hasSwimmers:setSw.length>0, swimmersStr:setSw.join(', '), hasEquip:onEquip.length>0, equipStr:onEquip.join(', '), hasSendoff:!!st.sendoffVal, sendoffStr:st.sendoffVal||'', hasRest:!!st.rest, restStr:st.rest||'', hasHr:!!(st.hrFromVal||st.hrToVal), hrStr:(st.hrFromVal||st.hrToVal)?('HR '+(st.hrFromVal||'?')+(st.hrToVal?('-'+st.hrToVal):'')):'', zoneCode:st.zone||'', hasZone:!!st.zone, zoneStr:st.zone||''}; }) })) },
       onImportPdfClick:()=>{ const el=document.getElementById('vx-pdf-input'); if(el) el.click(); },
       pdfImportBusy:S.pdfImportBusy, pdfImportMsg:S.pdfImportMsg, pdfImportMsgColor: S.pdfImportOk?'#0C7A4F':'#B42318',
       onPdfFileChange:(e)=>this.handlePdfImport(e, S.squadId),
