@@ -5054,16 +5054,11 @@ class Component extends DCLogic {
   // ---- Share the current plan as a real PDF file (native share sheet / download) ----
   async sharePlan(squadId, target){ const sq=this.squadById[squadId]||{name:'Squad'}; const plan=this.getPlan(squadId);
     const fname=(((plan.title||'Session').replace(/[^\w\- ]+/g,'').trim()||'Session')+' - '+((sq.name||'Squad').replace(/[^\w\- ]+/g,'').trim()))+'.pdf';
-    this.setState({shareMsg:'Building PDF…'});
-    // Render the REAL preview sheet so the shared PDF looks exactly like the print preview.
-    // Hard 15s cap, then fall back to the built-in vector writer, so sharing always produces a file.
-    let blob=null;
-    try{
-      blob=await Promise.race([
-        this._buildPlanPdfExact(squadId),
-        new Promise((_,rej)=>setTimeout(()=>rej(new Error('render timeout')), 15000))
-      ]);
-    }catch(e){ blob=null; }
+    // IMPORTANT: nothing may be awaited before navigator.share() — an await drops the
+    // user-gesture, which both delays and (on iOS) blocks the native share sheet.
+    // So use the PDF pre-built when the sheet opened; if it isn't ready, build the
+    // instant vector one synchronously. Either way the share sheet opens immediately.
+    let blob=(this._sharePdf && this._sharePdf.squadId===squadId) ? this._sharePdf.blob : null;
     if(!blob){ try{ blob=this._buildPlanPdf(squadId); }catch(e){ blob=null; } }
     if(!blob){ this.setState({shareOpen:false, shareMsg:'Could not build the PDF on this device.'}); return; }
     // 0) A specific saved destination (a person's number OR a WhatsApp group link): download the PDF
@@ -5110,6 +5105,18 @@ class Component extends DCLogic {
     try{
       if(!window.html2canvas) this._loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js').catch(()=>{});
       if(!(window.jspdf&&window.jspdf.jsPDF)) this._loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js').catch(()=>{});
+    }catch(e){}
+  }
+  // Build the exact (preview-identical) PDF in the background while the share sheet is
+  // open, so tapping a destination can hand it over instantly with no waiting.
+  async _prebuildSharePdf(squadId){
+    this._sharePdf={squadId, blob:null};
+    try{
+      const blob=await Promise.race([
+        this._buildPlanPdfExact(squadId),
+        new Promise((_,rej)=>setTimeout(()=>rej(new Error('render timeout')), 15000))
+      ]);
+      if(this._sharePdf && this._sharePdf.squadId===squadId) this._sharePdf.blob=blob;
     }catch(e){}
   }
   // Build the shared PDF by rasterising the very same sheet the print preview shows, then
@@ -6694,7 +6701,7 @@ class Component extends DCLogic {
     return {title:p.title, zone:p.zone, sections: sections.length?sections:this.makeDefaultPlan().sections};
   }
   getPlan(id){ const raw=(this.state.plans||{})[id]; return raw ? this._migratePlan(raw) : this.makeDefaultPlan(); }
-  mutatePlan(id, fn){ this._editedSquads=this._editedSquads||{}; this._editedSquads[id]=true; const plans={...(this.state.plans||{})}; const cur=this._migratePlan(plans[id]?JSON.parse(JSON.stringify(plans[id])):this.makeDefaultPlan()); fn(cur); plans[id]=cur; this.setState({plans}); try{ localStorage.setItem('vx_plans', JSON.stringify(plans)); }catch(e){} this._squadPlanPush(id); }
+  mutatePlan(id, fn){ this._editedSquads=this._editedSquads||{}; this._editedSquads[id]=true; this._sharePdf=null; const plans={...(this.state.plans||{})}; const cur=this._migratePlan(plans[id]?JSON.parse(JSON.stringify(plans[id])):this.makeDefaultPlan()); fn(cur); plans[id]=cur; this.setState({plans}); try{ localStorage.setItem('vx_plans', JSON.stringify(plans)); }catch(e){} this._squadPlanPush(id); }
   // Each squad's plan is its own row in squad_plans (like the chat/staff tables), so
   // edits from different squads/devices never overwrite each other. Debounced so a
   // burst of stepper taps sends one write.
@@ -8782,7 +8789,7 @@ class Component extends DCLogic {
           onPlanCalNext:()=>{ let m=calM+1,y=calY; if(m>11){m=0;y++;} this.setState({planCalM:m,planCalY:y}); },
           planCalDaySel:!!daySel, planCalSelLabel:selLabel, onPlanCalClearDay:()=>this.setState({planCalDay:null}),
           planCalDaySessions:daySessions, planCalDayHasSessions:daySessions.length>0, planCalDayKm:daySelKm }; })(),
-      onShareWhatsapp:()=>{ this._warmPdfLibs(); this.setState({shareOpen:true, shareMsg:''}); }, onPrintPlan:()=>this.setState({printPreviewOpen:true}), onOpenPaceClock:()=>this.openTool('clock', false),
+      onShareWhatsapp:()=>{ this._warmPdfLibs(); this._prebuildSharePdf(S.squadId); this.setState({shareOpen:true, shareMsg:''}); }, onPrintPlan:()=>this.setState({printPreviewOpen:true}), onOpenPaceClock:()=>this.openTool('clock', false),
       onSubmitPlanReview:()=>this.submitPlanForReview(S.squadId, squad.name),
       onClosePrintPreview:()=>this.setState({printPreviewOpen:false}), onConfirmPrint:()=>{ this._printEscape(); setTimeout(()=>window.print(), 30); }, printPreviewOpen:S.printPreviewOpen,
       printSheet:{ accent:squad.accent, clubName:this.brandConfig.clubName||'Vortex Swimming Club', squadName:squad.name, printDate:new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}), zoneLabel:(zoneRows[zi]?zoneRows[zi].code+' \u00b7 '+zoneRows[zi].name:zName), title:sessionTitle||'Session', coach:squad.coach, total:planTotalN.toLocaleString(),
