@@ -428,11 +428,13 @@ if ('serviceWorker' in navigator) {
     background-image:url("assets/pattern-transparent.png")}
   @media print{
     /* Print the sheet EXACTLY as it looks in the on-screen preview — same fonts,
-       colours, badges and pattern (no shrinking, no background stripping). */
-    html, body{background:#fff !important}
-    body *{visibility:hidden;overflow:visible !important;max-height:none !important;height:auto !important}
-    #vx-print-sheet, #vx-print-sheet *{visibility:visible;-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important}
-    #vx-print-sheet{display:block !important;position:absolute !important;top:0 !important;left:0 !important;width:100% !important;margin:0 !important;padding:20px !important}
+       colours, badges and pattern (no shrinking, no background stripping).
+       The app is display:none (NOT visibility:hidden) so it takes up no layout and
+       can't push blank pages after the sheet. */
+    html, body{background:#fff !important;margin:0 !important;padding:0 !important;height:auto !important}
+    body > *{display:none !important}
+    body > #vx-print-sheet{display:block !important;position:static !important;margin:0 !important;padding:20px !important}
+    #vx-print-sheet *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important}
     #vx-print-sheet.vx-pattern-bg{background-color:#fff !important;background-image:url("assets/pattern-transparent.png") !important;background-repeat:repeat-y !important;background-position:right top !important;background-size:280px 316px !important}
     #vx-print-sheet [style*="break-inside:avoid"]{break-inside:avoid !important;page-break-inside:avoid !important}
     @page{size:A4;margin:12mm}
@@ -5054,8 +5056,14 @@ class Component extends DCLogic {
     const fname=(((plan.title||'Session').replace(/[^\w\- ]+/g,'').trim()||'Session')+' - '+((sq.name||'Squad').replace(/[^\w\- ]+/g,'').trim()))+'.pdf';
     this.setState({shareMsg:'Building PDF…'});
     // Render the REAL preview sheet so the shared PDF looks exactly like the print preview.
-    // Falls back to the built-in vector writer if the renderer can't load (offline).
-    let blob=null; try{ blob=await this._buildPlanPdfExact(squadId); }catch(e){ blob=null; }
+    // Hard 15s cap, then fall back to the built-in vector writer, so sharing always produces a file.
+    let blob=null;
+    try{
+      blob=await Promise.race([
+        this._buildPlanPdfExact(squadId),
+        new Promise((_,rej)=>setTimeout(()=>rej(new Error('render timeout')), 15000))
+      ]);
+    }catch(e){ blob=null; }
     if(!blob){ try{ blob=this._buildPlanPdf(squadId); }catch(e){ blob=null; } }
     if(!blob){ this.setState({shareOpen:false, shareMsg:'Could not build the PDF on this device.'}); return; }
     // 0) A specific saved destination (a person's number OR a WhatsApp group link): download the PDF
@@ -5081,7 +5089,14 @@ class Component extends DCLogic {
       this.setState({shareOpen:false, shareMsg:'PDF downloaded — attach it in any chat ✓'}); return;
     }catch(e){ this.setState({shareOpen:false, shareMsg:'Could not export the PDF on this device.'}); }
   }
-  _loadScriptOnce(src){ return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src=src; s.onload=()=>res(); s.onerror=()=>rej(new Error('Could not load '+src)); document.head.appendChild(s); }); }
+  // Loads a CDN script but NEVER hangs — rejects on error or after `ms`, so the caller
+  // can fall back instead of leaving the user staring at a dead button.
+  _loadScriptOnce(src, ms){ return new Promise((res,rej)=>{
+    let done=false; const finish=(fn,arg)=>{ if(done) return; done=true; clearTimeout(t); fn(arg); };
+    const s=document.createElement('script'); s.src=src;
+    s.onload=()=>finish(res); s.onerror=()=>finish(rej,new Error('Could not load '+src));
+    const t=setTimeout(()=>finish(rej,new Error('Timed out loading '+src)), ms||8000);
+    document.head.appendChild(s); }); }
   // Build the shared PDF by rasterising the very same sheet the print preview shows, then
   // fitting it onto ONE A4 page — so the shared file matches the preview exactly.
   async _buildPlanPdfExact(squadId){
@@ -6935,9 +6950,9 @@ class Component extends DCLogic {
     const doc='<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><base href="'+location.href+'"><title>'+this._esc(title)+'</title><style>'+css+'</style></head><body>'
       +'<div class="topbar noprint"><button class="backbtn" onclick="if(window.opener){window.close();}else{history.back();}">Close</button><button class="printbtn" onclick="window.print()">Save as PDF / Print</button></div>'
       +'<div class="sheet">'+inner+'</div>'
-      +'<scr'+'ipt>(function(){function fit(){var s=document.querySelector(".sheet");if(!s)return;var MM=96/25.4,maxW=186*MM,maxH=273*MM;'
-      +'s.style.transform="";s.style.width="";s.style.transformOrigin="top left";s.style.width=maxW+"px";var h=s.scrollHeight,k=1;'
-      +'if(h>maxH){k=maxH/h;s.style.width=(maxW/k)+"px";var h2=s.scrollHeight;k=Math.min(k,maxH/Math.max(1,h2));s.style.transform="scale("+k+")";}'
+      +'<scr'+'ipt>(function(){function fit(){var s=document.querySelector(".sheet");if(!s)return;var MM=96/25.4,maxW=186*MM,maxH=273*MM,k=1;'
+      +'for(var i=0;i<7;i++){s.style.zoom="1";s.style.width=(maxW/k)+"px";var lh=s.scrollHeight,ph=lh*k;if(!lh||ph<=maxH)break;k=k*(maxH/ph)*0.985;}'
+      +'s.style.width=(maxW/k)+"px";s.style.zoom=(k<1?String(k):"");'
       +'}window.addEventListener("beforeprint",fit);})();</scr'+'ipt></body></html>';
     const w=window.open('','_blank');
     if(!w){ this.setState({settingsMsg:'Allow pop-ups to open the PDF view.'}); return; }
@@ -7111,9 +7126,9 @@ class Component extends DCLogic {
       +'#vx-print-sheet [style*="break-inside:avoid"]{break-inside:avoid;page-break-inside:avoid}'
       +'table{border-collapse:collapse;width:100%} @page{size:A4;margin:12mm}'
       +'</style></head><body>'+sheet.outerHTML
-      +'<scr'+'ipt>(function(){var s=document.getElementById("vx-print-sheet");if(!s)return;var MM=96/25.4,maxW=186*MM,maxH=273*MM;'
-      +'s.style.transformOrigin="top left";s.style.width=maxW+"px";var h=s.scrollHeight;'
-      +'if(h>maxH){var k=maxH/h;s.style.width=(maxW/k)+"px";var h2=s.scrollHeight;k=Math.min(k,maxH/Math.max(1,h2));s.style.transform="scale("+k+")";}})();</scr'+'ipt>'
+      +'<scr'+'ipt>(function(){var s=document.getElementById("vx-print-sheet");if(!s)return;var MM=96/25.4,maxW=186*MM,maxH=273*MM,k=1;'
+      +'for(var i=0;i<7;i++){s.style.zoom="1";s.style.width=(maxW/k)+"px";var lh=s.scrollHeight,ph=lh*k;if(!lh||ph<=maxH)break;k=k*(maxH/ph)*0.985;}'
+      +'s.style.width=(maxW/k)+"px";s.style.zoom=(k<1?String(k):"");})();</scr'+'ipt>'
       +'</body></html>';
     w.document.open(); w.document.write(html); w.document.close();
     const doPrint=()=>{ try{ w.focus(); w.print(); }catch(e){} };
@@ -7128,31 +7143,36 @@ class Component extends DCLogic {
     document.body.appendChild(sheet);
     this._fitPrintSheet(sheet);
   }
-  // Scale the whole sheet down uniformly so a session always prints on ONE A4 page.
-  // Uniform scaling keeps the design identical to the preview — nothing is re-flowed.
+  // Shrink the whole sheet so a session always prints on ONE A4 page.
+  // Uses `zoom`, not `transform`: zoom changes the real layout box so the browser
+  // paginates the smaller sheet. `transform` is visual only — the page count would not change.
   _fitPrintSheet(sheet){
     try{
       const MM=96/25.4, maxW=186*MM, maxH=273*MM;   // A4 minus the 12mm @page margin
       const st=sheet.style;
-      st.removeProperty('transform'); st.removeProperty('width');
+      st.removeProperty('zoom'); st.removeProperty('transform'); st.removeProperty('width');
       const prev={display:st.display, position:st.position, left:st.left, top:st.top, visibility:st.visibility};
       st.display='block'; st.position='absolute'; st.left='-10000px'; st.top='0'; st.visibility='hidden';
-      st.setProperty('width', maxW+'px', 'important');
-      st.transformOrigin='top left';
-      let k=1; const h=sheet.scrollHeight;
-      if(h>maxH){
-        k=maxH/h;
-        st.setProperty('width', (maxW/k)+'px', 'important');      // widen, then scale back down
-        const h2=sheet.scrollHeight; k=Math.min(k, maxH/Math.max(1,h2));
+      let k=1;
+      for(let i=0;i<7;i++){
+        // Always measure with zoom reset, then work out the printed height ourselves — browsers
+        // disagree on whether measured sizes already include an element's own zoom.
+        st.setProperty('zoom','1','important');
+        st.setProperty('width', (maxW/k)+'px', 'important');
+        const layoutH=sheet.scrollHeight, physH=layoutH*k;
+        if(!layoutH || physH<=maxH) break;
+        k=Math.max(0.35, k*(maxH/physH)*0.985);                 // safety margin; never shrink past legible
+        if(k<=0.35) break;
       }
+      st.setProperty('width', (maxW/k)+'px', 'important');       // keep the printed width full-bleed
       st.display=prev.display; st.position=prev.position; st.left=prev.left; st.top=prev.top; st.visibility=prev.visibility;
-      if(k<1) st.setProperty('transform','scale('+k+')','important');
-      else { st.removeProperty('transform'); st.removeProperty('width'); }
+      if(k<1) st.setProperty('zoom', String(k), 'important');
+      else { st.removeProperty('zoom'); st.removeProperty('width'); }
     }catch(e){}
   }
   _printRestore(){
     const sheet=document.getElementById('vx-print-sheet');
-    if(sheet){ sheet.style.removeProperty('transform'); sheet.style.removeProperty('width'); sheet.style.transformOrigin=''; }
+    if(sheet){ sheet.style.removeProperty('zoom'); sheet.style.removeProperty('transform'); sheet.style.removeProperty('width'); sheet.style.transformOrigin=''; }
     if(!sheet || !this._printAnchor || !this._printAnchor.parentNode) return;
     this._printAnchor.parentNode.insertBefore(sheet, this._printAnchor);
     this._printAnchor.remove();
