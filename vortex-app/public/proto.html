@@ -8789,7 +8789,15 @@ class Component extends DCLogic {
           onPlanCalNext:()=>{ let m=calM+1,y=calY; if(m>11){m=0;y++;} this.setState({planCalM:m,planCalY:y}); },
           planCalDaySel:!!daySel, planCalSelLabel:selLabel, onPlanCalClearDay:()=>this.setState({planCalDay:null}),
           planCalDaySessions:daySessions, planCalDayHasSessions:daySessions.length>0, planCalDayKm:daySelKm }; })(),
-      onShareWhatsapp:()=>{ this._warmPdfLibs(); this._prebuildSharePdf(S.squadId); this.setState({shareOpen:true, shareMsg:''}); }, onPrintPlan:()=>this.setState({printPreviewOpen:true}), onOpenPaceClock:()=>this.openTool('clock', false),
+      onShareWhatsapp:()=>{
+        // Open the sheet FIRST, then start the render once the panel has painted —
+        // building it inline blocks the main thread and makes the icon feel slow.
+        this.setState({shareOpen:true, shareMsg:''});
+        const sqid=S.squadId;
+        const go=()=>{ this._warmPdfLibs(); this._prebuildSharePdf(sqid); };
+        if(window.requestIdleCallback) window.requestIdleCallback(go, {timeout:1500});
+        else setTimeout(go, 300);
+      }, onPrintPlan:()=>this.setState({printPreviewOpen:true}), onOpenPaceClock:()=>this.openTool('clock', false),
       onSubmitPlanReview:()=>this.submitPlanForReview(S.squadId, squad.name),
       onClosePrintPreview:()=>this.setState({printPreviewOpen:false}), onConfirmPrint:()=>{ this._printEscape(); setTimeout(()=>window.print(), 30); }, printPreviewOpen:S.printPreviewOpen,
       printSheet:{ accent:squad.accent, clubName:this.brandConfig.clubName||'Vortex Swimming Club', squadName:squad.name, printDate:new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}), zoneLabel:(zoneRows[zi]?zoneRows[zi].code+' \u00b7 '+zoneRows[zi].name:zName), title:sessionTitle||'Session', coach:squad.coach, total:planTotalN.toLocaleString(),
