@@ -5053,7 +5053,10 @@ class Component extends DCLogic {
   async sharePlan(squadId, target){ const sq=this.squadById[squadId]||{name:'Squad'}; const plan=this.getPlan(squadId);
     const fname=(((plan.title||'Session').replace(/[^\w\- ]+/g,'').trim()||'Session')+' - '+((sq.name||'Squad').replace(/[^\w\- ]+/g,'').trim()))+'.pdf';
     this.setState({shareMsg:'Building PDF…'});
-    let blob=null; try{ blob=this._buildPlanPdf(squadId); }catch(e){ blob=null; }
+    // Render the REAL preview sheet so the shared PDF looks exactly like the print preview.
+    // Falls back to the built-in vector writer if the renderer can't load (offline).
+    let blob=null; try{ blob=await this._buildPlanPdfExact(squadId); }catch(e){ blob=null; }
+    if(!blob){ try{ blob=this._buildPlanPdf(squadId); }catch(e){ blob=null; } }
     if(!blob){ this.setState({shareOpen:false, shareMsg:'Could not build the PDF on this device.'}); return; }
     // 0) A specific saved destination (a person's number OR a WhatsApp group link): download the PDF
     //    and open that chat/group so you attach it there. (WhatsApp has no way to auto-post a file to
@@ -5077,6 +5080,34 @@ class Component extends DCLogic {
       if(target && target.number){ window.open('https://wa.me/'+target.number, '_blank'); this.setState({shareOpen:false, shareMsg:'PDF downloaded — attach it in the WhatsApp chat with '+target.label+' ✓'}); return; }
       this.setState({shareOpen:false, shareMsg:'PDF downloaded — attach it in any chat ✓'}); return;
     }catch(e){ this.setState({shareOpen:false, shareMsg:'Could not export the PDF on this device.'}); }
+  }
+  _loadScriptOnce(src){ return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src=src; s.onload=()=>res(); s.onerror=()=>rej(new Error('Could not load '+src)); document.head.appendChild(s); }); }
+  // Build the shared PDF by rasterising the very same sheet the print preview shows, then
+  // fitting it onto ONE A4 page — so the shared file matches the preview exactly.
+  async _buildPlanPdfExact(squadId){
+    if(!window.html2canvas) await this._loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+    if(!(window.jspdf && window.jspdf.jsPDF)) await this._loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+    if(!window.html2canvas || !(window.jspdf && window.jspdf.jsPDF)) throw new Error('renderer unavailable');
+    const sq=this.squadById[squadId]||{name:'Squad', accent:'#067EEA', coach:''};
+    const plan=this.getPlan(squadId);
+    const meta={ clubName:(this.brandConfig&&this.brandConfig.clubName)||'Vortex Swimming Club', squadName:sq.name,
+      printDate:new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}),
+      title:plan.title||'Session', zoneLabel:plan.zone||'', coach:sq.coach||'', startTime:this.state.planSessTime||'' };
+    const host=document.createElement('div');
+    host.style.cssText='position:fixed;left:-10000px;top:0;z-index:-1;width:703px;box-sizing:border-box;padding:20px;'
+      +'background-color:#fff;background-image:url("assets/pattern-transparent.png");background-repeat:repeat-y;background-position:right top;background-size:280px 316px;'
+      +'font-family:"Funnel Display",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#0C1116';
+    host.innerHTML=this._planSheetHTML(plan, sq, meta);
+    document.body.appendChild(host);
+    try{
+      const canvas=await window.html2canvas(host, {scale:2, backgroundColor:'#ffffff', useCORS:true, logging:false});
+      const jsPDF=window.jspdf.jsPDF; const pdf=new jsPDF({unit:'mm', format:'a4', orientation:'portrait'});
+      const PW=210, PH=297, M=10; const availW=PW-2*M, availH=PH-2*M;
+      let w=availW, h=canvas.height*w/canvas.width;
+      if(h>availH){ h=availH; w=canvas.width*h/canvas.height; }   // shrink to fit ONE page
+      pdf.addImage(canvas.toDataURL('image/jpeg',0.92), 'JPEG', M+(availW-w)/2, M, w, h);
+      return pdf.output('blob');
+    } finally { try{ host.remove(); }catch(e){} }
   }
   // ---- Minimal, self-contained PDF writer (no external library; single-file / offline / CSP safe) ----
   _pdfEsc(s){ s=''+(s==null?'':s); let o=''; for(let i=0;i<s.length;i++){ const c=s.charCodeAt(i);
@@ -5131,7 +5162,7 @@ class Component extends DCLogic {
         const distLabel=(rounds>1?(rounds+'x('+(reps>1?(reps+'x'+dist):dist)+')'):(reps>1?(reps+'x'+dist):(''+dist)))+'m'+(s.sendoff?(' @ '+s.sendoff):'');
         const tot=reps*dist*rounds;
         const tags=[]; if((s.strokes||[]).length) tags.push(s.strokes.join('/')); if((s.types||[]).length) tags.push(s.types.join(', ')); if((s.labels||[]).length) tags.push(s.labels.join(', ')); if((s.groups||[]).length) tags.push('Groups '+s.groups.join('/')); if((s.swimmers||[]).length) tags.push('For '+s.swimmers.map(x=>String(x.name||'').split(' ')[0]).join(', ')); if((s.equip||[]).length) tags.push('Tools '+s.equip.join(', ')); if(s.rest) tags.push('Rest '+s.rest); { const hf=s.hrFrom||'', ht=s.hrTo||''; if(hf||ht) tags.push('HR '+(hf||'?')+(ht?('-'+ht):'')); else if(s.hr) tags.push('HR '+s.hr); } if(s.zone) tags.push(s.zone);
-        const descX=ML+80, descW=RIGHT-66-descX; const descLines=this._pdfWrap(s.txt||'', descW, 10.5);
+        const descX=ML+112, descW=RIGHT-66-descX; const descLines=this._pdfWrap(s.txt||'', descW, 10.5);
         text(ML, y, distLabel, 'b', 10.5, accent);
         text(descX, y, descLines.length?descLines[0]:'', 'n', 10.5, dark);
         text(RIGHT-62, y, this._fmtClockAmPm(secClk.times[sxi]!=null?secClk.times[sxi]:secClk.startSec), 'b', 8.5, grey); nl(11);
@@ -6903,7 +6934,11 @@ class Component extends DCLogic {
       +'@media print{body{background:#fff}.noprint{display:none}.sheet{margin:0;max-width:none;border-radius:0;box-shadow:none;padding:20px}@page{size:A4;margin:12mm}}';
     const doc='<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><base href="'+location.href+'"><title>'+this._esc(title)+'</title><style>'+css+'</style></head><body>'
       +'<div class="topbar noprint"><button class="backbtn" onclick="if(window.opener){window.close();}else{history.back();}">Close</button><button class="printbtn" onclick="window.print()">Save as PDF / Print</button></div>'
-      +'<div class="sheet">'+inner+'</div></body></html>';
+      +'<div class="sheet">'+inner+'</div>'
+      +'<scr'+'ipt>(function(){function fit(){var s=document.querySelector(".sheet");if(!s)return;var MM=96/25.4,maxW=186*MM,maxH=273*MM;'
+      +'s.style.transform="";s.style.width="";s.style.transformOrigin="top left";s.style.width=maxW+"px";var h=s.scrollHeight,k=1;'
+      +'if(h>maxH){k=maxH/h;s.style.width=(maxW/k)+"px";var h2=s.scrollHeight;k=Math.min(k,maxH/Math.max(1,h2));s.style.transform="scale("+k+")";}'
+      +'}window.addEventListener("beforeprint",fit);})();</scr'+'ipt></body></html>';
     const w=window.open('','_blank');
     if(!w){ this.setState({settingsMsg:'Allow pop-ups to open the PDF view.'}); return; }
     w.document.open(); w.document.write(doc); w.document.close();
@@ -7075,7 +7110,11 @@ class Component extends DCLogic {
       +'#vx-print-sheet{display:block;padding:20px;background-color:#fff;background-image:url("assets/pattern-transparent.png");background-repeat:repeat-y;background-position:right top;background-size:280px 316px}'
       +'#vx-print-sheet [style*="break-inside:avoid"]{break-inside:avoid;page-break-inside:avoid}'
       +'table{border-collapse:collapse;width:100%} @page{size:A4;margin:12mm}'
-      +'</style></head><body>'+sheet.outerHTML+'</body></html>';
+      +'</style></head><body>'+sheet.outerHTML
+      +'<scr'+'ipt>(function(){var s=document.getElementById("vx-print-sheet");if(!s)return;var MM=96/25.4,maxW=186*MM,maxH=273*MM;'
+      +'s.style.transformOrigin="top left";s.style.width=maxW+"px";var h=s.scrollHeight;'
+      +'if(h>maxH){var k=maxH/h;s.style.width=(maxW/k)+"px";var h2=s.scrollHeight;k=Math.min(k,maxH/Math.max(1,h2));s.style.transform="scale("+k+")";}})();</scr'+'ipt>'
+      +'</body></html>';
     w.document.open(); w.document.write(html); w.document.close();
     const doPrint=()=>{ try{ w.focus(); w.print(); }catch(e){} };
     if(w.document.readyState==='complete') setTimeout(doPrint,150);
@@ -7087,9 +7126,33 @@ class Component extends DCLogic {
     this._printAnchor = document.createComment('vx-print-sheet-anchor');
     sheet.parentNode.insertBefore(this._printAnchor, sheet);
     document.body.appendChild(sheet);
+    this._fitPrintSheet(sheet);
+  }
+  // Scale the whole sheet down uniformly so a session always prints on ONE A4 page.
+  // Uniform scaling keeps the design identical to the preview — nothing is re-flowed.
+  _fitPrintSheet(sheet){
+    try{
+      const MM=96/25.4, maxW=186*MM, maxH=273*MM;   // A4 minus the 12mm @page margin
+      const st=sheet.style;
+      st.removeProperty('transform'); st.removeProperty('width');
+      const prev={display:st.display, position:st.position, left:st.left, top:st.top, visibility:st.visibility};
+      st.display='block'; st.position='absolute'; st.left='-10000px'; st.top='0'; st.visibility='hidden';
+      st.setProperty('width', maxW+'px', 'important');
+      st.transformOrigin='top left';
+      let k=1; const h=sheet.scrollHeight;
+      if(h>maxH){
+        k=maxH/h;
+        st.setProperty('width', (maxW/k)+'px', 'important');      // widen, then scale back down
+        const h2=sheet.scrollHeight; k=Math.min(k, maxH/Math.max(1,h2));
+      }
+      st.display=prev.display; st.position=prev.position; st.left=prev.left; st.top=prev.top; st.visibility=prev.visibility;
+      if(k<1) st.setProperty('transform','scale('+k+')','important');
+      else { st.removeProperty('transform'); st.removeProperty('width'); }
+    }catch(e){}
   }
   _printRestore(){
     const sheet=document.getElementById('vx-print-sheet');
+    if(sheet){ sheet.style.removeProperty('transform'); sheet.style.removeProperty('width'); sheet.style.transformOrigin=''; }
     if(!sheet || !this._printAnchor || !this._printAnchor.parentNode) return;
     this._printAnchor.parentNode.insertBefore(sheet, this._printAnchor);
     this._printAnchor.remove();
