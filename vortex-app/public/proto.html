@@ -4617,7 +4617,19 @@ class Component extends DCLogic {
     return 'present';
   }
   hashStr(s){ let h=0; for(let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))>>>0; return h; }
+  // Is this swimmer signed off (inactive / traveling / break / sick / injured) on this date?
+  // Honours the from/to window: before "from" or after "to" they count as back and active.
+  _swAwayOn(swId, dateISO){
+    const st=this._swStatus(swId);
+    if(st.active) return null;
+    if(st.from && dateISO < st.from) return null;
+    if(st.to && dateISO > st.to) return null;
+    return st.reason||'break';
+  }
   getAttendStatus(squadId, dateISO, swId, idx){
+    // A signed-off swimmer is ALWAYS absent — no daily marking needed. This wins over any
+    // existing mark and stays until the status is changed back on the swimmer's profile.
+    if(this._swAwayOn(swId, dateISO)) return 'absent';
     const rec = this.attendLog[squadId] && this.attendLog[squadId][dateISO] && this.attendLog[squadId][dateISO][swId];
     if(rec) return rec;
     const today=this.todayISO();
@@ -4654,6 +4666,9 @@ class Component extends DCLogic {
     for(let i=0;i<batch.length;i+=500){ try{ window.__vxUpsert('attendance_marks', batch.slice(i,i+500)); }catch(e){} }
   }
   cycleAttend(id){ const sq=this.state.squadId; const date=this.curAttendDate(); const list=(this.roster[sq]||[]); const idx=list.findIndex(s=>s.id===id);
+    // Signed-off swimmers stay absent — the mark is driven by their profile status, not the
+    // register — so tapping does nothing until the status is set back to Active.
+    if(this._swAwayOn(id, date)) return;
     const cur=this.getAttendStatus(sq, date, id, idx<0?0:idx);
     const nx = cur==='present'?'absent':(cur==='absent'?'late':'present');
     this.setAttendStatus(sq, date, id, nx);
@@ -5438,8 +5453,9 @@ class Component extends DCLogic {
     return out;
   }
   _saveSwMeta(swId, meta){ const clean=this._sanitizeMeta({...this.swimmerMeta, [swId]:meta}); this.swimmerMeta=clean; this._saveJSON('vx_sw_meta', clean); this.forceUpdate(); }
-  // Swimmer active/inactive status (traveling / break / sick / injured). Default = active.
-  _statusLabel(k){ return {travel:'Traveling', 'break':'On break', sick:'Sick', injured:'Injured', other:'Away'}[k] || 'Away'; }
+  // Swimmer status (inactive / traveling / break / sick / injured). Default = active.
+  // Anything other than Active counts as absent in attendance until it is set back to Active.
+  _statusLabel(k){ return {inactive:'Inactive', travel:'Traveling', 'break':'On break', sick:'Sick', injured:'Injured', other:'Away'}[k] || 'Away'; }
   _fmtDMY(iso){ if(!iso) return ''; const p=(''+iso).split('-'); if(p.length!==3) return iso; const mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return parseInt(p[2],10)+' '+(mo[parseInt(p[1],10)-1]||'')+' '+p[0]; }
   _swStatus(swId){ const s=(this.swimmerStatus||{})[swId]; return s ? {active:s.active!==false, reason:s.reason||'', from:s.from||s.since||'', to:s.to||''} : {active:true, reason:'', from:'', to:''}; }
   setSwStatus(swId, active, reason){ const m={...(this.swimmerStatus||{})}; if(active){ delete m[swId]; } else { const prev=m[swId]||{}; m[swId]={active:false, reason:reason||prev.reason||'break', from:prev.from||prev.since||this.todayISO(), to:prev.to||''}; }
@@ -7572,12 +7588,15 @@ class Component extends DCLogic {
     let cP=0,cA=0,cL=0;
     const attendList=attList.map(({sw, idx})=>{ const st=this.getAttendStatus(S.squadId, attendCurDate, sw.id, idx); if(st==='present')cP++; else if(st==='absent')cA++; else cL++; const sm=statusMap[st];
       const stt=this._swStatus(sw.id); const isAct=stt.active;
-      return {name:sw.name, initials:sw.initials, avBg:'#EEF1F5', avFg:'#5A657E', statusLabel:sm.label, statusIcon:sm.icon, statusColor:sm.color, statusBg:sm.bg,
+      const away=this._swAwayOn(sw.id, attendCurDate);   // locked absent while signed off
+      return {name:sw.name, initials:sw.initials, avBg:'#EEF1F5', avFg:'#5A657E',
+        statusLabel: away ? (sm.label+' · '+this._statusLabel(away)) : sm.label,
+        statusIcon: away ? 'lock' : sm.icon, statusColor:sm.color, statusBg:sm.bg,
         isPresent: st==='present', isAbsent: st==='absent', isLate: st==='late', onCycle:()=>this.cycleAttend(sw.id),
         inactive:!isAct, statusText:this._statusLabel(stt.reason),
         activeLabel: isAct?'Active':this._statusLabel(stt.reason), activeIcon: isAct?'user-check':'user-minus',
         activeBg: isAct?'#DCF5EA':'#FCEFD6', activeColor: isAct?'#0C7A4F':'#B4690E',
-        onToggleActive:()=>this.setSwStatus(sw.id, !isAct, isAct?'break':'')}; });
+        onToggleActive:()=>this.setSwStatus(sw.id, !isAct, isAct?'inactive':'')}; });
     const attendSummary={present:cP, absent:cA, late:cL};
     const attendDateObj=new Date(attendCurDate+'T00:00:00');
     const dowNames=['SUN','MON','TUE','WED','THU','FRI','SAT'];
@@ -8361,7 +8380,7 @@ class Component extends DCLogic {
         onEditPbTimeDraft:(e)=>this.setState({swEditPbTimeDraft:e.target.value}),
         onEditPbAdd:()=>this.swEditAddPb(),
         // active / inactive status (editable right here in the roster)
-        editStatusOpts: [{key:'active',label:'Active'},{key:'travel',label:'Traveling'},{key:'break',label:'Break'},{key:'sick',label:'Sick'},{key:'injured',label:'Injured'}].map(o=>{ const st=this._swStatus(sw.id); const sel = o.key==='active' ? st.active : (!st.active && st.reason===o.key); const isAct=o.key==='active';
+        editStatusOpts: [{key:'active',label:'Active'},{key:'inactive',label:'Inactive'},{key:'travel',label:'Traveling'},{key:'break',label:'Break'},{key:'sick',label:'Sick'},{key:'injured',label:'Injured'}].map(o=>{ const st=this._swStatus(sw.id); const sel = o.key==='active' ? st.active : (!st.active && st.reason===o.key); const isAct=o.key==='active';
           return { label:o.label, sel, bg: sel?(isAct?'#0C7A4F':'#B4690E'):'#F4F6F8', fg: sel?'#fff':'#7A8296', onClick:()=>this.setSwStatus(sw.id, isAct, isAct?'':o.key) }; }),
         statusInactive: !this._swStatus(sw.id).active,
         editStatusFrom: this._swStatus(sw.id).from||'', editStatusTo: this._swStatus(sw.id).to||'',
@@ -8838,7 +8857,7 @@ class Component extends DCLogic {
           swStatusInactive: !this._swStatus(swObj.id).active,
           swStatusFrom: this._swStatus(swObj.id).from||'', swStatusTo: this._swStatus(swObj.id).to||'',
           onSwStatusFrom:(e)=>this.setSwStatusDate(swObj.id,'from',e.target.value), onSwStatusTo:(e)=>this.setSwStatusDate(swObj.id,'to',e.target.value),
-          swStatusOpts: [{key:'active',label:'Active'},{key:'travel',label:'Traveling'},{key:'break',label:'Break'},{key:'sick',label:'Sick'},{key:'injured',label:'Injured'}].map(o=>{ const st=this._swStatus(swObj.id); const sel = o.key==='active' ? st.active : (!st.active && st.reason===o.key); const isAct=o.key==='active';
+          swStatusOpts: [{key:'active',label:'Active'},{key:'inactive',label:'Inactive'},{key:'travel',label:'Traveling'},{key:'break',label:'Break'},{key:'sick',label:'Sick'},{key:'injured',label:'Injured'}].map(o=>{ const st=this._swStatus(swObj.id); const sel = o.key==='active' ? st.active : (!st.active && st.reason===o.key); const isAct=o.key==='active';
             return { label:o.label, onClick:()=>this.setSwStatus(swObj.id, isAct, isAct?'':o.key),
               bg: sel?(isAct?'#E4F3EC':'#FCEFDD'):'#F8FAFC', fg: sel?(isAct?'#0C7A4F':'#B4690E'):'#7A8296', border: sel?(isAct?'#B7E0C7':'#F0D9A8'):'#E5E9F0' }; }),
           isSponsored: sponsorOn,
