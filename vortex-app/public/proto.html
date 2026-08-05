@@ -6559,17 +6559,46 @@ class Component extends DCLogic {
     const [sqid,swid]=uid.split('::'); const sw=(this.roster[sqid]||[]).find(x=>x.id===swid); if(!sw) return;
     this.setState({famVerify:{uid, name:sw.name, sub:(sw.squadName||'')+' · Age '+sw.age}, famVerifyInput:'', famVerifyErr:''});
   }
+  // Resolve a family link ("squadId::swimmerId") to the REAL linked child.
+  // SAFETY: this must NEVER fall back to "some other swimmer" — if the link can't be
+  // resolved it returns null and the portal shows an unlinked state. (A previous
+  // fallback to the squad's first swimmer is what showed parents a stranger's child.)
+  _famResolve(uid){
+    const parts=String(uid==null?'':uid).split('::');
+    const sqid=parts.length>1?parts[0]:'';
+    const swid=parts.length>1?parts[1]:parts[0];
+    if(!swid) return null;
+    const inSquad=(this.roster[sqid]||[]).find(x=>x.id===swid);
+    if(inSquad) return {sqid, sw:inSquad};
+    // The child may have been promoted/moved to another squad since the link was made —
+    // match on the swimmer's own id across every squad so the right child is still found.
+    const keys=Object.keys(this.roster||{});
+    for(let i=0;i<keys.length;i++){
+      const f=(this.roster[keys[i]]||[]).find(x=>x.id===swid);
+      if(f) return {sqid:keys[i], sw:f};
+    }
+    return null;
+  }
   _parseDobParts(s){ s=(s||'').trim(); let m;
     if(m=s.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/)) return {y:+m[1],mo:+m[2],d:+m[3]};
     if(m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/)) return {y:+m[3],mo:+m[1],d:+m[2]};
     return null; }
   famVerifyConfirm(){ const S=this.state; const v=S.famVerify; if(!v) return;
     const [sqid,swid]=v.uid.split('::'); const sw=(this.roster[sqid]||[]).find(x=>x.id===swid); if(!sw){ this.setState({famVerify:null}); return; }
+    // Stop repeated guessing at a child's details.
+    this._famTries=this._famTries||{};
+    if((this._famTries[v.uid]||0)>=3) return this.setState({famVerifyErr:'Too many incorrect attempts for this swimmer. Please ask the club to link your child.'});
+    // A swimmer with no date of birth on file can NOT be self-linked: the only remaining
+    // check would be their age, which is easy to guess — that is how a wrong child gets linked.
+    if(!sw.dob) return this.setState({famVerifyErr:'We can’t verify this swimmer automatically (no date of birth on file). Please ask the club to link your child to your account.'});
     const ans=(S.famVerifyInput||'').trim(); if(!ans) return this.setState({famVerifyErr:'Please answer to confirm.'});
-    let ok=false;
-    if(sw.dob){ const a=this._parseDobParts(ans), b=this._parseDobParts(sw.dob); ok = !!(a && b && a.y===b.y && a.mo===b.mo && a.d===b.d); }
-    else { const n=parseInt(ans.replace(/\D/g,''),10); ok = (!isNaN(n) && n===parseInt(sw.age,10)); }
-    if(!ok) return this.setState({famVerifyErr:'That doesn’t match our records for '+v.name+'. Please check with the swimmer or your coach.'});
+    const a=this._parseDobParts(ans), b=this._parseDobParts(sw.dob);
+    const ok = !!(a && b && a.y===b.y && a.mo===b.mo && a.d===b.d);
+    if(!ok){
+      this._famTries[v.uid]=(this._famTries[v.uid]||0)+1;
+      const left=Math.max(0, 3-this._famTries[v.uid]);
+      return this.setState({famVerifyErr:'That doesn’t match our records for '+v.name+'.'+(left?(' '+left+' attempt'+(left===1?'':'s')+' left.'):' No attempts left — please ask the club to link your child.')});
+    }
     const cur=this.state.famPicked.slice(); if(this.state.famRole==='swimmer' && cur.length>=1) cur.splice(0,1); if(cur.indexOf(v.uid)<0) cur.push(v.uid);
     this.setState({famPicked:cur, famVerify:null, famVerifyInput:'', famVerifyErr:'', famSearch:''});
   }
@@ -8552,8 +8581,8 @@ class Component extends DCLogic {
       famPickedChips:S.famPicked.map(uid=>{ const [sqid,swid]=uid.split('::'); const sw=(this.roster[sqid]||[]).find(x=>x.id===swid); return {uid, label:sw?sw.name:'?', onRemove:()=>this.famToggleSwimmer(uid)}; }),
       famVerifyShow: !!S.famVerify,
       famVerifyName: S.famVerify ? S.famVerify.name : '',
-      famVerifyQuestion: S.famVerify ? (()=>{ const [sq,sw]=S.famVerify.uid.split('::'); const s=(this.roster[sq]||[]).find(x=>x.id===sw); return (s && s.dob) ? ('Enter '+S.famVerify.name+'’s date of birth to confirm you’re their parent/guardian.') : ('Enter '+S.famVerify.name+'’s age to confirm you’re their parent/guardian.'); })() : '',
-      famVerifyPlaceholder: S.famVerify ? (()=>{ const [sq,sw]=S.famVerify.uid.split('::'); const s=(this.roster[sq]||[]).find(x=>x.id===sw); return (s && s.dob) ? 'mm/dd/yyyy' : 'Age e.g. 12'; })() : '',
+      famVerifyQuestion: S.famVerify ? (()=>{ const [sq,sw]=S.famVerify.uid.split('::'); const s=(this.roster[sq]||[]).find(x=>x.id===sw); return (s && s.dob) ? ('Enter '+S.famVerify.name+'’s exact date of birth to confirm you’re their parent/guardian. You must repeat this for each of your children.') : (S.famVerify.name+' can’t be linked automatically — there’s no date of birth on file. Please ask the club to link this child to your account.'); })() : '',
+      famVerifyPlaceholder: S.famVerify ? (()=>{ const [sq,sw]=S.famVerify.uid.split('::'); const s=(this.roster[sq]||[]).find(x=>x.id===sw); return (s && s.dob) ? 'mm/dd/yyyy' : 'Not available'; })() : '',
       famVerifyInput:S.famVerifyInput||'', onFamVerifyInput:(e)=>this.setState({famVerifyInput:e.target.value}),
       famVerifyErr:S.famVerifyErr||'', famVerifyErrShow:!!S.famVerifyErr,
       onFamVerifyConfirm:()=>this.famVerifyConfirm(), onFamVerifyCancel:()=>this.famVerifyCancel(),
@@ -8980,11 +9009,15 @@ class Component extends DCLogic {
       // ---- family portal ----
       famUser: S.familyUser,
       famPortalName: S.familyUser?S.familyUser.name:'',
-      famKidsChips:(S.familyUser?S.familyUser.swimmerIds:[]).map((uid,i)=>{ const [sqid,swid]=uid.split('::'); const sw=(this.roster[sqid]||[])[0]&&(this.roster[sqid]||[]).find(x=>x.id===swid); const on=i===S.familyActiveIdx; return {label:sw?sw.name.split(' ')[0]:'?', onClick:()=>this.setState({familyActiveIdx:i}), bg:on?'#fff':'rgba(255,255,255,.08)', fg:on?'#0A0F1A':'#fff', border:on?'#fff':'rgba(255,255,255,.18)'}; }),
+      famKidsChips:(S.familyUser?S.familyUser.swimmerIds:[]).map((uid,i)=>{ const h=this._famResolve(uid); const on=i===S.familyActiveIdx; return {label:h?h.sw.name.split(' ')[0]:'Not linked', onClick:()=>this.setState({familyActiveIdx:i}), bg:on?'#fff':'rgba(255,255,255,.08)', fg:on?'#0A0F1A':'#fff', border:on?'#fff':'rgba(255,255,255,.18)'}; }),
       famMultiKids: !!(S.familyUser && S.familyUser.swimmerIds.length>1),
       ...(()=>{ const fu=S.familyUser; if(!fu) return {famSwName:'',famSwMeta:'',famSwInit:'',famGenIcon:'',famGenBg:'',famAccent:'#067EEA',famPbs:[],famResults:[],famMeetsUpcoming:[],famAttendPct:'—',famAttendHistory:[],famDocsRows:[],famAttMonthCells:[],famAttYearBars:[],famMeetChips:[],famMeetResultRows:[]};
-        const uid=fu.swimmerIds[Math.min(S.familyActiveIdx, fu.swimmerIds.length-1)]||fu.swimmerIds[0]; const [sqid,swid]=(uid||'::').split('::');
-        const sq=this.squadById[sqid]||this.squads[0]; const sw=(this.roster[sqid]||[]).find(x=>x.id===swid) || (this.roster[sqid]||[])[0] || {name:'—',age:'',gender:'',initials:'—',pbs:[],results:[],meetCount:0};
+        const uid=fu.swimmerIds[Math.min(S.familyActiveIdx, fu.swimmerIds.length-1)]||fu.swimmerIds[0];
+        const _hit=this._famResolve(uid);
+        // No match → show an unlinked state. NEVER substitute another swimmer.
+        if(!_hit) return {famSwName:'Not linked', famSwMeta:'Ask the club to link your child to this account', famSwInit:'—', famGenIcon:'', famGenBg:'#EEF1F5', famAccent:'#067EEA', famPbs:[], famResults:[], famMeetsUpcoming:[], famAttendPct:'—', famAttendHistory:[], famDocsRows:[], famAttMonthCells:[], famAttYearBars:[], famMeetChips:[], famMeetResultRows:[]};
+        const sqid=_hit.sqid, sw=_hit.sw;
+        const sq=this.squadById[sqid]||this.squads[0];
         const gm=this.genMeta(sw.gender);
         const swIdx=(this.roster[sqid]||[]).findIndex(x=>x.id===sw.id); const swIdxSafe=swIdx<0?0:swIdx;
         const today=this.todayISO();
@@ -9152,8 +9185,8 @@ class Component extends DCLogic {
       onFamTabPerf:()=>this.setState({famTab:'perf'}), onFamTabAttend:()=>this.setState({famTab:'attend'}), onFamTabResults:()=>this.setState({famTab:'results'}), onFamTabMeets:()=>this.setState({famTab:'meets'}), onFamTabDocs:()=>this.setState({famTab:'docs'}), onFamTabMsgs:()=>{ this.setState({famTab:'msgs'}); try{ this._famMsgFetch(); }catch(e){} },
       famShowPerf:(S.famTab||'perf')==='perf', famShowAttend:S.famTab==='attend', famShowResults:S.famTab==='results', famShowMeets:S.famTab==='meets', famShowDocs:S.famTab==='docs', famShowMsgs:S.famTab==='msgs',
       ...(()=>{ const fu=S.familyUser; if(!fu) return {};
-        const uid=fu.swimmerIds[Math.min(S.familyActiveIdx, fu.swimmerIds.length-1)]||fu.swimmerIds[0]; const [sqid,swid]=(uid||'::').split('::');
-        const sw=(this.roster[sqid]||[]).find(x=>x.id===swid);
+        const uid=fu.swimmerIds[Math.min(S.familyActiveIdx, fu.swimmerIds.length-1)]||fu.swimmerIds[0];
+        const _h=this._famResolve(uid); const sw=_h?_h.sw:null;
         const upcomingMeets = this.meetsMeta.slice(0,4).length ? this.meetsMeta.slice(0,4) : (this.customMeets.slice(0,4));
         const famReqMeetChips = upcomingMeets.map((m,i)=>({label:m.name, onClick:()=>this.setState({famReqMeetIdx:i}), bg:i===S.famReqMeetIdx?'#067EEA':'#fff', fg:i===S.famReqMeetIdx?'#fff':'#3A4152', border:i===S.famReqMeetIdx?'#067EEA':'#E5E9F0'}));
         const curMeet = upcomingMeets[S.famReqMeetIdx] || upcomingMeets[0];
