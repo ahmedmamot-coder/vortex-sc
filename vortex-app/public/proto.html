@@ -3690,6 +3690,58 @@ if ('serviceWorker' in navigator) {
 
                   </sc-if>
 
+                  <!-- FAMILY ACCOUNTS — check / fix which children each login can see -->
+                  <sc-if value="{{ adminFamilies }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;flex-direction:column;gap:9px">
+                      <div style="display:flex;align-items:center;gap:7px;background:#FFF7E6;border:1px solid #F5D9A0;border-radius:11px;padding:9px 11px">
+                        <i data-lucide="shield-alert" style="width:15px;height:15px;color:#B4690E;flex:none"></i>
+                        <span style="font-size:11.5px;color:#7A5A18;line-height:1.4">A login can only ever see the children listed here. Remove anything that isn’t theirs.</span>
+                      </div>
+                      <span style="display:flex;align-items:center;gap:7px;background:#fff;border:1px solid #E5E9F0;border-radius:11px;padding:9px 11px">
+                        <i data-lucide="search" style="width:15px;height:15px;color:#9AA2B4;flex:none"></i>
+                        <input value="{{ famAdminQuery }}" oninput="{{ onFamAdminQuery }}" placeholder="Search a parent by name or email…" style="flex:1;min-width:0;border:none;outline:none;background:none;font-family:inherit;font-size:12.5px;color:#0C1116">
+                      </span>
+                      <sc-if value="{{ famAdminMsgShow }}" hint-placeholder-val="{{ false }}">
+                        <p style="margin:0;font-size:11.5px;font-weight:700;color:#0C7A4F">{{ famAdminMsg }}</p>
+                      </sc-if>
+                      <sc-if value="{{ famAdminEmpty }}" hint-placeholder-val="{{ false }}">
+                        <p style="margin:0;padding:14px;text-align:center;font-size:12.5px;color:#9AA2B4">No family accounts match.</p>
+                      </sc-if>
+                      <sc-for list="{{ famAdminRows }}" as="fa" hint-placeholder-count="6">
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:12px 13px;box-shadow:0 1px 4px rgba(11,20,40,.04);display:flex;flex-direction:column;gap:9px">
+                          <div style="display:flex;align-items:flex-start;gap:9px">
+                            <div style="flex:1;min-width:0">
+                              <p style="margin:0;font-size:13.5px;font-weight:800;color:#0C1116">{{ fa.name }}</p>
+                              <p style="margin:1px 0 0;font-size:11.5px;color:#7A8296;word-break:break-all">{{ fa.email }}</p>
+                              <p style="margin:1px 0 0;font-size:11px;color:#9AA2B4">{{ fa.phone }} · {{ fa.kidCount }}</p>
+                            </div>
+                            <span style="flex:none;background:{{ fa.roleBg }};color:{{ fa.roleFg }};border-radius:999px;padding:3px 9px;font-size:10.5px;font-weight:800">{{ fa.roleLabel }}</span>
+                          </div>
+                          <sc-for list="{{ fa.kids }}" as="fk" hint-placeholder-count="2">
+                            <div style="display:flex;align-items:center;gap:8px;background:{{ fk.bg }};border:1px solid #EEF1F5;border-radius:10px;padding:8px 10px">
+                              <span style="width:8px;height:8px;border-radius:50%;background:{{ fk.dot }};flex:none"></span>
+                              <span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;font-weight:700;color:#0C1116">{{ fk.label }}</span><span style="display:block;font-size:10.5px;color:#7A8296">{{ fk.sub }}</span></span>
+                              <button onclick="{{ fk.onRemove }}" title="Unlink this child" style="flex:none;width:28px;height:28px;border-radius:8px;border:none;background:#FBE2E3;color:#A52A2E;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="user-minus" style="width:14px;height:14px"></i></button>
+                            </div>
+                          </sc-for>
+                          <button onclick="{{ fa.onAddToggle }}" style="display:flex;align-items:center;justify-content:center;gap:7px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border:1.5px dashed var(--vx-blue);border-radius:10px;padding:9px;cursor:pointer;font-family:inherit;font-weight:700;font-size:12px"><i data-lucide="user-plus" style="width:15px;height:15px"></i> Link a child</button>
+                          <sc-if value="{{ fa.addOpen }}" hint-placeholder-val="{{ false }}">
+                            <div style="display:flex;flex-direction:column;gap:7px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:11px;padding:10px">
+                              <input value="{{ famAdminSwQuery }}" oninput="{{ onFamAdminSwQuery }}" placeholder="Search the swimmer’s name…" style="border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none;background:#fff">
+                              <p style="margin:0;font-size:11px;color:#9AA2B4">{{ fa.addHint }}</p>
+                              <sc-for list="{{ fa.addResults }}" as="fr" hint-placeholder-count="4">
+                                <button onclick="{{ fr.onPick }}" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;cursor:pointer;font-family:inherit">
+                                  <i data-lucide="plus-circle" style="width:15px;height:15px;color:var(--vx-blue);flex:none"></i>
+                                  <span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;font-weight:700;color:#0C1116">{{ fr.label }}</span><span style="display:block;font-size:10.5px;color:#7A8296">{{ fr.sub }}</span></span>
+                                </button>
+                              </sc-for>
+                            </div>
+                          </sc-if>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+
                   <!-- BRAND / WHITE-LABEL ADMIN -->
                   <sc-if value="{{ adminBrand }}" hint-placeholder-val="{{ false }}">
                     <div style="display:flex;flex-direction:column;gap:12px">
@@ -4464,7 +4516,8 @@ class Component extends DCLogic {
       family:this._loadFamily(), familyUser:null, familyActiveIdx:0,
       famMode:'login', famName:'', famEmail:'', famPass:'', famPass2:'', famPhone:'', famRole:'parent', famSearch:'', famPicked:[], famErr:'', famResetOk:false, famBusy:false, famRegisteredMsg:'',
       famVerify:null, famVerifyInput:'', famVerifyErr:'',
-      adminSection:null, swQuery:'', swSquadFilter:'all', swDobFilter:false, swEditId:null, swAddOpen:false, swForm:{name:'',age:'',dob:'',gender:'Boys',squadId:'',pbs:[]},
+      adminSection:null, famAdminQuery:'', famAdminAddFor:null, famAdminSwQuery:'', famAdminMsg:'',
+      swQuery:'', swSquadFilter:'all', swDobFilter:false, swEditId:null, swAddOpen:false, swForm:{name:'',age:'',dob:'',gender:'Boys',squadId:'',pbs:[]},
       swPbEventSel:'50 Free', swPbTimeDraft:'', swPbCourse:'LCM', swPbMeet:'', swPbMeetDate:'',
       swEditPbs:[], swEditPbEventSel:'50 Free', swEditPbTimeDraft:'', swEditPbCourse:'LCM', swEditPbMeet:'', swEditPbMeetDate:'',
       meetImportOpen:false, meetImportText:'', meetImportPreview:null, meetImportBusy:false, meetExpanded:null, meetEventsEditIdx:null,
@@ -6579,6 +6632,23 @@ class Component extends DCLogic {
     }
     return null;
   }
+  // ---- Admin: repair which children a family account is linked to ----
+  async _famAdminUpdate(famId, mutate){
+    const list=(this.family||[]).slice();
+    const i=list.findIndex(f=>f.id===famId); if(i<0) return;
+    const rec={...list[i], swimmerIds:((list[i].swimmerIds)||[]).slice()};
+    mutate(rec); list[i]=rec;
+    this._saveFamily(list); this.forceUpdate();
+    if(window.__vxInsert){ try{ await window.__vxInsert('family_accounts', [{id:rec.id, name:rec.name, email:rec.email, phone:rec.phone, pass:rec.pass||'', role:rec.role, swimmer_ids:rec.swimmerIds, ts:Date.now()}]); await this._familyFetch(); }catch(e){} }
+  }
+  famAdminUnlink(famId, uid){
+    this._famAdminUpdate(famId, r=>{ r.swimmerIds=(r.swimmerIds||[]).filter(x=>x!==uid); });
+    this.setState({famAdminMsg:'Child unlinked ✓'});
+  }
+  famAdminLink(famId, uid){
+    this._famAdminUpdate(famId, r=>{ const a=(r.swimmerIds||[]); if(a.indexOf(uid)<0) a.push(uid); r.swimmerIds=a; });
+    this.setState({famAdminAddFor:null, famAdminSwQuery:'', famAdminMsg:'Child linked ✓'});
+  }
   _parseDobParts(s){ s=(s||'').trim(); let m;
     if(m=s.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/)) return {y:+m[1],mo:+m[2],d:+m[3]};
     if(m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/)) return {y:+m[3],mo:+m[1],d:+m[2]};
@@ -7480,6 +7550,7 @@ class Component extends DCLogic {
       {id:'meets', icon:'medal', title:'Meets', sub:this.allMeets().length+' meets · Hy-Tek & PDF import', divider:'#EEF1F5'},
       {id:'brand', icon:'palette', title:'Club Configuration', sub:'Brand · zone method · locale · currency', divider:'#EEF1F5'},
       {id:'staff', icon:'user-cog', title:'Staff', sub:'Coaches · names & PINs', divider:'#EEF1F5'},
+      {id:'families', icon:'users-round', title:'Family accounts', sub:(this.family||[]).length+' parent / swimmer logins · linked children', divider:'#EEF1F5'},
       {id:'settings', icon:'settings', title:'Settings', sub:'Anthropic API key · reset data', divider:'transparent'},
     ].map(r=>({...r, onClick:()=>this.setState({adminSection:r.id})}));
 
@@ -8363,8 +8434,8 @@ class Component extends DCLogic {
     const aiPlaceMap={season:'Describe the target meet & timeframe…',dryland:'Squad, equipment & focus…',nutrition:'Training day, age & any constraints…',review:'Paste a set to review…'};
 
     // ---- admin section overlay ----
-    const adminTitleMap={swimmers:'Swimmers',meets:'Meets',staff:'Staff',settings:'Settings',brand:'Club Configuration'};
-    const adminSubMap={swimmers:this.allSwimmersFlat().length+' swimmers · '+this.squads.length+' squads', meets:this.allMeets().length+' meets on record', staff:'Admins, coaches & staff · names, usernames & PINs', settings:'API key · reset data', brand:'Brand · zone method · locale · currency'};
+    const adminTitleMap={swimmers:'Swimmers',meets:'Meets',staff:'Staff',families:'Family accounts',settings:'Settings',brand:'Club Configuration'};
+    const adminSubMap={swimmers:this.allSwimmersFlat().length+' swimmers · '+this.squads.length+' squads', meets:this.allMeets().length+' meets on record', staff:'Admins, coaches & staff · names, usernames & PINs', families:'Check and fix which children each login can see', settings:'API key · reset data', brand:'Brand · zone method · locale · currency'};
     const onCloseAdmin=()=>this.setState({adminSection:null, swEditId:null, swAddOpen:false, staffEditId:null, meetImportOpen:false, meetImportPreview:null, meetExpanded:null});
 
     // -- swimmers admin --
@@ -9210,6 +9281,42 @@ class Component extends DCLogic {
       adminOpen: !!S.adminSection, onCloseAdmin,
       adminTitle: adminTitleMap[S.adminSection]||'', adminSub: adminSubMap[S.adminSection]||'',
       adminSwimmers: S.adminSection==='swimmers', adminMeets: S.adminSection==='meets', adminStaff: S.adminSection==='staff', adminSettings: S.adminSection==='settings',
+      adminFamilies: S.adminSection==='families',
+      famAdminQuery:S.famAdminQuery, onFamAdminQuery:(e)=>this.setState({famAdminQuery:e.target.value}),
+      famAdminMsg:S.famAdminMsg||'', famAdminMsgShow:!!S.famAdminMsg,
+      ...(()=>{
+        const q=(S.famAdminQuery||'').trim().toLowerCase();
+        const swq=(S.famAdminSwQuery||'').trim().toLowerCase();
+        const rows=(this.family||[])
+          .filter(f=> !q || (String(f.name||'').toLowerCase().includes(q) || String(f.email||'').toLowerCase().includes(q)))
+          .slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')))
+          .map(f=>{
+            const ids=f.swimmerIds||[];
+            const addOpen=S.famAdminAddFor===f.id;
+            return {
+              id:f.id, name:f.name||'—', email:f.email||'', phone:f.phone||'—',
+              roleLabel:(f.role==='swimmer'?'Swimmer login':'Parent login'),
+              roleBg:(f.role==='swimmer'?'#EDE7FF':'#E3F0FF'), roleFg:(f.role==='swimmer'?'#6D28D9':'#0C6CE0'),
+              kidCount:ids.length+(ids.length===1?' child':' children'),
+              hasKids:ids.length>0,
+              kids:ids.map(uid=>{ const h=this._famResolve(uid);
+                return { label: h? h.sw.name : 'Broken link',
+                  sub: h? (((this.squadById[h.sqid]||{}).name)||'') : 'this link points at no swimmer — remove it',
+                  ok:!!h, dot: h?'#0C7A4F':'#A52A2E', bg: h?'#F8FAFC':'#FBE2E3',
+                  onRemove:()=>this.famAdminUnlink(f.id, uid) }; }),
+              addOpen,
+              onAddToggle:()=>this.setState({famAdminAddFor: addOpen?null:f.id, famAdminSwQuery:'', famAdminMsg:''}),
+              addResults: (addOpen && swq.length>=2) ? this.allSwimmersFlat()
+                .filter(s=>String(s.name||'').toLowerCase().includes(swq))
+                .slice(0,8)
+                .map(s=>({ label:s.name, sub:(((this.squadById[s.squadId]||{}).name)||'')+' · Age '+this._swAge(s),
+                  onPick:()=>this.famAdminLink(f.id, s.squadId+'::'+s.id) })) : [],
+              addHint: swq.length>=2 ? '' : 'Type at least 2 letters of the child’s name'
+            };
+          });
+        return { famAdminRows:rows, famAdminEmpty:rows.length===0,
+          famAdminSwQuery:S.famAdminSwQuery, onFamAdminSwQuery:(e)=>this.setState({famAdminSwQuery:e.target.value}) };
+      })(),
       onExportRosterCsv:()=>this.exportRosterCsv(),
       adminBrand: S.adminSection==='brand', brandView,
       swQuery:S.swQuery, onSwQuery:(e)=>this.setState({swQuery:e.target.value}), swSquadChips, swSquadFilterName,
