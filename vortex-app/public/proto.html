@@ -3999,6 +3999,14 @@ if ('serviceWorker' in navigator) {
                     </div>
                   </div>
                   <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                    <p style="margin:0 0 10px;font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7A8296">Language · اللغة</p>
+                    <div style="display:flex;gap:8px">
+                      <button onclick="{{ onLangEn }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:7px;background:{{ langEnBg }};color:{{ langEnFg }};border:none;border-radius:11px;padding:12px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer">English</button>
+                      <button onclick="{{ onLangAr }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:7px;background:{{ langArBg }};color:{{ langArFg }};border:none;border-radius:11px;padding:12px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer">العربية</button>
+                    </div>
+                    <p style="margin:8px 0 0;font-size:11px;color:#9AA2B4;line-height:1.45">Arabic switches the app to right-to-left. Names, squads and times stay as entered.</p>
+                  </div>
+                  <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
                     <p style="margin:0 0 8px;font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7A8296">Notifications</p>
                     <p style="margin:0 0 10px;font-size:12px;color:#7A8296;line-height:1.5">Get a push alert on this device for new coach messages{{ pushRoleNote }}.</p>
                     <button onclick="{{ onEnablePush }}" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:{{ pushBtnBg }};color:{{ pushBtnFg }};border:none;border-radius:11px;padding:12px;font-family:inherit;font-weight:700;font-size:13.5px;cursor:pointer"><i data-lucide="bell" style="width:16px;height:16px"></i>{{ pushBtnLabel }}</button>
@@ -5170,6 +5178,81 @@ class Component extends DCLogic {
   }
   // ---- Theme (dark / light) ----
   setTheme(t){ this.setState({theme:t}); try{ localStorage.setItem('vx_theme', t); }catch(e){} }
+  // ---- Language (English / العربية) ----
+  // The interface is translated by swapping the rendered text against a dictionary, and
+  // the page is flipped to right-to-left. Data the club typed in — swimmer names, squad
+  // names, meet names, times — is deliberately left exactly as entered.
+  _dict(){
+    if(this._I18N) return this._I18N;
+    this._I18N={
+      // shell / navigation
+      'Home':'الرئيسية','Hub':'الرئيسية','Squads':'المجموعات','Tools':'الأدوات','Settings':'الإعدادات','Admin':'الإدارة',
+      'Club Administration':'إدارة النادي','Back':'رجوع','Close':'إغلاق','Save':'حفظ','Cancel':'إلغاء','Delete':'حذف','Edit':'تعديل','Add':'إضافة','Done':'تم','Search':'بحث','Export CSV':'تصدير CSV','Print':'طباعة','Share':'مشاركة','Today':'اليوم','Yesterday':'أمس','All':'الكل','None':'لا شيء','Open':'فتح','Remove':'إزالة','Confirm':'تأكيد','Sign in':'تسجيل الدخول','Sign out':'تسجيل الخروج','Register':'تسجيل جديد','Email':'البريد الإلكتروني','Password':'كلمة المرور','Phone':'الهاتف','Name':'الاسم','Age':'العمر','Date of birth':'تاريخ الميلاد','Gender':'الجنس','Boys':'ذكور','Girls':'إناث',
+      // hub
+      'Today at a glance':'اليوم باختصار','Attendance':'الحضور','Red recovery':'التعافي المنخفض','Next meet':'البطولة القادمة','all recovered':'الجميع متعافٍ','Swimmers':'السباحون','Squad':'المجموعة','Coach':'المدرب','Coaches':'المدربون','Staff':'الطاقم','Parents':'أولياء الأمور','Meets':'البطولات','Results':'النتائج','Documents':'المستندات','Performance':'الأداء','Profile':'الملف الشخصي',
+      // attendance
+      'Daily Attendance':'الحضور اليومي','Present':'حاضر','Absent':'غائب','Late':'متأخر','present':'حاضر','absent':'غائب','late':'متأخر','club attendance':'حضور النادي','Active':'نشط','Inactive':'غير نشط','Traveling':'مسافر','On break':'في إجازة','Break':'إجازة','Sick':'مريض','Injured':'مصاب','Status':'الحالة',
+      // plans
+      'Plans':'الخطط','Plan':'الخطة','Session plan':'خطة التمرين','Session':'الحصة','Warm-up':'الإحماء','Pre-set':'التمهيد','Main set':'المجموعة الرئيسية','Cool-down':'التهدئة','Add set':'إضافة مجموعة','Add section':'إضافة قسم','metres':'متر','Rest':'راحة','Zone':'المنطقة','Stroke':'السباحة','Type':'النوع','Focus':'التركيز','Tools:':'الأدوات:','Groups':'المجموعات','Send-off':'زمن الانطلاق','Swim':'سباحة','Drill':'تمرين فني','Kick':'أرجل','Pull':'سحب','Breast':'صدر','Fly':'فراشة',
+      // meets / results
+      'Meet':'البطولة','Event':'السباق','Time':'الزمن','Place':'المركز','Personal best':'أفضل زمن شخصي','Entries':'التسجيلات','Long course':'مسبح طويل','Short course':'مسبح قصير','Rankings':'الترتيب','Meet Standards':'معايير التأهل','Qualified':'مؤهل',
+      // family portal
+      'Family':'العائلة','My swimmer':'سباحي','Messages':'الرسائل','Announcements':'الإعلانات','Not linked':'غير مرتبط','Family accounts':'حسابات العائلات','Link a child':'ربط طفل','Parent login':'حساب ولي أمر','Swimmer login':'حساب سباح',
+      // wellness / recovery
+      'Recovery Board':'لوحة التعافي','Sleep':'النوم','Energy':'الطاقة','Soreness':'الإجهاد العضلي','Mood':'المزاج','Hydration':'الترطيب','Heart rate':'معدل ضربات القلب','Recovery':'التعافي',
+      // settings
+      'Appearance':'المظهر','Light':'فاتح','Dark':'داكن','Language · اللغة':'اللغة · Language','My profile':'ملفي الشخصي','Notifications':'الإشعارات'
+    };
+    return this._I18N;
+  }
+  setLang(l){
+    this.lang=(l==='ar')?'ar':'en';
+    try{ localStorage.setItem('vx_lang', this.lang); }catch(e){}
+    this.setState({lang:this.lang});
+    this._applyLang(true);
+  }
+  _applyLang(force){
+    const lang=this.lang||'en';
+    try{
+      const el=document.documentElement;
+      el.setAttribute('dir', lang==='ar'?'rtl':'ltr');
+      el.setAttribute('lang', lang);
+    }catch(e){}
+    if(lang!=='ar' && !this._langApplied && !force) return;
+    if(this._langRaf) cancelAnimationFrame(this._langRaf);
+    this._langRaf=requestAnimationFrame(()=>{
+      this._langRaf=null;
+      const dict=this._dict();
+      const root=document.body; if(!root) return;
+      const toAr=(lang==='ar');
+      const walker=document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+        acceptNode(n){
+          const p=n.parentNode; if(!p) return NodeFilter.FILTER_REJECT;
+          const tag=p.nodeName; if(tag==='SCRIPT'||tag==='STYLE'||tag==='TEXTAREA') return NodeFilter.FILTER_REJECT;
+          return n.nodeValue && n.nodeValue.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+        }
+      });
+      const nodes=[]; let n; while((n=walker.nextNode())) nodes.push(n);
+      nodes.forEach(node=>{
+        const orig = (node.__vxEn!=null) ? node.__vxEn : node.nodeValue;
+        if(toAr){
+          const key=String(orig).trim(); const hit=dict[key];
+          if(hit){ if(node.__vxEn==null) node.__vxEn=node.nodeValue; node.nodeValue=String(node.nodeValue).replace(key, hit); }
+        } else if(node.__vxEn!=null){ node.nodeValue=node.__vxEn; node.__vxEn=null; }
+      });
+      // placeholders + tooltips too
+      document.querySelectorAll('[placeholder],[title]').forEach(elm=>{
+        ['placeholder','title'].forEach(attr=>{
+          if(!elm.hasAttribute(attr)) return;
+          const store='__vxEn_'+attr;
+          const orig=(elm[store]!=null)?elm[store]:elm.getAttribute(attr);
+          if(toAr){ const hit=dict[String(orig).trim()]; if(hit){ if(elm[store]==null) elm[store]=elm.getAttribute(attr); elm.setAttribute(attr, hit); } }
+          else if(elm[store]!=null){ elm.setAttribute(attr, elm[store]); elm[store]=null; }
+        });
+      });
+      this._langApplied=toAr;
+    });
+  }
   // ---- Settings + my-profile + WhatsApp share targets ----
   openSettings(){ const acc=this._me(); const fam=this.state.familyUser;
     let profDraft=null;
@@ -7463,6 +7546,8 @@ class Component extends DCLogic {
     // Also pull family accounts on open. This is what re-uploads ("self-heals") a
     // registration that never reached the table, so the admin can see that parent.
     this._familyFetch();
+    try{ this.lang=localStorage.getItem('vx_lang')||'en'; }catch(e){ this.lang='en'; }
+    this._applyLang(true);
     // Load every saved training session on startup so the training log & calendar populate
     // immediately for each coach (not only when the Plans tab is opened).
     try{ this._plansFetch(); }catch(e){}
@@ -7541,6 +7626,8 @@ class Component extends DCLogic {
     this.setState({liveClock, batteryPct, batteryWidth, netOnline: online});
   }
   componentDidUpdate(){ this._icons();
+    // Re-translate whatever was just drawn (no-op when the app is in English).
+    if(this.lang==='ar' || this._langApplied){ try{ this._applyLang(); }catch(e){} }
     const v=this._activeVideo();
     if((v?v.id:null) !== this._lastActiveVideoId) this._rebuildPlayer();
     // Remember where we are, so a page refresh returns to the SAME screen (not the hub).
@@ -8775,6 +8862,9 @@ class Component extends DCLogic {
           onOpenSettings:()=>this.openSettings(), onCloseSettings:()=>this.closeSettings(), settingsOpen:!!S.settingsOpen,
           settingsMsg:S.settingsMsg||'', settingsMsgShow:!!S.settingsMsg,
           themeIsDark:S.theme==='dark', onThemeLight:()=>this.setTheme('light'), onThemeDark:()=>this.setTheme('dark'),
+          onLangEn:()=>this.setLang('en'), onLangAr:()=>this.setLang('ar'),
+          langEnBg:(this.lang!=='ar')?'#0A0F1A':'#F4F6F8', langEnFg:(this.lang!=='ar')?'#fff':'#7A8296',
+          langArBg:(this.lang==='ar')?'#0A0F1A':'#F4F6F8', langArFg:(this.lang==='ar')?'#fff':'#7A8296',
           onEnablePush:()=>this.enablePush(), pushBtnLabel:S.pushOn?'Notifications on ✓ — tap to re-enable':'Enable notifications',
           pushBtnBg:S.pushOn?'#0C7A4F':'var(--vx-blue)', pushBtnFg:'#fff', pushRoleNote: isFam?'':', family replies and new sign-ups',
           pushMsg:S.pushMsg||'', pushMsgShow:!!S.pushMsg, pushMsgColor:/✓/.test(S.pushMsg||'')?'#0C7A4F':(/block|can’t|could not|not granted|failed/i.test(S.pushMsg||'')?'#B42318':'#3A4152'),
