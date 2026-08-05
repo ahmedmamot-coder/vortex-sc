@@ -4747,7 +4747,11 @@ class Component extends DCLogic {
   _loadPlans(){ try{ return JSON.parse(localStorage.getItem('vx_plans')||'{}')||{}; }catch(e){ return {}; } }
   _loadFamily(){ try{ return JSON.parse(localStorage.getItem('vx_family')||'[]')||[]; }catch(e){ return []; } }
   _saveFamily(list){ this.family=list; try{ this._saveLocalOnly('vx_family', list); }catch(e){} this.setState({family:list}); }
-  async _familyFetch(){ if(!window.__vxSelect) return; const rows=await window.__vxSelect('family_accounts', 'select=*&limit=2000'); if(rows==null) return;
+  async _familyFetch(){ if(!window.__vxSelect) return; const rows=await window.__vxSelect('family_accounts', 'select=*&limit=2000');
+    // Remember whether the read actually worked, so the admin screen can tell "nobody has
+    // registered" apart from "the database refused the read" (they look identical otherwise).
+    this._famFetchOk = (rows!=null);
+    if(rows==null) return;
     const fromTable=rows.map(r=>({ id:r.id, name:r.name||'', email:r.email||'', phone:r.phone||'', pass:r.pass||'', role:r.role||'parent', swimmerIds:r.swimmer_ids||[] }));
     const have=new Set(fromTable.map(f=>(f.email||'').trim().toLowerCase()));
     // Self-heal: any account registered locally that never made it into the table
@@ -6700,6 +6704,12 @@ class Component extends DCLogic {
     const _authRes=await this._authPost('/signup?redirect_to='+encodeURIComponent(location.origin+location.pathname), {email, password:S.famPass, data:{name:rec.name, phone:phoneDigits, role:rec.role, swimmer_ids:rec.swimmerIds}});
     if(_authRes.ok===false && !_authRes.netfail){ const _m=(_authRes.j&&(_authRes.j.msg||_authRes.j.error_description||_authRes.j.message))||'Could not create the account.'; if(/registered|already|exists/i.test(_m)) return this.setState({famBusy:false, famErr:'This email is already registered - sign in or reset your password.'}); return this.setState({famBusy:false, famErr:_m}); }
     this._famRegAuthRes=_authRes;
+    // Install the new session BEFORE writing the row. The lockdown only lets signed-in
+    // users insert into family_accounts, so inserting first (as anon) was rejected and the
+    // registration never reached the admin — it only lived in an in-memory retry queue.
+    if(_authRes.ok && _authRes.j && _authRes.j.access_token && window.__vxSetAuth){
+      try{ window.__vxSetAuth(_authRes.j); }catch(e){}
+    }
     const list=[...existing, rec]; this._saveFamily(list);
     // Append one row (never overwrites another parent's registration). If it fails now,
     // _familyFetch self-heals by re-uploading it, so the account is never lost.
@@ -6720,7 +6730,7 @@ class Component extends DCLogic {
       window.open('https://wa.me/'+waNum+'?text='+waText, '_blank');
     }catch(e){}
     const _ar=this._famRegAuthRes||{}; const _hasSession=_ar.ok && _ar.j && _ar.j.access_token;
-    if(_hasSession && window.__vxSetAuth){ try{ window.__vxSetAuth(_ar.j); }catch(e){} try{ this._pushSend({role:'staff'}, _signTitle, _signBody, '/'); }catch(e){} this._refetchAll(); this._postLoginRefresh(); }
+    if(_hasSession){ try{ this._pushSend({role:'staff'}, _signTitle, _signBody, '/'); }catch(e){} this._refetchAll(); this._postLoginRefresh(); }
     if(_hasSession || _ar.netfail){ try{ localStorage.setItem('vx_session', JSON.stringify({type:'family', email:rec.email})); }catch(e){}
       this.setState({familyUser:rec, familyActiveIdx:0, screen:'app', view:'family', famErr:'', famBusy:false}); }
     else { this.setState({famBusy:false, famMode:'login', famPass:'', famPass2:'', famErr:'', famRegisteredMsg:'Account created! We emailed a confirmation link to '+email+'. Open it, then sign in.'}); }
@@ -7379,6 +7389,9 @@ class Component extends DCLogic {
     this._wellnessFetch();
     this._attendFetch();
     this._planCustomFetch();
+    // Also pull family accounts on open. This is what re-uploads ("self-heals") a
+    // registration that never reached the table, so the admin can see that parent.
+    this._familyFetch();
     // Load every saved training session on startup so the training log & calendar populate
     // immediately for each coach (not only when the Plans tab is opened).
     try{ this._plansFetch(); }catch(e){}
@@ -9361,7 +9374,9 @@ class Component extends DCLogic {
           famAdminTotal:all.length,
           famAdminAuditLine: all.length
             ? (all.length+' accounts · '+nBroken+' with a broken link · '+shared.length+' child'+(shared.length===1?'':'ren')+' linked to 2+ logins · '+nEmpty+' with no child')
-            : 'No family accounts have registered yet.',
+            : (this._famFetchOk===false
+                ? 'Could not read family accounts from the database — check you are signed in (Data Check) and try again.'
+                : 'No family accounts have reached the database yet. A parent who registered but has not signed in since will appear as soon as they sign in once.'),
           famAdminAuditOk: nProblem===0 && all.length>0,
           famAdminHasProblems: nProblem>0,
           famAdminProblemsOn: !!S.famAdminProblems,
