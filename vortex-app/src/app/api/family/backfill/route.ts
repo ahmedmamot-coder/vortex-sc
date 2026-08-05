@@ -10,7 +10,7 @@
 //
 // Env: SUPABASE_SERVICE_ROLE_KEY (must be the service_role key, NOT the anon key).
 
-import { SB_URL, SB_SERVICE, sbHeaders, haveService } from "@/lib/wearable";
+import { SB_URL, SB_SERVICE, haveService } from "@/lib/wearable";
 
 type AuthUser = {
   id: string;
@@ -19,51 +19,95 @@ type AuthUser = {
   user_metadata?: { name?: string; phone?: string; role?: string; swimmer_ids?: string[] };
 };
 
-async function listAllAuthUsers(): Promise<{ users: AuthUser[]; error?: string }> {
+// Describe the configured key WITHOUT revealing it, so a misconfiguration can be
+// identified precisely instead of guessed at.
+export function probeKey() {
+  const k = SB_SERVICE || "";
+  const trimmed = k.trim();
+  const parts = trimmed.split(".");
+  let role: string | null = null, ref: string | null = null, jwt = false;
+  if (parts.length === 3) {
+    try {
+      const p = JSON.parse(Buffer.from(parts[1], "base64").toString("utf8"));
+      role = p.role || null; ref = p.ref || null; jwt = true;
+    } catch { /* not a readable JWT */ }
+  }
+  const kind = !trimmed ? "EMPTY — the variable is not set in this deployment"
+    : trimmed.startsWith("sb_secret_") ? "new-format secret key (sb_secret_…)"
+    : trimmed.startsWith("sb_publishable_") ? "PUBLISHABLE key — this is the public one, it will never work"
+    : jwt && role === "service_role" ? "legacy service_role JWT ✓"
+    : jwt && role === "anon" ? "ANON key — public, it will never work"
+    : jwt ? `JWT with role "${role}"`
+    : "not a JWT and not an sb_ key — probably the JWT Secret, which is the wrong field";
+  return {
+    present: !!trimmed,
+    length: trimmed.length,
+    startsWith: trimmed.slice(0, 10) + (trimmed.length > 10 ? "…" : ""),
+    hadSurroundingWhitespace: k !== trimmed,
+    containsQuotes: /["']/.test(k),
+    isJwt: jwt, jwtRole: role, jwtProjectRef: ref,
+    projectUrl: SB_URL,
+    projectRefMatches: ref ? SB_URL.includes(ref) : null,
+    verdict: kind,
+  };
+}
+
+// Try each accepted way of presenting the key. Legacy JWTs want a Bearer token;
+// the newer sb_secret_ keys are accepted on the apikey header.
+async function authFetch(url: string) {
+  const attempts: Array<{ how: string; headers: Record<string, string> }> = [
+    { how: "apikey + Bearer", headers: { apikey: SB_SERVICE, Authorization: "Bearer " + SB_SERVICE } },
+    { how: "apikey only", headers: { apikey: SB_SERVICE } },
+    { how: "Authorization only", headers: { Authorization: "Bearer " + SB_SERVICE } },
+  ];
+  let last = "";
+  for (const a of attempts) {
+    const r = await fetch(url, { headers: a.headers, cache: "no-store" });
+    if (r.ok) return { ok: true as const, res: r, how: a.how };
+    last = `${a.how} → HTTP ${r.status} ${(await r.text().catch(() => "")).slice(0, 160)}`;
+  }
+  return { ok: false as const, error: last };
+}
+
+async function listAllAuthUsers(): Promise<{ users: AuthUser[]; error?: string; how?: string }> {
   const out: AuthUser[] = [];
+  let how = "";
   for (let page = 1; page <= 20; page++) {
-    const r = await fetch(`${SB_URL}/auth/v1/admin/users?page=${page}&per_page=200`, {
-      headers: { apikey: SB_SERVICE, Authorization: "Bearer " + SB_SERVICE },
-      cache: "no-store",
-    });
-    if (!r.ok) {
-      const body = await r.text().catch(() => "");
-      const hint =
-        r.status === 401 || r.status === 403
-          ? " — the key in Vercel is not the service_role key (the anon key returns this). Copy Supabase → Project Settings → API → service_role, update SUPABASE_SERVICE_ROLE_KEY in Vercel, then Redeploy."
-          : "";
-      return { users: out, error: `auth list failed HTTP ${r.status}${hint} ${body.slice(0, 200)}` };
+    const a = await authFetch(`${SB_URL}/auth/v1/admin/users?page=${page}&per_page=200`);
+    if (!a.ok) {
+      const p = probeKey();
+      return { users: out, error: `auth list failed. Key in Vercel: ${p.verdict} (length ${p.length}, starts ${p.startsWith}). Last attempt: ${a.error}` };
     }
-    const j = await r.json();
+    how = a.how;
+    const j = await a.res.json();
     const users: AuthUser[] = j.users || (Array.isArray(j) ? j : []);
     out.push(...users);
     if (users.length < 200) break;
   }
-  return { users: out };
+  return { users: out, how };
 }
 
 async function build(request: Request, write: boolean) {
+  const url = new URL(request.url);
+  // ?probe=1 identifies the configured key without revealing it.
+  if (url.searchParams.get("probe") === "1") return Response.json({ key: probeKey() });
   if (!haveService()) {
     return Response.json(
-      { error: "server missing SUPABASE_SERVICE_ROLE_KEY — add it in Vercel → Settings → Environment Variables, then Redeploy" },
+      { error: "server missing SUPABASE_SERVICE_ROLE_KEY — add it in Vercel → Settings → Environment Variables, then Redeploy", key: probeKey() },
       { status: 500 },
     );
   }
-  const includeAll = new URL(request.url).searchParams.get("all") === "1";
+  const includeAll = url.searchParams.get("all") === "1";
 
   const { users, error } = await listAllAuthUsers();
   if (error) return Response.json({ error, authUsers: users.length }, { status: 502 });
 
   // Existing rows (service-role read bypasses RLS, so this is the true contents of the table)
-  const exRes = await fetch(`${SB_URL}/rest/v1/family_accounts?select=id,name,email,swimmer_ids&limit=5000`, {
-    headers: sbHeaders(),
-    cache: "no-store",
-  });
-  if (!exRes.ok) {
-    const body = await exRes.text().catch(() => "");
-    return Response.json({ error: `could not read family_accounts (HTTP ${exRes.status}) ${body.slice(0, 200)}` }, { status: 502 });
+  const exA = await authFetch(`${SB_URL}/rest/v1/family_accounts?select=id,name,email,swimmer_ids&limit=5000`);
+  if (!exA.ok) {
+    return Response.json({ error: `could not read family_accounts — ${exA.error}`, key: probeKey() }, { status: 502 });
   }
-  const existing: Array<{ email?: string; name?: string; swimmer_ids?: string[] }> = await exRes.json();
+  const existing: Array<{ email?: string; name?: string; swimmer_ids?: string[] }> = await exA.res.json();
   const have = new Set(existing.map((r) => (r.email || "").trim().toLowerCase()).filter(Boolean));
 
   const isStaff = (email: string) => /@vortexswimmingclub\.com$/i.test(email) || email === "ahmedmamot@gmail.com";
@@ -112,13 +156,23 @@ async function build(request: Request, write: boolean) {
   let insertError: string | null = null;
   for (let i = 0; i < rows.length; i += 200) {
     const chunk = rows.slice(i, i + 200);
-    const ins = await fetch(`${SB_URL}/rest/v1/family_accounts`, {
-      method: "POST",
-      headers: { ...sbHeaders(), Prefer: "resolution=merge-duplicates,return=minimal" },
-      body: JSON.stringify(chunk),
-    });
-    if (ins.ok) created += chunk.length;
-    else if (!insertError) insertError = `insert failed HTTP ${ins.status}: ${(await ins.text().catch(() => "")).slice(0, 300)}`;
+    let ok = false, lastErr = "";
+    const headerStyles: Array<Record<string, string>> = [
+      { apikey: SB_SERVICE, Authorization: "Bearer " + SB_SERVICE },
+      { apikey: SB_SERVICE },
+      { Authorization: "Bearer " + SB_SERVICE },
+    ];
+    for (const hdr of headerStyles) {
+      const ins = await fetch(`${SB_URL}/rest/v1/family_accounts`, {
+        method: "POST",
+        headers: { ...hdr, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify(chunk),
+      });
+      if (ins.ok) { ok = true; break; }
+      lastErr = `HTTP ${ins.status}: ${(await ins.text().catch(() => "")).slice(0, 250)}`;
+    }
+    if (ok) created += chunk.length;
+    else if (!insertError) insertError = `insert failed ${lastErr}`;
   }
 
   return Response.json({ created, insertError, ...report });
