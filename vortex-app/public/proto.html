@@ -3762,7 +3762,10 @@ if ('serviceWorker' in navigator) {
                           <button onclick="{{ onFamAdminProblems }}" style="margin-top:7px;width:100%;background:#FCEFD6;color:#B4690E;border:1px solid #F5D9A0;border-radius:9px;padding:8px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">{{ famAdminProblemsLabel }}</button>
                         </sc-if>
                       </div>
-                      <button onclick="{{ onFamAdminSync }}" style="display:flex;align-items:center;justify-content:center;gap:7px;background:var(--vx-blue);color:#fff;border:none;border-radius:11px;padding:10px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer"><i data-lucide="refresh-cw" style="width:15px;height:15px"></i> Sync now</button>
+                      <div style="display:flex;gap:8px">
+                        <button onclick="{{ onFamAdminSync }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:7px;background:var(--vx-blue);color:#fff;border:none;border-radius:11px;padding:10px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer"><i data-lucide="refresh-cw" style="width:15px;height:15px"></i> Sync now</button>
+                        <button onclick="{{ onFamAdminRecover }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:7px;background:#0C7A4F;color:#fff;border:none;border-radius:11px;padding:10px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer"><i data-lucide="download-cloud" style="width:15px;height:15px"></i> Recover all</button>
+                      </div>
                       <span style="display:flex;align-items:center;gap:7px;background:#fff;border:1px solid #E5E9F0;border-radius:11px;padding:9px 11px">
                         <i data-lucide="search" style="width:15px;height:15px;color:#9AA2B4;flex:none"></i>
                         <input value="{{ famAdminQuery }}" oninput="{{ onFamAdminQuery }}" placeholder="Search a parent or a child’s name…" style="flex:1;min-width:0;border:none;outline:none;background:none;font-family:inherit;font-size:12.5px;color:#0C1116">
@@ -6902,6 +6905,22 @@ class Component extends DCLogic {
       this.setState({familyUser:rec, familyActiveIdx:0, screen:'app', view:'family', famErr:'', famBusy:false}); }
     else { this.setState({famBusy:false, famMode:'login', famPass:'', famPass2:'', famErr:'', famRegisteredMsg:'Account created! We emailed a confirmation link to '+email+'. Open it, then sign in.'}); }
   }
+  // Called on every successful family sign-in. Two jobs:
+  //  1) upsert the account row — this is the reliable moment, because the user is now
+  //     signed in, so the write can't be refused the way it can during registration;
+  //  2) log the sign-in for the admin (an alert row every device picks up, plus a push).
+  _famRecordLogin(rec){
+    if(!rec || !rec.email) return;
+    const kids=(rec.swimmerIds||[]).map(uid=>{ const h=this._famResolve(uid); return h?h.sw.name:null; }).filter(Boolean).join(', ');
+    try{
+      if(window.__vxUpsert) window.__vxUpsert('family_accounts', [{ id:rec.id, name:rec.name, email:rec.email, phone:rec.phone||'', pass:'', role:rec.role||'parent', swimmer_ids:rec.swimmerIds||[], ts:Date.now() }]);
+    }catch(e){}
+    const title='Family sign-in';
+    const body=(rec.name||rec.email)+' signed in ('+rec.email+')'+(kids?(' · '+kids):' · no child linked');
+    try{ this.notify('coach', 'log-in', title, body); }catch(e){}
+    try{ if(window.__vxInsert) window.__vxInsert('signup_alerts', [{ id:'li'+Date.now()+'_'+Math.random().toString(36).slice(2,6), icon:'log-in', title, body, ts:Date.now() }]); }catch(e){}
+    try{ this._pushSend({role:'staff'}, title, body, '/'); }catch(e){}
+  }
   async famLogin(){ this.setState({famErr:''});
     // Refresh the family list from its table so a parent who registered on another device can sign in now.
     try { await this._familyFetch(); } catch(e){}
@@ -6919,6 +6938,9 @@ class Component extends DCLogic {
         if(window.__vxInsert) try{ window.__vxInsert('family_accounts', [{id:rec.id, name:rec.name, email:rec.email, phone:rec.phone, pass:'', role:rec.role, swimmer_ids:rec.swimmerIds, ts:Date.now()}]); }catch(e){}
         this._saveFamily([...(this.family||[]), rec]); }
       try{ localStorage.setItem('vx_session', JSON.stringify({type:'family', email:rec.email})); }catch(e){}
+      // Every sign-in is recorded: guarantee the account row exists (now that we ARE signed in,
+      // so it can never be refused), and tell the admin who signed in and when.
+      this._famRecordLogin(rec);
       return this.setState({familyUser:rec, familyActiveIdx:0, screen:'app', view:'family', famErr:'', famBusy:false});
     }
     const emsg=(res.j&&(res.j.error_description||res.j.msg||res.j.message))||'';
@@ -9492,6 +9514,18 @@ class Component extends DCLogic {
         try{ await this._familyFetch(); }catch(e){}
         const n=(this.family||[]).length;
         this.setState({famAdminMsg: this._famFetchOk===false ? 'Could not read the database — check Data Check.' : ('Synced ✓ '+n+' account'+(n===1?'':'s')+' found')}); },
+      // Rebuilds every registered parent from Supabase Auth (server-side, service-role), for
+      // accounts whose row was refused at sign-up and so never reached the table.
+      onFamAdminRecover:async()=>{
+        this.setState({famAdminMsg:'Recovering every registered account…'});
+        try{
+          const r=await fetch('/api/family/backfill', {method:'POST'});
+          const j=await r.json().catch(()=>({}));
+          if(!r.ok){ this.setState({famAdminMsg:(j&&j.error)||('Recovery failed (HTTP '+r.status+')')}); return; }
+          try{ await this._familyFetch(); }catch(e){}
+          this.setState({famAdminMsg:'Recovered '+(j.created||0)+' of '+(j.authUsers||0)+' registered accounts ✓'});
+        }catch(e){ this.setState({famAdminMsg:'Could not reach the recovery service.'}); }
+      },
       famAdminMsg:S.famAdminMsg||'', famAdminMsgShow:!!S.famAdminMsg,
       ...(()=>{
         const q=(S.famAdminQuery||'').trim().toLowerCase();
