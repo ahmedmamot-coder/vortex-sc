@@ -3762,6 +3762,7 @@ if ('serviceWorker' in navigator) {
                           <button onclick="{{ onFamAdminProblems }}" style="margin-top:7px;width:100%;background:#FCEFD6;color:#B4690E;border:1px solid #F5D9A0;border-radius:9px;padding:8px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">{{ famAdminProblemsLabel }}</button>
                         </sc-if>
                       </div>
+                      <button onclick="{{ onFamAdminSync }}" style="display:flex;align-items:center;justify-content:center;gap:7px;background:var(--vx-blue);color:#fff;border:none;border-radius:11px;padding:10px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer"><i data-lucide="refresh-cw" style="width:15px;height:15px"></i> Sync now</button>
                       <span style="display:flex;align-items:center;gap:7px;background:#fff;border:1px solid #E5E9F0;border-radius:11px;padding:9px 11px">
                         <i data-lucide="search" style="width:15px;height:15px;color:#9AA2B4;flex:none"></i>
                         <input value="{{ famAdminQuery }}" oninput="{{ onFamAdminQuery }}" placeholder="Search a parent or a child’s name…" style="flex:1;min-width:0;border:none;outline:none;background:none;font-family:inherit;font-size:12.5px;color:#0C1116">
@@ -4586,7 +4587,7 @@ class Component extends DCLogic {
       attendView:'day', attendDateISO:null, attendCalY:null, attendCalM:null, attendYearSel:null,
       clockRunning:false, clockSetIdx:0, clockRep:1, clockRemain:0, clockFs:false, reviewMode:'review',
       plans:_plans,
-      family:this._loadFamily(), familyUser:null, familyActiveIdx:0,
+      family:this._famBoot(), familyUser:null, familyActiveIdx:0,
       famMode:'login', famName:'', famEmail:'', famPass:'', famPass2:'', famPhone:'', famRole:'parent', famSearch:'', famPicked:[], famErr:'', famResetOk:false, famBusy:false, famRegisteredMsg:'',
       famVerify:null, famVerifyInput:'', famVerifyErr:'',
       adminSection:null, famAdminQuery:'', famAdminAddFor:null, famAdminSwQuery:'', famAdminMsg:'', famAdminProblems:false,
@@ -4825,6 +4826,10 @@ class Component extends DCLogic {
   _uid(pfx){ this._pid=(this._pid||0)+1; return (pfx||'s')+Date.now().toString(36)+'_'+this._pid; }
   _loadPlans(){ try{ return JSON.parse(localStorage.getItem('vx_plans')||'{}')||{}; }catch(e){ return {}; } }
   _loadFamily(){ try{ return JSON.parse(localStorage.getItem('vx_family')||'[]')||[]; }catch(e){ return []; } }
+  // Load the saved family list into BOTH this.family and state at boot. this.family was
+  // previously left undefined until something wrote to it, so the self-heal in
+  // _familyFetch had an empty list and never re-uploaded a missing registration.
+  _famBoot(){ const l=this._loadFamily(); this.family=l; return l; }
   _saveFamily(list){ this.family=list; try{ this._saveLocalOnly('vx_family', list); }catch(e){} this.setState({family:list}); }
   async _familyFetch(){ if(!window.__vxSelect) return; const rows=await window.__vxSelect('family_accounts', 'select=*&limit=2000');
     // Remember whether the read actually worked, so the admin screen can tell "nobody has
@@ -4833,9 +4838,17 @@ class Component extends DCLogic {
     if(rows==null) return;
     const fromTable=rows.map(r=>({ id:r.id, name:r.name||'', email:r.email||'', phone:r.phone||'', pass:r.pass||'', role:r.role||'parent', swimmerIds:r.swimmer_ids||[] }));
     const have=new Set(fromTable.map(f=>(f.email||'').trim().toLowerCase()));
-    // Self-heal: any account registered locally that never made it into the table
-    // (a failed insert / offline moment) is KEPT and re-uploaded, so it can never vanish.
-    const localOnly=(this.family||[]).filter(f=> f && f.email && !have.has((f.email||'').trim().toLowerCase()));
+    // Self-heal: any account registered on this device that never made it into the table
+    // (a failed insert / offline moment / RLS refusal) is KEPT and re-uploaded, so it can
+    // never vanish. Look in every place the record can live — the in-memory list, the
+    // saved list, and the signed-in user themselves — because after a fresh app start
+    // only some of those are populated.
+    const seen=new Set(); const candidates=[];
+    [].concat(this.family||[], this.state&&this.state.family||[], this._loadFamily()||[],
+              (this.state&&this.state.familyUser)?[this.state.familyUser]:[])
+      .forEach(f=>{ if(!f||!f.email) return; const k=(f.email||'').trim().toLowerCase();
+        if(seen.has(k)) return; seen.add(k); candidates.push(f); });
+    const localOnly=candidates.filter(f=>!have.has((f.email||'').trim().toLowerCase()));
     localOnly.forEach(f=>{ if(window.__vxInsert) try{ window.__vxInsert('family_accounts', [{id:f.id||this._uid('fam'), name:f.name, email:f.email, phone:f.phone, pass:f.pass, role:f.role, swimmer_ids:f.swimmerIds||[], ts:Date.now()}]); }catch(e){} });
     const list=[...fromTable, ...localOnly];
     this.family=list; try{ this._saveLocalOnly('vx_family', list); }catch(e){} this.setState({family:list});
@@ -9475,6 +9488,10 @@ class Component extends DCLogic {
       adminSwimmers: S.adminSection==='swimmers', adminMeets: S.adminSection==='meets', adminStaff: S.adminSection==='staff', adminSettings: S.adminSection==='settings',
       adminFamilies: S.adminSection==='families',
       famAdminQuery:S.famAdminQuery, onFamAdminQuery:(e)=>this.setState({famAdminQuery:e.target.value}),
+      onFamAdminSync:async()=>{ this.setState({famAdminMsg:'Syncing…'});
+        try{ await this._familyFetch(); }catch(e){}
+        const n=(this.family||[]).length;
+        this.setState({famAdminMsg: this._famFetchOk===false ? 'Could not read the database — check Data Check.' : ('Synced ✓ '+n+' account'+(n===1?'':'s')+' found')}); },
       famAdminMsg:S.famAdminMsg||'', famAdminMsgShow:!!S.famAdminMsg,
       ...(()=>{
         const q=(S.famAdminQuery||'').trim().toLowerCase();
