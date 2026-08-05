@@ -9523,7 +9523,14 @@ class Component extends DCLogic {
           const j=await r.json().catch(()=>({}));
           if(!r.ok){ this.setState({famAdminMsg:(j&&j.error)||('Recovery failed (HTTP '+r.status+')')}); return; }
           try{ await this._familyFetch(); }catch(e){}
-          this.setState({famAdminMsg:'Recovered '+(j.created||0)+' of '+(j.authUsers||0)+' registered accounts ✓'});
+          // Say exactly what happened — "0 of 5" on its own hides whether they were already
+          // there, skipped as staff, or the insert was refused.
+          const parts=[];
+          parts.push('Created '+(j.created||0));
+          if(j.rowsAlreadyInTable) parts.push((j.rowsAlreadyInTable)+' already in table');
+          if((j.skippedStaff||[]).length) parts.push((j.skippedStaff.length)+' staff skipped');
+          if(j.insertError) parts.push('⚠ '+j.insertError);
+          this.setState({famAdminMsg:parts.join(' · ')+' (of '+(j.authUsers||0)+' registered)'});
         }catch(e){ this.setState({famAdminMsg:'Could not reach the recovery service.'}); }
       },
       famAdminMsg:S.famAdminMsg||'', famAdminMsgShow:!!S.famAdminMsg,
