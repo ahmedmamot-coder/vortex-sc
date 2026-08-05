@@ -3697,9 +3697,18 @@ if ('serviceWorker' in navigator) {
                         <i data-lucide="shield-alert" style="width:15px;height:15px;color:#B4690E;flex:none"></i>
                         <span style="font-size:11.5px;color:#7A5A18;line-height:1.4">A login can only ever see the children listed here. Remove anything that isn’t theirs.</span>
                       </div>
+                      <div style="background:#fff;border:1px solid #E5E9F0;border-radius:11px;padding:10px 11px">
+                        <p style="margin:0;font-size:11.5px;font-weight:700;color:#3A4152;line-height:1.45">{{ famAdminAuditLine }}</p>
+                        <sc-if value="{{ famAdminAuditOk }}" hint-placeholder-val="{{ false }}">
+                          <p style="margin:5px 0 0;font-size:11.5px;font-weight:700;color:#0C7A4F">✓ Every account looks correct.</p>
+                        </sc-if>
+                        <sc-if value="{{ famAdminHasProblems }}" hint-placeholder-val="{{ false }}">
+                          <button onclick="{{ onFamAdminProblems }}" style="margin-top:7px;width:100%;background:#FCEFD6;color:#B4690E;border:1px solid #F5D9A0;border-radius:9px;padding:8px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">{{ famAdminProblemsLabel }}</button>
+                        </sc-if>
+                      </div>
                       <span style="display:flex;align-items:center;gap:7px;background:#fff;border:1px solid #E5E9F0;border-radius:11px;padding:9px 11px">
                         <i data-lucide="search" style="width:15px;height:15px;color:#9AA2B4;flex:none"></i>
-                        <input value="{{ famAdminQuery }}" oninput="{{ onFamAdminQuery }}" placeholder="Search a parent by name or email…" style="flex:1;min-width:0;border:none;outline:none;background:none;font-family:inherit;font-size:12.5px;color:#0C1116">
+                        <input value="{{ famAdminQuery }}" oninput="{{ onFamAdminQuery }}" placeholder="Search a parent or a child’s name…" style="flex:1;min-width:0;border:none;outline:none;background:none;font-family:inherit;font-size:12.5px;color:#0C1116">
                       </span>
                       <sc-if value="{{ famAdminMsgShow }}" hint-placeholder-val="{{ false }}">
                         <p style="margin:0;font-size:11.5px;font-weight:700;color:#0C7A4F">{{ famAdminMsg }}</p>
@@ -4516,7 +4525,7 @@ class Component extends DCLogic {
       family:this._loadFamily(), familyUser:null, familyActiveIdx:0,
       famMode:'login', famName:'', famEmail:'', famPass:'', famPass2:'', famPhone:'', famRole:'parent', famSearch:'', famPicked:[], famErr:'', famResetOk:false, famBusy:false, famRegisteredMsg:'',
       famVerify:null, famVerifyInput:'', famVerifyErr:'',
-      adminSection:null, famAdminQuery:'', famAdminAddFor:null, famAdminSwQuery:'', famAdminMsg:'',
+      adminSection:null, famAdminQuery:'', famAdminAddFor:null, famAdminSwQuery:'', famAdminMsg:'', famAdminProblems:false,
       swQuery:'', swSquadFilter:'all', swDobFilter:false, swEditId:null, swAddOpen:false, swForm:{name:'',age:'',dob:'',gender:'Boys',squadId:'',pbs:[]},
       swPbEventSel:'50 Free', swPbTimeDraft:'', swPbCourse:'LCM', swPbMeet:'', swPbMeetDate:'',
       swEditPbs:[], swEditPbEventSel:'50 Free', swEditPbTimeDraft:'', swEditPbCourse:'LCM', swEditPbMeet:'', swEditPbMeetDate:'',
@@ -7312,7 +7321,11 @@ class Component extends DCLogic {
   }
   _printRestore(){
     const sheet=document.getElementById('vx-print-sheet');
-    if(sheet){ sheet.style.removeProperty('zoom'); sheet.style.removeProperty('transform'); sheet.style.removeProperty('width'); sheet.style.transformOrigin=''; }
+    // Always strip every sizing style we applied, even if the sheet was never moved,
+    // so nothing from the print fit can leak back into the on-screen app.
+    if(sheet){ const st=sheet.style;
+      ['zoom','transform','width','display','position','left','top','visibility'].forEach(p=>st.removeProperty(p));
+      st.transformOrigin=''; }
     if(!sheet || !this._printAnchor || !this._printAnchor.parentNode) return;
     this._printAnchor.parentNode.insertBefore(sheet, this._printAnchor);
     this._printAnchor.remove();
@@ -7552,7 +7565,7 @@ class Component extends DCLogic {
       {id:'staff', icon:'user-cog', title:'Staff', sub:'Coaches · names & PINs', divider:'#EEF1F5'},
       {id:'families', icon:'users-round', title:'Family accounts', sub:(this.family||[]).length+' parent / swimmer logins · linked children', divider:'#EEF1F5'},
       {id:'settings', icon:'settings', title:'Settings', sub:'Anthropic API key · reset data', divider:'transparent'},
-    ].map(r=>({...r, onClick:()=>this.setState({adminSection:r.id})}));
+    ].map(r=>({...r, onClick:()=>{ if(r.id==='families'){ try{ this._familyFetch(); }catch(e){} } this.setState({adminSection:r.id, famAdminQuery:'', famAdminAddFor:null, famAdminSwQuery:'', famAdminMsg:''}); }}));
 
     // ---- move ----
     const flat=[];
@@ -8918,7 +8931,11 @@ class Component extends DCLogic {
         else setTimeout(go, 300);
       }, onPrintPlan:()=>this.setState({printPreviewOpen:true}), onOpenPaceClock:()=>this.openTool('clock', false),
       onSubmitPlanReview:()=>this.submitPlanForReview(S.squadId, squad.name),
-      onClosePrintPreview:()=>this.setState({printPreviewOpen:false}), onConfirmPrint:()=>{ this._printEscape(); setTimeout(()=>window.print(), 30); }, printPreviewOpen:S.printPreviewOpen,
+      onClosePrintPreview:()=>{ this._printRestore(); this.setState({printPreviewOpen:false}); },
+      // iOS often never fires `afterprint`, so always restore the sheet on a timer too —
+      // otherwise the zoom-to-fit sizing stays applied and the app looks stuck zoomed.
+      onConfirmPrint:()=>{ this._printEscape(); setTimeout(()=>window.print(), 30); setTimeout(()=>this._printRestore(), 2500); },
+      printPreviewOpen:S.printPreviewOpen,
       printSheet:{ accent:squad.accent, clubName:this.brandConfig.clubName||'Vortex Swimming Club', squadName:squad.name, printDate:new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}), zoneLabel:(zoneRows[zi]?zoneRows[zi].code+' \u00b7 '+zoneRows[zi].name:zName), title:sessionTitle||'Session', coach:squad.coach, total:planTotalN.toLocaleString(),
         timeWindow:this._fmtClockAmPm(planClock.startSec)+' \u2013 '+this._fmtClockAmPm(planClock.endSec)+' \u00b7 '+this._fmtDur(planClock.endSec-planClock.startSec),
         sections: planSections.map(ps=>({ title:ps.title, dot:ps.dot, subtotal:ps.subtotal, isRounds:ps.isRounds, roundsLabel:ps.roundsLabel, sets: ps.sets.map(st=>{ const onEquip=(st.equip||[]).filter(e=>e.on).map(e=>e.label); const onTypes=(st.types||[]).filter(e=>e.on).map(e=>e.label); const onStrokes=(st.strokes||[]).filter(e=>e.on).map(e=>e.label); const onLabels=(st.labels||[]).filter(e=>e.on).map(e=>e.label); const setSw=(st.setSwimmers||[]).map(e=>e.name); const onGroups=(st.setGroups||[]).filter(e=>e.on).map(e=>e.label); const rounds=Number(st.circuit)||1; return {dist:(rounds>1?(rounds+'×('+(st.reps>1?(st.reps+'×'+st.dist):st.dist)+')'):(st.reps>1?(st.reps+'×'+st.dist):st.dist)), hasDistSend:!!st.sendoffVal, distSend:('@ '+(st.sendoffVal||'')), timeLabel:st.timeLabel, setMetres:(Number(st.setMetres)||0).toLocaleString(), txt:st.txt, hasStrokes:onStrokes.length>0, strokesStr:onStrokes.join('/'), hasTypes:onTypes.length>0, typesStr:onTypes.join(', '), hasLabels:onLabels.length>0, labelsStr:onLabels.join(', '), hasGroups:onGroups.length>0, groupsStr:onGroups.join(', '), hasSwimmers:setSw.length>0, swimmersStr:setSw.join(', '), hasEquip:onEquip.length>0, equipStr:onEquip.join(', '), hasSendoff:!!st.sendoffVal, sendoffStr:st.sendoffVal||'', hasRest:!!st.rest, restStr:st.rest||'', hasHr:!!(st.hrFromVal||st.hrToVal), hrStr:(st.hrFromVal||st.hrToVal)?('HR '+(st.hrFromVal||'?')+(st.hrToVal?('-'+st.hrToVal):'')):'', zoneCode:st.zone||'', hasZone:!!st.zone, zoneStr:st.zone||''}; }) })) },
@@ -9287,8 +9304,32 @@ class Component extends DCLogic {
       ...(()=>{
         const q=(S.famAdminQuery||'').trim().toLowerCase();
         const swq=(S.famAdminSwQuery||'').trim().toLowerCase();
-        const rows=(this.family||[])
-          .filter(f=> !q || (String(f.name||'').toLowerCase().includes(q) || String(f.email||'').toLowerCase().includes(q)))
+        const all=(this.family||[]);
+        // Audit every account so problems can be found without opening each one.
+        let nBroken=0, nEmpty=0; const owners={};
+        all.forEach(f=>{ const ids=f.swimmerIds||[];
+          if(!ids.length) nEmpty++;
+          let bad=false;
+          ids.forEach(uid=>{ const h=this._famResolve(uid); if(!h){ bad=true; return; }
+            (owners[h.sw.id]=owners[h.sw.id]||[]).push(f.name||f.email||'?'); });
+          if(bad) nBroken++;
+        });
+        // A child linked to two different logins is the classic sign of a wrong link.
+        const shared=Object.keys(owners).filter(k=>owners[k].length>1);
+        const problemIds={};
+        all.forEach(f=>{ const ids=f.swimmerIds||[];
+          const bad=ids.some(uid=>!this._famResolve(uid));
+          const dup=ids.some(uid=>{ const h=this._famResolve(uid); return h && owners[h.sw.id] && owners[h.sw.id].length>1; });
+          if(bad||dup||!ids.length) problemIds[f.id]=true; });
+        const rows=all
+          .filter(f=>{
+            if(S.famAdminProblems && !problemIds[f.id]) return false;
+            if(!q) return true;
+            if(String(f.name||'').toLowerCase().includes(q)) return true;
+            if(String(f.email||'').toLowerCase().includes(q)) return true;
+            // also match on a linked CHILD's name — admins search for the swimmer, not the parent
+            return (f.swimmerIds||[]).some(uid=>{ const h=this._famResolve(uid); return h && String(h.sw.name||'').toLowerCase().includes(q); });
+          })
           .slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')))
           .map(f=>{
             const ids=f.swimmerIds||[];
@@ -9300,9 +9341,10 @@ class Component extends DCLogic {
               kidCount:ids.length+(ids.length===1?' child':' children'),
               hasKids:ids.length>0,
               kids:ids.map(uid=>{ const h=this._famResolve(uid);
+                const dup = h && owners[h.sw.id] && owners[h.sw.id].length>1;
                 return { label: h? h.sw.name : 'Broken link',
-                  sub: h? (((this.squadById[h.sqid]||{}).name)||'') : 'this link points at no swimmer — remove it',
-                  ok:!!h, dot: h?'#0C7A4F':'#A52A2E', bg: h?'#F8FAFC':'#FBE2E3',
+                  sub: h? ((((this.squadById[h.sqid]||{}).name)||'')+(dup?(' · ALSO linked to '+owners[h.sw.id].filter(n=>n!==(f.name||f.email||'?')).join(', ')):'')) : 'this link points at no swimmer — remove it',
+                  ok:!!h, dot: h?(dup?'#B4690E':'#0C7A4F'):'#A52A2E', bg: h?(dup?'#FCEFD6':'#F8FAFC'):'#FBE2E3',
                   onRemove:()=>this.famAdminUnlink(f.id, uid) }; }),
               addOpen,
               onAddToggle:()=>this.setState({famAdminAddFor: addOpen?null:f.id, famAdminSwQuery:'', famAdminMsg:''}),
@@ -9314,7 +9356,17 @@ class Component extends DCLogic {
               addHint: swq.length>=2 ? '' : 'Type at least 2 letters of the child’s name'
             };
           });
+        const nProblem=Object.keys(problemIds).length;
         return { famAdminRows:rows, famAdminEmpty:rows.length===0,
+          famAdminTotal:all.length,
+          famAdminAuditLine: all.length
+            ? (all.length+' accounts · '+nBroken+' with a broken link · '+shared.length+' child'+(shared.length===1?'':'ren')+' linked to 2+ logins · '+nEmpty+' with no child')
+            : 'No family accounts have registered yet.',
+          famAdminAuditOk: nProblem===0 && all.length>0,
+          famAdminHasProblems: nProblem>0,
+          famAdminProblemsOn: !!S.famAdminProblems,
+          famAdminProblemsLabel: S.famAdminProblems ? ('Showing '+nProblem+' account'+(nProblem===1?'':'s')+' needing a check — tap to show all') : ('Show only the '+nProblem+' account'+(nProblem===1?'':'s')+' needing a check'),
+          onFamAdminProblems:()=>this.setState({famAdminProblems:!S.famAdminProblems, famAdminQuery:''}),
           famAdminSwQuery:S.famAdminSwQuery, onFamAdminSwQuery:(e)=>this.setState({famAdminSwQuery:e.target.value}) };
       })(),
       onExportRosterCsv:()=>this.exportRosterCsv(),
