@@ -2924,6 +2924,62 @@ if ('serviceWorker' in navigator) {
                     </div>
                   </sc-if>
 
+                  <!-- DAILY ATTENDANCE — every squad, one day, recorded automatically -->
+                  <sc-if value="{{ toolAttDay }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;flex-direction:column;gap:10px">
+                      <div style="background:linear-gradient(140deg,#0C7A4F,#075437);border-radius:18px;padding:14px 15px;color:#fff">
+                        <div style="display:flex;align-items:center;gap:9px">
+                          <button onclick="{{ attDayPrev }}" style="width:32px;height:32px;flex:none;border-radius:10px;border:none;background:rgba(255,255,255,.16);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="chevron-left" style="width:16px;height:16px"></i></button>
+                          <div style="flex:1;text-align:center">
+                            <p style="margin:0;font-size:13.5px;font-weight:800">{{ attDayLabel }}</p>
+                            <p style="margin:1px 0 0;font-size:11px;color:rgba(255,255,255,.75)">{{ attDayPresent }} present · {{ attDayAbsent }} absent · {{ attDayLate }} late</p>
+                          </div>
+                          <button onclick="{{ attDayNext }}" style="width:32px;height:32px;flex:none;border-radius:10px;border:none;background:rgba(255,255,255,.16);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="chevron-right" style="width:16px;height:16px"></i></button>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
+                          <span style="font-size:30px;font-weight:800;line-height:1">{{ attDayPct }}</span>
+                          <span style="flex:1"><span style="display:block;font-size:10.5px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.06em">club attendance</span><span style="display:block;font-size:11.5px;color:rgba(255,255,255,.9);margin-top:1px">{{ attDayPresent }} of {{ attDayTotal }} swimmers</span></span>
+                          <sc-if value="{{ attDayIsToday }}" hint-placeholder-val="{{ true }}">
+                            <span style="flex:none;background:rgba(255,255,255,.18);border-radius:999px;padding:4px 10px;font-size:10.5px;font-weight:800">TODAY</span>
+                          </sc-if>
+                        </div>
+                      </div>
+                      <div style="display:flex;gap:6px;flex-wrap:wrap">
+                        <sc-for list="{{ attDayChips }}" as="ac" hint-placeholder-count="4">
+                          <button onclick="{{ ac.onClick }}" style="background:{{ ac.bg }};color:{{ ac.fg }};border:1px solid {{ ac.border }};border-radius:999px;padding:6px 12px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">{{ ac.label }}</button>
+                        </sc-for>
+                        <button onclick="{{ attDayToday }}" style="margin-left:auto;background:#fff;color:#3A4152;border:1px solid #E5E9F0;border-radius:999px;padding:6px 12px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Today</button>
+                        <button onclick="{{ onAttDayExport }}" style="background:#fff;color:#0C7A4F;border:1px solid #BFE4D2;border-radius:999px;padding:6px 12px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Export CSV</button>
+                      </div>
+                      <sc-for list="{{ attDaySquads }}" as="ad" hint-placeholder-count="9">
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;box-shadow:0 1px 4px rgba(11,20,40,.04);overflow:hidden">
+                          <button onclick="{{ ad.onToggle }}" style="width:100%;text-align:left;background:none;border:none;padding:12px 13px;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:10px">
+                            <span style="width:9px;height:9px;flex:none;border-radius:50%;background:{{ ad.accent }}"></span>
+                            <span style="flex:1;min-width:0">
+                              <span style="display:block;font-size:13.5px;font-weight:800;color:#0C1116">{{ ad.name }}</span>
+                              <span style="display:block;font-size:11px;color:#7A8296;margin-top:1px">{{ ad.present }}/{{ ad.total }} present · {{ ad.absent }} absent · {{ ad.late }} late</span>
+                            </span>
+                            <span style="flex:none;font-family:var(--font-mono);font-size:14px;font-weight:800;color:{{ ad.accent }}">{{ ad.pct }}</span>
+                            <i data-lucide="chevron-down" style="width:16px;height:16px;color:#AEB6C7;flex:none"></i>
+                          </button>
+                          <div style="height:4px;background:#EEF1F5"><div style="height:4px;background:{{ ad.accent }};width:{{ ad.barW }}"></div></div>
+                          <sc-if value="{{ ad.open }}" hint-placeholder-val="{{ false }}">
+                            <div style="padding:10px 13px 13px;display:flex;flex-direction:column;gap:6px;border-top:1px solid #F4F6F8">
+                              <sc-for list="{{ ad.rows }}" as="ar" hint-placeholder-count="6">
+                                <button onclick="{{ ar.onOpen }}" style="display:flex;align-items:center;gap:9px;width:100%;text-align:left;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:10px;padding:8px 10px;cursor:pointer;font-family:inherit">
+                                  <span style="width:28px;height:28px;flex:none;border-radius:9px;background:#EEF1F5;color:#5A657E;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:800">{{ ar.initials }}</span>
+                                  <span style="flex:1;min-width:0;font-size:12.5px;font-weight:700;color:#0C1116">{{ ar.name }}</span>
+                                  <span style="flex:none;background:{{ ar.statusBg }};color:{{ ar.statusColor }};border-radius:999px;padding:3px 9px;font-size:10.5px;font-weight:800">{{ ar.statusLabel }}</span>
+                                </button>
+                              </sc-for>
+                              <button onclick="{{ ad.onTakeAttendance }}" style="margin-top:3px;display:flex;align-items:center;justify-content:center;gap:7px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border:1.5px dashed var(--vx-blue);border-radius:10px;padding:9px;cursor:pointer;font-family:inherit;font-weight:700;font-size:12px"><i data-lucide="clipboard-check" style="width:15px;height:15px"></i> Take / edit this squad’s register</button>
+                            </div>
+                          </sc-if>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+
                   <sc-if value="{{ toolRecovery }}" hint-placeholder-val="{{ true }}">
                     <div style="display:flex;flex-direction:column;gap:12px">
                       <div style="background:linear-gradient(135deg,#C81E5B,#7A1338);color:#fff;border-radius:16px;padding:16px;display:flex;align-items:center;gap:12px">
@@ -4526,6 +4582,7 @@ class Component extends DCLogic {
       famMode:'login', famName:'', famEmail:'', famPass:'', famPass2:'', famPhone:'', famRole:'parent', famSearch:'', famPicked:[], famErr:'', famResetOk:false, famBusy:false, famRegisteredMsg:'',
       famVerify:null, famVerifyInput:'', famVerifyErr:'',
       adminSection:null, famAdminQuery:'', famAdminAddFor:null, famAdminSwQuery:'', famAdminMsg:'', famAdminProblems:false,
+      attDayISO:null, attDayStatus:'all', attDayOpenSquad:null,
       swQuery:'', swSquadFilter:'all', swDobFilter:false, swEditId:null, swAddOpen:false, swForm:{name:'',age:'',dob:'',gender:'Boys',squadId:'',pbs:[]},
       swPbEventSel:'50 Free', swPbTimeDraft:'', swPbCourse:'LCM', swPbMeet:'', swPbMeetDate:'',
       swEditPbs:[], swEditPbEventSel:'50 Free', swEditPbTimeDraft:'', swEditPbCourse:'LCM', swEditPbMeet:'', swEditPbMeetDate:'',
@@ -4667,7 +4724,8 @@ class Component extends DCLogic {
     // Locked to the Fitness Plan tool if their role mentions "fitness" OR the account is Coach Nedhal.
     if(a.id==='ahmed'||a.id==='sameh') return false; // club admins always have full access
     return /fitness/i.test(a.role||'') || /nedhal/i.test(a.label||'') || /nedhal/i.test(a.user||''); }
-  openTool(t, club){ if(this._fitnessLocked() && t!=='fitness') t='fitness'; const patch={tool:t, toolScopeClub:!!club, aiOut:null, aiLoading:false}; if(t==='clock'){ const seq=this.clockSeq(); patch.clockRunning=false; patch.clockSetIdx=0; patch.clockRep=1; patch.clockRemain=seq[0]?seq[0].interval:0; } this.setState(patch); if(t==='lounge'){ try{ this._loungeFetch(); }catch(e){} } if(t==='season'){ try{ this._seasonFetch(); }catch(e){} try{ this._plansFetch(); }catch(e){} try{ this._squadPlansFetch(); }catch(e){} } if(t==='fitness'){ try{ this._fitSessFetch(); }catch(e){} try{ this._fitPlansFetch(); }catch(e){} } }
+  openTool(t, club){ if(this._fitnessLocked() && t!=='fitness') t='fitness'; const patch={tool:t, toolScopeClub:!!club, aiOut:null, aiLoading:false}; if(t==='clock'){ const seq=this.clockSeq(); patch.clockRunning=false; patch.clockSetIdx=0; patch.clockRep=1; patch.clockRemain=seq[0]?seq[0].interval:0; } this.setState(patch); if(t==='attday'){ try{ this._attendFetch(this.state.attDayISO||this.todayISO()); }catch(e){} }
+    if(t==='lounge'){ try{ this._loungeFetch(); }catch(e){} } if(t==='season'){ try{ this._seasonFetch(); }catch(e){} try{ this._plansFetch(); }catch(e){} try{ this._squadPlansFetch(); }catch(e){} } if(t==='fitness'){ try{ this._fitSessFetch(); }catch(e){} try{ this._fitPlansFetch(); }catch(e){} } }
 
   todayISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
   curAttendDate(){ return this.state.attendDateISO || this.todayISO(); }
@@ -4722,6 +4780,19 @@ class Component extends DCLogic {
     const log=JSON.parse(JSON.stringify(this.attendLog||{}));
     rows.forEach(r=>{ if(!r.squad_id||!r.day||!r.sw_id) return; (log[r.squad_id]=log[r.squad_id]||{}); (log[r.squad_id][r.day]=log[r.squad_id][r.day]||{}); log[r.squad_id][r.day][r.sw_id]=r.status; });
     this.attendLog=log; try{ this._saveLocalOnly('vx_attend_log', log); }catch(e){} this.forceUpdate();
+  }
+  // One CSV of the whole club's register for a single day — a daily record you can keep.
+  exportDailyAttendanceCsv(day, sqRows){
+    const esc=(v)=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+    const lines=[['Date','Squad','Coach','Swimmer','Status'].map(esc).join(',')];
+    (sqRows||[]).forEach(sq=>{ (sq.rows||[]).forEach(r=>{
+      lines.push([day, sq.name, sq.coach||'', r.name, r.statusLabel].map(esc).join(','));
+    }); });
+    const blob=new Blob([lines.join('\n')], {type:'text/csv;charset=utf-8'});
+    const url=URL.createObjectURL(blob); const a=document.createElement('a');
+    a.href=url; a.download='Vortex attendance '+day+'.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>{ try{ URL.revokeObjectURL(url); }catch(e){} }, 60000);
   }
   _attendMigrate(){ if(!window.__vxUpsert) return; const log=this.attendLog||{}; const batch=[];
     Object.keys(log).forEach(sq=>{ const days=log[sq]||{}; Object.keys(days).forEach(day=>{ const marks=days[day]||{}; Object.keys(marks).forEach(sw=>{ const st=marks[sw]; if(st) batch.push({id:sq+'_'+day+'_'+sw, squad_id:sq, day:day, sw_id:sw, status:st, ts:Date.now(), updated_at:new Date().toISOString()}); }); }); });
@@ -7615,6 +7686,7 @@ class Component extends DCLogic {
       {id:'inbody', icon:'scan-line', title:'InBody Import', sub:'PDF / QR scan · health analysis', tint:'rgba(200,30,91,.1)', color:'#C81E5B'},
       {id:'sponsors', icon:'crown', title:'Sponsors', sub:'VIP sponsored swimmers directory', tint:'rgba(200,155,60,.16)', color:'#9A6206'},
       {id:'talent', icon:'star', title:'Talent Board', sub:'Move-up candidates by age & PB', tint:'rgba(6,126,234,.1)', color:'#067EEA'},
+      {id:'attday', icon:'clipboard-check', title:'Daily Attendance', sub:'Every squad · who is in today', tint:'rgba(12,122,79,.1)', color:'#0C7A4F'},
       {id:'recovery', icon:'heart-pulse', title:'Recovery Board', sub:'WHOOP/Fitbit · who is run-down', tint:'rgba(200,30,91,.1)', color:'#C81E5B'},
       {id:'improvers', icon:'trending-down', title:'Top Improvers', sub:'Biggest time drops this season', tint:'rgba(12,122,79,.1)', color:'#0C7A4F'},
       {id:'rankings', icon:'list-ordered', title:'Rankings', sub:'Fastest per event vs squad average', tint:'rgba(6,126,234,.1)', color:'#067EEA'},
@@ -7823,7 +7895,7 @@ class Component extends DCLogic {
     const mainPadBottom = (S.view==='squad') ? '92px' : '0px';
 
     // ---- tool overlay content ----
-    const toolTitleMap={insights:'Insights',boards:'Boards',video:'Video Analysis',lounge:'Vortex Lounge',goals:'Season Goals',ai:'AI Assistants',review:'AI Plan Review',clock:'Pace Clock',talent:'Talent Board',recovery:'Recovery Board',improvers:'Top Improvers',rankings:'Rankings',standards:'Meet Standards',relay:'Relay Builder',zoneeng:'Zone Engine',sponsors:'Sponsors',tpace:'T-Pace Tests',promo:'Level-Up Review',entries:'Meet Entries',fitness:'Fitness Plan',inbody:'InBody Import',season:'Season Plan'};
+    const toolTitleMap={attday:'Daily Attendance',insights:'Insights',boards:'Boards',video:'Video Analysis',lounge:'Vortex Lounge',goals:'Season Goals',ai:'AI Assistants',review:'AI Plan Review',clock:'Pace Clock',talent:'Talent Board',recovery:'Recovery Board',improvers:'Top Improvers',rankings:'Rankings',standards:'Meet Standards',relay:'Relay Builder',zoneeng:'Zone Engine',sponsors:'Sponsors',tpace:'T-Pace Tests',promo:'Level-Up Review',entries:'Meet Entries',fitness:'Fitness Plan',inbody:'InBody Import',season:'Season Plan'};
     const toolScope = S.toolScopeClub ? ('Club-wide · '+this.allSwimmersFlat().length+' swimmers') : squad.name+' · '+squad.count+' swimmers';
 
     // ---- Talent / Move-up board ----
@@ -8774,7 +8846,7 @@ class Component extends DCLogic {
           dashRed:String(redCount), dashRedIsZero:redCount===0, dashRedSub: redCount? 'need lighter load' : 'all recovered',
           dashUnread:String(unread), dashUnreadIsZero:unread===0, dashUnreadSub: unread? 'awaiting reply' : 'all replied',
           dashMeetName: nextMeet?nextMeet.name:'No meet scheduled', dashMeetSub: nextMeet?((nextMeet.course||'')+' · '+(nextMeet.date||'')):'—', dashHasMeet:!!nextMeet,
-          onDashAttend:()=>this.setState({view:'squad', squadId:(acc.squadId||this.state.squadId||'seniora'), tab:'attend'}),
+          onDashAttend:()=>{ this.setState({attDayISO:this.todayISO()}); this.openTool('attday', true); },
           onDashRecovery:()=>this.setState({view:'tools', tool:'recovery', toolScopeClub:isAdm}),
           onDashMeets:()=>this.setState({view:'squad', squadId:(acc.squadId||this.state.squadId||'seniora'), tab:'more'}),
         };
@@ -9465,6 +9537,58 @@ class Component extends DCLogic {
       promoRows, promoEmpty, promoScopeLabel,
       toolEntries:S.tool==='entries', toolFitness:S.tool==='fitness', toolInbody:S.tool==='inbody', toolSponsors:S.tool==='sponsors',
       toolTalent:S.tool==='talent', talentRows, talentEmpty, talentScopeLabel:toolScope,
+      toolAttDay:S.tool==='attday',
+      ...(()=>{
+        if(S.tool!=='attday') return {};
+        const day=S.attDayISO||this.todayISO();
+        const filt=S.attDayStatus||'all';
+        const today=this.todayISO();
+        // Which squads this account may see (a coach stays locked to their own squad).
+        const mySq=(this._me()||{}).squadId;
+        const squads=this.squads.filter(sq=> !mySq || sq.id===mySq);
+        let tP=0,tA=0,tL=0;
+        const sqRows=squads.map(sq=>{
+          const list=(this.roster[sq.id]||[]);
+          let p=0,a=0,l=0;
+          const swRows=list.map((sw,idx)=>{
+            const st=this.getAttendStatus(sq.id, day, sw.id, idx);
+            if(st==='present')p++; else if(st==='absent')a++; else l++;
+            const away=this._swAwayOn(sw.id, day);
+            const meta={present:{label:'Present',color:'#0C7A4F',bg:'#DCF5EA'},absent:{label:'Absent',color:'#A52A2E',bg:'#FBE2E3'},late:{label:'Late',color:'#9A6206',bg:'#FCEFD6'}}[st];
+            return {id:sw.id, name:sw.name, initials:sw.initials, status:st,
+              statusLabel: away ? (meta.label+' · '+this._statusLabel(away)) : meta.label,
+              statusColor:meta.color, statusBg:meta.bg,
+              onOpen:()=>this.setState({tool:null, view:'squad', squadId:sq.id, tab:'group', swimmerId:sw.id}) };
+          }).filter(r=> filt==='all' || r.status===filt)
+            .sort((x,y)=>x.name.localeCompare(y.name));
+          tP+=p; tA+=a; tL+=l;
+          const tot=list.length||1;
+          return {id:sq.id, name:sq.name, accent:sq.accent, coach:sq.coach,
+            present:p, absent:a, late:l, total:list.length,
+            pct:Math.round((p/tot)*100)+'%',
+            barW:Math.round((p/tot)*100)+'%',
+            open:S.attDayOpenSquad===sq.id,
+            onToggle:()=>this.setState({attDayOpenSquad: S.attDayOpenSquad===sq.id?null:sq.id}),
+            rows:swRows, hasRows:swRows.length>0,
+            onTakeAttendance:()=>this.setState({tool:null, view:'squad', squadId:sq.id, tab:'attend', attendDateISO:day}) };
+        });
+        const grand=tP+tA+tL;
+        const d=new Date(day+'T00:00:00');
+        const chip=(k,label,n)=>({label:label+' '+n, on:filt===k, onClick:()=>this.setState({attDayStatus:k}),
+          bg: filt===k?'#0C1116':'#fff', fg: filt===k?'#fff':'#3A4152', border: filt===k?'#0C1116':'#E5E9F0'});
+        return {
+          attDayLabel: d.toLocaleDateString('en-GB',{weekday:'long', day:'numeric', month:'short', year:'numeric'}),
+          attDayIsToday: day===today,
+          attDayPrev:()=>{ const nd=this.shiftDate(day,-1); this.setState({attDayISO:nd}); try{ this._attendFetch(nd); }catch(e){} },
+          attDayNext:()=>{ if(day>=today) return; const nd=this.shiftDate(day,1); this.setState({attDayISO:nd}); try{ this._attendFetch(nd); }catch(e){} },
+          attDayToday:()=>{ this.setState({attDayISO:today}); try{ this._attendFetch(today); }catch(e){} },
+          attDayPresent:tP, attDayAbsent:tA, attDayLate:tL, attDayTotal:grand,
+          attDayPct: grand? Math.round(tP/grand*100)+'%' : '—',
+          attDaySquads:sqRows,
+          attDayChips:[chip('all','All',grand), chip('present','Present',tP), chip('absent','Absent',tA), chip('late','Late',tL)],
+          onAttDayExport:()=>this.exportDailyAttendanceCsv(day, sqRows)
+        };
+      })(),
       toolRecovery:S.tool==='recovery', recoveryRows, recoveryEmpty, recoveryScopeLabel:toolScope, recoveryLowCount, recoveryHasLow:recoveryLowCount>0,
       toolImprovers:S.tool==='improvers', improverRows, improverEmpty, improverScopeLabel:toolScope,
       toolStandards:S.tool==='standards', stdRows, stdEmpty, stdMeetName, stdMeetChips, stdEventsWithCut, stdTotalQual, onStdExport,
