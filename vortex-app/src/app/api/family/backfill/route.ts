@@ -56,17 +56,21 @@ export function probeKey() {
 // the newer sb_secret_ keys are accepted on the apikey header.
 async function authFetch(url: string) {
   const attempts: Array<{ how: string; headers: Record<string, string> }> = [
-    { how: "apikey + Bearer", headers: { apikey: SB_SERVICE, Authorization: "Bearer " + SB_SERVICE } },
+    { how: "apikey+Bearer", headers: { apikey: SB_SERVICE, Authorization: "Bearer " + SB_SERVICE } },
     { how: "apikey only", headers: { apikey: SB_SERVICE } },
+    { how: "apikey+Bearer+role", headers: { apikey: SB_SERVICE, Authorization: "Bearer " + SB_SERVICE, "Accept-Profile": "public", "Content-Profile": "public" } },
     { how: "Authorization only", headers: { Authorization: "Bearer " + SB_SERVICE } },
   ];
-  let last = "";
+  // Report EVERY attempt — showing only the last one hid why the earlier styles failed.
+  const tried: string[] = [];
   for (const a of attempts) {
-    const r = await fetch(url, { headers: a.headers, cache: "no-store" });
+    let r: Response;
+    try { r = await fetch(url, { headers: a.headers, cache: "no-store" }); }
+    catch (e) { tried.push(`${a.how} → threw ${String((e as Error).message || e).slice(0, 80)}`); continue; }
     if (r.ok) return { ok: true as const, res: r, how: a.how };
-    last = `${a.how} → HTTP ${r.status} ${(await r.text().catch(() => "")).slice(0, 160)}`;
+    tried.push(`${a.how} → ${r.status} ${(await r.text().catch(() => "")).slice(0, 120)}`);
   }
-  return { ok: false as const, error: last };
+  return { ok: false as const, error: tried.join("  |  ") };
 }
 
 async function listAllAuthUsers(): Promise<{ users: AuthUser[]; error?: string; how?: string }> {
@@ -99,13 +103,18 @@ async function build(request: Request, write: boolean) {
   }
   const includeAll = url.searchParams.get("all") === "1";
 
-  const { users, error } = await listAllAuthUsers();
+  const { users, error, how: authHow } = await listAllAuthUsers();
   if (error) return Response.json({ error, authUsers: users.length }, { status: 502 });
 
-  // Existing rows (service-role read bypasses RLS, so this is the true contents of the table)
+  // Existing rows (a secret key bypasses RLS, so this is the true contents of the table)
   const exA = await authFetch(`${SB_URL}/rest/v1/family_accounts?select=id,name,email,swimmer_ids&limit=5000`);
   if (!exA.ok) {
-    return Response.json({ error: `could not read family_accounts — ${exA.error}`, key: probeKey() }, { status: 502 });
+    return Response.json({
+      error: `could not read family_accounts. Auth listing DID work via "${authHow}" and found ${users.length} registered users, so the key is valid — the database read is what is refused.`,
+      attempts: exA.error,
+      authUsers: users.length,
+      key: probeKey(),
+    }, { status: 502 });
   }
   const existing: Array<{ email?: string; name?: string; swimmer_ids?: string[] }> = await exA.res.json();
   const have = new Set(existing.map((r) => (r.email || "").trim().toLowerCase()).filter(Boolean));

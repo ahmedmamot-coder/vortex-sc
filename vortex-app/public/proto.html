@@ -9521,7 +9521,7 @@ class Component extends DCLogic {
         try{
           const r=await fetch('/api/family/backfill', {method:'POST'});
           const j=await r.json().catch(()=>({}));
-          if(!r.ok){ this.setState({famAdminMsg:(j&&j.error)||('Recovery failed (HTTP '+r.status+')')}); return; }
+          if(!r.ok){ this.setState({famAdminMsg:((j&&j.error)||('Recovery failed (HTTP '+r.status+')'))+(j&&j.attempts?(' — tried: '+j.attempts):'')}); return; }
           try{ await this._familyFetch(); }catch(e){}
           // Say exactly what happened — "0 of 5" on its own hides whether they were already
           // there, skipped as staff, or the insert was refused.
