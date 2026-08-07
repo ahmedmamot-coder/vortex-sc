@@ -459,6 +459,10 @@ if ('serviceWorker' in navigator) {
   @keyframes vxrise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
   @keyframes vxsheet{from{transform:translateY(100%)}to{transform:none}}
   @keyframes vxspin{to{transform:rotate(360deg)}}
+  /* Bottom bar: the water surface under the open tab keeps moving. */
+  @keyframes vxdrift{to{transform:translateX(-25%)}}
+  .vx-wave{animation:vxdrift 3.6s linear infinite}
+  @media (prefers-reduced-motion:reduce){ .vx-wave{animation:none} .vx-pool{transition:none} }
   @keyframes vxbar{from{transform:scaleY(0)}to{transform:scaleY(1)}}
   .vx-screen{animation:vxrise .32s cubic-bezier(.22,1,.36,1)}
   .vx-sheet{animation:vxsheet .34s cubic-bezier(.22,1,.36,1)}
@@ -2370,9 +2374,18 @@ if ('serviceWorker' in navigator) {
 
             <sc-if value="{{ showNav }}" hint-placeholder-val="{{ true }}">
               <div style="position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:center;background:transparent;padding:9px 12px calc(env(safe-area-inset-bottom) + 10px);z-index:20;pointer-events:none">
-                <div style="display:flex;align-items:center;gap:4px;background:#0A0F1A;border-radius:999px;padding:6px 8px;box-shadow:0 12px 30px rgba(0,0,0,.28);pointer-events:auto">
+                <div style="position:relative;overflow:hidden;display:flex;align-items:stretch;width:100%;max-width:440px;background:#0A0F1A;border-radius:26px;padding:8px 4px 6px;box-shadow:0 12px 30px rgba(0,0,0,.28);pointer-events:auto">
+                  <span class="vx-pool" style="position:absolute;bottom:0;left:{{ navPoolLeft }};width:{{ navPoolWidth }};height:46px;z-index:0;overflow:hidden;border-radius:14px 14px 20px 20px;transition:left .44s cubic-bezier(.4,1.25,.5,1)">
+                    <span style="position:absolute;inset:0;background:{{ navPoolGrad }};border-radius:14px 14px 20px 20px"></span>
+                    <svg class="vx-wave" viewBox="0 0 200 16" preserveAspectRatio="none" style="position:absolute;top:-1px;left:-30%;width:160%;height:14px">
+                      <path d="M0 8 Q 25 0 50 8 T 100 8 T 150 8 T 200 8 V16 H0Z" fill="{{ navWaveFill }}"></path>
+                    </svg>
+                  </span>
                   <sc-for list="{{ navItems }}" as="n" hint-placeholder-count="5">
-                    <button onclick="{{ n.onClick }}" style="display:flex;align-items:center;gap:6px;height:42px;padding:0 {{ n.pad }};border-radius:999px;background:{{ n.pillBg }};border:none;cursor:pointer;color:{{ n.color }};font-family:inherit"><i data-lucide="{{ n.icon }}" style="width:21px;height:21px"></i><sc-if value="{{ n.active }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;font-weight:700;white-space:nowrap">{{ n.label }}</span></sc-if></button>
+                    <button onclick="{{ n.onClick }}" style="position:relative;z-index:2;flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:6px 2px 4px;background:none;border:none;cursor:pointer;color:{{ n.color }};font-family:inherit;transform:{{ n.lift }};transition:transform .4s cubic-bezier(.34,1.4,.5,1),color .3s ease">
+                      <i data-lucide="{{ n.icon }}" style="width:22px;height:22px"></i>
+                      <span style="font-size:10px;font-weight:750;letter-spacing:.01em;opacity:{{ n.labelOpacity }};white-space:nowrap">{{ n.label }}</span>
+                    </button>
                   </sc-for>
                 </div>
               </div>
@@ -7988,6 +8001,11 @@ class Component extends DCLogic {
       'activity':'<path d="M2.5 12h4l2.5-6.5 4.5 13L16 12h5.5"/>',
       'dumbbell':'<path d="M3 9.5v5M6.2 7v10M17.8 7v10M21 9.5v5"/><path d="M6.2 12h11.6"/>',
       'route':'<circle cx="6" cy="18.5" r="2.6"/><circle cx="18" cy="5.5" r="2.6"/><path d="M8.6 18.5h5.4a3.4 3.4 0 0 0 0-6.8H10a3.4 3.4 0 0 1 0-6.8h5.4"/>',
+      'vxf-users':'<g fill="currentColor" stroke="none"><circle cx="9" cy="7.6" r="3.6"/><path d="M2.6 19.9c0-3.5 2.9-6.3 6.4-6.3s6.4 2.8 6.4 6.3z"/><circle cx="17.2" cy="8.4" r="2.7"/><path d="M15.9 13.9c.5-.1.9-.2 1.4-.2 2.5 0 4.5 2 4.5 4.5v1.7h-4.2c0-2.3-.7-4.4-1.7-6z"/></g>',
+      'vxf-list-checks':'<g fill="currentColor" stroke="none"><path d="M2.4 6.4a1 1 0 0 1 1.5-1.3l1.1 1.1 2.5-2.6a1 1 0 0 1 1.5 1.4L5.7 8.4a1 1 0 0 1-1.5 0z"/><path d="M2.4 16.4a1 1 0 0 1 1.5-1.3l1.1 1.1 2.5-2.6a1 1 0 0 1 1.5 1.4l-3.3 3.4a1 1 0 0 1-1.5 0z"/><rect x="11" y="5.6" width="10" height="2" rx="1"/><rect x="11" y="10.5" width="7" height="2" rx="1"/><rect x="11" y="15.6" width="10" height="2" rx="1"/></g>',
+      'vxf-calendar-check':'<g fill="currentColor" stroke="none"><path d="M8 2a1 1 0 0 1 1 1v1h6V3a1 1 0 1 1 2 0v1h1a3 3 0 0 1 3 3v1.2H3V7a3 3 0 0 1 3-3h1V3a1 1 0 0 1 1-1z"/><path d="M3 10.6h18V18a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3zm5.5 4.4a1 1 0 0 0-1.4 1.4l2 2a1 1 0 0 0 1.5-.1l3.6-4a1 1 0 0 0-1.5-1.3l-2.9 3.2z"/></g>',
+      'vxf-medal':'<g fill="currentColor" stroke="none"><path d="M6.4 3h11.2a.8.8 0 0 1 .8 1l-1.9 5.9a7 7 0 0 0-8.2 0L5.6 4a.8.8 0 0 1 .8-1z"/><path d="M12 9.4a5.8 5.8 0 1 0 0 11.6 5.8 5.8 0 0 0 0-11.6zm0 2.6l.9 1.9 2.1.3-1.5 1.5.4 2.1-1.9-1-1.9 1 .4-2.1-1.5-1.5 2.1-.3z"/></g>',
+      'vxf-layout-grid':'<g fill="currentColor" stroke="none"><rect x="3" y="3" width="8" height="8" rx="2.2"/><rect x="13" y="3" width="8" height="8" rx="2.2"/><rect x="3" y="13" width="8" height="8" rx="2.2"/><rect x="13" y="13" width="8" height="8" rx="2.2"/></g>',
       'users':'<circle cx="9.2" cy="8" r="3.1"/><path d="M2.8 20c0-3.2 2.9-5.8 6.4-5.8s6.4 2.6 6.4 5.8"/><path d="M16.4 5.4a3.1 3.1 0 0 1 0 5.6"/><path d="M18 14.6c2 .8 3.3 2.6 3.3 4.7"/>'
     };
     this._glyphMap=G; return G;
@@ -8369,7 +8387,19 @@ class Component extends DCLogic {
     // ---- nav ----
     const tabs=[{id:'group',icon:'users',label:'Group'},{id:'plans',icon:'list-checks',label:'Plans'},{id:'attend',icon:'calendar-check',label:'Attend'},{id:'results',icon:'medal',label:'Results'},{id:'more',icon:'layout-grid',label:'More'}];
     // Floating pill nav: the active tab expands into a coloured pill with its label; others are icon-only.
-    const navItems=tabs.map(t=>{ const on=S.tab===t.id; return {icon:t.icon, label:t.label, active:on, color: on?'#fff':'rgba(255,255,255,.6)', pillBg: on?squad.accent:'transparent', pad: on?'15px':'13px', onClick:()=>this.setState({tab:t.id})}; });
+    // Waterline bar: water pools under the open tab, its surface always moving, and the
+    // open glyph fills in. Tabs are equal width so the pool can slide by percentage.
+    const navIdx=Math.max(0, tabs.findIndex(t=>t.id===S.tab));
+    const navItems=tabs.map(t=>{ const on=S.tab===t.id;
+      return { icon: on?('vxf-'+t.icon):t.icon, label:t.label, active:on,
+        color: on?'#fff':'rgba(255,255,255,.55)',
+        lift: on?'translateY(-3px)':'none',
+        labelOpacity: on?'1':'.6',
+        onClick:()=>this.setState({tab:t.id}) }; });
+    const navPoolLeft=(navIdx*(100/tabs.length))+'%';
+    const navPoolWidth=(100/tabs.length)+'%';
+    const navPoolGrad='linear-gradient(180deg,'+this._hexA(squad.accent,.85)+','+this._hexA(squad.accent,.32)+')';
+    const navWaveFill=this._hexA('#ffffff',.32);
     const navBarBg = (S.theme==='dark') ? '#0B0F17' : '#EEF1F5';
     const mainPadBottom = (S.view==='squad') ? '92px' : '0px';
 

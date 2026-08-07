@@ -165,4 +165,29 @@ describe("icon glyphs", () => {
     eq(/tint:this\._gradTile\(t\.color\), color:'#fff'/.test(SOURCE), true));
 });
 
+/* ----------------------------------------------------------- bottom tab bar
+   Waterline: the pool slides under the open tab and the glyph fills in. */
+describe("tab bar", () => {
+  const tabs = ["group", "plans", "attend", "results", "more"];
+  const left = (id) => Math.max(0, tabs.indexOf(id)) * (100 / tabs.length) + "%";
+
+  it("pool sits under the first tab", () => eq(left("group"), "0%"));
+  it("pool slides to the middle tab", () => eq(left("attend"), "40%"));
+  it("pool slides to the last tab", () => eq(left("more"), "80%"));
+  it("an unknown tab falls back to the first", () => eq(left("nope"), "0%"));
+
+  it("ships a filled glyph for every tab", () => {
+    for (const n of tabs) {
+      const icon = { group: "users", plans: "list-checks", attend: "calendar-check", results: "medal", more: "layout-grid" }[n];
+      eq(SOURCE.includes(`'vxf-${icon}'`), true, `vxf-${icon} missing`);
+    }
+  });
+  it("the open tab uses the filled glyph", () =>
+    eq(/on\?\('vxf-'\+t\.icon\):t\.icon/.test(SOURCE), true));
+  it("the water surface animates", () =>
+    eq(SOURCE.includes("@keyframes vxdrift") && SOURCE.includes('class="vx-wave"'), true));
+  it("motion stops for Reduce Motion", () =>
+    eq(/prefers-reduced-motion:reduce\)\{ \.vx-wave\{animation:none\}/.test(SOURCE), true));
+});
+
 report();
