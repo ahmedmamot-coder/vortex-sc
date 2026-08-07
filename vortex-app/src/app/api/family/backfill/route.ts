@@ -95,6 +95,32 @@ async function build(request: Request, write: boolean) {
   const url = new URL(request.url);
   // ?probe=1 identifies the configured key without revealing it.
   if (url.searchParams.get("probe") === "1") return Response.json({ key: probeKey() });
+
+  // ?schema=1 reports the table's real columns from the API's own description, which
+  // works even when the table is empty (reading a row cannot tell you the shape then).
+  if (url.searchParams.get("schema") === "1") {
+    const a = await authFetch(`${SB_URL}/rest/v1/`);
+    if (!a.ok) return Response.json({ error: a.error, key: probeKey() }, { status: 502 });
+    const spec = await a.res.json().catch(() => null);
+    const def = spec && spec.definitions && spec.definitions.family_accounts;
+    if (!def) return Response.json({ error: "family_accounts is not described by the API — check the table exists in the public schema" }, { status: 404 });
+    const props: Record<string, { type?: string; format?: string; description?: string }> = def.properties || {};
+    const required: string[] = def.required || [];
+    const appWrites = ["id", "name", "email", "phone", "pass", "role", "swimmer_ids", "ts"];
+    const columns = Object.keys(props).map((k) => ({
+      name: k,
+      type: props[k].format || props[k].type,
+      notNull: required.includes(k),
+      hasDefault: /Default Value/i.test(props[k].description || ""),
+      appSendsIt: appWrites.includes(k),
+    }));
+    return Response.json({
+      columns,
+      // These are what break an insert: cannot be null, no default, and the app never sends them.
+      blockingColumns: columns.filter((c) => c.notNull && !c.hasDefault && !c.appSendsIt).map((c) => c.name),
+      missingColumnsAppNeeds: appWrites.filter((c) => !props[c]),
+    });
+  }
   if (!haveService()) {
     return Response.json(
       { error: "server missing SUPABASE_SERVICE_ROLE_KEY — add it in Vercel → Settings → Environment Variables, then Redeploy", key: probeKey() },
