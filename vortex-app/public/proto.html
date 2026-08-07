@@ -4117,8 +4117,30 @@ if ('serviceWorker' in navigator) {
                       <button onclick="{{ onPickSetPhoto }}" style="display:flex;align-items:center;gap:7px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border:none;border-radius:9px;padding:9px 13px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer"><i data-lucide="camera" style="width:15px;height:15px"></i>Change photo</button>
                     </div>
                     <input value="{{ setName }}" oninput="{{ onSetName }}" placeholder="Full name" style="width:100%;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:11px 13px;font-family:inherit;font-size:13.5px;color:#0C1116;outline:none;box-sizing:border-box;margin-bottom:8px">
-                    <input value="{{ setPhone }}" oninput="{{ onSetPhone }}" placeholder="Phone / WhatsApp" type="tel" style="width:100%;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:11px 13px;font-family:inherit;font-size:13.5px;color:#0C1116;outline:none;box-sizing:border-box">
+                    <input value="{{ setPhone }}" oninput="{{ onSetPhone }}" placeholder="Phone / WhatsApp" type="tel" style="width:100%;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:11px 13px;font-family:inherit;font-size:13.5px;color:#0C1116;outline:none;box-sizing:border-box;margin-bottom:8px">
+                    <sc-if value="{{ settingsIsStaff }}" hint-placeholder-val="{{ false }}">
+                      <span style="display:block">
+                        <input value="{{ setUser }}" oninput="{{ onSetUser }}" placeholder="Username you sign in with" autocapitalize="off" autocorrect="off" style="width:100%;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:11px 13px;font-family:inherit;font-size:13.5px;color:#0C1116;outline:none;box-sizing:border-box;margin-bottom:8px">
+                        <input value="{{ setEmail }}" oninput="{{ onSetEmail }}" placeholder="Personal email" type="email" autocapitalize="off" style="width:100%;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:11px 13px;font-family:inherit;font-size:13.5px;color:#0C1116;outline:none;box-sizing:border-box;margin-bottom:8px">
+                        <input value="{{ setRoleTitle }}" oninput="{{ onSetRoleTitle }}" placeholder="Job title / role" style="width:100%;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:11px 13px;font-family:inherit;font-size:13.5px;color:#0C1116;outline:none;box-sizing:border-box;margin-bottom:8px">
+                        <textarea value="{{ setBio }}" oninput="{{ onSetBio }}" placeholder="About you — qualifications, experience (shown to families)" style="width:100%;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:11px 13px;font-family:inherit;font-size:13px;color:#0C1116;outline:none;box-sizing:border-box;min-height:64px;resize:vertical"></textarea>
+                        <p style="margin:7px 0 0;font-size:11px;color:#9AA2B4;line-height:1.45">Your squad and access level are set by an admin. Changing your email changes the address you sign in with.</p>
+                      </span>
+                    </sc-if>
                     <button onclick="{{ onSaveProfile }}" style="margin-top:11px;width:100%;background:#0A0F1A;color:#fff;border:none;border-radius:11px;padding:12px;font-family:inherit;font-weight:700;font-size:13.5px;cursor:pointer">Save profile</button>
+                    <sc-if value="{{ profileMsgShow }}" hint-placeholder-val="{{ false }}">
+                      <p style="margin:9px 0 0;font-size:11.5px;font-weight:700;color:{{ profileMsgColor }}">{{ profileMsg }}</p>
+                    </sc-if>
+                  </div>
+                  <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                    <p style="margin:0 0 4px;font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7A8296">Password</p>
+                    <p style="margin:0 0 10px;font-size:11.5px;color:#9AA2B4;line-height:1.45">Choose your own password — it is stored securely and checked by the server, never on this device.</p>
+                    <input value="{{ pwNew }}" oninput="{{ onPwNew }}" type="password" placeholder="New password (min 8)" autocomplete="new-password" style="width:100%;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:11px 13px;font-family:inherit;font-size:13.5px;color:#0C1116;outline:none;box-sizing:border-box;margin-bottom:8px">
+                    <input value="{{ pwNew2 }}" oninput="{{ onPwNew2 }}" type="password" placeholder="Repeat new password" autocomplete="new-password" style="width:100%;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:11px 13px;font-family:inherit;font-size:13.5px;color:#0C1116;outline:none;box-sizing:border-box">
+                    <button onclick="{{ onChangePw }}" style="margin-top:10px;width:100%;background:var(--vx-blue);color:#fff;border:none;border-radius:11px;padding:12px;font-family:inherit;font-weight:700;font-size:13.5px;cursor:pointer">Change my password</button>
+                    <sc-if value="{{ pwMsgShow }}" hint-placeholder-val="{{ false }}">
+                      <p style="margin:9px 0 0;font-size:11.5px;font-weight:700;color:{{ pwMsgColor }}">{{ pwMsg }}</p>
+                    </sc-if>
                   </div>
                   <sc-if value="{{ settingsIsStaff }}" hint-placeholder-val="{{ false }}">
                     <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
@@ -4655,6 +4677,7 @@ class Component extends DCLogic {
       adminSection:null, famAdminQuery:'', famAdminAddFor:null, famAdminSwQuery:'', famAdminMsg:'', famAdminProblems:false,
       attDayISO:null, attDayStatus:'all', attDayOpenSquad:null,
       saveFailCount:0, saveFailLast:null, saveFailHidden:false,
+      pwNew:'', pwNew2:'', pwMsg:'', pwOk:true, profileMsg:'', profileOk:true,
       staffPwDrafts:{}, staffPwMsg:'', staffPwOk:true,
       swQuery:'', swSquadFilter:'all', swDobFilter:false, swEditId:null, swAddOpen:false, swForm:{name:'',age:'',dob:'',gender:'Boys',squadId:'',pbs:[]},
       swPbEventSel:'50 Free', swPbTimeDraft:'', swPbCourse:'LCM', swPbMeet:'', swPbMeetDate:'',
@@ -4896,6 +4919,24 @@ class Component extends DCLogic {
   _famBoot(){ const l=this._loadFamily(); this.family=l; return l; }
   // Admin sets a staff member's sign-in password. The server verifies the caller is an
   // admin, then writes it into Supabase Auth as a hashed password — nothing is stored here.
+  // Anyone signed in can change their OWN password (and their email, which is the
+  // address they sign in with). Supabase Auth stores it hashed — nothing is kept here.
+  async changeMyPassword(){
+    const S=this.state; const pw=(S.pwNew||''); const pw2=(S.pwNew2||'');
+    if(pw.length<8) return this.setState({pwMsg:'Password must be at least 8 characters.', pwOk:false});
+    if(pw!==pw2) return this.setState({pwMsg:'The two passwords do not match.', pwOk:false});
+    const tok=(window.__VX_AUTH && window.__VX_AUTH.token)||'';
+    if(!tok) return this.setState({pwMsg:'You are not signed in \u2014 sign out and back in, then try again.', pwOk:false});
+    this.setState({pwMsg:'Updating\u2026', pwOk:true});
+    try{
+      const r=await fetch(this._sbAuthUrl()+'/user', { method:'PUT',
+        headers:{'Content-Type':'application/json','apikey':this._sbAnon(),'Authorization':'Bearer '+tok},
+        body:JSON.stringify({password:pw}) });
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok){ const m=(j&&(j.msg||j.error_description||j.message))||('HTTP '+r.status); return this.setState({pwMsg:'Could not change it: '+m, pwOk:false}); }
+      this.setState({pwMsg:'Password changed \u2713 Use it next time you sign in.', pwOk:true, pwNew:'', pwNew2:''});
+    }catch(e){ this.setState({pwMsg:'Could not reach the sign-in service.', pwOk:false}); }
+  }
   async staffSetPassword(acct, pw){
     if(!acct) return;
     const email=(''+(acct.email||'')).trim().toLowerCase();
@@ -5222,13 +5263,15 @@ class Component extends DCLogic {
     if(val) this.staffAccChange('photo', val); }
   staffAccSave(id){ const d=this.state.staffAccDraft||{}; const a=this.accounts.find(x=>x.id===id); if(!a) return;
     const label=(d.label||'').trim(), user=(d.user||'').trim().toLowerCase(), pin=(d.pin||'').trim();
-    if(!label||!user||!pin){ return; }
+    // PINs are gone (sign-in is a server-checked password now), so a missing PIN must not
+    // block saving — this guard used to make "Save profile" silently do nothing.
+    if(!label||!user){ return this.setState({profileMsg:'Name and username are both required.', profileOk:false}); }
     const role=(d.role||'Coach'), squadId=(d.squadId||''), photo=(d.photo||''), phone=(d.phone||'').trim(), email=(d.email||'').trim(), bio=(d.bio||'').trim();
     const o={label:label, user:user, pin:pin, role:role, squadId:squadId, photo:photo, phone:phone, email:email, bio:bio};
     this.accountOvr[id]=o;
     const isCustom=(''+id).indexOf('st_')===0;
     if(isCustom){ this.customStaff=this.customStaff.map(function(c){ return c.id===id? {...c, name:label, user:user, pin:pin, role:role, squadId:squadId, phone:phone, email:email, bio:bio}:c; }); }
-    this._rebuildAccounts(); this.setState({staffEditId:null, staffAccDraft:null});
+    this._rebuildAccounts(); this.setState({staffEditId:null, staffAccDraft:null, profileMsg:'Profile saved \u2713', profileOk:true});
     // One row per account (id = account id) — upsert never clobbers other accounts.
     if(window.__vxUpsert){ window.__vxUpsert('staff_accounts', [this._staffRow(id, o, isCustom)]).then(ok=>{ if(ok) this._staffFetch(); }); }
   }
@@ -9021,6 +9064,15 @@ class Component extends DCLogic {
           // profile fields (staff use staffAccDraft, family use famProfileDraft)
           setName:isFam?(d.name||''):(d.label||''), onSetName:(e)=> isFam? this.setState({famProfileDraft:{...(S.famProfileDraft||{}), name:e.target.value}}) : this.staffAccChange('label', e.target.value),
           setPhone:d.phone||'', onSetPhone:(e)=> isFam? this.setState({famProfileDraft:{...(S.famProfileDraft||{}), phone:e.target.value}}) : this.staffAccChange('phone', e.target.value),
+          setUser:d.user||'', onSetUser:(e)=>this.staffAccChange('user', e.target.value),
+          setEmail:d.email||'', onSetEmail:(e)=>this.staffAccChange('email', e.target.value),
+          setRoleTitle:d.role||'', onSetRoleTitle:(e)=>this.staffAccChange('role', e.target.value),
+          setBio:d.bio||'', onSetBio:(e)=>this.staffAccChange('bio', e.target.value),
+          pwNew:S.pwNew||'', onPwNew:(e)=>this.setState({pwNew:e.target.value}),
+          pwNew2:S.pwNew2||'', onPwNew2:(e)=>this.setState({pwNew2:e.target.value}),
+          onChangePw:()=>this.changeMyPassword(),
+          pwMsg:S.pwMsg||'', pwMsgShow:!!S.pwMsg, pwMsgColor:(S.pwOk===false?'#B42318':'#0C7A4F'),
+          profileMsg:S.profileMsg||'', profileMsgShow:!!S.profileMsg, profileMsgColor:(S.profileOk===false?'#B42318':'#0C7A4F'),
           setPhoto:this.av((isFam?d.photo:d.photo)||null, (isFam?(d.name||'?'):(d.label||'?')).slice(0,2).toUpperCase(), 56, 14, acc.accent||'#067EEA', '#fff', 18),
           onPickSetPhoto:()=>{ const el=document.getElementById('vx-set-photo'); if(el) el.click(); },
           onSetPhoto:(e)=> isFam? this.famProfilePhoto(e) : this.staffAccPhoto(e),
