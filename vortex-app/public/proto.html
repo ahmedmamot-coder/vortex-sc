@@ -6027,6 +6027,23 @@ class Component extends DCLogic {
   promoMarkReviewed(swId){ const m=this._promoMeta(swId); this._savePromo(swId, {...m, lastReview:new Date().toISOString().slice(0,10)}); }
   promoSuggest(swId){ const m=this._promoMeta(swId); this._savePromo(swId, {...m, suggested:true, suggestedAt:new Date().toISOString().slice(0,10), lastReview:new Date().toISOString().slice(0,10)}); }
   promoDismiss(swId){ const m=this._promoMeta(swId); this._savePromo(swId, {...m, suggested:false}); }
+  // Move many swimmers in one go. promoteSwimmer saves and rebuilds the whole roster on
+  // every call, which would freeze the app if looped over a few hundred swimmers.
+  _moveSwimmersBatch(moves){
+    let n=0;
+    (moves||[]).forEach(mv=>{
+      const sw=(this.roster[mv.from]||[]).find(x=>x.id===mv.swId);
+      if(!sw || mv.from===mv.to) return;
+      this.rosterEdits.deleted[mv.from]=this.rosterEdits.deleted[mv.from]||{};
+      this.rosterEdits.deleted[mv.from][mv.swId]=true;
+      this.rosterEdits.added[mv.to]=[...(this.rosterEdits.added[mv.to]||[]), sw];
+      n++;
+    });
+    if(!n) return;
+    this._saveJSON('vx_roster_edits', this.rosterEdits);   // one save
+    this.rebuildRoster();                                   // one rebuild
+    this.setState({shareNote:n+' swimmer'+(n===1?'':'s')+' moved \u2713'});
+  }
   promoteSwimmer(swId, fromSquadId, toSquadId){
     const sw=(this.roster[fromSquadId]||[]).find(x=>x.id===swId); if(!sw) return;
     this.rosterEdits.deleted[fromSquadId]=this.rosterEdits.deleted[fromSquadId]||{}; this.rosterEdits.deleted[fromSquadId][swId]=true;
@@ -7908,19 +7925,33 @@ class Component extends DCLogic {
     ].map(r=>({...r, onClick:()=>{ if(r.id==='families'){ try{ this._familyFetch(); }catch(e){} } this.setState({adminSection:r.id, famAdminQuery:'', famAdminAddFor:null, famAdminSwQuery:'', famAdminMsg:''}); }}));
 
     // ---- move ----
+    // Every swimmer in the club, alphabetical. This used to take 2 per squad and then the
+    // first 8 of those — demo scaffolding — so only 8 swimmers could ever be listed.
     const flat=[];
-    this.squads.forEach(sq=>{ (this.roster[sq.id]||[]).slice(0,2).forEach(sw=>flat.push({sw, homeId:sq.id})); });
-    const moveSample = flat.slice(0,8);
+    this.squads.forEach(sq=>{ (this.roster[sq.id]||[]).forEach(sw=>flat.push({sw, homeId:sq.id})); });
+    flat.sort((a,b)=>String(a.sw.name||'').localeCompare(String(b.sw.name||'')));
     const squadOpts=this.squads.map(s=>({id:s.id, label:s.name}));
     const q=(S.moveQuery||'').toLowerCase();
-    const moveRows = moveSample.filter(m=>!q || m.sw.name.toLowerCase().includes(q)).map(m=>{
-      const curId = S.moveOverride[m.sw.id] || m.homeId;
-      const cur=this.squadById[curId];
-      return { name:m.sw.name, age:m.sw.age, initials:m.sw.initials, accent:cur.accent, squadName:cur.name, squadId:curId, squadOpts,
-        onMove:(e)=>this.setState({moveOverride:{...S.moveOverride,[m.sw.id]:e.target.value}}) };
-    });
     const autoAssignFor=(age)=>{ if(age<=6)return'preteam'; if(age<=8)return'advb'; if(age<=10)return'adva'; if(age<=12)return'junior'; if(age===13)return'seniorb'; if(age===14)return'seniora'; if(age===15)return'vortexb'; if(age===16)return'vortexa'; return'legend'; };
-    const onAutoAssign=()=>{ const ov={...S.moveOverride}; moveSample.forEach(m=>{ ov[m.sw.id]=autoAssignFor(m.sw.age); }); this.setState({moveOverride:ov}); };
+    const moveMatched = flat.filter(m=>!q || String(m.sw.name||'').toLowerCase().includes(q));
+    const MOVE_CAP = 60;   // keep the page responsive; searching reaches everyone
+    const moveRows = moveMatched.slice(0, MOVE_CAP).map(m=>{
+      const cur=this.squadById[m.homeId]||this.squads[0];
+      return { name:m.sw.name, age:this._swAge(m.sw), initials:m.sw.initials, accent:cur.accent, squadName:cur.name, squadId:m.homeId, squadOpts,
+        // Actually move the swimmer. This used to only change the dropdown on screen —
+        // nothing was saved, so the whole page did nothing.
+        onMove:(e)=>{ const to=e.target.value; if(!to || to===m.homeId) return; this.promoteSwimmer(m.sw.id, m.homeId, to); } };
+    });
+    const moveCountLine = moveMatched.length>MOVE_CAP
+      ? ('Showing '+MOVE_CAP+' of '+moveMatched.length+' \u2014 search a name to find anyone')
+      : (moveMatched.length+' swimmer'+(moveMatched.length===1?'':'s')+(q?' matching':' in the club'));
+    const onAutoAssign=()=>{
+      const wrong=flat.filter(m=>autoAssignFor(this._swAge(m.sw))!==m.homeId)
+                      .map(m=>({swId:m.sw.id, from:m.homeId, to:autoAssignFor(this._swAge(m.sw))}));
+      if(!wrong.length) return this.setState({shareNote:'Everyone is already in the squad that matches their age \u2713'});
+      if(!window.confirm('Move '+wrong.length+' swimmer'+(wrong.length===1?'':'s')+' into the squad matching their age?\n\nYou can move anyone back afterwards.')) return;
+      this._moveSwimmersBatch(wrong);
+    };
 
     // ---- tools tiles ----
     const T=(id,club)=>()=>this.openTool(id,club);
