@@ -7967,7 +7967,47 @@ class Component extends DCLogic {
     try{ const s=this.state; if(s.screen==='app'){ const nav={view:s.view, squadId:s.squadId, tab:s.tab, tool:s.tool||null, swimmerId:s.swimmerId||null, adminSection:s.adminSection||null, famTab:s.famTab||null, familyActiveIdx:s.familyActiveIdx||0}; const j=JSON.stringify(nav); if(j!==this._lastNavJson){ this._lastNavJson=j; localStorage.setItem('vx_nav', j); } } }catch(e){}
   }
   componentWillUnmount(){ clearInterval(this._clock); clearTimeout(this._t); clearInterval(this._statusInt); clearInterval(this._syncInt); clearInterval(this._loungeInt); clearInterval(this._attendInt); clearInterval(this._liveInt); clearInterval(this._plansInt); clearInterval(this._staffInt); try{ document.removeEventListener('visibilitychange', this._onVis); }catch(e){} window.removeEventListener('beforeprint', this._onBeforePrint); window.removeEventListener('afterprint', this._onAfterPrint); window.removeEventListener('online', this._onStatusEvt); window.removeEventListener('offline', this._onStatusEvt); if(this._battery){ try{ this._battery.removeEventListener('levelchange', this._onStatusEvt); this._battery.removeEventListener('chargingchange', this._onStatusEvt); }catch(e){} } }
-  _icons(){ clearTimeout(this._t); this._t=setTimeout(()=>{ try{ window.lucide && window.lucide.createIcons(); }catch(e){} }, 30); }
+  // Icons drawn for what the screen actually does, rather than the nearest library match:
+  // a register with a tick AND roll lines, a podium with three real steps because we rank
+  // swimmers, a stopwatch with its crown. Rendered before lucide runs and the data-lucide
+  // attribute removed, so lucide leaves them alone and no markup anywhere has to change.
+  _glyphs(){
+    if(this._glyphMap) return this._glyphMap;
+    const G={
+      'clipboard-check':'<path d="M9 3.2h6v3H9z"/><path d="M15 4.7h2.4A1.6 1.6 0 0 1 19 6.3v13.1a1.6 1.6 0 0 1-1.6 1.6H6.6A1.6 1.6 0 0 1 5 19.4V6.3a1.6 1.6 0 0 1 1.6-1.6H9"/><path d="M8.6 12.4l1.9 1.9 4-4.3"/><path d="M8.6 17.6h6.8"/>',
+      'trophy':'<path d="M4 20.5h16"/><rect x="4.6" y="12.5" width="4.4" height="8"/><rect x="9.8" y="8" width="4.4" height="12.5"/><rect x="15" y="15" width="4.4" height="5.5"/><path d="M12 4.6l.8 1.7 1.8.2-1.4 1.3.4 1.8-1.6-1-1.6 1 .4-1.8-1.4-1.3 1.8-.2z"/>',
+      'heart-pulse':'<path d="M20.4 8.7A4.5 4.5 0 0 0 12 6.5a4.5 4.5 0 0 0-8.4 2.2c0 4.9 8.4 9.8 8.4 9.8s8.4-4.9 8.4-9.8z"/><path d="M4.6 11.9h2.8l1.5-2.4 2 4.8 1.5-2.4h5.8"/>',
+      'list-ordered':'<path d="M4 6.5h2M4 12h2M4 17.5h2"/><path d="M9 6.5h11M9 12h8M9 17.5h5"/>',
+      'medal':'<circle cx="12" cy="14.6" r="5.6"/><path d="M12 11.9l.9 1.9 2 .3-1.5 1.4.4 2-1.8-1-1.8 1 .4-2-1.5-1.4 2-.3z"/><path d="M8.4 9.4L6.2 3.6h11.6l-2.2 5.8"/>',
+      'users-round':'<circle cx="8" cy="7.6" r="2.7"/><circle cx="16.6" cy="8.4" r="2.2"/><path d="M3.2 19.6c0-2.8 2.2-5 4.8-5s4.8 2.2 4.8 5"/><path d="M14.2 19.6c0-2.2 1.4-4 3.2-4s3.2 1.8 3.2 4"/>',
+      'target':'<circle cx="11" cy="13" r="7.6"/><circle cx="11" cy="13" r="3.6"/><path d="M13.6 10.4L20 4"/><path d="M16.6 4h3.6v3.6"/>',
+      'video':'<rect x="2.8" y="6" width="13" height="12" rx="2.2"/><path d="M15.8 11l5.4-3v8l-5.4-3z"/><path d="M7.6 10.6l3.4 1.9-3.4 1.9z"/>',
+      'waves':'<path d="M2 7c2.5 0 2.5 2 5 2s2.5-2 5-2 2.5 2 5 2 2.5-2 5-2"/><path d="M2 13c2.5 0 2.5 2 5 2s2.5-2 5-2 2.5 2 5 2 2.5-2 5-2"/><path d="M2 19c2.5 0 2.5 2 5 2s2.5-2 5-2 2.5 2 5 2 2.5-2 5-2"/>',
+      'timer':'<circle cx="12" cy="13.5" r="7.3"/><path d="M12 9.6v4l2.5 1.8"/><path d="M9.6 2.8h4.8"/><path d="M12 2.8v3.4"/>',
+      'credit-card':'<rect x="2.6" y="5.4" width="18.8" height="13.2" rx="2.4"/><path d="M2.6 9.8h18.8"/><path d="M6.2 14.4h4"/><path d="M15 14.4h3.2"/>',
+      'activity':'<path d="M2.5 12h4l2.5-6.5 4.5 13L16 12h5.5"/>',
+      'dumbbell':'<path d="M3 9.5v5M6.2 7v10M17.8 7v10M21 9.5v5"/><path d="M6.2 12h11.6"/>',
+      'route':'<circle cx="6" cy="18.5" r="2.6"/><circle cx="18" cy="5.5" r="2.6"/><path d="M8.6 18.5h5.4a3.4 3.4 0 0 0 0-6.8H10a3.4 3.4 0 0 1 0-6.8h5.4"/>',
+      'users':'<circle cx="9.2" cy="8" r="3.1"/><path d="M2.8 20c0-3.2 2.9-5.8 6.4-5.8s6.4 2.6 6.4 5.8"/><path d="M16.4 5.4a3.1 3.1 0 0 1 0 5.6"/><path d="M18 14.6c2 .8 3.3 2.6 3.3 4.7"/>'
+    };
+    this._glyphMap=G; return G;
+  }
+  _customIcons(){
+    const G=this._glyphs();
+    document.querySelectorAll('[data-lucide]').forEach(el=>{
+      const nm=el.getAttribute('data-lucide'); const paths=G[nm]; if(!paths) return;
+      const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+      svg.setAttribute('viewBox','0 0 24 24');
+      svg.setAttribute('fill','none'); svg.setAttribute('stroke','currentColor');
+      svg.setAttribute('stroke-width','1.9');
+      svg.setAttribute('stroke-linecap','round'); svg.setAttribute('stroke-linejoin','round');
+      svg.setAttribute('class','vx-glyph');
+      const st=el.getAttribute('style'); if(st) svg.setAttribute('style', st);
+      svg.innerHTML=paths;
+      el.replaceWith(svg);
+    });
+  }
+  _icons(){ clearTimeout(this._t); this._t=setTimeout(()=>{ try{ this._customIcons(); }catch(e){} try{ window.lucide && window.lucide.createIcons(); }catch(e){} }, 30); }
 
   parseSet(txt, dist){ txt=String(txt||''); let reps=1; const rm=txt.match(/(\d+)\s*[\u00d7xX]\s*(\d+)/); if(rm) reps=parseInt(rm[1])||1; let interval=null; const im=txt.match(/@\s*(\d+):(\d{2})/); if(im) interval=parseInt(im[1])*60+parseInt(im[2]); else { const im2=txt.match(/@\s*:(\d{2})/); if(im2) interval=parseInt(im2[1]); } if(!interval){ const per = reps>1 ? Math.round((+dist||100)/reps) : (+dist||100); interval = Math.max(20, Math.round(per*1.6)); } return {reps, interval}; }
   clockSeq(){ const plan=this.getPlan(this.state.squadId); const seq=[]; (plan.sections||[]).forEach(sec=>{ (sec.sets||[]).forEach(st=>{ const p=this.parseSet(st.txt, st.dist); seq.push({section:sec.title, dist:st.dist, txt:st.txt, reps:p.reps, interval:p.interval}); }); }); return seq; }
@@ -8131,7 +8171,12 @@ class Component extends DCLogic {
     // A staff member whose role contains "fitness" (e.g. Coach Nedhal, role "Fitness Coach")
     // is limited to the Fitness Plan tool only — every other tool is hidden for them.
     const _fitOnly=this._fitnessLocked();
-    const toolTiles=(_fitOnly? toolDefs.filter(t=>t.id==='fitness') : toolDefs).map(t=>({...t, grad:this._gradTile(t.color), glow:this._tileGlow(t.color), onClick:T(t.id, scopeClub)}));
+    // The 2027 tile: gradient in the feature's colour with the glyph knocked out in white.
+    // `tint` feeds the tile background in the markup, so switching it here restyles every
+    // tool at once without touching the template.
+    const toolTiles=(_fitOnly? toolDefs.filter(t=>t.id==='fitness') : toolDefs).map(t=>({...t,
+      tint:this._gradTile(t.color), color:'#fff',
+      grad:this._gradTile(t.color), glow:this._tileGlow(t.color), onClick:T(t.id, scopeClub)}));
 
     // ---- roster ----
     const rq=(S.rosterQuery||'').toLowerCase();

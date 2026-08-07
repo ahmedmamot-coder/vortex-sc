@@ -140,4 +140,29 @@ describe("shipped source", () => {
   });
 });
 
+/* ------------------------------------------------------------------- icons
+   The custom glyphs are injected as raw SVG, so a malformed path would break
+   the icon silently rather than throw. */
+describe("icon glyphs", () => {
+  const map = SOURCE.match(/_glyphs\(\)\{[\s\S]*?this\._glyphMap=G/)[0];
+  const entries = [...map.matchAll(/'([a-z-]+)':'([^']+)'/g)];
+
+  it("draws a glyph set", () => eq(entries.length >= 12, true));
+  it("every glyph is well-formed", () => {
+    for (const [, name, svg] of entries) {
+      const opens = (svg.match(/<(path|rect|circle)\b/g) || []).length;
+      const closes = (svg.match(/\/>/g) || []).length;
+      eq(opens === closes && opens > 0, true, `${name} has ${opens} shapes but ${closes} closers`);
+    }
+  });
+  it("redraws the screens used most", () => {
+    for (const n of ["clipboard-check", "trophy", "heart-pulse", "list-ordered", "medal"])
+      eq(entries.some(([, k]) => k === n), true, `${n} missing`);
+  });
+  it("custom glyphs render before lucide", () =>
+    eq(/this\._customIcons\(\);[\s\S]{0,80}lucide\.createIcons/.test(SOURCE), true));
+  it("tool tiles use the 2027 gradient", () =>
+    eq(/tint:this\._gradTile\(t\.color\), color:'#fff'/.test(SOURCE), true));
+});
+
 report();
