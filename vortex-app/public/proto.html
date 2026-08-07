@@ -8966,8 +8966,9 @@ class Component extends DCLogic {
         // browser. The old code compared a PIN that was hardcoded in this page's source, and
         // carried a permanent ahmed/7777 + sameh/1234 backdoor, so anyone who viewed source
         // had full admin and could sign into the database as a coach. Both are gone.
-        const acct=this.accounts.find(a=>(a.user&&norm(a.user).toLowerCase()===u)||(a.label&&norm(a.label).toLowerCase()===u));
-        if(!acct) return this.setState({loginErr:'Wrong username or password'});
+        // Match on username, full name, OR email — people naturally try their email address.
+        const acct=this.accounts.find(a=>(a.user&&norm(a.user).toLowerCase()===u)||(a.label&&norm(a.label).toLowerCase()===u)||(a.email&&(''+a.email).trim().toLowerCase()===u));
+        if(!acct) return this.setState({loginErr:'No account with that username or email'});
         if(!acct.email) return this.setState({loginErr:'This account has no email yet — ask an admin to set it up.'});
         this.setState({loginErr:'Checking…'});
         this._authPost('/token?grant_type=password', {email:acct.email, password:(pEl?pEl.value:'')}).then(res=>{
@@ -8978,7 +8979,7 @@ class Component extends DCLogic {
           }
           const msg=(res && res.j && (res.j.error_description||res.j.msg||res.j.message))||'';
           this.setState({loginErr: /credential|password|grant/i.test(msg)
-            ? 'Wrong username or password'
+            ? 'Wrong password. If you have never set one, use the password an admin gave you — or ask an admin to set one in Admin \u2192 Staff.'
             : (msg || 'Could not sign in — check your connection.')});
         }).catch(()=>this.setState({loginErr:'Could not reach the sign-in service.'}));
       },
