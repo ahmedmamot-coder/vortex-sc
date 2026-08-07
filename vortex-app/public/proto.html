@@ -3739,8 +3739,19 @@ if ('serviceWorker' in navigator) {
                           <button onclick="{{ onStaffCreate }}" style="background:var(--vx-blue);color:#fff;border:none;border-radius:10px;padding:10px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer">Create account</button>
                         </div>
                       </sc-if>
+                      <div style="display:flex;align-items:flex-start;gap:8px;background:#FFF7E6;border:1px solid #F5D9A0;border-radius:11px;padding:10px 11px">
+                        <i data-lucide="key-round" style="width:15px;height:15px;color:#B4690E;flex:none;margin-top:1px"></i>
+                        <span style="font-size:11.5px;color:#7A5A18;line-height:1.45">Staff now sign in with a <b>password</b>, checked by the server. Set one for each coach below — they cannot sign in until you do.</span>
+                      </div>
+                      <sc-if value="{{ staffPwMsgShow }}" hint-placeholder-val="{{ false }}">
+                        <p style="margin:0;font-size:11.5px;font-weight:700;color:{{ staffPwMsgColor }}">{{ staffPwMsg }}</p>
+                      </sc-if>
                       <sc-for list="{{ staffAllRows }}" as="s" hint-placeholder-count="11">
                         <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:12px 13px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
+                          <div style="display:flex;gap:7px;margin-bottom:9px">
+                            <input value="{{ s.pwDraft }}" oninput="{{ s.onPwDraft }}" type="text" autocomplete="off" placeholder="New password (min 8)" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:var(--font-mono);font-size:12px;color:#0C1116;outline:none">
+                            <button onclick="{{ s.onSetPw }}" style="flex:none;background:#0C1116;color:#fff;border:none;border-radius:9px;padding:8px 12px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Set password</button>
+                          </div>
                           <div style="display:flex;align-items:center;gap:11px">
                             {{ s.avatar }}
                             <span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:13px;color:#0C1116">{{ s.name }}</span><span style="display:block;font-size:11px;color:#7A8296">{{ s.sub }}</span></span>
@@ -4452,17 +4463,17 @@ class Component extends DCLogic {
     const PH = 'assets/logo-mark.png';
     this.PH = PH;
     this._baseAccounts = [
-      {id:'ahmed', user:'ahmed', label:'Ahmed Mamo', role:'Technical Director · full access', pin:'7777', accent:'#067EEA', photo:'assets/director-ahmed.jpg', initials:'AM', recommended:true, email:'ahmedmamot@gmail.com'},
-      {id:'sameh', user:'sameh', label:'Sameh', role:'Administrator · full access', pin:'1234', accent:'#3B23C7', photo:'', initials:'S', email:'sameh@vortexswimmingclub.com'},
-      {id:'fathy', user:'fathy', label:'Coach Fathy', role:'Pre-Team coach', pin:'1111', accent:'#22C1DA', photo:'assets/coach-fathy.jpg', initials:'CF', squadId:'preteam', email:'fathy@vortexswimmingclub.com'},
-      {id:'matuze', user:'matuze', label:'Coach Matuze', role:'Advanced B coach', pin:'1111', accent:'#1BA5E6', photo:'', initials:'CM', squadId:'advb', email:'matuze@vortexswimmingclub.com'},
-      {id:'sherif', user:'sherif', label:'Coach Sherif', role:'Advanced A coach', pin:'1111', accent:'#067EEA', photo:'', initials:'CS', squadId:'adva', email:'sherif@vortexswimmingclub.com'},
-      {id:'reda', user:'reda', label:'Coach Reda', role:'Junior coach', pin:'1111', accent:'#2A63E0', photo:'', initials:'CR', squadId:'junior', email:'reda@vortexswimmingclub.com'},
-      {id:'chafik', user:'chafik', label:'Coach Chafik', role:'Senior B coach', pin:'1111', accent:'#2733D6', photo:'assets/coach-chafik.jpg', initials:'CC', squadId:'seniorb', email:'chafik@vortexswimmingclub.com'},
-      {id:'baisher', user:'baisher', label:'Coach Baisher', role:'Senior A coach', pin:'1111', accent:'#3B23C7', photo:'', initials:'CB', squadId:'seniora', email:'baisher@vortexswimmingclub.com'},
-      {id:'wassim', user:'wassim', label:'Coach Wassim', role:'Vortex B coach', pin:'1111', accent:'#5D22CF', photo:'', initials:'CW', squadId:'vortexb', email:'wassim@vortexswimmingclub.com'},
-      {id:'mahmoud', user:'mahmoud', label:'Coach Mahmoud', role:'Vortex A coach', pin:'1111', accent:'#8A22D5', photo:'assets/coach-mahmoud.jpg', initials:'CM', squadId:'vortexa', email:'mahmoud@vortexswimmingclub.com'},
-      {id:'martin', user:'martin', label:'Coach Martin', role:'Legend coach', pin:'1111', accent:'#1B22E4', photo:'assets/coach-martin.jpg', initials:'CM', squadId:'legend', email:'martin@vortexswimmingclub.com'},
+      {id:'ahmed', user:'ahmed', label:'Ahmed Mamo', role:'Technical Director · full access', accent:'#067EEA', photo:'assets/director-ahmed.jpg', initials:'AM', recommended:true, email:'ahmedmamot@gmail.com'},
+      {id:'sameh', user:'sameh', label:'Sameh', role:'Administrator · full access', accent:'#3B23C7', photo:'', initials:'S', email:'sameh@vortexswimmingclub.com'},
+      {id:'fathy', user:'fathy', label:'Coach Fathy', role:'Pre-Team coach', accent:'#22C1DA', photo:'assets/coach-fathy.jpg', initials:'CF', squadId:'preteam', email:'fathy@vortexswimmingclub.com'},
+      {id:'matuze', user:'matuze', label:'Coach Matuze', role:'Advanced B coach', accent:'#1BA5E6', photo:'', initials:'CM', squadId:'advb', email:'matuze@vortexswimmingclub.com'},
+      {id:'sherif', user:'sherif', label:'Coach Sherif', role:'Advanced A coach', accent:'#067EEA', photo:'', initials:'CS', squadId:'adva', email:'sherif@vortexswimmingclub.com'},
+      {id:'reda', user:'reda', label:'Coach Reda', role:'Junior coach', accent:'#2A63E0', photo:'', initials:'CR', squadId:'junior', email:'reda@vortexswimmingclub.com'},
+      {id:'chafik', user:'chafik', label:'Coach Chafik', role:'Senior B coach', accent:'#2733D6', photo:'assets/coach-chafik.jpg', initials:'CC', squadId:'seniorb', email:'chafik@vortexswimmingclub.com'},
+      {id:'baisher', user:'baisher', label:'Coach Baisher', role:'Senior A coach', accent:'#3B23C7', photo:'', initials:'CB', squadId:'seniora', email:'baisher@vortexswimmingclub.com'},
+      {id:'wassim', user:'wassim', label:'Coach Wassim', role:'Vortex B coach', accent:'#5D22CF', photo:'', initials:'CW', squadId:'vortexb', email:'wassim@vortexswimmingclub.com'},
+      {id:'mahmoud', user:'mahmoud', label:'Coach Mahmoud', role:'Vortex A coach', accent:'#8A22D5', photo:'assets/coach-mahmoud.jpg', initials:'CM', squadId:'vortexa', email:'mahmoud@vortexswimmingclub.com'},
+      {id:'martin', user:'martin', label:'Coach Martin', role:'Legend coach', accent:'#1B22E4', photo:'assets/coach-martin.jpg', initials:'CM', squadId:'legend', email:'martin@vortexswimmingclub.com'},
     ];
     try { this.customStaff = JSON.parse(localStorage.getItem('vx_staff_accounts')||'[]'); } catch(e){ this.customStaff = []; }
     try { this.accountOvr = JSON.parse(localStorage.getItem('vx_account_ovr')||'{}'); } catch(e){ this.accountOvr = {}; }
@@ -4644,6 +4655,7 @@ class Component extends DCLogic {
       adminSection:null, famAdminQuery:'', famAdminAddFor:null, famAdminSwQuery:'', famAdminMsg:'', famAdminProblems:false,
       attDayISO:null, attDayStatus:'all', attDayOpenSquad:null,
       saveFailCount:0, saveFailLast:null, saveFailHidden:false,
+      staffPwDrafts:{}, staffPwMsg:'', staffPwOk:true,
       swQuery:'', swSquadFilter:'all', swDobFilter:false, swEditId:null, swAddOpen:false, swForm:{name:'',age:'',dob:'',gender:'Boys',squadId:'',pbs:[]},
       swPbEventSel:'50 Free', swPbTimeDraft:'', swPbCourse:'LCM', swPbMeet:'', swPbMeetDate:'',
       swEditPbs:[], swEditPbEventSel:'50 Free', swEditPbTimeDraft:'', swEditPbCourse:'LCM', swEditPbMeet:'', swEditPbMeetDate:'',
@@ -4882,6 +4894,26 @@ class Component extends DCLogic {
   // previously left undefined until something wrote to it, so the self-heal in
   // _familyFetch had an empty list and never re-uploaded a missing registration.
   _famBoot(){ const l=this._loadFamily(); this.family=l; return l; }
+  // Admin sets a staff member's sign-in password. The server verifies the caller is an
+  // admin, then writes it into Supabase Auth as a hashed password — nothing is stored here.
+  async staffSetPassword(acct, pw){
+    if(!acct) return;
+    const email=(''+(acct.email||'')).trim().toLowerCase();
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return this.setState({staffPwMsg:'That account needs an email address first.', staffPwOk:false});
+    if((pw||'').length<8) return this.setState({staffPwMsg:'Password must be at least 8 characters.', staffPwOk:false});
+    this.setState({staffPwMsg:'Setting password for '+(acct.label||email)+'\u2026', staffPwOk:true});
+    const tok=(window.__VX_AUTH && window.__VX_AUTH.token)||'';
+    if(!tok) return this.setState({staffPwMsg:'You are not signed in to the database \u2014 sign out and back in, then try again.', staffPwOk:false});
+    try{
+      const r=await fetch('/api/staff/set-password', {method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok},
+        body:JSON.stringify({email, password:pw, name:acct.label||''})});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok) return this.setState({staffPwMsg:(j&&j.error)||('Failed (HTTP '+r.status+')'), staffPwOk:false});
+      this.setState({staffPwMsg:(acct.label||email)+' can now sign in with that password \u2713', staffPwOk:true,
+        staffPwDrafts:{...(this.state.staffPwDrafts||{}), [acct.id]:''}});
+    }catch(e){ this.setState({staffPwMsg:'Could not reach the server.', staffPwOk:false}); }
+  }
   _refreshFailState(){
     try{
       const n = window.__vxFailedCount ? window.__vxFailedCount() : 0;
@@ -7038,41 +7070,27 @@ class Component extends DCLogic {
   // Requires the staff account to have an email; the password is derived from the account id+PIN.
   // Owner-triggered: sign the current admin into Supabase and show the exact result, so we can
   // diagnose why "Secure cloud sign-in" isn't turning green instead of guessing.
+  // The old version signed in with a password derived from the account's PIN, which was
+  // hardcoded in this page's source. Staff sign-in now uses a real password verified by
+  // Supabase Auth, so the session is already established at login and there is nothing to
+  // "fix" here — this only reports the current state.
   async fixCloudSignin(){
     const acct=this.accounts.find(a=>a.id===this.state.pickedId);
-    if(!acct){ this._authDbg='No staff account selected.'; return this.forceUpdate(); }
-    const email=(''+(acct.email||'')).trim().toLowerCase();
-    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ this._authDbg='This account has no email (old app version still loaded — hard-refresh / reinstall the app).'; return this.forceUpdate(); }
-    const pw='vxsc_'+acct.id+'_'+((''+(acct.pin||'')).trim()||'0000');
-    this._authDbg='Signing in '+email+'…'; this.forceUpdate();
-    let r=await this._authPost('/token?grant_type=password', {email, password:pw});
-    if(r.ok && r.j && r.j.access_token){ window.__vxSetAuth(r.j); this._refetchAll(); this._authDbg='Signed in ✓ ('+email+')'; return this.forceUpdate(); }
-    // Not there (or wrong pw) → try to create it. With confirm-email OFF this returns a session.
-    let s=await this._authPost('/signup', {email, password:pw, data:{name:acct.label||'', staff:true, staff_id:acct.id}});
-    if(s.ok && s.j && s.j.access_token){ window.__vxSetAuth(s.j); this._refetchAll(); this._authDbg='Account created & signed in ✓ ('+email+')'; return this.forceUpdate(); }
-    // Both failed — surface the real reason.
-    const em=(s.j&&(s.j.msg||s.j.error_description||s.j.message))|| (r.j&&(r.j.error_description||r.j.msg))||'unknown';
-    if(/already|registered|exists/i.test(em)) this._authDbg='An old Auth user for '+email+' exists with a different password. In Supabase → Authentication → Users, DELETE '+email+', then tap this again.';
-    else if(/signups? not allowed|disabled/i.test(em)) this._authDbg='Sign-ups are disabled in Supabase (Auth → turn ON "Allow new users to sign up").';
-    else this._authDbg='Sign-in failed: token '+r.status+', signup '+s.status+' — '+em;
+    const email=(''+((acct&&acct.email)||'')).trim().toLowerCase();
+    const signedIn = !!(window.__VX_AUTH && window.__VX_AUTH.token);
+    this._authDbg = signedIn
+      ? ('Signed in \u2713 ('+(email||'this account')+')')
+      : 'Not signed in. Sign out and sign back in with your password. If you have forgotten it, an admin can set a new one in Admin \u2192 Staff.';
     this.forceUpdate();
   }
-  _staffAuthEnsure(acct){
-    try{
-      if(!acct || !window.__vxSetAuth) return;
-      const email=(''+(acct.email||'')).trim().toLowerCase();
-      if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;   // no valid email yet → skip (still works locally)
-      const pin=(''+(acct.pin||'')).trim();
-      const pw='vxsc_'+acct.id+'_'+(pin||'0000');             // deterministic so the same PIN re-authenticates
-      this._authPost('/token?grant_type=password', {email, password:pw}).then((res)=>{
-        if(res && res.ok && res.j && res.j.access_token){ window.__vxSetAuth(res.j); this._refetchAll(); this._postLoginRefresh(); return; }
-        // Not provisioned in Auth yet → create the account, then a session (if confirmation is off).
-        this._authPost('/signup?redirect_to='+encodeURIComponent(location.origin+location.pathname),
-          {email, password:pw, data:{name:acct.label||'', role:acct.role||'Coach', staff:true, staff_id:acct.id}}
-        ).then((sr)=>{ if(sr && sr.ok && sr.j && sr.j.access_token){ window.__vxSetAuth(sr.j); this._refetchAll(); this._postLoginRefresh(); } }).catch(()=>{});
-      }).catch(()=>{});
-    }catch(e){}
-  }
+
+  // DISABLED (security). This used to sign staff into Supabase with a password derived
+  // from their PIN — 'vxsc_<id>_<pin>' — and the PIN was hardcoded in this page's source,
+  // so anyone who viewed source could compute any coach's real database password and sign
+  // in as them, straight past the RLS lockdown. It also CREATED accounts with that password.
+  // Staff sign-in now goes through Supabase Auth with a real password an admin sets, so
+  // this is no longer needed. Kept as a no-op so existing callers stay safe.
+  _staffAuthEnsure(){ /* intentionally does nothing */ }
   makeDefaultPlan(){ const t=this.planTemplate; const migrate=(sec)=>({id:this._uid(sec.key[0]||'s'), title:sec.title, sets:sec.sets.map(s=>({id:this._uid(sec.key[0]||'s'), dist:s.dist, txt:s.txt, equip:[...(s.equip||[])], types:[...(s.types||[])], rest:s.rest||''}))}); return {title:t.title, zone:t.zone, sections:t.sections.map(migrate)}; }
   _migratePlan(p){
     if(p && p.sections) return p;
@@ -8820,13 +8838,17 @@ class Component extends DCLogic {
     });
     // Unified staff list — admins (Ahmed, Sameh), the 9 squad coaches and any added staff.
     // Everyone here is editable: name, username & PIN (added staff also role, squad + delete).
+    const staffPw=S.staffPwDrafts||{};
     const staffAllRows=this.accounts.map(a=>{ const editing=S.staffEditId===a.id; const sq=a.squadId?this.squadById[a.squadId]:null;
+      const pwDraft=staffPw[a.id]||'';
+      const onPwDraft=(e)=>this.setState({staffPwDrafts:{...(this.state.staffPwDrafts||{}), [a.id]:e.target.value}});
+      const onSetPw=()=>this.staffSetPassword(a, pwDraft);
       const isCustom=(''+a.id).indexOf('st_')===0; const isAdminAcc=(a.id==='ahmed'||a.id==='sameh');
       const badge = sq? sq.short : (a.initials||'?'); const accent = sq? sq.accent : (a.accent||'#2733D6');
       const primary = a.role || (sq? sq.name : ''); const contactBits=[a.phone, a.email].filter(Boolean).join(' · ');
       const sub = primary + (sq?(' · '+sq.name):'') + ' · @' + (a.user||'') + (contactBits?(' · '+contactBits):'');
       const d=S.staffAccDraft||{}; const draftPhoto = editing? (d.photo ?? a.photo ?? '') : (a.photo||'');
-      return { id:a.id, name:a.label||'', sub:sub, isCustom, isAdminAcc, editing,
+      return { id:a.id, name:a.label||'', sub:sub, isCustom, isAdminAcc, editing, pwDraft, onPwDraft, onSetPw,
         avatar:this.av(a.photo||null, badge, 38, 11, accent, '#fff', 12),
         editPhotoAvatar:this.av(draftPhoto||null, badge, 56, 14, accent, '#fff', 18), hasEditPhoto:!!draftPhoto,
         photoInputId:'vx-staff-photo-'+a.id,
@@ -8897,14 +8919,25 @@ class Component extends DCLogic {
         const rawP = (pEl && pEl.value) || this.state.loginPinVal || '';
         const u=norm(rawU).toLowerCase(); const pl=norm(rawP).toLowerCase();
         const doLogin=(acct)=>{ const st={screen:'app', view:'hub', pickedId:acct.id, loginUser:'', loginPinVal:'', loginErr:''}; if(acct.squadId){ st.squadId=acct.squadId; } if(uEl)uEl.value=''; if(pEl)pEl.value=''; try{ localStorage.setItem('vx_session', JSON.stringify({type:'staff', id:acct.id})); }catch(e){} try{ this._staffAuthEnsure(acct); }catch(e){} this.setState(st); };
-        // Username is space/case-insensitive; PIN is case-insensitive so a typed capital never locks you out.
+        // Staff sign-in is verified by Supabase Auth against a hashed password — NOT in the
+        // browser. The old code compared a PIN that was hardcoded in this page's source, and
+        // carried a permanent ahmed/7777 + sameh/1234 backdoor, so anyone who viewed source
+        // had full admin and could sign into the database as a coach. Both are gone.
         const acct=this.accounts.find(a=>(a.user&&norm(a.user).toLowerCase()===u)||(a.label&&norm(a.label).toLowerCase()===u));
-        if(acct && norm(acct.pin).toLowerCase()===pl){ return doLogin(acct); }
-        // Admin recovery — the original built-in credentials for Ahmed & Sameh always work,
-        // so a mistaken self-edit can never lock the admins out.
-        const recId = ((u==='ahmed'||u==='ahmedmamo') && pl==='7777') ? 'ahmed' : ((u==='sameh') && pl==='1234') ? 'sameh' : null;
-        if(recId){ const ra=this.accounts.find(a=>a.id===recId); if(ra) return doLogin(ra); }
-        this.setState({loginErr:'Wrong username or PIN'});
+        if(!acct) return this.setState({loginErr:'Wrong username or password'});
+        if(!acct.email) return this.setState({loginErr:'This account has no email yet — ask an admin to set it up.'});
+        this.setState({loginErr:'Checking…'});
+        this._authPost('/token?grant_type=password', {email:acct.email, password:(pEl?pEl.value:'')}).then(res=>{
+          if(res && res.ok && res.j && res.j.access_token){
+            if(window.__vxSetAuth){ try{ window.__vxSetAuth(res.j); }catch(e){} }
+            try{ this._refetchAll(); this._postLoginRefresh(); }catch(e){}
+            return doLogin(acct);
+          }
+          const msg=(res && res.j && (res.j.error_description||res.j.msg||res.j.message))||'';
+          this.setState({loginErr: /credential|password|grant/i.test(msg)
+            ? 'Wrong username or password'
+            : (msg || 'Could not sign in — check your connection.')});
+        }).catch(()=>this.setState({loginErr:'Could not reach the sign-in service.'}));
       },
       pickedAcct:{label:picked.label, avatar:this.av(picked.photo||null, picked.initials, 26, 8, picked.accent, '#fff', 10)},
       onChangeAccount:()=>this.setState({loginStage:'accounts', pin:'', err:false}),
@@ -9719,6 +9752,7 @@ class Component extends DCLogic {
       onMeetImportPreview:()=>this.meetImportPreview(), meetImportHasPreview, meetImportSummary, onMeetImportConfirm:()=>this.meetImportConfirm(),
       meetRows,
       staffRows, staffAllRows,
+      staffPwMsg:S.staffPwMsg||'', staffPwMsgShow:!!S.staffPwMsg, staffPwMsgColor:(S.staffPwOk===false?'#B42318':'#0C7A4F'),
       staffAddOpen: S.staffAddOpen,
       staffForm: S.staffAddForm||{name:'',user:'',pin:'',role:'Coach',phone:''},
       onStaffAddToggle:()=>this.setState({staffAddOpen:!S.staffAddOpen}),
