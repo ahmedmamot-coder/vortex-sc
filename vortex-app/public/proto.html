@@ -4835,13 +4835,10 @@ class Component extends DCLogic {
 
   todayISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
   curAttendDate(){ return this.state.attendDateISO || this.todayISO(); }
-  seededDayStatus(squadId, dateISO, swId, idx){
-    const seed = this.hashStr(squadId+'|'+dateISO+'|'+swId);
-    const r=this.rng(seed)();
-    if(r>0.92) return 'absent';
-    if(r>0.80) return 'late';
-    return 'present';
-  }
+  // seededDayStatus() lived here. It invented a present/late/absent for any past day with
+  // no record, so reports and percentages contained history that never happened. Deleted
+  // rather than left unused, so it cannot quietly come back. Unmarked days are now
+  // reported as 'unmarked' and excluded from every total.
   hashStr(s){ let h=0; for(let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))>>>0; return h; }
   // Is this swimmer signed off (inactive / traveling / break / sick / injured) on this date?
   // Honours the from/to window: before "from" or after "to" they count as back and active.
@@ -4862,7 +4859,10 @@ class Component extends DCLogic {
     // Today: anyone not yet marked defaults to PRESENT (standard register behaviour) — no more
     // random-looking statuses that made it seem like marks weren't saving.
     if(dateISO===today) return 'present';
-    if(dateISO<today) return this.seededDayStatus(squadId, dateISO, swId, idx);
+    // A past day with no record means nobody took the register — say so. This used to
+    // return a pseudo-random present/late/absent, so attendance percentages, reports and
+    // exports silently contained invented history for days that were never marked.
+    if(dateISO<today) return 'unmarked';
     return 'present';
   }
   setAttendStatus(squadId, dateISO, swId, status){
@@ -4915,8 +4915,8 @@ class Component extends DCLogic {
   }
   attendDayCounts(squadId, dateISO){
     const list=this.roster[squadId]||[]; let p=0,a=0,l=0;
-    list.forEach((sw,i)=>{ const st=this.getAttendStatus(squadId, dateISO, sw.id, i); if(st==='present')p++; else if(st==='absent')a++; else l++; });
-    const tot=list.length||1;
+    list.forEach((sw,i)=>{ const st=this.getAttendStatus(squadId, dateISO, sw.id, i); if(st==='unmarked'){} else if(st==='present')p++; else if(st==='absent')a++; else l++; });
+    const tot=(p+a+l)||1;   // only days that were actually marked
     return {present:p, absent:a, late:l, pct: Math.round((p/tot)*100)};
   }
   shiftDate(dateISO, days){ const d=new Date(dateISO+'T00:00:00'); d.setDate(d.getDate()+days); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
@@ -5643,7 +5643,7 @@ class Component extends DCLogic {
       while(dt<=end && g<800){ const dISO=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0'); if(dISO<=today) cb(dISO); dt.setDate(dt.getDate()+1); g++; } };
     const list=this.roster[squadId]||[]; let sumPct=0, cnt=0;
     const rows=list.map((sw,idx)=>{ let p=0,a=0,l=0,tot=0;
-      iterDays(dISO=>{ const st=this.getAttendStatus(squadId,dISO,sw.id,idx); tot++; if(st==='present')p++; else if(st==='absent')a++; else l++; });
+      iterDays(dISO=>{ const st=this.getAttendStatus(squadId,dISO,sw.id,idx); if(st==='unmarked') return; tot++; if(st==='present')p++; else if(st==='absent')a++; else l++; });
       const pct= tot? Math.round((p/tot)*100):0; sumPct+=pct; cnt++;
       return {name:sw.name, p:p, a:a, l:l, pct:pct}; });
     rows.sort((x,z)=> z.pct-x.pct);
@@ -8068,10 +8068,10 @@ class Component extends DCLogic {
     // ---- attend ----
     // Alphabetical, but keep each swimmer's original index (used as the no-record default seed).
     const attList=(this.roster[S.squadId]||[]).map((sw,idx)=>({sw, idx})).sort((a,b)=>a.sw.name.localeCompare(b.sw.name));
-    const statusMap={present:{label:'Present',icon:'check',color:'#0C7A4F',bg:'#DCF5EA'},absent:{label:'Absent',icon:'x',color:'#A52A2E',bg:'#FBE2E3'},late:{label:'Late',icon:'clock',color:'#9A6206',bg:'#FCEFD6'}};
+    const statusMap={present:{label:'Present',icon:'check',color:'#0C7A4F',bg:'#DCF5EA'},absent:{label:'Absent',icon:'x',color:'#A52A2E',bg:'#FBE2E3'},late:{label:'Late',icon:'clock',color:'#9A6206',bg:'#FCEFD6'},unmarked:{label:'Not taken',icon:'minus',color:'#7A8296',bg:'#EEF1F5'}};
     const attendCurDate = S.attendDateISO || this.todayISO();
     let cP=0,cA=0,cL=0;
-    const attendList=attList.map(({sw, idx})=>{ const st=this.getAttendStatus(S.squadId, attendCurDate, sw.id, idx); if(st==='present')cP++; else if(st==='absent')cA++; else cL++; const sm=statusMap[st];
+    const attendList=attList.map(({sw, idx})=>{ const st=this.getAttendStatus(S.squadId, attendCurDate, sw.id, idx); if(st==='unmarked'){} else if(st==='present')cP++; else if(st==='absent')cA++; else cL++; const sm=statusMap[st];
       const stt=this._swStatus(sw.id); const isAct=stt.active;
       const away=this._swAwayOn(sw.id, attendCurDate);   // locked absent while signed off
       return {name:sw.name, initials:sw.initials, avBg:'#EEF1F5', avFg:'#5A657E',
@@ -8544,30 +8544,52 @@ class Component extends DCLogic {
 
     const zoneDefsIns=[{label:'EN1',color:'#22C1DA'},{label:'EN2',color:'#1BA5E6'},{label:'EN3',color:'#067EEA'},{label:'SP1',color:'#2733D6'},{label:'SP2',color:'#5D22CF'},{label:'SP3',color:'#8A22D5'}];
     let energyRaw, loadVals2, attendPctNum, avgKm, pbsMonth, sessionsCount, insightScopeLabel;
-    if(insSquadObj){
-      const perm=(ZP[insSquadObj.id]||[2,2,2,2,2,2]);
-      const permSum=perm.reduce((a,b)=>a+b,0)||1;
-      const rawPct = perm.map(p=>p/permSum);
-      // normalize to sum 100, integer
-      let acc=0; energyRaw = zoneDefsIns.map((z,i)=>{ const pct = i<5 ? Math.round(rawPct[i]*100) : 0; acc+=pct; return {...z, pct}; });
+    {
+      // These figures used to be generated — attendance was literally 78 + random*16, the
+      // weekly load bars were random, and the kilometres came from a fixed table. They are
+      // now measured from the saved sessions and the real register.
+      const insIds = insSquadObj ? [insSquadObj.id] : this.squads.map(s=>s.id);
+      insightScopeLabel = insSquadObj ? insSquadObj.name : 'All squads';
+
+      const perm = insSquadObj ? (ZP[insSquadObj.id]||[2,2,2,2,2,2]) : [2,2,2,2,2,2];
+      const permSum = perm.reduce((a,b)=>a+b,0)||1;
+      let acc=0; energyRaw = zoneDefsIns.map((z,i)=>{ const pct = i<5 ? Math.round((perm[i]/permSum)*100) : 0; acc+=pct; return {...z, pct}; });
       energyRaw[5].pct = Math.max(0, 100-acc);
-      const seed=insSeed(insSquadObj.id);
-      const r=this.rng(seed);
-      loadVals2=[0,1,2,3,4,5,6].map(i=>Math.round(18 + r()*30 + (i===5?14:0)));
-      attendPctNum = Math.round(78 + r()*16);
-      const capMap={preteam:12, advb:20, adva:26, junior:32, seniorb:38, seniora:44, vortexb:48, vortexa:52, legend:56};
-      avgKm = capMap[insSquadObj.id]||30;
-      pbsMonth = (this.roster[insSquadObj.id]||[]).filter(sw=>(sw.pbs||[]).length>0).length ? Math.max(1, Math.round((this.roster[insSquadObj.id]||[]).length * (0.05+r()*0.08))) : 0;
-      sessionsCount = Math.round(8 + r()*6);
-      insightScopeLabel = insSquadObj.name;
-    } else {
-      energyRaw=[{label:'EN1',pct:15,color:'#22C1DA'},{label:'EN2',pct:34,color:'#1BA5E6'},{label:'EN3',pct:20,color:'#067EEA'},{label:'SP1',pct:12,color:'#2733D6'},{label:'SP2',pct:10,color:'#5D22CF'},{label:'SP3',pct:9,color:'#8A22D5'}];
-      loadVals2=[38,42,31,46,40,52,22];
-      attendPctNum=87; avgKm=34; pbsMonth=18; sessionsCount=11;
-      insightScopeLabel = 'All squads';
+
+      // Sessions actually saved in the last 7 days, and the metres in them.
+      const todayIns=this.todayISO(); const weekAgoIns=this.shiftDate(todayIns,-6);
+      const sessIns=[];
+      insIds.forEach(id=>(((this.savedPlans||{})[id])||[]).forEach(r=>{ if(r.date && r.date>=weekAgoIns && r.date<=todayIns) sessIns.push(r); }));
+      sessionsCount = sessIns.length;
+      const dayTot=[0,0,0,0,0,0,0];   // Mon..Sun
+      sessIns.forEach(r=>{ const d=new Date(r.date+'T00:00:00'); const wd=(d.getDay()+6)%7; dayTot[wd]+=(r.totalM||0); });
+      loadVals2 = dayTot.map(m=>Math.round(m/100));            // hundreds of metres
+      avgKm = sessIns.length ? +((sessIns.reduce((a,x)=>a+(x.totalM||0),0)/sessIns.length)/1000).toFixed(1) : 0;
+
+      // Real attendance across the last 14 days, counting only days someone marked.
+      let insP=0, insTot=0;
+      for(let k=0;k<14;k++){
+        const dISO=this.shiftDate(todayIns,-k);
+        insIds.forEach(id=>{ (this.roster[id]||[]).forEach((sw,ix)=>{
+          const st=this.getAttendStatus(id,dISO,sw.id,ix);
+          if(st==='unmarked') return; insTot++; if(st==='present') insP++;
+        }); });
+      }
+      attendPctNum = insTot ? Math.round(insP/insTot*100) : 0;
+
+      // PBs recorded this calendar month.
+      const ymIns=todayIns.slice(0,7);
+      pbsMonth = 0;
+      insIds.forEach(id=>(this.roster[id]||[]).forEach(sw=>{
+        (sw.results||[]).forEach(rs=>{
+          const raw=String(rs.date||''); let ym='';
+          if(/^\d{4}-\d{2}/.test(raw)) ym=raw.slice(0,7);
+          else { const m=raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/); if(m) ym=m[3]+'-'+String(m[1]).padStart(2,'0'); }
+          if(ym===ymIns) pbsMonth++; });
+      }));
     }
     const energyZones=energyRaw.map(z=>({...z, w:z.pct+'%'}));
-    const daysIns=['M','T','W','T','F','S','S']; const maxLoad2=Math.max(...loadVals2);
+    const daysIns=['M','T','W','T','F','S','S']; const maxLoad2=Math.max(1, ...loadVals2);   // never divide by zero on a week with no sessions
     const loadBars=loadVals2.map((v,i)=>({h:Math.round(14+(v/maxLoad2)*70), fill: i===5?'#067EEA':'#BBD4F5', label:daysIns[i]}));
     const insightAttend={pct:attendPctNum+'%', dash:((attendPctNum/100)*276.5).toFixed(1)+' 276.5'};
     const insightStats=[{label:'Avg / swimmer', value:avgKm+' km', color:'#067EEA'},{label:'PBs this month', value:String(pbsMonth), color:'#0C7A4F'},{label:'Sessions', value:String(sessionsCount), color:'#2733D6'}];
@@ -9383,12 +9405,12 @@ class Component extends DCLogic {
           // ---- attendance performance (same synced data coaches mark in the Attend tab) ----
           ...(()=>{ const sqid=S.squadId; const idx=(this.roster[sqid]||[]).findIndex(x=>x.id===swObj.id); const today=this.todayISO(); const yStart=today.slice(0,4)+'-01-01';
             let p=0,l=0,a=0,tot=0; let dt=new Date(yStart+'T00:00:00'); const end=new Date(today+'T00:00:00'); let g=0;
-            while(dt<=end && g<400){ const dISO=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0'); const st=this.getAttendStatus(sqid,dISO,swObj.id,idx<0?0:idx); tot++; if(st==='present')p++; else if(st==='absent')a++; else l++; dt.setDate(dt.getDate()+1); g++; }
+            while(dt<=end && g<400){ const dISO=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0'); const st=this.getAttendStatus(sqid,dISO,swObj.id,idx<0?0:idx); if(st!=='unmarked') tot++; if(st==='unmarked'){} else if(st==='present')p++; else if(st==='absent')a++; else l++; dt.setDate(dt.getDate()+1); g++; }
             const pct= tot? Math.round((p/tot)*100):0;
             // last 6 months trend
             const mNames=['J','F','M','A','M','J','J','A','S','O','N','D']; const now=new Date(); const bars=[];
             for(let k=5;k>=0;k--){ const d=new Date(now.getFullYear(), now.getMonth()-k, 1); const my=d.getFullYear(), mm=d.getMonth(); const dim=new Date(my,mm+1,0).getDate(); let mp=0,mt=0;
-              for(let dd=1; dd<=dim; dd++){ const dISO=my+'-'+String(mm+1).padStart(2,'0')+'-'+String(dd).padStart(2,'0'); if(dISO>today) continue; if(this.getAttendStatus(sqid,dISO,swObj.id,idx<0?0:idx)==='present')mp++; mt++; }
+              for(let dd=1; dd<=dim; dd++){ const dISO=my+'-'+String(mm+1).padStart(2,'0')+'-'+String(dd).padStart(2,'0'); if(dISO>today) continue; const _s=this.getAttendStatus(sqid,dISO,swObj.id,idx<0?0:idx); if(_s==='unmarked') continue; if(_s==='present')mp++; mt++; }
               const mpct=mt?Math.round((mp/mt)*100):0; bars.push({label:mNames[mm], pct:mpct, h:Math.max(4,Math.round(mpct*0.5))+'px', bg: mpct>=85?'#1CB87A':(mpct>=70?squad.accent:'#F5A623') }); }
             const ring=(pct/100)*151;
             return { profileAttPct:pct+'%', profileAttPresent:p, profileAttLate:l, profileAttAbsent:a, profileAttSessions:tot, profileAttDash:ring.toFixed(1)+' 151', profileAttRingColor: pct>=85?'#1CB87A':(pct>=70?squad.accent:'#F5A623'), profileAttBars:bars, profileAttHasData:tot>0 }; })(),
@@ -9537,7 +9559,8 @@ class Component extends DCLogic {
           const dISO = famAttCalY+'-'+String(famAttCalM+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
           const isFuture = dISO>today; let bg='#F4F6F8', fg='#B9C0CC', opacity='1', ltr='';
           if(!isFuture){ const st=this.getAttendStatus(sqid, dISO, sw.id, swIdxSafe); famSess++;
-            if(st==='present'){famPres++; bg='#0C7A4F'; ltr='P';} else if(st==='late'){famLate++; bg='#F5A623'; ltr='L';} else {famAbs++; bg='#E5484D'; ltr='A';}
+            if(st==='unmarked'){ famSess--; bg='#EEF1F5'; ltr='\u00b7'; }   // register not taken that day
+            else if(st==='present'){famPres++; bg='#0C7A4F'; ltr='P';} else if(st==='late'){famLate++; bg='#F5A623'; ltr='L';} else {famAbs++; bg='#E5484D'; ltr='A';}
             fg='#fff';
           } else { opacity='.45'; }
           const isToday = dISO===today;
@@ -9551,7 +9574,7 @@ class Component extends DCLogic {
         let famYSum=0, famYMonths=0;
         const famYearRaw = monNamesF.map((mn,mi)=>{
           const dim=new Date(famAttYearSel, mi+1, 0).getDate(); let p=0,n=0;
-          for(let d=1; d<=dim; d++){ const dISO=famAttYearSel+'-'+String(mi+1).padStart(2,'0')+'-'+String(d).padStart(2,'0'); if(dISO>today) continue; if(this.getAttendStatus(sqid,dISO,sw.id,swIdxSafe)==='present')p++; n++; }
+          for(let d=1; d<=dim; d++){ const dISO=famAttYearSel+'-'+String(mi+1).padStart(2,'0')+'-'+String(d).padStart(2,'0'); if(dISO>today) continue; const _fs=this.getAttendStatus(sqid,dISO,sw.id,swIdxSafe); if(_fs==='unmarked') continue; if(_fs==='present')p++; n++; }
           const pct = n? Math.round((p/n)*100) : null; if(pct!=null){ famYSum+=pct; famYMonths++; } return {label:mn, pct, mi};
         });
         const famMaxY=Math.max(1, ...famYearRaw.map(m=>m.pct||0));
@@ -9901,9 +9924,9 @@ class Component extends DCLogic {
           let p=0,a=0,l=0;
           const swRows=list.map((sw,idx)=>{
             const st=this.getAttendStatus(sq.id, day, sw.id, idx);
-            if(st==='present')p++; else if(st==='absent')a++; else l++;
+            if(st==='unmarked'){} else if(st==='present')p++; else if(st==='absent')a++; else l++;
             const away=this._swAwayOn(sw.id, day);
-            const meta={present:{label:'Present',color:'#0C7A4F',bg:'#DCF5EA'},absent:{label:'Absent',color:'#A52A2E',bg:'#FBE2E3'},late:{label:'Late',color:'#9A6206',bg:'#FCEFD6'}}[st];
+            const meta={present:{label:'Present',color:'#0C7A4F',bg:'#DCF5EA'},absent:{label:'Absent',color:'#A52A2E',bg:'#FBE2E3'},late:{label:'Late',color:'#9A6206',bg:'#FCEFD6'},unmarked:{label:'Not taken',color:'#7A8296',bg:'#EEF1F5'}}[st];
             return {id:sw.id, name:sw.name, initials:sw.initials, status:st,
               statusLabel: away ? (meta.label+' · '+this._statusLabel(away)) : meta.label,
               statusColor:meta.color, statusBg:meta.bg,
