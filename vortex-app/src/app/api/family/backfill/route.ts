@@ -106,8 +106,10 @@ async function build(request: Request, write: boolean) {
   const { users, error, how: authHow } = await listAllAuthUsers();
   if (error) return Response.json({ error, authUsers: users.length }, { status: 502 });
 
-  // Existing rows (a secret key bypasses RLS, so this is the true contents of the table)
-  const exA = await authFetch(`${SB_URL}/rest/v1/family_accounts?select=id,name,email,swimmer_ids&limit=5000`);
+  // Existing rows. Ask for * rather than named columns: if the live table is missing one
+  // (it was), naming it makes the whole read fail with 42703 instead of just returning
+  // what is there — which is exactly how a schema problem got mistaken for an auth problem.
+  const exA = await authFetch(`${SB_URL}/rest/v1/family_accounts?select=*&limit=5000`);
   if (!exA.ok) {
     return Response.json({
       error: `could not read family_accounts. Auth listing DID work via "${authHow}" and found ${users.length} registered users, so the key is valid — the database read is what is refused.`,
@@ -149,8 +151,18 @@ async function build(request: Request, write: boolean) {
     };
   });
 
+  // Which columns does the live table actually have? A missing one breaks every save.
+  const needed = ["id", "name", "email", "phone", "pass", "role", "swimmer_ids", "ts"];
+  const columnsSeen = existing.length ? Object.keys(existing[0]) : null;
+  const missingColumns = columnsSeen ? needed.filter((c) => !columnsSeen.includes(c)) : null;
+
   const report = {
     authUsers: users.length,
+    columnsSeen,
+    missingColumns,
+    schemaWarning: missingColumns && missingColumns.length
+      ? `family_accounts is missing: ${missingColumns.join(", ")} — run supabase/family_accounts_schema_fix.sql or saves will keep failing`
+      : null,
     rowsAlreadyInTable: existing.length,
     tableContents: existing.map((r) => ({ name: r.name, email: r.email, children: (r.swimmer_ids || []).length })),
     matchedExisting: already,
