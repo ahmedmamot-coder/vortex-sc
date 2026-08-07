@@ -443,6 +443,16 @@ if ('serviceWorker' in navigator) {
   @font-face{font-family:"Funnel Display";src:url("assets/a8e6b0d8.ttf") format("truetype");font-weight:700;font-display:swap}
   *{box-sizing:border-box}
   body{margin:0;font-family:"Funnel Display",system-ui,sans-serif;background:#070C16;-webkit-font-smoothing:antialiased}
+  /* iOS zooms the whole page in whenever you focus a field whose text is smaller than
+     16px — and it never zooms back out, which is why the app felt stuck zoomed after
+     typing. Keeping every field at 16px on touch devices stops it happening at all.
+     (Pinch-zoom is deliberately left enabled; taking it away breaks accessibility.) */
+  @media (pointer: coarse){
+    input, select, textarea { font-size: 16px !important; }
+  }
+  /* Removes the ~300ms wait iOS adds while it watches for a double-tap-to-zoom, so
+     buttons and back arrows respond immediately. */
+  a, button, [onclick], input, select, textarea { touch-action: manipulation; }
   a{color:var(--vx-blue);text-decoration:none}a:hover{color:var(--vx-blue-dark)}
   .vx-scroll{scrollbar-width:none}.vx-scroll::-webkit-scrollbar{display:none;width:0}
   input::placeholder{color:#9AA2B4}
