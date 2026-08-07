@@ -177,23 +177,27 @@ async function build(request: Request, write: boolean) {
   let insertError: string | null = null;
   for (let i = 0; i < rows.length; i += 200) {
     const chunk = rows.slice(i, i + 200);
-    let ok = false, lastErr = "";
-    const headerStyles: Array<Record<string, string>> = [
-      { apikey: SB_SERVICE, Authorization: "Bearer " + SB_SERVICE },
-      { apikey: SB_SERVICE },
-      { Authorization: "Bearer " + SB_SERVICE },
+    let ok = false;
+    const tried: string[] = [];
+    const headerStyles: Array<{ how: string; h: Record<string, string> }> = [
+      { how: "apikey+Bearer", h: { apikey: SB_SERVICE, Authorization: "Bearer " + SB_SERVICE } },
+      { how: "apikey only", h: { apikey: SB_SERVICE } },
+      { how: "Authorization only", h: { Authorization: "Bearer " + SB_SERVICE } },
     ];
-    for (const hdr of headerStyles) {
+    for (const s of headerStyles) {
       const ins = await fetch(`${SB_URL}/rest/v1/family_accounts`, {
         method: "POST",
-        headers: { ...hdr, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
+        headers: { ...s.h, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
         body: JSON.stringify(chunk),
       });
       if (ins.ok) { ok = true; break; }
-      lastErr = `HTTP ${ins.status}: ${(await ins.text().catch(() => "")).slice(0, 250)}`;
+      // Record EVERY attempt: reporting only the last one showed "No API key found",
+      // which is simply what the Authorization-only style always returns, and hid the
+      // real reason the first (correct) style was refused.
+      tried.push(`${s.how} → ${ins.status} ${(await ins.text().catch(() => "")).slice(0, 200)}`);
     }
     if (ok) created += chunk.length;
-    else if (!insertError) insertError = `insert failed ${lastErr}`;
+    else if (!insertError) insertError = tried.join("  |  ");
   }
 
   return Response.json({ created, insertError, ...report });
