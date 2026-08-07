@@ -35,7 +35,7 @@ if ('serviceWorker' in navigator) {
   var REST = SB_URL + "/rest/v1/club_state";
   var HEAD = { "apikey": SB_ANON, "Authorization": "Bearer " + SB_ANON, "Content-Type": "application/json" };
   // Every shared data type the club edits. The only key kept per-device is vx_api_key.
-  var SYNC = ["vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_meet_events","vx_meet_cuts","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_sw_status"];
+  var SYNC = ["vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_meet_events","vx_meet_cuts","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_sw_status","vx_memberships","vx_fee_plans"];
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
   // Auth-retry queue: if a write is rejected because we weren't signed in yet (401/403 under the
@@ -1038,6 +1038,20 @@ if ('serviceWorker' in navigator) {
                         <button onclick="{{ onWellSave }}" style="margin-top:10px;width:100%;background:#0C7A4F;color:#fff;border:none;border-radius:10px;padding:11px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer">Save check-in</button>
                         <sc-if value="{{ wellMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:7px 2px 0;font-size:11px;font-weight:600;color:#0C7A4F">{{ wellMsg }}</p></sc-if>
                       </div>
+                      <sc-if value="{{ famMemHas }}" hint-placeholder-val="{{ false }}">
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05);margin-bottom:11px">
+                          <p style="margin:0 0 9px;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:#7A8296;font-weight:700">Membership</p>
+                          <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px">
+                            <span style="flex:1;min-width:0"><span style="display:block;font-size:14px;font-weight:800;color:#0C1116">{{ famMemPkg }}</span><span style="display:block;font-size:11.5px;color:#7A8296">{{ famMemCost }}</span></span>
+                            <span style="flex:none;background:{{ famMemPaidBg }};color:{{ famMemPaidFg }};border-radius:999px;padding:4px 11px;font-size:11px;font-weight:800">{{ famMemPaid }}</span>
+                          </div>
+                          <p style="margin:0;font-size:11.5px;color:#7A8296">{{ famMemDates }}</p>
+                          <p style="margin:3px 0 0;font-size:11.5px;font-weight:700;color:{{ famMemDueColor }}">{{ famMemDue }}</p>
+                          <sc-if value="{{ famMemHasNote }}" hint-placeholder-val="{{ false }}">
+                            <p style="margin:7px 0 0;font-size:11.5px;color:#3A4152;background:#F8FAFC;border-radius:9px;padding:8px 10px">{{ famMemNote }}</p>
+                          </sc-if>
+                        </div>
+                      </sc-if>
                       <sc-if value="{{ famQualHas }}" hint-placeholder-val="{{ false }}">
                         <p style="margin:0 2px 8px;font-size:11.5px;font-weight:700;color:#7A8296;text-transform:uppercase;letter-spacing:.04em">Qualified for</p>
                         <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px">
@@ -1389,16 +1403,69 @@ if ('serviceWorker' in navigator) {
                     </sc-if>
 
                     <sc-if value="{{ acadShowFees }}" hint-placeholder-val="{{ false }}">
-                      <div style="display:flex;flex-direction:column;gap:8px">
-                        <sc-for list="{{ acadFees }}" as="f" hint-placeholder-count="9">
-                          <div style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:11px 13px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
-                            <span style="width:6px;height:30px;border-radius:3px;background:{{ f.accent }};flex:none"></span>
-                            <span style="flex:1;font-weight:700;font-size:13px;color:#0C1116">{{ f.name }}</span>
-                            <span style="font-size:11px;color:#9AA2B4;font-weight:700">{{ acadCurrency }}</span>
-                            <input value="{{ f.value }}" oninput="{{ f.onChange }}" onblur="{{ f.onSave }}" type="number" style="width:70px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:8px;padding:6px 8px;font-family:var(--font-mono);font-weight:700;font-size:13px;color:#0C1116;outline:none;text-align:right">
-                            <span style="font-size:11px;color:#9AA2B4">/mo</span>
+                      <div style="display:flex;flex-direction:column;gap:9px">
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:12px 13px">
+                          <p style="margin:0 0 3px;font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">Monthly packages</p>
+                          <p style="margin:0 0 10px;font-size:11px;color:#9AA2B4">Same price for every squad — priced by sessions per week.</p>
+                          <sc-for list="{{ feePlanRows }}" as="fp" hint-placeholder-count="4">
+                            <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #F4F6F8">
+                              <span style="width:6px;height:26px;border-radius:3px;background:{{ fp.color }};flex:none"></span>
+                              <span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:13px;color:#0C1116">{{ fp.label }}</span><span style="display:block;font-size:10.5px;color:#9AA2B4">{{ fp.sub }}</span></span>
+                              <span style="font-size:11px;color:#9AA2B4;font-weight:700">{{ acadCurrency }}</span>
+                              <input value="{{ fp.value }}" oninput="{{ fp.onChange }}" onblur="{{ fp.onSave }}" type="number" style="width:74px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:var(--font-mono);font-size:13px;font-weight:700;color:#0C1116;outline:none;text-align:right">
+                              <span style="font-size:11px;color:#9AA2B4">/mo</span>
+                            </div>
+                          </sc-for>
+                        </div>
+
+                        <sc-if value="{{ renewHas }}" hint-placeholder-val="{{ false }}">
+                          <div style="background:#FFF7E6;border:1px solid #F5D9A0;border-radius:14px;padding:12px 13px">
+                            <p style="margin:0 0 8px;font-size:12px;font-weight:800;color:#7A5A18">{{ renewTitle }}</p>
+                            <sc-for list="{{ renewRows }}" as="rw" hint-placeholder-count="4">
+                              <div style="display:flex;align-items:center;gap:9px;background:#fff;border:1px solid #F0E3C8;border-radius:10px;padding:8px 10px;margin-bottom:6px">
+                                <span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;font-weight:700;color:#0C1116">{{ rw.name }}</span><span style="display:block;font-size:10.5px;color:{{ rw.color }}">{{ rw.when }}</span></span>
+                                <button onclick="{{ rw.onRemind }}" style="flex:none;background:#B4690E;color:#fff;border:none;border-radius:9px;padding:7px 11px;font-family:inherit;font-weight:700;font-size:11px;cursor:pointer">Remind</button>
+                              </div>
+                            </sc-for>
                           </div>
-                        </sc-for>
+                        </sc-if>
+
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:12px 13px">
+                          <p style="margin:0 0 8px;font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">Swimmer memberships</p>
+                          <span style="display:flex;align-items:center;gap:7px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:9px 11px;margin-bottom:8px">
+                            <i data-lucide="search" style="width:15px;height:15px;color:#9AA2B4;flex:none"></i>
+                            <input value="{{ memQuery }}" oninput="{{ onMemQuery }}" placeholder="Search a swimmer…" style="flex:1;min-width:0;border:none;outline:none;background:none;font-family:inherit;font-size:12.5px;color:#0C1116">
+                          </span>
+                          <p style="margin:0 0 8px;font-size:11px;color:#9AA2B4">{{ memCountLine }}</p>
+                          <sc-for list="{{ memRows }}" as="mb" hint-placeholder-count="6">
+                            <div style="border:1px solid #EEF1F5;border-radius:12px;padding:10px;margin-bottom:8px">
+                              <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                                <span style="flex:1;min-width:0"><span style="display:block;font-size:13px;font-weight:800;color:#0C1116">{{ mb.name }}</span><span style="display:block;font-size:10.5px;color:#7A8296">{{ mb.sub }}</span></span>
+                                <span style="flex:none;font-family:var(--font-mono);font-size:13px;font-weight:800;color:#0C7A4F">{{ mb.cost }}</span>
+                              </div>
+                              <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">
+                                <sc-for list="{{ mb.pkgChips }}" as="pc" hint-placeholder-count="4">
+                                  <button onclick="{{ pc.onClick }}" style="background:{{ pc.bg }};color:{{ pc.fg }};border:1px solid {{ pc.border }};border-radius:999px;padding:6px 11px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">{{ pc.label }}</button>
+                                </sc-for>
+                              </div>
+                              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+                                <button onclick="{{ mb.onFitness }}" style="flex:1;min-width:110px;background:{{ mb.fitBg }};color:{{ mb.fitFg }};border:1px solid {{ mb.fitBorder }};border-radius:9px;padding:8px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">{{ mb.fitLabel }}</button>
+                                <button onclick="{{ mb.onPaid }}" style="flex:1;min-width:110px;background:{{ mb.paidBg }};color:{{ mb.paidFg }};border:1px solid {{ mb.paidBorder }};border-radius:9px;padding:8px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">{{ mb.paidLabel }}</button>
+                              </div>
+                              <div style="display:flex;gap:6px;margin-bottom:8px">
+                                <span style="flex:1;display:flex;align-items:center;gap:5px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:6px 8px"><span style="font-size:10px;color:#9AA2B4;font-weight:700">From</span><input value="{{ mb.start }}" oninput="{{ mb.onStart }}" type="date" style="flex:1;min-width:0;border:none;outline:none;background:none;font-family:var(--font-mono);font-size:11.5px;color:#0C1116"></span>
+                                <span style="flex:1;display:flex;align-items:center;gap:5px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:6px 8px"><span style="font-size:10px;color:#9AA2B4;font-weight:700">To</span><input value="{{ mb.end }}" oninput="{{ mb.onEnd }}" type="date" style="flex:1;min-width:0;border:none;outline:none;background:none;font-family:var(--font-mono);font-size:11.5px;color:#0C1116"></span>
+                              </div>
+                              <input value="{{ mb.note }}" oninput="{{ mb.onNote }}" placeholder="Note for the swimmer / parents (optional)" style="width:100%;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:11.5px;color:#0C1116;outline:none;box-sizing:border-box">
+                              <sc-if value="{{ mb.hasEnd }}" hint-placeholder-val="{{ false }}">
+                                <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+                                  <span style="flex:1;font-size:11px;font-weight:700;color:{{ mb.dueColor }}">{{ mb.dueLabel }}</span>
+                                  <button onclick="{{ mb.onRemind }}" style="flex:none;background:#EEF1F5;color:#3A4152;border:none;border-radius:9px;padding:6px 11px;font-family:inherit;font-weight:700;font-size:11px;cursor:pointer">Send reminder</button>
+                                </div>
+                              </sc-if>
+                            </div>
+                          </sc-for>
+                        </div>
                       </div>
 
                       <div style="margin-top:16px;padding-top:14px;border-top:1px solid #E5E9F0">
@@ -1969,6 +2036,20 @@ if ('serviceWorker' in navigator) {
                     </div>
                     <div>
                       <h2 style="font-size:11.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#7A8296;margin:0 2px 9px">Coach notes &amp; wellbeing</h2>
+                      <sc-if value="{{ swMemHas }}" hint-placeholder-val="{{ false }}">
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                          <p style="margin:0 0 9px;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:#7A8296;font-weight:700">Academy membership</p>
+                          <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px">
+                            <span style="flex:1;min-width:0"><span style="display:block;font-size:14px;font-weight:800;color:#0C1116">{{ swMemPkg }}</span><span style="display:block;font-size:11.5px;color:#7A8296">{{ swMemCost }}</span></span>
+                            <span style="flex:none;background:{{ swMemPaidBg }};color:{{ swMemPaidFg }};border-radius:999px;padding:4px 11px;font-size:11px;font-weight:800">{{ swMemPaid }}</span>
+                          </div>
+                          <p style="margin:0;font-size:11.5px;color:#7A8296">{{ swMemDates }}</p>
+                          <p style="margin:3px 0 0;font-size:11.5px;font-weight:700;color:{{ swMemDueColor }}">{{ swMemDue }}</p>
+                          <sc-if value="{{ swMemHasNote }}" hint-placeholder-val="{{ false }}">
+                            <p style="margin:7px 0 0;font-size:11.5px;color:#3A4152;background:#F8FAFC;border-radius:9px;padding:8px 10px">{{ swMemNote }}</p>
+                          </sc-if>
+                        </div>
+                      </sc-if>
                       <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05);display:flex;flex-direction:column;gap:12px">
                         <button onclick="{{ onToggleSponsor }}" style="display:flex;align-items:center;justify-content:space-between;background:{{ sponsorBg }};color:{{ sponsorFg }};border:none;border-radius:11px;padding:11px 13px;cursor:pointer;font-family:inherit"><span style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:12.5px"><i data-lucide="award" style="width:16px;height:16px"></i>{{ sponsorLabel }}</span><i data-lucide="chevron-right" style="width:15px;height:15px;opacity:.6"></i></button>
                         <div>
@@ -2938,6 +3019,20 @@ if ('serviceWorker' in navigator) {
                         <img src="assets/a4d3e396.jpg" alt="" style="position:absolute;inset:0;left:auto;width:60%;height:100%;object-fit:cover;opacity:.28;mix-blend-mode:overlay;-webkit-mask-image:linear-gradient(90deg,transparent,#000 40%);mask-image:linear-gradient(90deg,transparent,#000 40%)">
                         <span style="position:relative;width:42px;height:42px;flex:none;border-radius:12px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center"><i data-lucide="crown" style="width:22px;height:22px;color:#FFE08A"></i></span>
                         <div><p style="margin:0;font-size:14px;font-weight:800">VIP Sponsors Directory</p><p style="margin:2px 0 0;font-size:12px;color:rgba(255,240,210,.85)">{{ sponsorsScopeLabel }} · {{ sponsorsRows.length }} sponsored</p></div>
+                      </div>
+                      <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:12px 13px;display:flex;flex-direction:column;gap:8px">
+                        <p style="margin:0;font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">Add or remove a sponsored swimmer</p>
+                        <span style="display:flex;align-items:center;gap:7px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:9px 11px">
+                          <i data-lucide="search" style="width:15px;height:15px;color:#9AA2B4;flex:none"></i>
+                          <input value="{{ sponsorQuery }}" oninput="{{ onSponsorQuery }}" placeholder="Search any swimmer in the club…" style="flex:1;min-width:0;border:none;outline:none;background:none;font-family:inherit;font-size:12.5px;color:#0C1116">
+                        </span>
+                        <p style="margin:0;font-size:11px;color:#9AA2B4">{{ sponsorHint }}</p>
+                        <sc-for list="{{ sponsorPick }}" as="spk" hint-placeholder-count="4">
+                          <button onclick="{{ spk.onToggle }}" style="display:flex;align-items:center;gap:9px;width:100%;text-align:left;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:10px;padding:9px 10px;cursor:pointer;font-family:inherit">
+                            <span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;font-weight:700;color:#0C1116">{{ spk.name }}</span><span style="display:block;font-size:10.5px;color:#7A8296">{{ spk.sub }}</span></span>
+                            <sc-if value="{{ spk.on }}" hint-placeholder-val="{{ false }}"><span style="flex:none;background:#FCEFD6;color:#B4690E;border-radius:999px;padding:3px 9px;font-size:10.5px;font-weight:800">Sponsored ✓</span></sc-if>
+                          </button>
+                        </sc-for>
                       </div>
                       <sc-if value="{{ sponsorsEmpty }}" hint-placeholder-val="{{ false }}">
                         <div style="text-align:center;padding:36px 20px;color:#9AA2B4"><i data-lucide="crown" style="width:30px;height:30px"></i><p style="font-size:12.5px;margin-top:10px;line-height:1.5">No sponsored swimmers yet.<br>Mark a swimmer as sponsored from their profile.</p></div>
@@ -4647,6 +4742,10 @@ class Component extends DCLogic {
     this.attendLog=this._loadJSON('vx_attend_log', {});
     this.academyTrials=this._loadJSON('vx_academy_trials', []);
     this.academyFees=this._loadJSON('vx_academy_fees', {preteam:350,advb:450,adva:500,junior:550,seniorb:600,seniora:650,vortexb:700,vortexa:750,legend:800});
+    // Membership packages — the same price for every squad, priced by sessions per week.
+    this.feePlans=this._loadJSON('vx_fee_plans', {'3x':650, '4x':750, '6x':850, fitness:360});
+    // Per swimmer: which package, whether they take fitness, paid or not, the dates, a note.
+    this.memberships=this._loadJSON('vx_memberships', {});
     this.invoices=this._loadJSON('vx_invoices', {});
     this.academySchedule={preteam:'Mon/Wed/Fri · 4:00–5:00pm', advb:'Mon/Wed/Fri · 4:00–5:30pm', adva:'Mon–Fri · 4:00–5:30pm', junior:'Mon–Fri · 4:00–6:00pm', seniorb:'Mon–Sat · 4:00–6:00pm', seniora:'Mon–Sat · 4:00–6:30pm', vortexb:'Mon–Sat · 5:00–7:00pm', vortexa:'Mon–Sat · 5:00–7:30pm', legend:'Mon–Sat · 5:30–8:00pm'};
     this.videoLib=this._loadJSON('vx_videos', []).filter(v=>v && v.url && /^https?:\/\//i.test(v.url)).map(v=>({
@@ -4721,14 +4820,14 @@ class Component extends DCLogic {
       relayPickerOpen:false, relayPickerKey:null, relayPickerGender:null, relayPickerBand:null, relayPickerLegId:null, relayPickerStroke:null, relayPickerKind:null,
       goalsSwId:null, goalsSwQuery:'', goalEditEvent:null, goalEditVal:'', goalMsg:'',
       academyTab:'trials', trialForm:{childName:'',age:'',parentName:'',phone:'',notes:''}, trialSubmitted:false,
-      feesDraft:{},
+      feesDraft:{}, memQuery:'',
       seasonOpenWeek:null,
       planSessDate:null, planSessSlot:'AM', planSessTime:'', planCalY:null, planCalM:null, planCalDay:null,
       fitSessDate:null, fitSessSlot:'AM', fitSessTime:'', fitCalY:null, fitCalM:null, fitCalDay:null, fitSavedMsg:'',
       videoActiveId:null, videoUrlDraft:'', videoTitleDraft:'', videoTagDraft:'', videoAddOpen:false, videoRate:1, videoNoteDraft:'', videoCurT:0, videoDur:0,
       fitAddOpen:false, fitBusy:null, fitMediaMsg:'', inbodyMode:'pdf', inbodySwId:'', inbodyQuery:'', inbodyPdfBusy:false, inbodyPdfMsg:'', inbodyQrOpen:false, inbodyQrMsg:'', inbodyDraft:null,
       shareNote:'',
-      moveOverride:{}, moveQuery:'',
+      moveOverride:{}, moveQuery:'', sponsorQuery:'',
       rosterQuery:'', meetSel:0, boardSel:0,
       videoPlaying:false,
       compose:'', composeTag:'set', composeImage:'', composeEmojiOpen:false,
@@ -6231,6 +6330,42 @@ class Component extends DCLogic {
     this.setState({trialForm:{childName:'',age:'',parentName:'',phone:'',notes:''}, trialSubmitted:true});
   }
   trialDismiss(id){ this.academyTrials=this.academyTrials.filter(t=>t.id!==id); this._saveJSON('vx_academy_trials', this.academyTrials); this.forceUpdate(); }
+  // ---- Membership (academy packages) ----
+  _membership(swId){ const m=(this.memberships||{})[swId]||{};
+    return { pkg:m.pkg||'', fitness:!!m.fitness, paid:!!m.paid, start:m.start||'', end:m.end||'', note:m.note||'' }; }
+  setMembership(swId, patch){
+    const cur=this._membership(swId); const next={...cur, ...patch};
+    const map={...(this.memberships||{})};
+    if(!next.pkg && !next.fitness) delete map[swId]; else map[swId]=next;
+    this.memberships=map; this._saveJSON('vx_memberships', map); this.forceUpdate();
+  }
+  _feePlans(){ const f=this.feePlans||{}; return {'3x':Number(f['3x'])||650, '4x':Number(f['4x'])||750, '6x':Number(f['6x'])||850, fitness:Number(f.fitness)||360}; }
+  feePlanSave(key, val){ const n=parseFloat(val); if(isNaN(n)) return; const f={...this._feePlans(), [key]:n};
+    this.feePlans=f; this._saveJSON('vx_fee_plans', f); this.forceUpdate(); }
+  _membershipCost(m){ const f=this._feePlans(); return (m.pkg?(f[m.pkg]||0):0) + (m.fitness?f.fitness:0); }
+  // Days until the membership ends — negative once it has expired, null if no end date.
+  _renewalDaysLeft(m){ if(!m.end) return null;
+    const end=new Date(m.end+'T00:00:00'), now=new Date(this.todayISO()+'T00:00:00');
+    return Math.round((end-now)/86400000); }
+  // Everyone whose membership has expired or runs out within `days`.
+  _renewalsDue(days){
+    const out=[];
+    this.squads.forEach(sq=>(this.roster[sq.id]||[]).forEach(sw=>{
+      const m=this._membership(sw.id); if(!m.pkg && !m.fitness) return;
+      const dl=this._renewalDaysLeft(m); if(dl==null || dl>days) return;
+      out.push({sw, sqId:sq.id, sqName:sq.name, m, daysLeft:dl});
+    }));
+    return out.sort((a,b)=>a.daysLeft-b.daysLeft);
+  }
+  // Tell the swimmer and their parents that a renewal is coming (or overdue).
+  notifyRenewal(swId, name, daysLeft, note){
+    const title = daysLeft<0 ? 'Membership expired' : (daysLeft===0 ? 'Membership ends today' : 'Membership renewal due');
+    const when = daysLeft<0 ? (Math.abs(daysLeft)+' day'+(Math.abs(daysLeft)===1?'':'s')+' ago') : ('in '+daysLeft+' day'+(daysLeft===1?'':'s'));
+    const body = name+' \u2014 membership '+(daysLeft<0?'expired ':'renews ')+when+'.'+(note?(' '+note):'');
+    try{ this.notify('family_sw:'+swId, 'credit-card', title, body); }catch(e){}
+    try{ this._pushSend({swimmerIds:[swId]}, title, body, '/'); }catch(e){}
+    this.setState({shareNote:'Renewal reminder sent to '+name+' \u2713'});
+  }
   feeSave(sqid, val){ const n=parseFloat(val); if(isNaN(n)) return; this.academyFees={...this.academyFees, [sqid]:n}; this._saveJSON('vx_academy_fees', this.academyFees); this.forceUpdate(); }
   invMonthKey(){ const n=new Date(); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0'); }
   invoiceToggle(swId){ const mk=this.invMonthKey(); const cur={...this.invoices}; const monthMap={...(cur[mk]||{})}; monthMap[swId]=!monthMap[swId]; cur[mk]=monthMap; this.invoices=cur; this._saveJSON('vx_invoices', cur); this.forceUpdate(); }
@@ -7793,7 +7928,8 @@ class Component extends DCLogic {
     this.staffOverrides=g('vx_staff_ovr', this.staffOverrides);
     this.meetStatus=g('vx_meet_status', this.meetStatus); this.meetEntries=g('vx_meet_entries', this.meetEntries);
     this.customMeets=g('vx_custom_meets', this.customMeets); this.eventRequests=g('vx_event_requests', this.eventRequests); this.meetCuts=g('vx_meet_cuts', this.meetCuts);
-    this.academyTrials=g('vx_academy_trials', this.academyTrials); this.academyFees=g('vx_academy_fees', this.academyFees); this.invoices=g('vx_invoices', this.invoices);
+    this.academyTrials=g('vx_academy_trials', this.academyTrials); this.academyFees=g('vx_academy_fees', this.academyFees);
+    this.feePlans=g('vx_fee_plans', this.feePlans); this.memberships=g('vx_memberships', this.memberships); this.invoices=g('vx_invoices', this.invoices);
     this.brandConfig=g('vx_brand', this.brandConfig); this.notifications=g('vx_notifications', this.notifications);
     this.tpaceTests=g('vx_tpace', this.tpaceTests); this.fitnessTests=g('vx_fitness_tests', this.fitnessTests);
     this.fitnessPlans=g('vx_fitness_plans', this.fitnessPlans); this.fitnessMedia=g('vx_fitness_media', this.fitnessMedia); this.waTargets=g('vx_wa_targets', this.waTargets); this.promoStore=g('vx_promo', this.promoStore); this.aiSuggOverrides=g('vx_ai_sugg_ovr', this.aiSuggOverrides);
@@ -8489,6 +8625,15 @@ class Component extends DCLogic {
         if(m.sponsored) sponsorsFlat.push({sw, sq});
       });
     });
+    // Pick sponsors from the WHOLE club — this screen previously listed only swimmers who
+    // were already marked, so there was no way to mark anyone.
+    const spq=(S.sponsorQuery||'').trim().toLowerCase();
+    const sponsorPick = spq.length>=2 ? this.allSwimmersFlat()
+        .filter(sw=>String(sw.name||'').toLowerCase().includes(spq))
+        .slice(0,10)
+        .map(sw=>({ id:sw.id, name:sw.name, sub:((this.squadById[sw.squadId]||{}).name||'')+' \u00b7 Age '+this._swAge(sw),
+          on:!!this._swMeta(sw.id).sponsored,
+          onToggle:()=>this.toggleSponsor(sw.id) })) : [];
     const sponsorsRows = sponsorsFlat.map(({sw,sq})=>({
       id:sw.id, name:sw.name, initials:sw.initials, sqName:sq.name,
       topEvent:sw.topEvent||'—', topTime:sw.topTime||'—',
@@ -8522,10 +8667,63 @@ class Component extends DCLogic {
     const acadLadder = this.squads.map(sq=>({ name:sq.name, ages:sq.ages, accent:sq.accent, coach:sq.coach, count:(this.roster[sq.id]||[]).length }));
     const acadSchedule = this.squads.map(sq=>({ name:sq.name, accent:sq.accent, when:this.academySchedule[sq.id]||'—' }));
     const curr = this.brandConfig.currency || 'QAR';
-    const acadFees = this.squads.map(sq=>({ id:sq.id, name:sq.name, accent:sq.accent,
-      value: (S.feesDraft[sq.id]!=null?S.feesDraft[sq.id]:this.academyFees[sq.id]),
-      onChange:(e)=>this.setState({feesDraft:{...S.feesDraft, [sq.id]:e.target.value}}),
-      onSave:()=>this.feeSave(sq.id, (S.feesDraft[sq.id]!=null?S.feesDraft[sq.id]:this.academyFees[sq.id])) }));
+    // Monthly packages — one price list for the whole club, by sessions per week.
+    const _fp=this._feePlans();
+    const feePlanDefs=[
+      {key:'3x', label:'3x per week', sub:'Swimming', color:'#22C1DA'},
+      {key:'4x', label:'4x per week', sub:'Swimming', color:'#067EEA'},
+      {key:'6x', label:'6x per week', sub:'Swimming', color:'#2733D6'},
+      {key:'fitness', label:'Fitness 3x per week', sub:'Add-on, on top of a swim package', color:'#0C7A4F'},
+    ];
+    const feePlanRows=feePlanDefs.map(d=>({ label:d.label, sub:d.sub, color:d.color,
+      value:(S.feesDraft[d.key]!=null?S.feesDraft[d.key]:_fp[d.key]),
+      onChange:(e)=>this.setState({feesDraft:{...S.feesDraft, [d.key]:e.target.value}}),
+      onSave:()=>this.feePlanSave(d.key, (S.feesDraft[d.key]!=null?S.feesDraft[d.key]:_fp[d.key])) }));
+
+    // Memberships, per swimmer.
+    const _mq=(S.memQuery||'').trim().toLowerCase();
+    const _memAll=this.allSwimmersFlat().slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+    const _memMatched=_memAll.filter(sw=>!_mq || String(sw.name||'').toLowerCase().includes(_mq));
+    const MEM_CAP=25;
+    const memRows=_memMatched.slice(0,MEM_CAP).map(sw=>{
+      const m=this._membership(sw.id); const dl=this._renewalDaysLeft(m);
+      const cost=this._membershipCost(m);
+      const pkgChips=[{k:'',l:'None'},{k:'3x',l:'3x'},{k:'4x',l:'4x'},{k:'6x',l:'6x'}].map(o2=>{
+        const on=(m.pkg||'')===o2.k;
+        return { label:o2.l, onClick:()=>this.setMembership(sw.id,{pkg:o2.k}),
+          bg:on?'#0C1116':'#fff', fg:on?'#fff':'#3A4152', border:on?'#0C1116':'#E5E9F0' };
+      });
+      return { id:sw.id, name:sw.name,
+        sub:((this.squadById[sw.squadId]||{}).name||'')+' · Age '+this._swAge(sw),
+        cost: cost? (cost+' '+curr) : '—',
+        pkgChips,
+        onFitness:()=>this.setMembership(sw.id,{fitness:!m.fitness}),
+        fitLabel:m.fitness?('Fitness ✓ '+_fp.fitness+' '+curr):'Add fitness',
+        fitBg:m.fitness?'#DCF5EA':'#fff', fitFg:m.fitness?'#0C7A4F':'#7A8296', fitBorder:m.fitness?'#0C7A4F':'#E5E9F0',
+        onPaid:()=>this.setMembership(sw.id,{paid:!m.paid}),
+        paidLabel:m.paid?'Paid ✓':'Not paid',
+        paidBg:m.paid?'#DCF5EA':'#FBE2E3', paidFg:m.paid?'#0C7A4F':'#A52A2E', paidBorder:m.paid?'#0C7A4F':'#E5AAAC',
+        start:m.start, end:m.end,
+        onStart:(e)=>this.setMembership(sw.id,{start:e.target.value}),
+        onEnd:(e)=>this.setMembership(sw.id,{end:e.target.value}),
+        note:m.note, onNote:(e)=>this.setMembership(sw.id,{note:e.target.value}),
+        hasEnd:!!m.end,
+        dueLabel: dl==null?'' : (dl<0? ('Expired '+Math.abs(dl)+' day'+(Math.abs(dl)===1?'':'s')+' ago') : (dl===0?'Ends today':('Renews in '+dl+' day'+(dl===1?'':'s')))),
+        dueColor: dl==null?'#9AA2B4' : (dl<0?'#A52A2E':(dl<=7?'#B4690E':'#0C7A4F')),
+        onRemind:()=>this.notifyRenewal(sw.id, sw.name, dl==null?0:dl, m.note) };
+    });
+    const memCountLine=_memMatched.length>MEM_CAP
+      ? ('Showing '+MEM_CAP+' of '+_memMatched.length+' — search a name to find anyone')
+      : (_memMatched.length+' swimmer'+(_memMatched.length===1?'':'s'));
+
+    // Renewals expiring within two weeks (or already expired).
+    const _due=this._renewalsDue(14);
+    const renewRows=_due.slice(0,12).map(d=>({
+      name:d.sw.name,
+      when: d.daysLeft<0 ? ('Expired '+Math.abs(d.daysLeft)+' day'+(Math.abs(d.daysLeft)===1?'':'s')+' ago') : (d.daysLeft===0?'Ends today':('Renews in '+d.daysLeft+' day'+(d.daysLeft===1?'':'s'))),
+      color: d.daysLeft<0?'#A52A2E':'#B4690E',
+      onRemind:()=>this.notifyRenewal(d.sw.id, d.sw.name, d.daysLeft, d.m.note) }));
+    const acadFees=[];
     const acadTrialRows = this.academyTrials.slice(0,10).map(t=>({ id:t.id, childName:t.childName, age:t.age, parentName:t.parentName, phone:t.phone,
       squadHintName: this.squadById[t.squadHint]?this.squadById[t.squadHint].name:'—', submittedAt:this.shortDate(t.submittedAt.split('-').reverse().join('/')),
       onDismiss:()=>this.trialDismiss(t.id) }));
@@ -9210,7 +9408,11 @@ class Component extends DCLogic {
       })(),
       onGoAcademy:()=>this.setState({view:'academy'}), showAcademy:S.view==='academy',
       acadTabChips, acadTab, acadShowTrials:acadTab==='trials', acadShowLadder:acadTab==='ladder', acadShowSchedule:acadTab==='schedule', acadShowFees:acadTab==='fees',
-      acadLadder, acadSchedule, acadFees, acadTrialRows, acadHasTrials: acadTrialRows.length>0, acadCurrency:curr,
+      acadLadder, acadSchedule, acadFees, acadTrialRows,
+      feePlanRows, memRows, memCountLine,
+      memQuery:S.memQuery||'', onMemQuery:(e)=>this.setState({memQuery:e.target.value}),
+      renewRows, renewHas:renewRows.length>0,
+      renewTitle:renewRows.length+' membership'+(renewRows.length===1?'':'s')+' need renewing', acadHasTrials: acadTrialRows.length>0, acadCurrency:curr,
       ...(()=>{
         const mk=this.invMonthKey(); const monthMap=this.invoices[mk]||{};
         const invSquadSel = S.invSquadSel && this.squadById[S.invSquadSel] ? S.invSquadSel : this.squads[0].id;
@@ -9391,6 +9593,21 @@ class Component extends DCLogic {
         return {
           sponsorOn, sponsorBg: sponsorOn?'linear-gradient(135deg,#7A5A12,#C89B3C)':'#EEF1F5', sponsorFg: sponsorOn?'#fff':'#7A8296', sponsorLabel: sponsorOn?'VIP Sponsored athlete':'Mark as sponsored',
           onToggleSponsor:()=>this.toggleSponsor(swObj.id),
+          ...(()=>{ const m=this._membership(swObj.id); const dl=this._renewalDaysLeft(m);
+            const f=this._feePlans(); const cost=this._membershipCost(m);
+            const cur=(this.brandConfig.currency||'QAR');
+            const parts=[]; if(m.pkg) parts.push(m.pkg+' per week'); if(m.fitness) parts.push('Fitness 3x');
+            return {
+              swMemHas: !!(m.pkg||m.fitness),
+              swMemPkg: parts.join(' + ')||'No package',
+              swMemCost: cost? (cost+' '+cur+' /mo') : '—',
+              swMemPaid: m.paid?'Paid ✓':'Not paid',
+              swMemPaidBg: m.paid?'#DCF5EA':'#FBE2E3', swMemPaidFg: m.paid?'#0C7A4F':'#A52A2E',
+              swMemDates: (m.start||m.end) ? ((m.start?this._fmtDMY(m.start):'—')+' → '+(m.end?this._fmtDMY(m.end):'open')) : 'No dates set',
+              swMemDue: dl==null?'' : (dl<0?('Expired '+Math.abs(dl)+'d ago'):(dl===0?'Ends today':('Renews in '+dl+'d'))),
+              swMemDueColor: dl==null?'#9AA2B4':(dl<0?'#A52A2E':(dl<=7?'#B4690E':'#0C7A4F')),
+              swMemNote: m.note||'', swMemHasNote: !!m.note };
+          })(),
           swStatusLabel: (()=>{ const s=this._swStatus(swObj.id); if(s.active) return 'Active'; const r=this._statusLabel(s.reason); const dr=s.from?(' · '+this._fmtDMY(s.from)+(s.to?(' → '+this._fmtDMY(s.to)):' → (open)')):''; return r+dr; })(),
           swStatusColor: this._swStatus(swObj.id).active ? '#0C7A4F' : '#B4690E',
           swStatusInactive: !this._swStatus(swObj.id).active,
@@ -9519,6 +9736,22 @@ class Component extends DCLogic {
       // ---- family portal ----
       famUser: S.familyUser,
       famPortalName: S.familyUser?S.familyUser.name:'',
+      ...(()=>{ const fu=S.familyUser; if(!fu) return {};
+        const uid=fu.swimmerIds[Math.min(S.familyActiveIdx, fu.swimmerIds.length-1)]||fu.swimmerIds[0];
+        const h=this._famResolve(uid); if(!h) return {famMemHas:false};
+        const m=this._membership(h.sw.id); const dl=this._renewalDaysLeft(m);
+        const cur=(this.brandConfig.currency||'QAR'); const cost=this._membershipCost(m);
+        const parts=[]; if(m.pkg) parts.push(m.pkg+' per week'); if(m.fitness) parts.push('Fitness 3x');
+        return { famMemHas: !!(m.pkg||m.fitness),
+          famMemPkg: parts.join(' + '),
+          famMemCost: cost? (cost+' '+cur+' /mo') : '—',
+          famMemPaid: m.paid?'Paid ✓':'Payment due',
+          famMemPaidBg: m.paid?'#DCF5EA':'#FBE2E3', famMemPaidFg: m.paid?'#0C7A4F':'#A52A2E',
+          famMemDates: (m.start||m.end) ? ((m.start?this._fmtDMY(m.start):'—')+' → '+(m.end?this._fmtDMY(m.end):'open')) : '',
+          famMemDue: dl==null?'' : (dl<0?('Expired '+Math.abs(dl)+' days ago'):(dl===0?'Ends today':('Renews in '+dl+' days'))),
+          famMemDueColor: dl==null?'#9AA2B4':(dl<0?'#A52A2E':(dl<=7?'#B4690E':'#0C7A4F')),
+          famMemNote: m.note||'', famMemHasNote: !!m.note };
+      })(),
       famKidsChips:(S.familyUser?S.familyUser.swimmerIds:[]).map((uid,i)=>{ const h=this._famResolve(uid); const on=i===S.familyActiveIdx; return {label:h?h.sw.name.split(' ')[0]:'Not linked', onClick:()=>this.setState({familyActiveIdx:i}), bg:on?'#fff':'rgba(255,255,255,.08)', fg:on?'#0A0F1A':'#fff', border:on?'#fff':'rgba(255,255,255,.18)'}; }),
       famMultiKids: !!(S.familyUser && S.familyUser.swimmerIds.length>1),
       ...(()=>{ const fu=S.familyUser; if(!fu) return {famSwName:'',famSwMeta:'',famSwInit:'',famGenIcon:'',famGenBg:'',famAccent:'#067EEA',famPbs:[],famResults:[],famMeetsUpcoming:[],famAttendPct:'—',famAttendHistory:[],famDocsRows:[],famAttMonthCells:[],famAttYearBars:[],famMeetChips:[],famMeetResultRows:[]};
@@ -9979,6 +10212,9 @@ class Component extends DCLogic {
       onSeasonAddPhase:()=>this.seasonAddPhase(S.squadId), onSeasonResetPhases:()=>this.seasonResetPhases(S.squadId),
       onOpenSeason:()=>this.openTool('season', false),
       sponsorsRows, sponsorsEmpty: sponsorsRows.length===0, sponsorsScopeLabel,
+      sponsorQuery:S.sponsorQuery||'', onSponsorQuery:(e)=>this.setState({sponsorQuery:e.target.value}),
+      sponsorPick, sponsorPickHas:sponsorPick.length>0,
+      sponsorHint:((S.sponsorQuery||'').trim().length>=2?'':'Type at least 2 letters of a swimmer\u2019s name'),
       fitSections, fitTitle, onFitTitle, onFitAddSection, onFitReset,
       fitMediaMsg:S.fitMediaMsg||'', fitMediaMsgShow:!!S.fitMediaMsg,
       onSaveFitSession:()=>this.saveFitSession(S.squadId), fitSavedMsg:S.fitSavedMsg||'', fitSavedMsgShow:!!S.fitSavedMsg,
