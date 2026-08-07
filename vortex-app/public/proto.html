@@ -44,6 +44,43 @@ if ('serviceWorker' in navigator) {
   window.__vxAuthQ = [];
   function _vxQueue(fn){ try{ if(window.__vxAuthQ.length<200) window.__vxAuthQ.push(fn); }catch(e){} }
   window.__vxFlushAuthQ = function(){ var q=window.__vxAuthQ||[]; window.__vxAuthQ=[]; for(var i=0;i<q.length;i++){ try{ q[i](); }catch(e){} } };
+
+  // ---- Failed writes: never silent, never lost -------------------------------------------
+  // Every rejected write is recorded to localStorage (so it survives a reload), retried
+  // automatically, and surfaced in the app. Five parent registrations were once refused by
+  // the database with nobody told; this is what makes that impossible.
+  var FAILK = "vx_failed_writes";
+  function _failLoad(){ try{ return JSON.parse(localStorage.getItem(FAILK)||"[]")||[]; }catch(e){ return []; } }
+  function _failSave(a){ try{ localStorage.setItem(FAILK, JSON.stringify(a.slice(-100))); }catch(e){} }
+  function _failAdd(op, table, payload, status, body){
+    var a=_failLoad();
+    a.push({ id:Date.now()+"_"+Math.random().toString(36).slice(2,7), op:op, table:table, payload:payload,
+             status:status||0, body:String(body||"").slice(0,300), ts:Date.now() });
+    _failSave(a);
+    window.__vxLastError = { table:table, status:status, body:String(body||"").slice(0,300), ts:Date.now() };
+    try{ window.dispatchEvent(new CustomEvent("vx-write-failed", {detail:{table:table, status:status}})); }catch(e){}
+  }
+  window.__vxFailed = function(){ return _failLoad(); };
+  window.__vxFailedCount = function(){ return _failLoad().length; };
+  window.__vxClearFailed = function(){ _failSave([]); try{ window.dispatchEvent(new CustomEvent("vx-write-failed")); }catch(e){} };
+  // Replay everything still pending. Anything that succeeds is dropped from the log.
+  window.__vxRetryFailed = function(){
+    var a=_failLoad(); if(!a.length) return Promise.resolve({tried:0, fixed:0});
+    _failSave([]);                       // take the batch; failures re-queue themselves
+    var fixed=0;
+    return a.reduce(function(p, it){
+      return p.then(function(){
+        var fn = it.op==="insert" ? window.__vxInsert : it.op==="upsert" ? window.__vxUpsert : null;
+        if(!fn) return;
+        return Promise.resolve(fn(it.table, it.payload)).then(function(ok){ if(ok) fixed++; });
+      });
+    }, Promise.resolve()).then(function(){
+      try{ window.dispatchEvent(new CustomEvent("vx-write-failed")); }catch(e){}
+      return {tried:a.length, fixed:fixed};
+    });
+  };
+  setInterval(function(){ if(_failLoad().length && navigator.onLine) window.__vxRetryFailed(); }, 45000);
+  window.addEventListener("online", function(){ window.__vxRetryFailed(); });
   window.__vxWriteTs = {};   // last time THIS device wrote each key (ms) — guards against stale pulls
   // ---- Auth session (Supabase GoTrue) ----------------------------------------------------
   // When a user is signed in, every data request carries THEIR JWT, so the database can
@@ -80,13 +117,13 @@ if ('serviceWorker' in navigator) {
   window.__VX_SB = { url: SB_URL, anon: SB_ANON, head: HEAD };
   // Generic table helpers — used by the Lounge chat, where each message is its own row
   // (append-only INSERT), so posts can never overwrite each other.
-  window.__vxInsert = function(table, rows){ return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":"return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(!r.ok){ if(r.status===401||r.status===403){ _vxQueue(function(){ window.__vxInsert(table, rows); }); } r.text().then(function(t){ try{console.warn("vx insert "+table+" HTTP "+r.status+": "+t);}catch(e){} }); } return r.ok; }).catch(function(){ return false; }); };
+  window.__vxInsert = function(table, rows){ return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":"return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(!r.ok){ if(r.status===401||r.status===403){ _vxQueue(function(){ window.__vxInsert(table, rows); }); } r.text().then(function(t){ try{console.warn("vx insert "+table+" HTTP "+r.status+": "+t);}catch(e){} _failAdd("insert", table, rows, r.status, t); }); } return r.ok; }).catch(function(e){ _failAdd("insert", table, rows, 0, "network: "+(e&&e.message)); return false; }); };
   window.__vxSelect = function(table, qs){ return fetch(SB_URL+"/rest/v1/"+table+(qs?("?"+qs):""), { headers: dyn() }).then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; }); };
   // Exact row count for a table (owner Data-Check panel). Uses PostgREST's Content-Range header
   // (Prefer: count=exact) so we never download the rows themselves. Returns a number, or -1 on error.
   window.__vxCount = function(table, qs){ return fetch(SB_URL+"/rest/v1/"+table+"?select=id"+(qs?("&"+qs):""), { method:"HEAD", headers: dyn({"Prefer":"count=exact","Range-Unit":"items","Range":"0-0"}) }).then(function(r){ var cr=r.headers.get("content-range")||""; var m=cr.split("/"); var n=m.length>1?parseInt(m[1],10):NaN; return isNaN(n)?(r.ok?0:-1):n; }).catch(function(){ return -1; }); };
   window.__vxDelete = function(table, qs){ return fetch(SB_URL+"/rest/v1/"+table+"?"+qs, { method:"DELETE", headers: dyn() }).then(function(r){ if(!r.ok && (r.status===401||r.status===403)){ _vxQueue(function(){ window.__vxDelete(table, qs); }); } return r.ok; }).catch(function(){ return false; }); };
-  window.__vxUpsert = function(table, rows){ return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":"resolution=merge-duplicates,return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(!r.ok){ if(r.status===401||r.status===403){ _vxQueue(function(){ window.__vxUpsert(table, rows); }); } r.text().then(function(t){ try{console.warn("vx upsert "+table+" HTTP "+r.status+": "+t);}catch(e){} }); } return r.ok; }).catch(function(){ return false; }); };
+  window.__vxUpsert = function(table, rows){ return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":"resolution=merge-duplicates,return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(!r.ok){ if(r.status===401||r.status===403){ _vxQueue(function(){ window.__vxUpsert(table, rows); }); } r.text().then(function(t){ try{console.warn("vx upsert "+table+" HTTP "+r.status+": "+t);}catch(e){} _failAdd("upsert", table, rows, r.status, t); }); } return r.ok; }).catch(function(e){ _failAdd("upsert", table, rows, 0, "network: "+(e&&e.message)); return false; }); };
   // Supabase Realtime (websocket) — best-effort live updates. On any change to `table`, calls
   // onChange(). Auto-reconnects, heartbeats, and re-auths on token refresh. If realtime isn't
   // enabled/available it simply never fires and the app's polling fallback keeps things in sync.
@@ -4325,6 +4362,14 @@ if ('serviceWorker' in navigator) {
       </div>
   </div>
 
+  <sc-if value="{{ saveFailShow }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;left:0;right:0;bottom:0;z-index:120;background:#7F1D1D;color:#fff;padding:10px 14px calc(10px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:10px;box-shadow:0 -6px 20px rgba(0,0,0,.25)">
+      <i data-lucide="cloud-off" style="width:18px;height:18px;flex:none"></i>
+      <span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;font-weight:800">{{ saveFailTitle }}</span><span style="display:block;font-size:11px;color:rgba(255,255,255,.8);margin-top:1px">{{ saveFailDetail }}</span></span>
+      <button onclick="{{ onSaveFailRetry }}" style="flex:none;background:#fff;color:#7F1D1D;border:none;border-radius:9px;padding:7px 12px;font-family:inherit;font-weight:800;font-size:11.5px;cursor:pointer">Retry</button>
+      <button onclick="{{ onSaveFailDismiss }}" style="flex:none;width:28px;height:28px;border-radius:8px;border:none;background:rgba(255,255,255,.15);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:14px;height:14px"></i></button>
+    </div>
+  </sc-if>
   <div id="vx-print-sheet" class="vx-pattern-bg" style="padding:20px">
     <sc-if value="{{ printIsPlan }}" hint-placeholder-val="{{ true }}">
     <div style="display:flex;align-items:center;gap:12px;border-bottom:3px solid {{ printSheet.accent }};padding-bottom:14px;margin-bottom:18px">
@@ -4595,6 +4640,7 @@ class Component extends DCLogic {
       famVerify:null, famVerifyInput:'', famVerifyErr:'',
       adminSection:null, famAdminQuery:'', famAdminAddFor:null, famAdminSwQuery:'', famAdminMsg:'', famAdminProblems:false,
       attDayISO:null, attDayStatus:'all', attDayOpenSquad:null,
+      saveFailCount:0, saveFailLast:null, saveFailHidden:false,
       swQuery:'', swSquadFilter:'all', swDobFilter:false, swEditId:null, swAddOpen:false, swForm:{name:'',age:'',dob:'',gender:'Boys',squadId:'',pbs:[]},
       swPbEventSel:'50 Free', swPbTimeDraft:'', swPbCourse:'LCM', swPbMeet:'', swPbMeetDate:'',
       swEditPbs:[], swEditPbEventSel:'50 Free', swEditPbTimeDraft:'', swEditPbCourse:'LCM', swEditPbMeet:'', swEditPbMeetDate:'',
@@ -4833,6 +4879,15 @@ class Component extends DCLogic {
   // previously left undefined until something wrote to it, so the self-heal in
   // _familyFetch had an empty list and never re-uploaded a missing registration.
   _famBoot(){ const l=this._loadFamily(); this.family=l; return l; }
+  _refreshFailState(){
+    try{
+      const n = window.__vxFailedCount ? window.__vxFailedCount() : 0;
+      const list = (n && window.__vxFailed) ? window.__vxFailed() : [];
+      const last = list.length ? list[list.length-1] : null;
+      if(n!==this.state.saveFailCount) this.setState({saveFailCount:n, saveFailLast:last, saveFailHidden: n>this.state.saveFailCount ? false : this.state.saveFailHidden});
+      else if(n===0 && this.state.saveFailHidden) this.setState({saveFailHidden:false});
+    }catch(e){}
+  }
   _saveFamily(list){ this.family=list; try{ this._saveLocalOnly('vx_family', list); }catch(e){} this.setState({family:list}); }
   async _familyFetch(){ if(!window.__vxSelect) return; const rows=await window.__vxSelect('family_accounts', 'select=*&limit=2000');
     // Remember whether the read actually worked, so the admin screen can tell "nobody has
@@ -7583,6 +7638,11 @@ class Component extends DCLogic {
     this._familyFetch();
     try{ this.lang=localStorage.getItem('vx_lang')||'en'; }catch(e){ this.lang='en'; }
     this._applyLang(true);
+    // Watch for rejected saves so the banner appears the moment one happens.
+    this._refreshFailState();
+    this._onWriteFail=()=>this._refreshFailState();
+    window.addEventListener('vx-write-failed', this._onWriteFail);
+    this._failInt=setInterval(()=>this._refreshFailState(), 20000);
     // Load every saved training session on startup so the training log & calendar populate
     // immediately for each coach (not only when the Plans tab is opened).
     try{ this._plansFetch(); }catch(e){}
@@ -9505,6 +9565,13 @@ class Component extends DCLogic {
           famReqSent, famReqHasSent: famReqSent.length>0 };
       })(),
       // admin section overlay
+      // A rejected save is never silent again: the banner names the table and the error,
+      // retries on its own, and survives a reload until it actually goes through.
+      saveFailShow: (S.saveFailCount>0) && !S.saveFailHidden,
+      saveFailTitle: S.saveFailCount===1 ? '1 change has not been saved' : (S.saveFailCount+' changes have not been saved'),
+      saveFailDetail: (S.saveFailLast ? (S.saveFailLast.table+' · '+(S.saveFailLast.status?('HTTP '+S.saveFailLast.status):'no connection')) : '') + ' · retrying automatically',
+      onSaveFailRetry: async()=>{ if(window.__vxRetryFailed){ const r=await window.__vxRetryFailed(); this._refreshFailState(); if(r && r.fixed) this.setState({saveFailHidden:false}); } },
+      onSaveFailDismiss: ()=>this.setState({saveFailHidden:true}),
       adminOpen: !!S.adminSection, onCloseAdmin,
       adminTitle: adminTitleMap[S.adminSection]||'', adminSub: adminSubMap[S.adminSection]||'',
       adminSwimmers: S.adminSection==='swimmers', adminMeets: S.adminSection==='meets', adminStaff: S.adminSection==='staff', adminSettings: S.adminSection==='settings',
