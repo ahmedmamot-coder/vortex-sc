@@ -6864,10 +6864,9 @@ class Component extends DCLogic {
     if((S.famPass||'').length<4) return this.setState({famErr:'Password must be at least 4 characters.'});
     if(S.famPass!==S.famPass2) return this.setState({famErr:'Passwords don\u2019t match.'});
     if(!S.famPicked.length) return this.setState({famErr: S.famRole==='swimmer' ? 'Search and select your swimmer profile.' : 'Search and link at least one swimmer.'});
-    // Pull the latest family list from its table (concurrent registrations are separate rows).
-    try { await this._familyFetch(); } catch(e){}
+    // No table read before sign-up either \u2014 Supabase Auth rejects a duplicate email on
+    // its own (handled below), so family_accounts stays closed to anonymous readers.
     const existing=this.family||this.state.family||[];
-    if(existing.find(f=>(f.email||'').trim().toLowerCase()===email)) return this.setState({famErr:'An account with this email already exists \u2014 sign in instead.'});
     // Password is NOT stored here anymore — Supabase Auth holds it securely (hashed).
     const rec={id:this._uid('fam')+'_'+Math.random().toString(36).slice(2,5), name:S.famName.trim(), email, phone:phoneDigits, pass:'', role:S.famRole, swimmerIds:S.famPicked.slice()};
     this.setState({famErr:'', famBusy:true});
@@ -6922,8 +6921,9 @@ class Component extends DCLogic {
     try{ this._pushSend({role:'staff'}, title, body, '/'); }catch(e){}
   }
   async famLogin(){ this.setState({famErr:''});
-    // Refresh the family list from its table so a parent who registered on another device can sign in now.
-    try { await this._familyFetch(); } catch(e){}
+    // No table read before sign-in — the account is looked up AFTER Supabase Auth
+    // succeeds (and rebuilt from the auth user's own metadata if it isn't there yet),
+    // so family_accounts never has to be readable by anonymous visitors.
     const S=this.state; const email=(S.famEmail||'').trim().toLowerCase(); const pass=(S.famPass||'');
     this.setState({famBusy:true, famRegisteredMsg:''});
     // 1) Supabase Auth first (this enforces the email confirmation).
@@ -6945,10 +6945,10 @@ class Component extends DCLogic {
     }
     const emsg=(res.j&&(res.j.error_description||res.j.msg||res.j.message))||'';
     if(/confirm/i.test(emsg)) return this.setState({famBusy:false, famErr:'Please confirm your email first - open the link we sent to '+email+'.'});
-    // 2) Fallback for legacy accounts created before Auth.
-    try { await this._familyFetch(); } catch(e){}
-    const rec=(this.family||[]).find(f=>(f.email||'').trim().toLowerCase()===email && (''+(f.pass||'')).trim()===(pass||'').trim());
-    if(rec){ try{ localStorage.setItem('vx_session', JSON.stringify({type:'family', email:rec.email})); }catch(e){} return this.setState({familyUser:rec, familyActiveIdx:0, screen:'app', view:'family', famErr:'', famBusy:false}); }
+    // The old "legacy account" fallback compared a plaintext `pass` column here. Every
+    // account now stores pass:'' , so an empty password matched ANY account — knowing a
+    // parent's email was enough to open their child's data. Removed: Supabase Auth is
+    // the only way in, and it verifies a real hashed password.
     return this.setState({famBusy:false, famErr:'Wrong email or password - or reset it below.'});
   }
   famLogout(){ try{ localStorage.removeItem('vx_session'); }catch(e){} if(window.__vxClearAuth){ try{ window.__vxClearAuth(); }catch(e){} } this.setState({familyUser:null, screen:'login', loginStage:'accounts', famMode:'login', famName:'', famEmail:'', famPass:'', famPass2:'', famPicked:[], famSearch:'', famErr:''}); }
