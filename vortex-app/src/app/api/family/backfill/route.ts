@@ -165,9 +165,14 @@ async function build(request: Request, write: boolean) {
   const rows = missing.map((u) => {
     const md = u.user_metadata || {};
     const em = (u.email || "").trim().toLowerCase();
+    const nm = md.name || em.split("@")[0];
     return {
       id: u.id,
-      name: md.name || em.split("@")[0],
+      name: nm,
+      // The live table also has a NOT NULL full_name that the rest of the app never
+      // writes — send it so recovery works whether or not the SQL fix has been run.
+      full_name: nm,
+      created_at: u.created_at || new Date().toISOString(),
       email: em,
       phone: md.phone || "",
       pass: "",
