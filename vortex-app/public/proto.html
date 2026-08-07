@@ -4362,6 +4362,9 @@ if ('serviceWorker' in navigator) {
       </div>
   </div>
 
+  <sc-if value="{{ isStagingEnv }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;top:0;left:0;right:0;z-index:130;background:#B4690E;color:#fff;text-align:center;padding:3px 8px;font-size:10.5px;font-weight:800;letter-spacing:.06em">STAGING · TEST COPY — NOT THE REAL CLUB APP</div>
+  </sc-if>
   <sc-if value="{{ saveFailShow }}" hint-placeholder-val="{{ false }}">
     <div style="position:fixed;left:0;right:0;bottom:0;z-index:120;background:#7F1D1D;color:#fff;padding:10px 14px calc(10px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:10px;box-shadow:0 -6px 20px rgba(0,0,0,.25)">
       <i data-lucide="cloud-off" style="width:18px;height:18px;flex:none"></i>
@@ -9567,6 +9570,9 @@ class Component extends DCLogic {
       // admin section overlay
       // A rejected save is never silent again: the banner names the table and the error,
       // retries on its own, and survives a reload until it actually goes through.
+      // Anything that isn't the live domain is a test copy — say so loudly, so a
+      // preview build is never mistaken for the real club app.
+      isStagingEnv: (()=>{ try{ const h=location.hostname; return !(h==='vortexswimmingclub.com' || h==='www.vortexswimmingclub.com' || h==='localhost' || h==='127.0.0.1'); }catch(e){ return false; } })(),
       saveFailShow: (S.saveFailCount>0) && !S.saveFailHidden,
       saveFailTitle: S.saveFailCount===1 ? '1 change has not been saved' : (S.saveFailCount+' changes have not been saved'),
       saveFailDetail: (S.saveFailLast ? (S.saveFailLast.table+' · '+(S.saveFailLast.status?('HTTP '+S.saveFailLast.status):'no connection')) : '') + ' · retrying automatically',
