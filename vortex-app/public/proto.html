@@ -2401,8 +2401,8 @@ if ('serviceWorker' in navigator) {
                             <input value="{{ inbodyMuscle }}" oninput="{{ onInbodyMuscle }}" placeholder="Muscle kg" type="number" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-size:11.5px;color:#0C1116;outline:none">
                             <button onclick="{{ onInbodyAdd }}" style="flex:none;width:36px;background:var(--vx-blue);color:#fff;border:none;border-radius:9px;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="plus" style="width:16px;height:16px"></i></button>
                           </div>
-                          <input id="{{ profileIbInputId }}" type="file" accept="application/pdf" onchange="{{ onProfileIbPdf }}" style="display:none">
-                          <button onclick="{{ onProfileIbPdfClick }}" style="margin-top:8px;width:100%;display:flex;align-items:center;justify-content:center;gap:7px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border:1.5px dashed var(--vx-blue);border-radius:9px;padding:10px;cursor:pointer;font-family:inherit;font-weight:700;font-size:11.5px"><i data-lucide="file-up" style="width:14px;height:14px"></i> Import InBody PDF</button>
+                          <input id="{{ profileIbInputId }}" type="file" accept="application/pdf,image/*" onchange="{{ onProfileIbPdf }}" style="display:none">
+                          <button onclick="{{ onProfileIbPdfClick }}" style="margin-top:8px;width:100%;display:flex;align-items:center;justify-content:center;gap:7px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border:1.5px dashed var(--vx-blue);border-radius:9px;padding:10px;cursor:pointer;font-family:inherit;font-weight:700;font-size:11.5px"><i data-lucide="file-up" style="width:14px;height:14px"></i> Import InBody sheet — PDF or photo</button>
                           <sc-if value="{{ profileIbMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:6px 2px 0;font-size:11px;font-weight:600;color:{{ profileIbMsgColor }}">{{ profileIbMsg }}</p></sc-if>
                         </div>
                       </div>
@@ -3320,8 +3320,8 @@ if ('serviceWorker' in navigator) {
                             <button onclick="{{ onIbModeQr }}" style="flex:1;padding:9px;border-radius:8px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:12px;background:{{ ibModeQrBg }};color:#0C1116">Scan QR</button>
                           </div>
                           <sc-if value="{{ ibModeIsPdf }}" hint-placeholder-val="{{ true }}">
-                            <input id="vx-ib-pdf" type="file" accept="application/pdf" onchange="{{ onIbPdfChange }}" style="display:none">
-                            <button onclick="{{ onIbPdfClick }}" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border:1.5px dashed var(--vx-blue);border-radius:11px;padding:12px;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px"><i data-lucide="file-up" style="width:16px;height:16px"></i> Upload InBody PDF report</button>
+                            <input id="vx-ib-pdf" type="file" accept="application/pdf,image/*" onchange="{{ onIbPdfChange }}" style="display:none">
+                            <button onclick="{{ onIbPdfClick }}" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border:1.5px dashed var(--vx-blue);border-radius:11px;padding:12px;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px"><i data-lucide="file-up" style="width:16px;height:16px"></i> Upload InBody sheet — PDF or photo</button>
                             <sc-if value="{{ inbodyPdfMsg }}" hint-placeholder-val="{{ false }}"><p style="margin:8px 2px 0;font-size:11.5px;font-weight:600;color:#3A4152">{{ inbodyPdfMsg }}</p></sc-if>
                           </sc-if>
                           <sc-if value="{{ ibModeIsQr }}" hint-placeholder-val="{{ false }}">
@@ -6828,8 +6828,25 @@ class Component extends DCLogic {
     if(window.__vxDelete){ try{ await window.__vxDelete('wearable_readings', 'id=eq.'+encodeURIComponent(swId+'_'+date)); }catch(e){} } }
   _wearRecoveryColor(v){ if(v==null) return '#9AA2B4'; return v>=67?'#0C7A4F':(v>=34?'#B4690E':'#C0362C'); }
   // Which swimmers have a band linked (from the server; no tokens exposed).
-  async _wearStatusFetch(){ try{ const r=await fetch('/api/wearable/status'); if(!r.ok) return; const j=await r.json(); const map={}; (j.connected||[]).forEach(c=>{ map[c.sw_id]={provider:c.provider, updatedAt:c.updated_at}; }); this.wearConn=map; this.forceUpdate(); }catch(e){} }
+  async _wearStatusFetch(){ try{ const r=await fetch('/api/wearable/status'); if(!r.ok) return; const j=await r.json();
+    const map={}; (j.connected||[]).forEach(c=>{ map[c.sw_id]={provider:c.provider, updated:c.updated_at||null}; });
+    this.wearConn=map;
+    // Whether the integration is switched on at all. The linking code is real; without
+    // credentials it simply cannot run, and a coach was being shown a raw error page that
+    // looks like a broken feature rather than a setup nobody has finished.
+    this.wearConfig=(j && j.config) || null;
+    this.wearMissing=(j && j.missing) || [];
+    this.forceUpdate(); }catch(e){} }
   _wearConn(swId){ return (this.wearConn||{})[swId]||null; }
+  _wearReady(kind){ const c=this.wearConfig; if(!c) return true;   // unknown yet — do not nag
+    return !!(c.service && (kind==='fitbit' ? c.fitbit : c.whoop)); }
+  _wearSetupMsg(kind){
+    const c=this.wearConfig; if(!c) return '';
+    if(!c.service) return 'Bands are not switched on yet — the server is missing SUPABASE_SERVICE_ROLE_KEY. See DEVELOPMENT.md.';
+    if(kind==='fitbit' && !c.fitbit) return 'Fitbit is not set up yet — the club needs a Fitbit developer app and its keys. See DEVELOPMENT.md.';
+    if(kind!=='fitbit' && !c.whoop) return 'WHOOP is not set up yet — the club needs a WHOOP developer app and its keys. See DEVELOPMENT.md.';
+    return '';
+  }
   async syncWearNow(swId){ this.setState({wearMsg:'Syncing from the band…'});
     try{ const r=await fetch('/api/wearable/sync?sw='+encodeURIComponent(swId)); const j=r.ok?await r.json():null;
       await this._wearFetch(); await this._wearStatusFetch();
@@ -6946,9 +6963,18 @@ class Component extends DCLogic {
   addInbody(swId){ const f=this.state.inbodyForm; const w=parseFloat(f.weight), fat=parseFloat(f.fat), mus=parseFloat(f.muscle);
     if(!w) return;
     const m=this._swMeta(swId);
-    const rec={date:new Date().toISOString().slice(0,10), weight:w, fat: isNaN(fat)?null:fat, muscle: isNaN(mus)?null:mus};
+    // Carry the imported sheet onto the record being saved. Without this an imported photo
+    // left its file on one entry and the numbers on another.
+    const pend=this.state.ibPending||null;
+    const extra=(pend&&pend.extra)||{};
+    const rec={date:new Date().toISOString().slice(0,10), weight:w, fat: isNaN(fat)?null:fat, muscle: isNaN(mus)?null:mus,
+      bmr:extra.bmr||null, visceralFat:extra.visceralFat||null, whr:extra.whr||null, protein:extra.protein||null,
+      minerals:extra.minerals||null, tbw:extra.tbw||null, bmi:extra.bmi||null, score:extra.score||null,
+      phaseAngle:extra.phaseAngle||null,
+      fileUrl:(pend&&pend.fileUrl)||null, fileName:(pend&&pend.fileName)||''};
     this._saveSwMeta(swId, {...m, inbody:[rec, ...(m.inbody||[])]});
-    this.setState({inbodyForm:{weight:'',fat:'',muscle:''}});
+    this.setState({inbodyForm:{weight:'',fat:'',muscle:''}, ibPending:null,
+      profileIbMsg: pend ? 'Saved with the sheet attached \u2713' : ''});
   }
   deleteInbody(swId, idx){ const m=this._swMeta(swId); const list=(m.inbody||[]).slice(); list.splice(idx,1); this._saveSwMeta(swId, {...m, inbody:list}); }
   // Only small http(s) URLs are kept in vx_sw_photos now (the actual image lives in Storage), so
@@ -6994,25 +7020,56 @@ class Component extends DCLogic {
     try{ if(window.__vxUploadFile){ const ext=((file.name||'').match(/\.([a-z0-9]+)$/i)||[])[1] || (/pdf/i.test(file.type||'')?'pdf':'jpg'); fileUrl=await window.__vxUploadFile('inbody/'+swId+'/'+Date.now()+'.'+ext, file); } }catch(err){}
     // 2) Try to auto-read the values from a text-based InBody PDF. A photo/scan has no text layer \u2014
     //    that's fine, the report is still saved and the coach can type the values in.
-    let data={};
+    let data={}, fromPhoto=false;
     try{
-      if(window.pdfjsLib && /pdf/i.test(file.type||'')){
+      // A photograph of the sheet has no text layer, so pdf.js has nothing to read. Optical
+      // character recognition does — loaded only when somebody actually imports a photo, the
+      // same way pdf.js and the PDF writer are, so it costs nothing until it is used.
+      if(!/pdf/i.test(file.type||'') && /^image\//i.test(file.type||'')){
+        fromPhoto=true;
+        this.setState({profileIbMsg:'Reading the sheet\u2026 this takes a few seconds'});
+        if(!window.Tesseract) await this._loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.0/tesseract.min.js', 20000);
+        if(window.Tesseract){
+          const out=await window.Tesseract.recognize(file, 'eng');
+          const text=(out && out.data && out.data.text) || '';
+          data=this._extractInbodyFields(text)||{};
+        }
+      }
+      else if(window.pdfjsLib && /pdf/i.test(file.type||'')){
         window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
         const buf=await file.arrayBuffer(); const doc=await window.pdfjsLib.getDocument({data:buf}).promise;
         let text=''; for(let i=1;i<=doc.numPages;i++){ const page=await doc.getPage(i); const c=await page.getTextContent(); text+=' '+c.items.map(it=>it.str).join(' '); }
         data=this._extractInbodyFields(text)||{};
       }
     }catch(err){}
+    const readCount=Object.keys(data).filter(k=>data[k]!=null).length;
+
+    // Read off a photograph, these are a machine's guess at what a picture says. A misread
+    // digit would put a wrong body-fat figure on a child's record and look exactly as
+    // authoritative as a correct one. So a photo fills the form in and waits to be checked;
+    // a PDF, where the numbers are read as text rather than guessed at, still saves itself.
+    if(fromPhoto){
+      this.setState({
+        inbodyForm:{ weight: data.weight!=null?String(data.weight):'',
+                     fat: data.pbf!=null?String(data.pbf):'',
+                     muscle: data.smm!=null?String(data.smm):'' },
+        ibPending:{ fileUrl:fileUrl||null, fileName:file.name||'', extra:data },
+        profileIbBusy:false,
+        profileIbMsg: !fileUrl ? 'The photo could not be uploaded \u2014 check your connection.'
+          : readCount ? ('Read '+readCount+' value'+(readCount===1?'':'s')+' off the photo. Check them against the sheet, then Save \u2014 nothing is on the record yet.')
+          : 'Photo saved to the report, but nothing could be read off it. Type the values in and Save.' });
+      return;
+    }
+
     const m=this._swMeta(swId);
     const rec={date:new Date().toISOString().slice(0,10), weight:data.weight||null, fat:data.pbf||null, muscle:data.smm||null,
       bmr:data.bmr||null, visceralFat:data.visceralFat||null, whr:data.whr||null, protein:data.protein||null, minerals:data.minerals||null,
       tbw:data.tbw||null, bmi:data.bmi||null, score:data.score||null, phaseAngle:data.phaseAngle||null, fileUrl:fileUrl||null, fileName:file.name||''};
     this._saveSwMeta(swId, {...m, inbody:[rec, ...(m.inbody||[])]});
-    const readCount=Object.keys(data).filter(k=>data[k]!=null).length;
     let msg;
     if(!fileUrl) msg='Saved, but the file upload failed \u2014 check your connection.';
     else if(readCount) msg='Report saved & '+readCount+' values read automatically \u2713';
-    else msg='Report saved \u2713 \u2014 it\u2019s a photo scan, so type the values in below.';
+    else msg='Report saved \u2713 \u2014 no text in that PDF, so type the values in below.';
     this.setState({profileIbBusy:false, profileIbMsg:msg});
   }
   _fitTests(swId){ return this.fitnessTests[swId]||[]; }
@@ -11308,8 +11365,8 @@ class Component extends DCLogic {
               wearStrainIn:S2.wearForm.strain, onWearStrain:(e)=>this.setState({wearForm:{...S2.wearForm,strain:e.target.value}}),
               onWearAdd:()=>{ this.saveWearable(swObj.id, S2.wearForm); this.setState({wearForm:{date:'',recovery:'',rhr:'',hrv:'',sleep:'',strain:''}, wearMsg:'Saved ✓ — synced to all devices'}); },
               wearMsg:S2.wearMsg, wearMsgShow:!!S2.wearMsg,
-              onWearConnect:()=>{ try{ this._openUrl('/api/whoop/connect?sw='+encodeURIComponent(swObj.id)); }catch(e){} this.setState({wearMsg:'Opening WHOOP… approve access, then the readings fill in automatically. (Needs the WHOOP developer keys set in Vercel.)'}); },
-              onWearConnectFitbit:()=>{ try{ this._openUrl('/api/fitbit/connect?sw='+encodeURIComponent(swObj.id)); }catch(e){} this.setState({wearMsg:'Opening Fitbit… approve access to auto-sync.'}); },
+              onWearConnect:()=>{ const w=this._wearSetupMsg('whoop'); if(w) return this.setState({wearMsg:w}); try{ this._openUrl('/api/whoop/connect?sw='+encodeURIComponent(swObj.id)); }catch(e){} this.setState({wearMsg:'Opening WHOOP… approve access, then the readings fill in automatically. (Needs the WHOOP developer keys set in Vercel.)'}); },
+              onWearConnectFitbit:()=>{ const w=this._wearSetupMsg('fitbit'); if(w) return this.setState({wearMsg:w}); try{ this._openUrl('/api/fitbit/connect?sw='+encodeURIComponent(swObj.id)); }catch(e){} this.setState({wearMsg:'Opening Fitbit… approve access to auto-sync.'}); },
               ...(()=>{ const wc=this._wearConn(swObj.id); return { wearConnected:!!wc, wearConnLabel: wc?('Connected · '+String(wc.provider||'band').toUpperCase()+(wc.updatedAt?(' · synced '+this._fmtDMY(String(wc.updatedAt).slice(0,10))):'')):'', onWearSyncNow:()=>this.syncWearNow(swObj.id) }; })(),
               ...(()=>{ const all=this._hrSetList(swObj.id); const flt=(S2.hrFilter||'');
                 const filtered = flt ? all.filter(r=>(r.label||'')===flt) : all;
@@ -11478,8 +11535,8 @@ class Component extends DCLogic {
           famWearSleepIn:S.wearForm.sleep, onFamWearSleep:(e)=>this.setState({wearForm:{...S.wearForm,sleep:e.target.value}}),
           famWearStrainIn:S.wearForm.strain, onFamWearStrain:(e)=>this.setState({wearForm:{...S.wearForm,strain:e.target.value}}),
           onFamWearAdd:()=>{ this.saveWearable(sw.id, S.wearForm); this.setState({wearForm:{date:'',recovery:'',rhr:'',hrv:'',sleep:'',strain:''}, wearMsg:'Saved ✓'}); },
-          onFamWearConnect:()=>{ try{ this._openUrl('/api/whoop/connect?sw='+encodeURIComponent(sw.id)+'&by='+encodeURIComponent((S.familyUser&&S.familyUser.id)||'')); }catch(e){} this.setState({wearMsg:'Opening WHOOP…'}); },
-          onFamWearConnectFitbit:()=>{ try{ this._openUrl('/api/fitbit/connect?sw='+encodeURIComponent(sw.id)+'&by='+encodeURIComponent((S.familyUser&&S.familyUser.id)||'')); }catch(e){} this.setState({wearMsg:'Opening Fitbit…'}); },
+          onFamWearConnect:()=>{ const w=this._wearSetupMsg('whoop'); if(w) return this.setState({famWearMsg:w}); try{ this._openUrl('/api/whoop/connect?sw='+encodeURIComponent(sw.id)+'&by='+encodeURIComponent((S.familyUser&&S.familyUser.id)||'')); }catch(e){} this.setState({wearMsg:'Opening WHOOP…'}); },
+          onFamWearConnectFitbit:()=>{ const w=this._wearSetupMsg('fitbit'); if(w) return this.setState({famWearMsg:w}); try{ this._openUrl('/api/fitbit/connect?sw='+encodeURIComponent(sw.id)+'&by='+encodeURIComponent((S.familyUser&&S.familyUser.id)||'')); }catch(e){} this.setState({wearMsg:'Opening Fitbit…'}); },
           ...(()=>{ const wc=this._wearConn(sw.id); return { famWearConnected:!!wc, famWearConnLabel: wc?('Connected · '+String(wc.provider||'band').toUpperCase()):'', onFamWearSyncNow:()=>this.syncWearNow(sw.id) }; })(),
           famWearMsg:S.wearMsg, famWearMsgShow:!!S.wearMsg,
           ...(()=>{ const wt=this.todayISO(); const ex=this._wellForDate(sw.id, wt); const wf=S.wellForm;

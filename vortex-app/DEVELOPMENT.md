@@ -70,6 +70,34 @@ A write the database refuses now shows in the app as *"refused — this account 
 make that change"* and is **not** retried, so a policy that is too tight shows up as a clear
 message rather than a red banner that never clears.
 
+## Bands (WHOOP & Fitbit) — switching them on
+
+The integration is complete and real: OAuth consent, token refresh, live calls to WHOOP's
+recovery / sleep / cycle endpoints and Fitbit's heart-rate / HRV / sleep endpoints, written to
+`wearable_readings` and shown on the swimmer's profile and in the family portal. What it cannot
+do is invent credentials — until these are set, "Connect WHOOP" has nothing to connect to, and
+the app now says which piece is missing instead of showing an error page.
+
+**In Vercel → Settings → Environment Variables (Production):**
+
+| Variable | Where it comes from |
+|---|---|
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Settings → API → `service_role`. Server-only; never in the browser. |
+| `WHOOP_CLIENT_ID` / `WHOOP_CLIENT_SECRET` | developer.whoop.com → your app |
+| `WHOOP_REDIRECT_URI` | exactly `https://vortexswimmingclub.com/api/whoop/callback`, and registered on the WHOOP app |
+| `FITBIT_CLIENT_ID` / `FITBIT_CLIENT_SECRET` | dev.fitbit.com → Manage Apps |
+| `FITBIT_REDIRECT_URI` | exactly `https://vortexswimmingclub.com/api/fitbit/callback`, registered on the Fitbit app |
+| `WHOOP_SYNC_SECRET` | optional; if set, `/api/wearable/sync` requires it as `x-sync-secret` |
+
+Run `supabase/wearable_connections.sql` and `supabase/wearable_readings.sql`, then redeploy.
+`/api/wearable/status` reports what is still missing, and names no secrets.
+
+**How "live" it is.** Recovery, sleep and strain are produced by the band once a day, in the
+morning — there is no second-by-second feed to read. The daily cron in `vercel.json` pulls at
+05:00, and **Sync now** on a swimmer's profile pulls that swimmer immediately, which is what to
+use poolside. A more frequent cron needs a Vercel plan that allows it; the Hobby plan is one run
+a day.
+
 ## Backups
 
 - **Supabase's own daily backups**: enable in Supabase → Database → Backups (Pro plan keeps 7 days;
