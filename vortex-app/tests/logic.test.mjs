@@ -190,6 +190,65 @@ describe("tab bar", () => {
     eq(/prefers-reduced-motion:reduce\)\{ \.vx-wave\{animation:none\}/.test(SOURCE), true));
 });
 
+/* -------------------------------------------------------------------- arabic
+   The family screens are what a parent who reads Arabic actually opens. The
+   choice has to be theirs and stay on their phone — a parent switching to Arabic
+   must not flip the language on the coach's iPad, and they cannot reach the admin
+   settings to put it back. */
+describe("arabic", () => {
+  const store = {};
+  globalThis.localStorage = {
+    getItem: (k) => (k in store ? store[k] : null),
+    setItem: (k, v) => { store[k] = String(v); },
+    removeItem: (k) => { delete store[k]; },
+  };
+  const ctx = (locale, device) => {
+    for (const k of Object.keys(store)) delete store[k];
+    if (device) store.vx_lang = device;
+    return { brandConfig: { locale } };
+  };
+
+  const langOf = (c) => bind("_lang", c, ["_langKey"])();
+  it("falls back to the club's configured language", () => eq(langOf(ctx("ar")), "ar"));
+  it("English club, English app", () => eq(langOf(ctx("en")), "en"));
+  it("the device's own choice wins over the club default", () => eq(langOf(ctx("en", "ar")), "ar"));
+  it("and wins the other way too", () => eq(langOf(ctx("ar", "en")), "en"));
+  it("a junk stored value does not leave the app in no language", () => eq(langOf(ctx("en", "klingon")), "en"));
+
+  const t = (c) => bind("_t", c, ["_i18n", "_lang", "_langKey"])();
+  it("Arabic really is Arabic", () => eq(/[؀-ۿ]/.test(t(ctx("ar")).tabFees), true));
+  it("English really is English", () => eq(t(ctx("en")).tabFees, "Fees"));
+  it("the fees tab a parent taps is translated", () => eq(t(ctx("ar")).tabFees !== "Fees", true));
+
+  const dict = bind("_i18n", {})();
+  it("every phrase carries both languages", () => {
+    const missing = Object.keys(dict).filter((k) => !dict[k][1] || !dict[k][0]);
+    eq(missing, [], "an untranslated key renders English inside an Arabic screen");
+  });
+  it("no Arabic string was left as a copy of the English", () => {
+    const copies = Object.keys(dict).filter((k) => dict[k][0] === dict[k][1]);
+    eq(copies, []);
+  });
+  it("every Arabic string actually contains Arabic", () => {
+    const notArabic = Object.keys(dict).filter((k) => !/[؀-ۿ]/.test(dict[k][1]));
+    eq(notArabic, []);
+  });
+
+  it("the family screens go through the dictionary, not hardcoded English", () => {
+    const tpl = SOURCE.slice(0, SOURCE.indexOf("class Component"));
+    const portal = tpl.slice(tpl.indexOf('value="{{ showFamily }}"'), tpl.indexOf('value="{{ showSquad }}"'));
+    for (const gone of ["-->Fees<", ">Documents</button>", ">Personal bests</p>", ">Nutrition</"])
+      eq(portal.includes(gone), false, `${gone} is still hardcoded`);
+    eq(portal.includes("{{ tx.tabFees }}"), true);
+  });
+  it("the direction is set on the document, not patched per element", () =>
+    eq(/document\.documentElement\.setAttribute\('dir'/.test(SOURCE), true));
+  it("Arabic has a font fallback — Funnel Display has no Arabic glyphs", () =>
+    eq(/\[dir="rtl"\] body[\s\S]{0,200}Noto Naskh Arabic/.test(SOURCE), true));
+  it("letter-spacing is off in Arabic, or the letters stop joining", () =>
+    eq(/\[dir="rtl"\] \*\{letter-spacing:normal/.test(SOURCE), true));
+});
+
 /* -------------------------------------------------------------- race strategy
    The split targets are what a swimmer is told to swim to. They have to add back
    up to the goal exactly, and they have to describe a race a coach recognises —
