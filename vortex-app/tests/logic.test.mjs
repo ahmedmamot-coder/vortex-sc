@@ -799,6 +799,22 @@ describe("expired session", () => {
     eq(t.win.__vxAuthDead, false);
     eq(t.upserted.length, 1);
   });
+  // The banner's own state is only re-read on a 20-second poll. Until it catches up the
+  // banner still says "Signed out" and its button still goes to the sign-in screen — which
+  // would throw a coach straight back out of the app they had just signed into.
+  itAsync("a successful sign-in tells the banner at once, not 20 seconds later", async () => {
+    const t = boot({ failed: QUEUED, reply: () => GOOD_TOKEN });
+    let told = 0;
+    t.win.dispatchEvent = () => { told++; return true; };
+    t.win.__vxAuthDead = true;
+    t.win.__vxSetAuth({ access_token: "fresh.jwt", refresh_token: "r9", expires_in: 3600, user: { id: "u1" } });
+    await flush();
+    eq(t.win.__vxAuthDead, false);
+    eq(told > 0, true, "the app must be told the session is good again");
+  });
+  it("the banner's button checks the live flag, not the rendered one", () =>
+    eq(/const dead = \(typeof window!=='undefined'\) \? !!window\.__vxAuthDead/.test(SOURCE), true));
+
   itAsync("signing out on purpose is not the same as being thrown out", async () => {
     const t = boot({ auth: LIVE, reply: () => GOOD_TOKEN });
     t.win.__vxAuthDead = true;

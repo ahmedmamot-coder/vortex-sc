@@ -153,7 +153,12 @@ if ('serviceWorker' in navigator) {
     // The banner tells the coach "sign in again and these will save automatically", so it
     // has to be immediate. Without this the queue sat there until the 45s sweep came round
     // and the banner stayed up, looking like the sign-in had not helped.
-    try{ if(_failLoad().length) window.__vxRetryFailed(); }catch(e){} };
+    try{ if(_failLoad().length) window.__vxRetryFailed(); }catch(e){}
+    // And tell the app right now that the session is good again. The banner's own state is
+    // only re-read on a 20s poll, so without this it kept saying "Signed out" — and its
+    // button, which goes to the sign-in screen, would throw the coach straight back out of
+    // the app they had just signed into.
+    try{ window.dispatchEvent(new CustomEvent("vx-write-failed")); }catch(e){} };
   // Signing out deliberately is not the same as being thrown out: clear the flag so the
   // login screen does not greet the next person with "signed out — changes will not save".
   window.__vxClearAuth = function(){ if(_refreshTimer) clearTimeout(_refreshTimer); _saveAuth(null); window.__vxAuthDead=false; };
@@ -11166,7 +11171,12 @@ class Component extends DCLogic {
       // and replay by themselves the moment the sign-in lands.
       saveFailActionLabel: S.authDead ? 'Sign in' : 'Retry',
       onSaveFailRetry: async()=>{
-        if(S.authDead){ this.setState({screen:'login', loginStage:'accounts', loginErr:''}); return; }
+        // Read the live flag, not the rendered one. Sending someone back to the sign-in
+        // screen is the one action here that undoes work, so it must never fire on a
+        // snapshot of the state taken before they signed in.
+        const dead = (typeof window!=='undefined') ? !!window.__vxAuthDead : !!S.authDead;
+        if(!dead && S.authDead) this._refreshFailState();
+        if(dead){ this.setState({screen:'login', loginStage:'accounts', loginErr:''}); return; }
         if(window.__vxRetryFailed){ const r=await window.__vxRetryFailed(); this._refreshFailState(); if(r && r.fixed) this.setState({saveFailHidden:false}); }
       },
       onSaveFailDismiss: ()=>this.setState({saveFailHidden:true}),
