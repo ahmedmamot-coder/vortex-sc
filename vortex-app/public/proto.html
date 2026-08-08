@@ -35,7 +35,7 @@ if ('serviceWorker' in navigator) {
   var REST = SB_URL + "/rest/v1/club_state";
   var HEAD = { "apikey": SB_ANON, "Authorization": "Bearer " + SB_ANON, "Content-Type": "application/json" };
   // Every shared data type the club edits. The only key kept per-device is vx_api_key.
-  var SYNC = ["vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_meet_events","vx_meet_cuts","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_sw_status","vx_memberships","vx_fee_plans","vx_billing","vx_race_splits"];
+  var SYNC = ["vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_meet_events","vx_meet_cuts","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_sw_status","vx_memberships","vx_fee_plans","vx_billing","vx_race_splits","vx_bday_sent"];
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
   // Auth-retry queue: if a write is rejected because we weren't signed in yet (401/403 under the
@@ -3342,6 +3342,75 @@ if ('serviceWorker' in navigator) {
                     </div>
                   </sc-if>
 
+                  <sc-if value="{{ toolBdays }}" hint-placeholder-val="{{ true }}">
+                    <div style="display:flex;flex-direction:column;gap:12px">
+                      <div style="background:#0A0F1A;color:#fff;border-radius:16px;padding:16px;display:flex;align-items:center;gap:12px">
+                        <span style="width:42px;height:42px;flex:none;border-radius:12px;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center"><i data-lucide="cake" style="width:22px;height:22px;color:#FFD666"></i></span>
+                        <div><p style="margin:0;font-size:14px;font-weight:800">Birthdays</p><p style="margin:2px 0 0;font-size:12px;color:rgba(255,255,255,.6)">{{ bdayScopeLabel }}</p></div>
+                      </div>
+                      <sc-if value="{{ bdayMsgShow }}" hint-placeholder-val="{{ false }}">
+                        <p style="margin:0;background:#DCF5EA;border:1px solid #B7E0C7;border-radius:10px;padding:8px 10px;font-size:11.5px;color:#0C7A4F">{{ bdayMsg }}</p>
+                      </sc-if>
+
+                      <sc-if value="{{ bdayHasToday }}" hint-placeholder-val="{{ true }}">
+                        <div>
+                          <p style="margin:0 2px 7px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">Today</p>
+                          <div style="display:flex;flex-direction:column;gap:8px">
+                            <sc-for list="{{ bdayTodayRows }}" as="bt" hint-placeholder-count="1">
+                              <div style="background:linear-gradient(135deg,#FBF0DD,#fff);border:1px solid #F0D9A8;border-radius:14px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                                <div style="display:flex;align-items:center;gap:10px">
+                                  <span style="width:38px;height:38px;flex:none;border-radius:12px;background:#C89B3C;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800">{{ bt.initials }}</span>
+                                  <span style="flex:1;min-width:0"><span style="display:block;font-size:13.5px;font-weight:800;color:#0C1116">{{ bt.name }}</span><span style="display:block;font-size:11px;color:#7A5A0C;margin-top:1px">{{ bt.squadName }} · {{ bt.turningLabel }}</span></span>
+                                  <i data-lucide="cake" style="width:20px;height:20px;color:#C89B3C;flex:none"></i>
+                                </div>
+                                <div style="display:flex;gap:7px;margin-top:10px">
+                                  <button onclick="{{ bt.onSend }}" style="flex:1;background:#0A0F1A;color:#fff;border:none;border-radius:10px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">{{ bt.sentLabel }}</button>
+                                  <button onclick="{{ bt.onOpen }}" style="flex:none;background:#fff;color:#3A4152;border:1px solid #E5E9F0;border-radius:10px;padding:9px 12px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">Profile</button>
+                                </div>
+                              </div>
+                            </sc-for>
+                          </div>
+                        </div>
+                      </sc-if>
+
+                      <sc-if value="{{ bdayHasUpcoming }}" hint-placeholder-val="{{ true }}">
+                        <div>
+                          <p style="margin:0 2px 7px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">Next 30 days</p>
+                          <div style="display:flex;flex-direction:column;gap:6px">
+                            <sc-for list="{{ bdayUpcomingRows }}" as="bu" hint-placeholder-count="4">
+                              <button onclick="{{ bu.onOpen }}" style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:10px 11px;cursor:pointer;font-family:inherit">
+                                <span style="width:30px;height:30px;flex:none;border-radius:9px;background:#EEF1F5;color:#5A657E;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:800">{{ bu.initials }}</span>
+                                <span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;font-weight:700;color:#0C1116">{{ bu.name }}</span><span style="display:block;font-size:10.5px;color:#9AA2B4;margin-top:1px">{{ bu.squadName }} · {{ bu.dateLabel }} · {{ bu.turningLabel }}</span></span>
+                                <span style="flex:none;background:#F8FAFC;color:#7A8296;border-radius:7px;padding:4px 9px;font-size:10.5px;font-weight:700">{{ bu.awayLabel }}</span>
+                              </button>
+                            </sc-for>
+                          </div>
+                        </div>
+                      </sc-if>
+
+                      <sc-if value="{{ bdayNoneAtAll }}" hint-placeholder-val="{{ false }}">
+                        <div style="text-align:center;padding:32px 20px;color:#9AA2B4"><i data-lucide="cake" style="width:30px;height:30px"></i><p style="font-size:12.5px;margin-top:10px;line-height:1.5">No birthdays in the next 30 days.</p></div>
+                      </sc-if>
+
+                      <sc-if value="{{ bdayHasMissing }}" hint-placeholder-val="{{ true }}">
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                          <p style="margin:0 0 9px;font-size:11.5px;font-weight:700;color:#B4690E">{{ bdayMissingLine }}</p>
+                          <div style="display:flex;flex-direction:column;gap:5px">
+                            <sc-for list="{{ bdayMissingRows }}" as="bm" hint-placeholder-count="3">
+                              <button onclick="{{ bm.onOpen }}" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:9px;padding:7px 9px;cursor:pointer;font-family:inherit">
+                                <span style="flex:1;min-width:0;font-size:12px;font-weight:600;color:#0C1116">{{ bm.name }}</span>
+                                <span style="flex:none;font-size:10.5px;color:#9AA2B4">{{ bm.squadName }}</span>
+                                <i data-lucide="chevron-right" style="width:14px;height:14px;color:#C7CDDA;flex:none"></i>
+                              </button>
+                            </sc-for>
+                          </div>
+                        </div>
+                      </sc-if>
+
+                      <p style="margin:0 2px;font-size:11px;color:#9AA2B4;line-height:1.5">On the morning of a swimmer's birthday the club's message goes to them and their parents on its own — once each, however many coaches open the app — and you and Sameh get a notification so it can be said in person at the session too. Only a real date of birth counts; nobody is wished on a date the app guessed.</p>
+                    </div>
+                  </sc-if>
+
                   <sc-if value="{{ toolRace }}" hint-placeholder-val="{{ true }}">
                     <div style="display:flex;flex-direction:column;gap:12px">
                       <div style="background:#0A0F1A;color:#fff;border-radius:16px;padding:16px;display:flex;align-items:center;gap:12px">
@@ -5164,6 +5233,7 @@ class Component extends DCLogic {
     // with no amount and no record, so nobody could answer "what did we bill in March".
     this.billing=this._loadJSON('vx_billing', null);   // normalised (and migrated once) by _billing()
     this.raceSplitLog=this._loadJSON('vx_race_splits', {});   // actual 50s a coach timed, per swimmer per event
+    this.bdaySent=this._loadJSON('vx_bday_sent', {});        // {swimmerId: 'YYYY'} — one greeting per swimmer per year
     this.academySchedule={preteam:'Mon/Wed/Fri · 4:00–5:00pm', advb:'Mon/Wed/Fri · 4:00–5:30pm', adva:'Mon–Fri · 4:00–5:30pm', junior:'Mon–Fri · 4:00–6:00pm', seniorb:'Mon–Sat · 4:00–6:00pm', seniora:'Mon–Sat · 4:00–6:30pm', vortexb:'Mon–Sat · 5:00–7:00pm', vortexa:'Mon–Sat · 5:00–7:30pm', legend:'Mon–Sat · 5:30–8:00pm'};
     this.videoLib=this._loadJSON('vx_videos', []).filter(v=>v && v.url && /^https?:\/\//i.test(v.url)).map(v=>({
       ...v,
@@ -5354,7 +5424,12 @@ class Component extends DCLogic {
     // Locked to the Fitness Plan tool if their role mentions "fitness" OR the account is Coach Nedhal.
     if(a.id==='ahmed'||a.id==='sameh') return false; // club admins always have full access
     return /fitness/i.test(a.role||'') || /nedhal/i.test(a.label||'') || /nedhal/i.test(a.user||''); }
-  openTool(t, club){ if(this._fitnessLocked() && t!=='fitness') t='fitness'; const patch={tool:t, toolScopeClub:!!club, aiOut:null, aiLoading:false}; if(t==='clock'){ const seq=this.clockSeq(); patch.clockRunning=false; patch.clockSetIdx=0; patch.clockRep=1; patch.clockRemain=seq[0]?seq[0].interval:0; } this.setState(patch); if(t==='attday'){ try{ this._attendFetch(this.state.attDayISO||this.todayISO()); }catch(e){} }
+  openTool(t, club){ if(this._fitnessLocked() && t!=='fitness') t='fitness';
+    // Meet Day is the Meet Entries screen in its live mode. It had no tile of its own, so the
+    // only way in was a toggle inside another tool — which nobody found.
+    let mode=null; if(t==='meetday'){ t='entries'; mode='day'; }
+    const patch={tool:t, toolScopeClub:!!club, aiOut:null, aiLoading:false};
+    if(mode) patch.meetMode=mode; if(t==='clock'){ const seq=this.clockSeq(); patch.clockRunning=false; patch.clockSetIdx=0; patch.clockRep=1; patch.clockRemain=seq[0]?seq[0].interval:0; } this.setState(patch); if(t==='attday'){ try{ this._attendFetch(this.state.attDayISO||this.todayISO()); }catch(e){} }
     if(t==='lounge'){ try{ this._loungeFetch(); }catch(e){} } if(t==='season'){ try{ this._seasonFetch(); }catch(e){} try{ this._plansFetch(); }catch(e){} try{ this._squadPlansFetch(); }catch(e){} } if(t==='fitness'){ try{ this._fitSessFetch(); }catch(e){} try{ this._fitPlansFetch(); }catch(e){} } }
 
   todayISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
@@ -7081,7 +7156,9 @@ class Component extends DCLogic {
   notifsFor(kind, ctx){
     const local=this.notifications.filter(n=>{
       if(n.audience==='all') return true;
-      if(kind==='coach') return n.audience==='coach' || (ctx && ctx.squadId && n.audience==='coach:'+ctx.squadId);
+      // 'admin' reaches the club's managers only — used for things the whole coaching staff
+      // does not need in their feed.
+      if(kind==='coach') return n.audience==='coach' || (n.audience==='admin' && this._isAdmin()) || (ctx && ctx.squadId && n.audience==='coach:'+ctx.squadId);
       if(kind==='family') return ctx && ctx.swimmerIds && ctx.swimmerIds.some(uid=>n.audience==='family_sw:'+uid.split('::')[1]);
       return false;
     });
@@ -8261,6 +8338,95 @@ class Component extends DCLogic {
       try{ this.setState({plans:state}); }catch(e){} }
   }
   // ---- Season / periodization planner (per squad, own season_plans table) ----
+  // ---- Birthdays -------------------------------------------------------------------------
+  // Only a real date of birth counts. _swDob() falls back to a date derived from the swimmer's
+  // age when none is on file, which is fine for working out how old somebody is and completely
+  // wrong for this: it would wish a child happy birthday on a day the club invented.
+  _bdayISO(sw){ const d=(sw&&sw.dob)||''; return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null; }
+  _bdayMD(sw){ const d=this._bdayISO(sw); return d ? d.slice(5) : null; }
+  // A swimmer born on 29 February has a birthday in three years out of four. Mark it on the
+  // 28th in a common year rather than skipping the child altogether.
+  _bdayDateIn(year, md){
+    const mm=parseInt(md.slice(0,2),10), dd=parseInt(md.slice(3,5),10);
+    const d=new Date(year, mm-1, dd);
+    if(d.getMonth()!==mm-1) d.setDate(0);
+    return d;
+  }
+  _bdayIsToday(sw, todayISO){
+    const md=this._bdayMD(sw); if(!md) return false;
+    const t=new Date((todayISO||this.todayISO())+'T00:00:00');
+    const d=this._bdayDateIn(t.getFullYear(), md);
+    return d.getMonth()===t.getMonth() && d.getDate()===t.getDate();
+  }
+  _bdayDaysAway(sw, fromISO){
+    const md=this._bdayMD(sw); if(!md) return null;
+    const from=new Date((fromISO||this.todayISO())+'T00:00:00');
+    let d=this._bdayDateIn(from.getFullYear(), md);
+    if(d<from) d=this._bdayDateIn(from.getFullYear()+1, md);
+    return Math.round((d-from)/86400000);
+  }
+  _bdayTurning(sw, onISO){
+    const b=this._bdayISO(sw); if(!b) return null;
+    const on=new Date((onISO||this.todayISO())+'T00:00:00');
+    let age=on.getFullYear()-parseInt(b.slice(0,4),10);
+    const md=b.slice(5);
+    if(this._bdayDateIn(on.getFullYear(), md) > on) age--;   // hasn't come round yet this year
+    return (age>=0 && age<100) ? age : null;
+  }
+  _bdaySentMap(){ const m=this.bdaySent; return (m && typeof m==='object') ? m : {}; }
+  // Only a signed-in staff device sends the club's greetings. A parent's phone must never
+  // post a message as the club, and a signed-out device cannot write anyway.
+  _isStaffSession(){
+    try{ const s=JSON.parse(localStorage.getItem('vx_session')||'null'); return !!(s && s.type==='staff'); }catch(e){ return false; }
+  }
+  // Wish one swimmer happy birthday: a real message in the family thread they can read and
+  // reply to, a notification for them, and one for the managers.
+  async birthdayWish(swId, name, squadName, turning){
+    const first=String(name||'').trim().split(/\s+/)[0]||'there';
+    const club=this.brandConfig.clubName||'Vortex Swimming Club';
+    const title='Happy birthday, '+first+'! 🎂';
+    const body='Everyone at '+club+' wishes you a brilliant day'+(turning!=null?(' — '+turning+' today'):'')+'. كل عام وأنت بخير!';
+    const rec={ id:'fm'+Date.now()+'_'+Math.random().toString(36).slice(2,6), swimmer_id:swId, sender:'staff',
+      from_name:club, from_photo:'', body:title+'\n'+body, set_text:'', video:'', ts:Date.now() };
+    const by={...(this.famMessages||{})};
+    by[swId]=[...(by[swId]||[]), {id:rec.id, sender:'staff', fromName:club, fromPhoto:'', body:rec.body, setText:'', video:'', ts:rec.ts}];
+    this.famMessages=by;
+    try{ this.notify('family_sw:'+swId, 'cake', title, body); }catch(e){}
+    try{ this._pushSend({swimmerIds:[swId]}, title, body, '/'); }catch(e){}
+    // And tell the managers, so a coach can say it in person at the session too.
+    try{ this.notify('admin', 'cake', name+'’s birthday'+(turning!=null?(' — '+turning+' today'):''), (squadName||'')+' · the club’s message has gone to them and their parents'); }catch(e){}
+    try{ this._pushSend({role:'staff'}, 'Birthday today: '+name, (squadName||'')+(turning!=null?(' · turning '+turning):''), '/'); }catch(e){}
+    try{ if(window.__vxInsert) await window.__vxInsert('family_messages',[rec]); }catch(e){}
+  }
+  // Runs when a coach opens the app. Once per swimmer per year, recorded in a shared store so
+  // five devices opening the app do not send five greetings.
+  async birthdayRun(){
+    if(!this._isStaffSession()) return;
+    if(!(window.__VX_AUTH && window.__VX_AUTH.token)) return;   // signed out: it could not save anyway
+    const today=this.todayISO();
+    if(this._bdayRanOn===today) return;
+    this._bdayRanOn=today;
+    const year=today.slice(0,4);
+    const sent={...this._bdaySentMap()};
+    const due=this.allSwimmersFlat().filter(sw=>this._bdayIsToday(sw, today) && sent[sw.id]!==year);
+    if(!due.length) return;
+    due.forEach(sw=>{ sent[sw.id]=year; });
+    this.bdaySent=sent; this._saveJSON('vx_bday_sent', sent);   // claim first, so a second device stands down
+    for(const sw of due){
+      try{ await this.birthdayWish(sw.id, sw.name, sw.squadName, this._bdayTurning(sw, today)); }catch(e){}
+    }
+    this.forceUpdate();
+  }
+  // Manual send, for a birthday the club missed or wants to send again.
+  async birthdaySendNow(swId){
+    const sw=this.allSwimmersFlat().find(x=>x.id===swId); if(!sw) return;
+    const today=this.todayISO();
+    const sent={...this._bdaySentMap(), [swId]:today.slice(0,4)};
+    this.bdaySent=sent; this._saveJSON('vx_bday_sent', sent);
+    await this.birthdayWish(sw.id, sw.name, sw.squadName, this._bdayTurning(sw, today));
+    this.setState({bdayMsg:'Sent to '+sw.name+' and their parents ✓'});
+  }
+
   // ---- The club week ------------------------------------------------------------------
   // The training week runs Saturday → Friday. Every calendar, every weekly total and the
   // season planner read it from here, so the week is stated once instead of being re-derived
@@ -8751,7 +8917,7 @@ class Component extends DCLogic {
     this._printAnchor.remove();
     this._printAnchor=null;
   }
-  componentDidMount(){ this._applyLang(); this._icons(); this._clock=setInterval(()=>{ if(this.state.clockRunning && this.state.tool==='clock') this.tickClock(); }, 1000);
+  componentDidMount(){ this._applyLang(); this._icons(); setTimeout(()=>{ try{ this.birthdayRun(); }catch(e){} }, 6000); this._clock=setInterval(()=>{ if(this.state.clockRunning && this.state.tool==='clock') this.tickClock(); }, 1000);
     this._onBeforePrint=()=>this._printEscape(); this._onAfterPrint=()=>this._printRestore();
     window.addEventListener('beforeprint', this._onBeforePrint); window.addEventListener('afterprint', this._onAfterPrint);
     if(location.hash==='#print-preview') this.setState({screen:'app', pickedId:'ahmed', view:'squad', squadId:'seniora', tab:'plans', printPreviewOpen:true});
@@ -8871,6 +9037,7 @@ class Component extends DCLogic {
     this.academyTrials=g('vx_academy_trials', this.academyTrials); this.academyFees=g('vx_academy_fees', this.academyFees);
     this.feePlans=g('vx_fee_plans', this.feePlans); this.memberships=g('vx_memberships', this.memberships); this.invoices=g('vx_invoices', this.invoices);
     this.billing=g('vx_billing', this.billing); this.raceSplitLog=g('vx_race_splits', this.raceSplitLog);
+    this.bdaySent=g('vx_bday_sent', this.bdaySent);
     this.brandConfig=g('vx_brand', this.brandConfig); this.notifications=g('vx_notifications', this.notifications);
     this.tpaceTests=g('vx_tpace', this.tpaceTests); this.fitnessTests=g('vx_fitness_tests', this.fitnessTests);
     this.fitnessPlans=g('vx_fitness_plans', this.fitnessPlans); this.fitnessMedia=g('vx_fitness_media', this.fitnessMedia); this.waTargets=g('vx_wa_targets', this.waTargets); this.promoStore=g('vx_promo', this.promoStore); this.aiSuggOverrides=g('vx_ai_sugg_ovr', this.aiSuggOverrides);
@@ -9122,7 +9289,9 @@ class Component extends DCLogic {
       {id:'standards', icon:'badge-check', title:'Meet Standards', sub:'Cut times · who has qualified', tint:'rgba(12,122,79,.1)', color:'#0C7A4F'},
       {id:'relay', icon:'users-round', title:'Relay Builder', sub:'Fastest lineup by stroke', tint:'rgba(12,122,79,.1)', color:'#0C7A4F'},
       {id:'season', icon:'calendar-range', title:'Season Plan', sub:'Phases · weeks · peak & taper', tint:'rgba(124,77,255,.12)', color:'#7C4DFF'},
+      {id:'meetday', icon:'timer', title:'Meet Day', sub:'Live results poolside, heat by heat', tint:'rgba(200,30,91,.1)', color:'#C81E5B'},
       {id:'race', icon:'gauge', title:'Race Strategy', sub:'Split targets vs the race swum', tint:'rgba(200,30,91,.1)', color:'#C81E5B'},
+      {id:'bdays', icon:'cake', title:'Birthdays', sub:'Today · the next 30 days', tint:'rgba(245,166,35,.12)', color:'#C77E12'},
       {id:'risk', icon:'shield-alert', title:'Load & Risk', sub:'Who is ramping up too fast', tint:'rgba(245,166,35,.12)', color:'#C77E12'},
     ];
     // A staff member whose role contains "fitness" (e.g. Coach Nedhal, role "Fitness Coach")
@@ -9343,8 +9512,39 @@ class Component extends DCLogic {
     const mainPadBottom = (S.view==='squad') ? '78px' : '0px';
 
     // ---- tool overlay content ----
-    const toolTitleMap={attday:'Daily Attendance',insights:'Insights',boards:'Boards',video:'Video Analysis',lounge:'Vortex Lounge',goals:'Season Goals',ai:'AI Assistants',review:'AI Plan Review',clock:'Pace Clock',talent:'Talent Board',recovery:'Recovery Board',improvers:'Top Improvers',rankings:'Rankings',standards:'Meet Standards',relay:'Relay Builder',zoneeng:'Zone Engine',sponsors:'Sponsors',tpace:'T-Pace Tests',promo:'Level-Up Review',entries:'Meet Entries',fitness:'Fitness Plan',inbody:'InBody Import',season:'Season Plan',race:'Race Strategy',risk:'Load & Risk'};
+    const toolTitleMap={attday:'Daily Attendance',insights:'Insights',boards:'Boards',video:'Video Analysis',lounge:'Vortex Lounge',goals:'Season Goals',ai:'AI Assistants',review:'AI Plan Review',clock:'Pace Clock',talent:'Talent Board',recovery:'Recovery Board',improvers:'Top Improvers',rankings:'Rankings',standards:'Meet Standards',relay:'Relay Builder',zoneeng:'Zone Engine',sponsors:'Sponsors',tpace:'T-Pace Tests',promo:'Level-Up Review',entries:'Meet Entries',fitness:'Fitness Plan',inbody:'InBody Import',season:'Season Plan',race:'Race Strategy',risk:'Load & Risk',meetday:'Meet Day',bdays:'Birthdays'};
     const toolScope = S.toolScopeClub ? ('Club-wide · '+this.allSwimmersFlat().length+' swimmers') : squad.name+' · '+squad.count+' swimmers';
+
+    // ---- Birthdays ----
+    const bdayToday=this.todayISO();
+    const bdayPool = S.toolScopeClub ? this.allSwimmersFlat() : (this.roster[S.squadId]||[]).map(sw=>({...sw, squadId:S.squadId, squadName:squad.name}));
+    const bdaySentMap = this._bdaySentMap();
+    const bdayYear = bdayToday.slice(0,4);
+    const bdayRow = (sw)=>{
+      const turning=this._bdayTurning(sw, bdayToday);
+      const away=this._bdayDaysAway(sw, bdayToday);
+      const done = bdaySentMap[sw.id]===bdayYear;
+      return { id:sw.id, name:sw.name, initials:sw.initials, squadName:sw.squadName||squad.name,
+        turningLabel: turning!=null ? ('turns '+turning) : '',
+        dateLabel: this._fmtDMY(this._bdayISO(sw), false),
+        awayLabel: away===0 ? 'Today' : (away===1 ? 'Tomorrow' : ('in '+away+' days')),
+        sent:done, sentLabel: done ? 'Message sent ✓' : 'Send the club’s message',
+        onSend:()=>this.birthdaySendNow(sw.id),
+        onOpen:()=>this.setState({view:'squad', squadId:sw.squadId||S.squadId, tab:'group', swimmerId:sw.id, tool:null}) };
+    };
+    const bdayWithDob = bdayPool.filter(sw=>!!this._bdayISO(sw));
+    const bdayTodayRows = bdayWithDob.filter(sw=>this._bdayIsToday(sw, bdayToday)).map(bdayRow);
+    const bdayUpcomingRows = bdayWithDob
+      .map(sw=>({sw, away:this._bdayDaysAway(sw, bdayToday)}))
+      .filter(x=>x.away>0 && x.away<=30)
+      .sort((a,b)=>a.away-b.away)
+      .map(x=>bdayRow(x.sw));
+    // Named, not just counted: a swimmer with no date of birth is one nobody can wish, and
+    // the fix is somebody typing it in.
+    const bdayMissingRows = bdayPool.filter(sw=>!this._bdayISO(sw)).slice(0,40).map(sw=>({
+      name:sw.name, squadName:sw.squadName||squad.name,
+      onOpen:()=>this.setState({view:'squad', squadId:sw.squadId||S.squadId, tab:'group', swimmerId:sw.id, tool:null}) }));
+    const bdayMissingCount = bdayPool.filter(sw=>!this._bdayISO(sw)).length;
 
     // ---- Race strategy ----
     const racePool = S.toolScopeClub ? this.allSwimmersFlat() : (this.roster[S.squadId]||[]).map(sw=>({...sw, squadId:S.squadId, squadName:squad.name}));
@@ -11397,6 +11597,14 @@ class Component extends DCLogic {
       promoRows, promoEmpty, promoScopeLabel,
       toolEntries:S.tool==='entries', toolFitness:S.tool==='fitness', toolInbody:S.tool==='inbody', toolSponsors:S.tool==='sponsors',
       toolTalent:S.tool==='talent', talentRows, talentEmpty, talentScopeLabel:toolScope,
+      // ---- birthdays ----
+      toolBdays:S.tool==='bdays', bdayScopeLabel:toolScope,
+      bdayTodayRows, bdayHasToday: bdayTodayRows.length>0,
+      bdayUpcomingRows, bdayHasUpcoming: bdayUpcomingRows.length>0,
+      bdayNoneAtAll: bdayTodayRows.length===0 && bdayUpcomingRows.length===0,
+      bdayMissingRows, bdayHasMissing: bdayMissingCount>0,
+      bdayMissingLine: bdayMissingCount+' swimmer'+(bdayMissingCount===1?'':'s')+' have no date of birth on file, so the club cannot wish them',
+      bdayMsg:S.bdayMsg||'', bdayMsgShow:!!S.bdayMsg,
       // ---- race strategy ----
       toolRace:S.tool==='race', raceScopeLabel:toolScope,
       raceQuery:S.raceQuery||'', onRaceQuery:(e)=>this.setState({raceQuery:e.target.value}),

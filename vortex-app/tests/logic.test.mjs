@@ -873,6 +873,107 @@ describe("expired session", () => {
   });
 });
 
+/* ------------------------------------------------------------------ birthdays
+   This messages children and their parents in the club's name, on its own. Wishing
+   the wrong child, wishing one twice, or wishing one on a date the app made up are
+   all worse than never sending anything. */
+describe("birthdays", () => {
+  const ctx = () => ({
+    squads: [{ id: "junior", name: "Junior" }],
+    roster: { junior: [
+      { id: "s1", name: "Hannah Millen", dob: "2013-08-08" },
+      { id: "s2", name: "Omar Ali", dob: "2012-02-29" },   // leap-year birthday
+      { id: "s3", name: "No Dob Kid", age: 12 },           // age only — no real date
+    ] },
+    todayISO: () => "2026-08-08",
+    brandConfig: { clubName: "Vortex Swimming Club" },
+    bdaySent: {},
+    famMessages: {},
+    state: {},
+    setState() {}, forceUpdate() {}, notify() {}, _pushSend() {}, _saveJSON() {},
+  });
+  const sw = (c, id) => c.roster.junior.find((x) => x.id === id);
+
+  const c0 = ctx();
+  const isToday = bind("_bdayIsToday", c0, ["_bdayMD", "_bdayISO", "_bdayDateIn"]);
+  const away = bind("_bdayDaysAway", c0, ["_bdayMD", "_bdayISO", "_bdayDateIn"]);
+  const turning = bind("_bdayTurning", c0, ["_bdayISO", "_bdayDateIn"]);
+  const dobOf = bind("_bdayISO", c0);
+
+  it("a swimmer whose birthday is today is found", () => eq(isToday(sw(c0, "s1"), "2026-08-08"), true));
+  it("and not on any other day", () => eq(isToday(sw(c0, "s1"), "2026-08-09"), false));
+  it("a swimmer with only an age has no birthday to wish", () => eq(dobOf(sw(c0, "s3")), null));
+  it("an age-derived date is never treated as a birthday", () =>
+    eq(isToday({ id: "x", age: 12 }, "2026-08-08"), false, "_swDob() invents one — this must not use it"));
+
+  it("counts the days to the next birthday", () => eq(away(sw(c0, "s1"), "2026-08-01"), 7));
+  it("today is zero days away", () => eq(away(sw(c0, "s1"), "2026-08-08"), 0));
+  it("a birthday just gone rolls to next year", () => eq(away(sw(c0, "s1"), "2026-08-09"), 364));
+
+  it("29 February is wished on the 28th in a common year", () => eq(isToday(sw(c0, "s2"), "2027-02-28"), true));
+  it("and on the 29th in a leap year", () => eq(isToday(sw(c0, "s2"), "2028-02-29"), true));
+  it("a leap-year child is never simply skipped", () => eq(away(sw(c0, "s2"), "2027-01-01") <= 365, true));
+
+  it("the age they turn is right on the day", () => eq(turning(sw(c0, "s1"), "2026-08-08"), 13));
+  it("and the day before, they are still the year younger", () => eq(turning(sw(c0, "s1"), "2026-08-07"), 12));
+
+  itAsync("a coach opening the app wishes today's birthdays", async () => {
+    const c = ctx();
+    c.allSwimmersFlat = () => c.roster.junior.map((x) => ({ ...x, squadName: "Junior" }));
+    const wished = [];
+    c.birthdayWish = (id) => { wished.push(id); return Promise.resolve(); };
+    c._isStaffSession = () => true;
+    globalThis.window = { __VX_AUTH: { token: "t" } };
+    const run = bind("birthdayRun", c, ["_bdayIsToday", "_bdayMD", "_bdayISO", "_bdayDateIn", "_bdayTurning", "_bdaySentMap"]);
+    await run();
+    eq(wished, ["s1"], "only the swimmer whose birthday it actually is");
+    eq(c.bdaySent.s1, "2026", "and it is recorded so it cannot go twice");
+  });
+
+  itAsync("a second device the same day sends nothing", async () => {
+    const c = ctx();
+    c.allSwimmersFlat = () => c.roster.junior.map((x) => ({ ...x, squadName: "Junior" }));
+    c.bdaySent = { s1: "2026" };
+    const wished = [];
+    c.birthdayWish = (id) => { wished.push(id); return Promise.resolve(); };
+    c._isStaffSession = () => true;
+    globalThis.window = { __VX_AUTH: { token: "t" } };
+    const run = bind("birthdayRun", c, ["_bdayIsToday", "_bdayMD", "_bdayISO", "_bdayDateIn", "_bdayTurning", "_bdaySentMap"]);
+    await run();
+    eq(wished, [], "five coaches opening the app is still one greeting");
+  });
+
+  itAsync("a parent's phone never sends in the club's name", async () => {
+    const c = ctx();
+    c.allSwimmersFlat = () => c.roster.junior.map((x) => ({ ...x, squadName: "Junior" }));
+    const wished = [];
+    c.birthdayWish = (id) => { wished.push(id); return Promise.resolve(); };
+    c._isStaffSession = () => false;
+    globalThis.window = { __VX_AUTH: { token: "t" } };
+    const run = bind("birthdayRun", c, ["_bdayIsToday", "_bdayMD", "_bdayISO", "_bdayDateIn", "_bdayTurning", "_bdaySentMap"]);
+    await run();
+    eq(wished, []);
+  });
+
+  itAsync("a signed-out device does not claim the send it cannot make", async () => {
+    const c = ctx();
+    c.allSwimmersFlat = () => c.roster.junior.map((x) => ({ ...x, squadName: "Junior" }));
+    const wished = [];
+    c.birthdayWish = (id) => { wished.push(id); return Promise.resolve(); };
+    c._isStaffSession = () => true;
+    globalThis.window = {};                       // no token
+    const run = bind("birthdayRun", c, ["_bdayIsToday", "_bdayMD", "_bdayISO", "_bdayDateIn", "_bdayTurning", "_bdaySentMap"]);
+    await run();
+    eq(wished, []);
+    eq(c.bdaySent.s1, undefined, "marking it sent here would lose the greeting for good");
+  });
+
+  it("the managers get their own notification, not the whole coaching staff", () =>
+    eq(/this\.notify\('admin', 'cake'/.test(SOURCE), true));
+  it("and the feed actually understands an admin-only note", () =>
+    eq(/n\.audience==='admin' && this\._isAdmin\(\)/.test(SOURCE), true));
+});
+
 /* ----------------------------------------------------------- the club's week
    Qatar: the training week runs Saturday → Friday. Get this wrong and every
    calendar is shifted by two columns and every "this week" total counts the
@@ -922,30 +1023,35 @@ describe("club week", () => {
    difference between "Checking…" for a few seconds and for half a minute. */
 describe("sign-in speed", () => {
   const asked = [];
-  globalThis.window = {
-    __VX_AUTH: { token: "t", refresh: "r" },
-    __vxSelect: (table, qs) => { asked.push(qs); return Promise.resolve([]); },
+  // Installed per test, not once: these run interleaved with other suites that also stub
+  // globalThis.window, and whichever ran last would otherwise own it.
+  const stubWindow = () => {
+    globalThis.window = {
+      __VX_AUTH: { token: "t", refresh: "r" },
+      __vxSelect: (table, qs) => { asked.push(qs); return Promise.resolve([]); },
+    };
   };
   const newCtx = () => ({ attendLog: {}, todayISO: () => "2026-08-08", _saveLocalOnly() {}, forceUpdate() {} });
 
   itAsync("the live poll asks for one day, not the table", async () => {
-    asked.length = 0;
+    stubWindow(); asked.length = 0;
     await bind("_attendFetch", newCtx(), ["shiftDate"])("2026-08-08");
     eq(asked[0].includes("day=eq.2026-08-08"), true);
   });
   itAsync("a bounded catch-up asks only for days since a date", async () => {
-    asked.length = 0;
+    stubWindow(); asked.length = 0;
     await bind("_attendFetch", newCtx(), ["shiftDate"])(null, "2026-04-10");
     eq(asked[0].includes("day=gte.2026-04-10"), true);
   });
   itAsync("a single day never also carries a range", async () => {
-    asked.length = 0;
+    stubWindow(); asked.length = 0;
     await bind("_attendFetch", newCtx(), ["shiftDate"])("2026-08-08", "2026-04-10");
     eq(asked[0].includes("gte"), false);
   });
 
   itAsync("signing in reads the recent window first, not all of history", async () => {
-    asked.length = 0;
+    stubWindow(); asked.length = 0;
+    stubWindow();
     const ctx = newCtx();
     bind("_attendFetchStaged", ctx, ["_attendFetch", "shiftDate"])();
     await new Promise((r) => setTimeout(r, 5));
@@ -953,6 +1059,7 @@ describe("sign-in speed", () => {
     eq(asked[0].includes("day=gte.2026-04-10"), true, "120 days back from 2026-08-08");
   });
   itAsync("the full history follows later, so nothing is lost", async () => {
+    stubWindow();
     const ctx = newCtx();
     bind("_attendFetchStaged", ctx, ["_attendFetch", "shiftDate"])();
     await new Promise((r) => setTimeout(r, 5));
