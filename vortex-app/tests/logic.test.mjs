@@ -1018,6 +1018,32 @@ describe("InBody sheet", () => {
   it("dates the record from the test, not the day it was scanned", () =>
     eq(out.testDate, "2026-07-14", "a July test must not land on the chart as today"));
 
+  // In-browser OCR must fetch a worker, a WASM core and a large language model before it can
+  // read a thing. Without a deadline the app sat on "reading it as a picture" and never came
+  // back — which is what a coach actually saw.
+  it("reading a photo has a deadline it cannot outlive", () =>
+    eq(/Promise\.race\(\[work, deadline\]\)/.test(SOURCE), true));
+  it("the server is asked first, and a missing key falls back instead of stalling", () => {
+    eq(/_readSheetOnServer/.test(SOURCE), true);
+    eq(/if\(!j \|\| j\.notConfigured\) return null/.test(SOURCE), true);
+  });
+  it("the photo is shrunk before it is sent, not posted at 12 megapixels", () =>
+    eq(/const max=1600/.test(SOURCE), true));
+  it("the key never leaves the server", () => {
+    const route = readFileSync(new URL("../src/app/api/inbody/read/route.ts", import.meta.url), "utf8");
+    eq(/process\.env\.ANTHROPIC_API_KEY/.test(route), true);
+    eq(/x-api-key/.test(SOURCE), false, "a secret key must never be in the page");
+  });
+  it("only the fields we asked for come back, as numbers", () => {
+    const route = readFileSync(new URL("../src/app/api/inbody/read/route.ts", import.meta.url), "utf8");
+    eq(/Number\.isFinite\(n\)/.test(route), true, "a stray sentence must not reach a child's record");
+  });
+  it("every reading the import stores is shown, not just three", () => {
+    const shown = (SOURCE.match(/const IB_FIELDS=\[[\s\S]*?\];/) || [""])[0];
+    for (const k of ["bmi", "score", "tbw", "icw", "ecw", "ecwRatio", "phaseAngle", "smi", "bmr", "visceralFat", "whr", "boneMineral", "bodyCellMass", "obesityDegree"])
+      eq(shown.includes("'" + k + "'"), true, k + " is parsed and stored but never shown");
+  });
+
   it("an unreadable photo yields nothing rather than a guess", () => {
     const junk = parse("~~~ blurry ~~~ 3 4 5 ~~~");
     eq(junk.weight, undefined);

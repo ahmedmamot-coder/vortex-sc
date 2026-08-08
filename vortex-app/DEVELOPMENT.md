@@ -70,6 +70,31 @@ A write the database refuses now shows in the app as *"refused — this account 
 make that change"* and is **not** retried, so a policy that is too tight shows up as a clear
 message rather than a red banner that never clears.
 
+## Reading an InBody sheet from a photograph
+
+A PDF with a real text layer is read directly, in the browser, with no setup.
+
+A **photograph** — including a scanner app's PDF, which is a photograph in a PDF wrapper — is
+sent to `/api/inbody/read`, which reads it with a vision model and returns the values. This
+needs one environment variable in Vercel:
+
+| Variable | Where it comes from |
+|---|---|
+| `ANTHROPIC_API_KEY` | console.anthropic.com → API keys. Server-side only; it never reaches a phone. |
+
+Without it the route reports `notConfigured` and the app falls back to in-browser OCR, which
+works but is slow on a phone — it has to fetch a worker, a WASM core and a large language model
+before it can read anything. That fallback has a 45-second deadline; before, it could hang for
+ever, and did.
+
+Whatever reads it, a photograph **fills the form in and waits to be checked**. A misread digit
+would put a wrong body-fat figure on a child's record looking exactly as authoritative as a
+correct one, so a person confirms it before it is saved. A text PDF still saves itself.
+
+The Settings screen has an "API key" field left over from an earlier design. It is stored on the
+device and used for nothing — the key for this lives on the server, which is the only safe place
+for it.
+
 ## Bands (WHOOP & Fitbit) — switching them on
 
 The integration is complete and real: OAuth consent, token refresh, live calls to WHOOP's

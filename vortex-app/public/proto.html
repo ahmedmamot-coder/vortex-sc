@@ -2392,6 +2392,19 @@ if ('serviceWorker' in navigator) {
                                     <button onclick="{{ ib.onDelete }}" style="flex:none;width:24px;height:24px;border-radius:7px;border:none;background:#EEF1F5;color:#9AA2B4;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:13px;height:13px"></i></button>
                                   </span>
                                 </div>
+                                <sc-if value="{{ ib.hasDetail }}" hint-placeholder-val="{{ true }}">
+                                  <button onclick="{{ ib.onToggle }}" style="width:100%;margin-top:4px;background:none;border:none;color:var(--vx-blue);font-family:inherit;font-weight:700;font-size:11px;cursor:pointer;text-align:left;padding:2px 3px">{{ ib.moreLabel }}</button>
+                                  <sc-if value="{{ ib.open }}" hint-placeholder-val="{{ false }}">
+                                    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:5px;margin:4px 0 8px">
+                                      <sc-for list="{{ ib.detail }}" as="ibd" hint-placeholder-count="8">
+                                        <div style="background:#fff;border:1px solid #EEF1F5;border-radius:9px;padding:7px 9px">
+                                          <span style="display:block;font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#9AA2B4">{{ ibd.label }}</span>
+                                          <span style="display:block;font-family:var(--font-mono);font-size:12.5px;font-weight:700;color:#0C1116;margin-top:1px">{{ ibd.value }}</span>
+                                        </div>
+                                      </sc-for>
+                                    </div>
+                                  </sc-if>
+                                </sc-if>
                               </sc-for>
                             </div>
                           </sc-if>
@@ -7013,6 +7026,47 @@ class Component extends DCLogic {
     try{ this._saveLocalOnly('vx_photos_cache', p); }catch(e){}
     if(window.__vxDelete){ try{ window.__vxDelete('swimmer_docs', 'id=eq.'+encodeURIComponent(swId+'::photo')); }catch(e){} }
     this.forceUpdate(); }
+  // Draw whatever we were given onto a canvas and hand back a JPEG small enough to send.
+  // A 12-megapixel phone photo is far more than is needed to read printed digits, and far
+  // more than a request body will carry.
+  async _sheetToJpeg(src){
+    const img=await new Promise((res,rej)=>{
+      const im=new Image(); im.onload=()=>res(im); im.onerror=()=>rej(new Error('image'));
+      im.src=(src instanceof Blob) ? URL.createObjectURL(src) : src;
+    });
+    const max=1600, sc=Math.min(1, max/Math.max(img.width||1, img.height||1));
+    const cv=document.createElement('canvas');
+    cv.width=Math.max(1,Math.round((img.width||max)*sc)); cv.height=Math.max(1,Math.round((img.height||max)*sc));
+    cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+    const out=cv.toDataURL('image/jpeg', 0.85);
+    cv.width=cv.height=0;
+    return out;
+  }
+  // Ask the server to read the sheet. Returns null when it is not set up, so the caller can
+  // fall back rather than stall.
+  async _readSheetOnServer(dataUrl){
+    try{
+      const r=await fetch('/api/inbody/read', {method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({image:dataUrl, mime:'image/jpeg'})});
+      if(!r.ok) return null;
+      const j=await r.json();
+      if(!j || j.notConfigured) return null;
+      return j.values && Object.keys(j.values).length ? j.values : {};
+    }catch(e){ return null; }
+  }
+  // In-browser OCR, kept as the fallback. It has to fetch a worker, a WASM core and a large
+  // language model before it can read anything, so it gets a deadline: without one the app
+  // sat on "reading it as a picture" for ever, which is what a coach actually saw.
+  async _ocrSheet(src, seconds){
+    const deadline=new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')), (seconds||45)*1000));
+    const work=(async()=>{
+      if(!window.Tesseract) await this._loadScriptOnce('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js', 25000);
+      if(!window.Tesseract) throw new Error('ocr unavailable');
+      const out=await window.Tesseract.recognize(src, 'eng');
+      return (out && out.data && out.data.text) || '';
+    })();
+    return Promise.race([work, deadline]);
+  }
   async profileInbodyPdf(e, swId){
     const file=e.target.files && e.target.files[0]; e.target.value=''; if(!file) return;
     this.setState({profileIbBusy:true, profileIbMsg:'Saving report\u2026'});
@@ -7024,51 +7078,40 @@ class Component extends DCLogic {
     //    that's fine, the report is still saved and the coach can type the values in.
     let data={}, fromPhoto=false;
     try{
-      // A photograph of the sheet has no text layer, so pdf.js has nothing to read. Optical
-      // character recognition does — loaded only when somebody actually imports a photo, the
-      // same way pdf.js and the PDF writer are, so it costs nothing until it is used.
-      if(!/pdf/i.test(file.type||'') && /^image\//i.test(file.type||'')){
-        fromPhoto=true;
-        this.setState({profileIbMsg:'Reading the sheet\u2026 this takes a few seconds'});
-        if(!window.Tesseract) await this._loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.0/tesseract.min.js', 20000);
-        if(window.Tesseract){
-          const out=await window.Tesseract.recognize(file, 'eng');
-          const text=(out && out.data && out.data.text) || '';
-          data=this._extractInbodyFields(text)||{};
-        }
-      }
+      // A picture — either an image file, or a scanner app's PDF, which is a photograph in a
+      // PDF wrapper with no text in it at all.
+      let picture=null;
+      if(/^image\//i.test(file.type||'')) picture=await this._sheetToJpeg(file);
       else if(window.pdfjsLib && /pdf/i.test(file.type||'')){
         window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
         const buf=await file.arrayBuffer(); const doc=await window.pdfjsLib.getDocument({data:buf}).promise;
         let text=''; for(let i=1;i<=doc.numPages;i++){ const page=await doc.getPage(i); const c=await page.getTextContent(); text+=' '+c.items.map(it=>it.str).join(' '); }
         data=this._extractInbodyFields(text)||{};
-
-        // A scanner app gives you a photograph wrapped in a PDF: one image, no text layer at
-        // all. pdf.js finds nothing there, and the coach was told to type the whole sheet in.
-        // If a PDF yields no weight, draw the page and read the picture instead.
         if(data.weight==null){
-          this.setState({profileIbMsg:'No text in that PDF — reading it as a picture, this takes a few seconds'});
-          if(!window.Tesseract) await this._loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.0/tesseract.min.js', 20000);
-          if(window.Tesseract){
-            let ocr='';
-            const pages=Math.min(doc.numPages, 2);   // an InBody sheet is one page; two is generous
-            for(let i=1;i<=pages;i++){
-              const page=await doc.getPage(i);
-              // 2x: enough for the small print in Research Parameters without asking a phone
-              // to hold a needlessly large canvas.
-              const vp=page.getViewport({scale:2});
-              const cv=document.createElement('canvas'); cv.width=Math.round(vp.width); cv.height=Math.round(vp.height);
-              await page.render({canvasContext:cv.getContext('2d'), viewport:vp}).promise;
-              const out=await window.Tesseract.recognize(cv, 'eng');
-              ocr+=' '+((out&&out.data&&out.data.text)||'');
-              cv.width=cv.height=0;                  // let the phone have the memory back
-            }
-            data=this._extractInbodyFields(ocr)||{};
-            fromPhoto=true;                          // read from a picture — a person checks it
-          }
+          const page=await doc.getPage(1);
+          const vp=page.getViewport({scale:2});
+          const cv=document.createElement('canvas'); cv.width=Math.round(vp.width); cv.height=Math.round(vp.height);
+          await page.render({canvasContext:cv.getContext('2d'), viewport:vp}).promise;
+          picture=cv.toDataURL('image/jpeg', 0.85); cv.width=cv.height=0;
         }
       }
-    }catch(err){}
+
+      if(picture){
+        fromPhoto=true;
+        // The server reads it in one request and reads it the way a person does. In-browser
+        // OCR has to fetch a worker, a core and a language model first, which is why it hung.
+        this.setState({profileIbMsg:'Reading the sheet…'});
+        const viaServer=await this._readSheetOnServer(picture);
+        if(viaServer && Object.keys(viaServer).length){ data=viaServer; }
+        else {
+          this.setState({profileIbMsg: viaServer ? 'Reading the sheet… (nothing found yet, trying again on the device)' : 'Reading the sheet on this device… this takes up to a minute'});
+          try{
+            const ocr=await this._ocrSheet(picture, 45);
+            data=this._extractInbodyFields(ocr)||{};
+          }catch(err){ data={}; }
+        }
+      }
+    }catch(err){ data=data||{}; }
     const readCount=Object.keys(data).filter(k=>data[k]!=null).length;
 
     // Read off a photograph, these are a machine's guess at what a picture says. A misread
@@ -7083,8 +7126,8 @@ class Component extends DCLogic {
         ibPending:{ fileUrl:fileUrl||null, fileName:file.name||'', extra:data, testDate:data.testDate||null },
         profileIbBusy:false,
         profileIbMsg: !fileUrl ? 'The photo could not be uploaded \u2014 check your connection.'
-          : readCount ? ('Read '+readCount+' value'+(readCount===1?'':'s')+' off the photo. Check them against the sheet, then Save \u2014 nothing is on the record yet.')
-          : 'Photo saved to the report, but nothing could be read off it. Type the values in and Save.' });
+          : readCount ? ('Read '+readCount+' value'+(readCount===1?'':'s')+' off the sheet. Check them against the paper, then Save \u2014 nothing is on the record yet.')
+          : 'The sheet is saved to the record, but nothing could be read off it. Type the values in and Save. (If this keeps happening, ANTHROPIC_API_KEY is not set — see DEVELOPMENT.md.)' });
       return;
     }
 
@@ -11357,11 +11400,30 @@ class Component extends DCLogic {
       ...(()=>{ const meta=this._swMeta(swObj.id); const S2=S;
         const sponsorOn=!!meta.sponsored;
         const docBirth=meta.docs.birth||null, docId=meta.docs.id||null, docMedical=meta.docs.medical||null;
-        const inbodyRows=(meta.inbody||[]).slice(0,6).map((r,i)=>({
-          dateLabel:this.shortDate(r.date.split('-').reverse().join('/')),
-          weight: r.weight!=null?(r.weight+' kg'):'—', fat: r.fat!=null?(r.fat+'% fat'):'—', muscle: r.muscle!=null?(r.muscle+' kg muscle'):'—',
-          hasFile:!!r.fileUrl, onViewFile: r.fileUrl? ()=>this._openUrl(r.fileUrl) : ()=>{},
-          onDelete:()=>this.deleteInbody(swObj.id, i) }));
+        // The whole sheet, not three numbers off it. Everything the import reads was being
+        // stored and then never shown, so a coach had no way to see the body water, the phase
+        // angle or the InBody score they had just imported.
+        const IB_FIELDS=[
+          ['bmi','BMI',''], ['score','InBody score','/100'], ['bodyFatMass','Body fat mass',' kg'],
+          ['ffm','Fat free mass',' kg'], ['slm','Soft lean mass',' kg'], ['tbw','Total body water',' L'],
+          ['icw','Intracellular water',' L'], ['ecw','Extracellular water',' L'], ['ecwRatio','ECW ratio',''],
+          ['protein','Protein',' kg'], ['minerals','Minerals',' kg'], ['boneMineral','Bone mineral',' kg'],
+          ['bodyCellMass','Body cell mass',' kg'], ['bmr','Basal metabolic rate',' kcal'],
+          ['visceralFat','Visceral fat area',''], ['whr','Waist-hip ratio',''],
+          ['obesityDegree','Obesity degree',' %'], ['smi','SMI',' kg/m²'], ['phaseAngle','Phase angle','°'],
+        ];
+        const inbodyRows=(meta.inbody||[]).slice(0,6).map((r,i)=>{
+          const detail=IB_FIELDS.filter(f=>r[f[0]]!=null).map(f=>({label:f[1], value:String(r[f[0]])+f[2]}));
+          const open=S.ibOpen===(swObj.id+'::'+i);
+          return {
+            dateLabel:this.shortDate(r.date.split('-').reverse().join('/')),
+            weight: r.weight!=null?(r.weight+' kg'):'—', fat: r.fat!=null?(r.fat+'% fat'):'—', muscle: r.muscle!=null?(r.muscle+' kg muscle'):'—',
+            detail, hasDetail:detail.length>0, open,
+            moreLabel: open ? 'Hide the full sheet' : ('Show all '+(detail.length+3)+' readings'),
+            onToggle:()=>this.setState({ibOpen: open?null:(swObj.id+'::'+i)}),
+            hasFile:!!r.fileUrl, onViewFile: r.fileUrl? ()=>this._openUrl(r.fileUrl) : ()=>{},
+            onDelete:()=>this.deleteInbody(swObj.id, i) };
+        });
         return {
           sponsorOn, sponsorBg: sponsorOn?'linear-gradient(135deg,#7A5A12,#C89B3C)':'#EEF1F5', sponsorFg: sponsorOn?'#fff':'#7A8296', sponsorLabel: sponsorOn?'VIP Sponsored athlete':'Mark as sponsored',
           onToggleSponsor:()=>this.toggleSponsor(swObj.id),
