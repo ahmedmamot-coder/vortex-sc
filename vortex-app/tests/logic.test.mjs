@@ -856,6 +856,49 @@ describe("expired session", () => {
   });
 });
 
+/* ----------------------------------------------------------- the club's week
+   Qatar: the training week runs Saturday → Friday. Get this wrong and every
+   calendar is shifted by two columns and every "this week" total counts the
+   wrong days — quietly, in a way that looks plausible. */
+describe("club week", () => {
+  const ctx = {};
+  const dow = bind("_dowIndex", ctx, ["_weekStartDow"]);
+  const weekStart = bind("_weekStartISO", ctx, ["_dowIndex", "_weekStartDow"]);
+  const labels = bind("_weekdayLabels", ctx);
+  const d = (iso) => new Date(iso + "T00:00:00");
+
+  it("Saturday is the first day", () => eq(dow(d("2026-08-08")), 0));
+  it("Sunday is the second", () => eq(dow(d("2026-08-09")), 1));
+  it("Monday is the third", () => eq(dow(d("2026-08-10")), 2));
+  it("Friday is the last", () => eq(dow(d("2026-08-14")), 6));
+  it("every day of the week has its own column", () => {
+    const seen = [0, 1, 2, 3, 4, 5, 6].map((k) => dow(d("2026-08-" + String(8 + k).padStart(2, "0"))));
+    eq(seen, [0, 1, 2, 3, 4, 5, 6]);
+  });
+
+  it("a Saturday is its own week start", () => eq(weekStart("2026-08-08"), "2026-08-08"));
+  it("Sunday belongs to the Saturday before it", () => eq(weekStart("2026-08-09"), "2026-08-08"));
+  it("Friday belongs to the Saturday six days back", () => eq(weekStart("2026-08-14"), "2026-08-08"));
+  it("the next Saturday starts a new week", () => eq(weekStart("2026-08-15"), "2026-08-15"));
+  it("a week start can cross into the previous month", () => eq(weekStart("2026-09-01"), "2026-08-29"));
+  it("and into the previous year", () => eq(weekStart("2026-01-01"), "2025-12-27"));
+
+  it("the labels start on Saturday", () => eq(labels()[0], "Sa"));
+  it("and end on Friday", () => eq(labels()[6], "F"));
+  it("there are seven of them", () => eq(labels().length, 7));
+
+  // Every calendar and weekly total must read the week from that one place, or one of them
+  // will quietly drift back to Monday the next time somebody edits it.
+  it("no Monday-first arithmetic is left anywhere", () =>
+    eq((SOURCE.match(/getDay\(\)\+6\)%7/g) || []).length, 0));
+  it("no hardcoded Monday-first weekday strip is left", () =>
+    eq(SOURCE.includes("['M','T','W','T','F','S','S']"), false));
+  it("the admin chart is measured, not a fixed array", () =>
+    eq(SOURCE.includes("[38,42,31,46,40,52,22]"), false, "invented numbers that never moved"));
+  it("the attendance ring is measured, not a fixed 87%", () =>
+    eq(SOURCE.includes("pct:'87%'"), false));
+});
+
 /* ------------------------------------------------------------- sign-in speed
    Signing in used to reload the whole page and then read the club's entire
    attendance history before showing anything. On mobile data that is the
