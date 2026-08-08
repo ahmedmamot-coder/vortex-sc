@@ -5759,8 +5759,12 @@ class Component extends DCLogic {
     };
   }
   // Every string resolved for the current language in one object, so the template reads
-  // {{ t.tabFees }} and an untranslated key quietly falls back to English rather than blank.
-  _t(){
+  // {{ tx.tabFees }} and an untranslated key quietly falls back to English rather than blank.
+  //
+  // Deliberately NOT called _t: _icons() parks a setTimeout id in this._t, and an instance
+  // property shadows the prototype method — so this._t() came out as "486 is not a function"
+  // and took the whole app down with it.
+  _strings(){
     const i=this._lang()==='ar'?1:0; const dict=this._i18n(); const out={};
     Object.keys(dict).forEach(k=>{ out[k]=dict[k][i] || dict[k][0]; });
     return out;
@@ -10343,7 +10347,7 @@ class Component extends DCLogic {
     };
 
     return {
-      tx:this._t(),
+      tx:this._strings(),
       langIsAr: this._lang()==='ar', langIsEn: this._lang()!=='ar',
       onLangEn:()=>this.setLang('en'), onLangAr:()=>this.setLang('ar'),
       langEnBg: this._lang()!=='ar' ? 'rgba(255,255,255,.9)' : 'transparent',

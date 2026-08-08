@@ -130,6 +130,23 @@ describe("shipped source", () => {
     eq(/f\.pass\|\|''\)\)\.trim\(\)===\(pass/.test(SOURCE), false, "auth bypass"));
   it("attendance is never invented", () =>
     eq(SOURCE.includes("seededDayStatus(squadId"), false, "fabricated history"));
+
+  // The app is one enormous class, so a new method can silently collide with a field the
+  // constructor or a timer already parks on `this`. The instance property wins, and the
+  // method becomes whatever that field holds — which is how `this._t()` shipped as
+  // "486 is not a function" and white-screened the live site. Nothing catches this at
+  // parse time and unit tests bind methods onto a bare object where the field never exists,
+  // so it has to be checked against the shipped source.
+  it("no method name is shadowed by a field on the same instance", () => {
+    const body = SOURCE.slice(SOURCE.indexOf("class Component"));
+    const methods = new Set(
+      [...body.matchAll(/^ {2}(?:async )?([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{/gm)].map((m) => m[1]),
+    );
+    for (const skip of ["if", "for", "while", "switch", "catch", "return", "constructor"]) methods.delete(skip);
+    const assigned = new Set([...body.matchAll(/\bthis\.([A-Za-z_$][\w$]*)\s*=(?!=)/g)].map((m) => m[1]));
+    const clashes = [...methods].filter((n) => assigned.has(n));
+    eq(clashes, [], "these methods are overwritten by a value on `this` and stop being callable");
+  });
   it("template conditionals stay balanced", () => {
     const o = (SOURCE.match(/<sc-if/g) || []).length, c = (SOURCE.match(/<\/sc-if>/g) || []).length;
     eq(o - c, -2, "sc-if open/close delta");
@@ -215,7 +232,7 @@ describe("arabic", () => {
   it("and wins the other way too", () => eq(langOf(ctx("ar", "en")), "en"));
   it("a junk stored value does not leave the app in no language", () => eq(langOf(ctx("en", "klingon")), "en"));
 
-  const t = (c) => bind("_t", c, ["_i18n", "_lang", "_langKey"])();
+  const t = (c) => bind("_strings", c, ["_i18n", "_lang", "_langKey"])();
   it("Arabic really is Arabic", () => eq(/[؀-ۿ]/.test(t(ctx("ar")).tabFees), true));
   it("English really is English", () => eq(t(ctx("en")).tabFees, "Fees"));
   it("the fees tab a parent taps is translated", () => eq(t(ctx("ar")).tabFees !== "Fees", true));
