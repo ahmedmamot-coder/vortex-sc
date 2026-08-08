@@ -3168,6 +3168,8 @@ if ('serviceWorker' in navigator) {
                       <sc-if value="{{ videoAddOpen }}" hint-placeholder-val="{{ false }}">
                         <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:15px;box-shadow:0 2px 7px rgba(11,20,40,.05);display:flex;flex-direction:column;gap:8px">
                           <input value="{{ videoUrlDraft }}" oninput="{{ onVideoUrlDraft }}" placeholder="YouTube / Vimeo / .mp4 link (https://…)" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:10px 12px;font-family:inherit;font-size:13px;color:#0C1116;outline:none">
+                          <sc-if value="{{ videoUploadMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:0 0 7px;background:#EEF4FF;border:1px solid #D4E2FB;border-radius:10px;padding:8px 10px;font-size:11.5px;color:#1B4CA1;line-height:1.5">{{ videoUploadMsg }}</p></sc-if>
+                          <sc-if value="{{ videoDeviceOnly }}" hint-placeholder-val="{{ false }}"><p style="margin:0 0 7px;background:#FBF0DD;border:1px solid #F0D9A8;border-radius:10px;padding:8px 10px;font-size:11.5px;color:#7A5A0C;line-height:1.5">This clip is on this device only — it will be gone when the app closes, and the splits will have nothing to point at.</p></sc-if>
                           <sc-if value="{{ videoUrlErrShow }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:11.5px;color:#B42318;font-weight:600">{{ videoUrlErr }}</p></sc-if>
                           <input value="{{ videoTitleDraft }}" oninput="{{ onVideoTitleDraft }}" placeholder="Title e.g. 100m Free · lane 4 · Sara K." style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:10px 12px;font-family:inherit;font-size:13px;color:#0C1116;outline:none">
                           <input value="{{ videoTagDraft }}" oninput="{{ onVideoTagDraft }}" placeholder="Tag e.g. Meet name / event (optional)" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:10px 12px;font-family:inherit;font-size:13px;color:#0C1116;outline:none">
@@ -7489,12 +7491,34 @@ class Component extends DCLogic {
     this.videoLib=[rec, ...this.videoLib]; this._saveJSON('vx_videos', this.videoLib);
     this.setState({videoAddOpen:false, videoUrlDraft:'', videoTitleDraft:'', videoTagDraft:'', videoActiveId:rec.id, videoRate:1, videoUrlErr:''});
   }
-  videoUploadFile(e){
+  // An uploaded video used to become a blob: URL — a pointer that lives only in the tab that
+  // made it. The coach analysed the race, captured the splits, wrote the notes, closed the app,
+  // and the video was gone: the splits and notes survived, pointing at nothing. It goes to the
+  // club's media storage now, so the recording belongs to the club rather than to one phone.
+  async videoUploadFile(e){
     const file=e.target.files && e.target.files[0]; e.target.value=''; if(!file) return;
-    const url=URL.createObjectURL(file);
-    const rec={id:this._uid('vid'), url, kind:'mp4', vid:url, title:file.name.replace(/\.[^.]+$/,''), tag:'Uploaded from device', laps:[], notes:[], raceType:'100', _isBlob:true};
+    const id=this._uid('vid');
+    const local=URL.createObjectURL(file);
+    const rec={id, url:local, kind:'mp4', vid:local, title:file.name.replace(/\.[^.]+$/,''),
+      tag:'Uploading…', laps:[], notes:[], raceType:'100', _isBlob:true};
     this.videoLib=[rec, ...this.videoLib];
-    this.setState({videoActiveId:rec.id, videoRate:1});
+    // Play it from the device straight away — the upload runs behind, so nobody waits at the
+    // poolside for a hundred megabytes before they can look at the swim.
+    const mb=Math.round((file.size||0)/104857.6)/10;
+    this.setState({videoActiveId:id, videoRate:1, videoUploadMsg:'Uploading '+mb+'MB — you can start marking splits now.'});
+    if(!window.__vxUploadFile) return this.setState({videoUploadMsg:'Saved on this device only — it will be gone when the app closes.'});
+    const ext=((file.name.match(/\.([a-z0-9]+)$/i)||[])[1]||'mp4').toLowerCase();
+    let url=null; try{ url=await window.__vxUploadFile('videos/'+id+'.'+ext, file); }catch(err){ url=null; }
+    if(!url){
+      const why=window.__vxUploadErr||'';
+      this.setState({videoUploadMsg:'Could not upload'+(why?(' — '+why):'')+
+        ((file.size||0) > 50*1024*1024 ? '. At '+mb+'MB it is probably over the storage limit — trim the clip, or paste a YouTube link instead.' : '.')+
+        ' This video is on this device only and will be lost when the app closes.'});
+      return;
+    }
+    this.videoLib=this.videoLib.map(v=>v.id===id?{...v, url, vid:url, tag:'Uploaded from device', _isBlob:false}:v);
+    this._saveJSON('vx_videos', this.videoLib);   // only now is it safe to keep — the URL outlives the tab
+    this.setState({videoUploadMsg:'Uploaded ✓ — saved to the club, and the splits will keep.'});
   }
   videoSplitLabels(raceType){
     const lengths=Math.max(1, Math.round((parseInt(raceType,10)||100)/50));
@@ -10326,7 +10350,10 @@ class Component extends DCLogic {
     const videoSplitsDone = activeVid ? (activeVid.laps||[]).length : 0;
     const videoSplitsTotal = activeVid ? this.videoSplitLabels(activeVid.raceType||'100').length : 0;
     const videoAllSplitsDone = activeVid ? videoSplitsDone>=videoSplitsTotal : false;
-    const videoIsUploaded = activeVid ? !!activeVid._isBlob : false;
+    // _isBlob means it lives only in this tab, so it is the opposite of uploaded. Read the
+    // wrong way round, this told a coach a device-only clip was safely stored.
+    const videoIsUploaded = activeVid ? !activeVid._isBlob : false;
+    const videoDeviceOnly = activeVid ? !!activeVid._isBlob : false;
     const videoCanDownload = activeVid && activeVid.kind==='mp4';
 
     // ---- Fitness Plan ----
@@ -12021,7 +12048,8 @@ class Component extends DCLogic {
       onPlayerMount,
       videoRateOptions, onVideoAddLap:()=>this.videoAddLap(), videoHasLaps, videoNoLaps: !videoHasLaps, onVideoClearLaps: activeVid?()=>this.videoClearLaps(activeVid.id):null,
       raceTypeOptions, nextSplitLabel, videoSplitsDone, videoSplitsTotal, videoAllSplitsDone, videoSplitsRemaining: !videoAllSplitsDone,
-      videoIsUploaded, videoCanDownload, activeVideoDownloadUrl: activeVid?activeVid.url:'', activeVideoDownloadName: activeVid?(activeVid.title||'clip')+'.mp4':'clip.mp4',
+      videoIsUploaded, videoDeviceOnly, videoCanDownload,
+      videoUploadMsg:S.videoUploadMsg||'', videoUploadMsgShow:!!S.videoUploadMsg, activeVideoDownloadUrl: activeVid?activeVid.url:'', activeVideoDownloadName: activeVid?(activeVid.title||'clip')+'.mp4':'clip.mp4',
       onVideoUploadClick:()=>{ const el=document.getElementById('vx-video-upload'); if(el) el.click(); },
       onVideoUploadChange:(e)=>this.videoUploadFile(e),
       onYoutubeQuickOpen:()=>this.setState({videoAddOpen:true, videoUrlDraft:'https://www.youtube.com/watch?v='}),

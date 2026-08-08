@@ -170,6 +170,20 @@ describe("shipped source", () => {
   it("the icon paths do not depend on the page's URL", () =>
     eq(/apple-touch-icon" href="assets\//.test(SOURCE), false, "a relative icon path resolves against whatever URL was opened"));
 
+  // A blob: URL lives only in the tab that made it. Keeping a video record that points at
+  // one is keeping a reference to something already gone — with the splits and notes still
+  // attached to it.
+  it("a video is only kept once it has a URL that outlives the tab", () => {
+    const fn = SOURCE.slice(SOURCE.indexOf("async videoUploadFile"), SOURCE.indexOf("videoSplitLabels"));
+    const saveAt = fn.indexOf("_saveJSON('vx_videos'");
+    const clearAt = fn.indexOf("_isBlob:false");
+    eq(saveAt > -1 && clearAt > -1 && clearAt < saveAt, true, "it must be uploaded before it is saved");
+  });
+  it("a failed upload says the video will be lost, rather than nothing", () =>
+    eq(/on this device only and will be lost/.test(SOURCE), true));
+  it("'uploaded' is not read from the flag that means the opposite", () =>
+    eq(/videoIsUploaded = activeVid \? !activeVid\._isBlob/.test(SOURCE), true));
+
   it("no method name is shadowed by a field on the same instance", () => {
     const body = SOURCE.slice(SOURCE.indexOf("class Component"));
     const methods = new Set(
