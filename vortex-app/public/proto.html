@@ -35,7 +35,7 @@ if ('serviceWorker' in navigator) {
   var REST = SB_URL + "/rest/v1/club_state";
   var HEAD = { "apikey": SB_ANON, "Authorization": "Bearer " + SB_ANON, "Content-Type": "application/json" };
   // Every shared data type the club edits. The only key kept per-device is vx_api_key.
-  var SYNC = ["vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_meet_events","vx_meet_cuts","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_sw_status","vx_memberships","vx_fee_plans"];
+  var SYNC = ["vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_meet_events","vx_meet_cuts","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_sw_status","vx_memberships","vx_fee_plans","vx_billing","vx_race_splits"];
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
   // Auth-retry queue: if a write is rejected because we weren't signed in yet (401/403 under the
@@ -530,6 +530,21 @@ if ('serviceWorker' in navigator) {
   @font-face{font-family:"Funnel Display";src:url("assets/a8e6b0d8.ttf") format("truetype");font-weight:700;font-display:swap}
   *{box-sizing:border-box}
   body{margin:0;font-family:"Funnel Display",system-ui,sans-serif;background:#070C16;-webkit-font-smoothing:antialiased}
+  /* Arabic. Funnel Display has no Arabic glyphs, so without a fallback every Arabic string
+     renders as boxes. The direction itself is set on <html>, which lets the browser's own
+     bidi handling flip the rows, the inputs and the scrollers together. */
+  [dir="rtl"] body, [lang="ar"] body,
+  [dir="rtl"] input, [dir="rtl"] select, [dir="rtl"] textarea, [dir="rtl"] button{
+    font-family:"Funnel Display","Noto Naskh Arabic","Geeza Pro","Segoe UI",system-ui,sans-serif;
+  }
+  /* Letter-spacing pulls Arabic letters out of their joins, so the word stops being a word.
+     The uppercase eyebrow labels are the ones that set it. */
+  [dir="rtl"] *{letter-spacing:normal !important}
+  /* Times, distances and money stay left-to-right inside an Arabic sentence: "1:05.80"
+     must not come out as "80.05:1". */
+  [dir="rtl"] [style*="font-mono"]{direction:ltr;unicode-bidi:isolate}
+  /* The language chips read the same either way round. */
+  [dir="rtl"] [lang="en"]{direction:ltr;unicode-bidi:isolate}
   /* iOS zooms the whole page in whenever you focus a field whose text is smaller than
      16px — and it never zooms back out, which is why the app felt stuck zoomed after
      typing. Keeping every field at 16px on touch devices stops it happening at all.
@@ -591,56 +606,62 @@ if ('serviceWorker' in navigator) {
             <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,15,26,.55) 0%,rgba(10,15,26,.35) 22%,rgba(10,15,26,.55) 55%,#0A0F1A 88%)"></div>
             <div class="vx-scroll" style="position:relative;padding:calc(max(env(safe-area-inset-top), 40px) + 20px) 26px calc(env(safe-area-inset-bottom) + 40px);display:flex;flex-direction:column;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch">
               <img src="assets/b798adf9.png" alt="" style="width:52px;height:52px">
-              <h1 style="font-size:31px;font-weight:700;letter-spacing:-.02em;margin:18px 0 4px;line-height:1.04">Welcome back.</h1>
-              <p style="margin:0;color:rgba(255,255,255,.6);font-size:14px;line-height:1.45;max-width:272px">Vortex SC — squad management for the technical team, coaches &amp; families.</p>
+              <h1 style="font-size:31px;font-weight:700;letter-spacing:-.02em;margin:18px 0 4px;line-height:1.04">{{ tx.welcomeBack }}</h1>
+              <p style="margin:0;color:rgba(255,255,255,.6);font-size:14px;line-height:1.45;max-width:272px">{{ tx.tagline }}</p>
 
               <sc-if value="{{ loginAccounts }}" hint-placeholder-val="{{ true }}">
                 <div class="vx-screen" style="margin-top:30px;display:flex;flex-direction:column;gap:12px">
-                  <p style="font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.42);margin:0 0 2px">Staff sign in</p>
-                  <input id="vx-login-user" value="{{ loginUser }}" oninput="{{ onLoginUser }}" placeholder="Username" autocapitalize="none" autocorrect="off" autocomplete="off" spellcheck="false" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
-                  <input id="vx-login-pin" value="{{ loginPinVal }}" oninput="{{ onLoginPin }}" type="password" placeholder="PIN" autocapitalize="none" autocorrect="off" autocomplete="off" spellcheck="false" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
+                  <p style="font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.42);margin:0 0 2px">{{ tx.staffSignIn }}</p>
+                  <input id="vx-login-user" value="{{ loginUser }}" oninput="{{ onLoginUser }}" placeholder="{{ tx.username }}" autocapitalize="none" autocorrect="off" autocomplete="off" spellcheck="false" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
+                  <input id="vx-login-pin" value="{{ loginPinVal }}" oninput="{{ onLoginPin }}" type="password" placeholder="{{ tx.pinLabel }}" autocapitalize="none" autocorrect="off" autocomplete="off" spellcheck="false" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
                   <sc-if value="{{ loginErrShow }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:12px;color:#FF8A8D;font-weight:600">{{ loginErr }}</p></sc-if>
                   <button onclick="{{ onLoginSubmit }}" style="background:var(--vx-blue);color:#fff;border:none;border-radius:13px;padding:13px;font-family:inherit;font-weight:700;font-size:14px;cursor:pointer">Sign in</button>
-                  <button onclick="{{ onGoFamily }}" style="margin-top:6px;display:flex;align-items:center;justify-content:center;gap:9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:12px;cursor:pointer;color:#fff;font-family:inherit"><i data-lucide="users" style="width:16px;height:16px"></i><span style="font-size:13px;font-weight:600">Parent or swimmer? Sign in / register</span></button>
+                  <button onclick="{{ onGoFamily }}" style="margin-top:6px;display:flex;align-items:center;justify-content:center;gap:9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:12px;cursor:pointer;color:#fff;font-family:inherit"><i data-lucide="users" style="width:16px;height:16px"></i><span style="font-size:13px;font-weight:600">{{ tx.familyCta }}</span></button>
                 </div>
               </sc-if>
 
               <sc-if value="{{ loginFamily }}" hint-placeholder-val="{{ false }}">
                 <div class="vx-screen" data-screen-label="Family login" style="margin-top:24px;display:flex;flex-direction:column;gap:14px;padding-bottom:20px">
-                  <button onclick="{{ onBackAccounts }}" style="align-self:flex-start;display:flex;align-items:center;gap:7px;background:none;border:none;color:rgba(255,255,255,.6);cursor:pointer;font-size:12.5px;font-family:inherit;padding:0"><i data-lucide="arrow-left" style="width:15px;height:15px"></i>Back</button>
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                    <button onclick="{{ onBackAccounts }}" style="display:flex;align-items:center;gap:7px;background:none;border:none;color:rgba(255,255,255,.6);cursor:pointer;font-size:12.5px;font-family:inherit;padding:0"><i data-lucide="arrow-left" style="width:15px;height:15px"></i>{{ tx.back }}</button>
+                    <span style="display:flex;gap:3px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:3px">
+                      <button onclick="{{ onLangEn }}" lang="en" style="background:{{ langEnBg }};color:{{ langEnFg }};border:none;border-radius:999px;padding:4px 11px;font-family:inherit;font-size:11px;font-weight:700;cursor:pointer">EN</button>
+                      <button onclick="{{ onLangAr }}" lang="ar" style="background:{{ langArBg }};color:{{ langArFg }};border:none;border-radius:999px;padding:4px 11px;font-family:inherit;font-size:11px;font-weight:700;cursor:pointer">عربي</button>
+                    </span>
+                  </div>
                   <div style="display:flex;gap:6px;background:rgba(255,255,255,.06);border-radius:12px;padding:4px">
-                    <button onclick="{{ onFamTabLogin }}" style="flex:1;padding:9px;border-radius:9px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;background:{{ famTabLoginBg }};color:{{ famTabLoginFg }}">Sign in</button>
-                    <button onclick="{{ onFamTabRegister }}" style="flex:1;padding:9px;border-radius:9px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;background:{{ famTabRegBg }};color:{{ famTabRegFg }}">Register</button>
+                    <button onclick="{{ onFamTabLogin }}" style="flex:1;padding:9px;border-radius:9px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;background:{{ famTabLoginBg }};color:{{ famTabLoginFg }}">{{ tx.signIn }}</button>
+                    <button onclick="{{ onFamTabRegister }}" style="flex:1;padding:9px;border-radius:9px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;background:{{ famTabRegBg }};color:{{ famTabRegFg }}">{{ tx.register }}</button>
                   </div>
 
                   <sc-if value="{{ famIsRegister }}" hint-placeholder-val="{{ false }}">
                     <div style="display:flex;gap:8px">
-                      <button onclick="{{ onFamRoleParent }}" style="flex:1;padding:10px;border-radius:11px;border:1px solid rgba(255,255,255,.16);cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;background:{{ famRoleParentBg }};color:{{ famRoleParentFg }}">I'm a parent</button>
-                      <button onclick="{{ onFamRoleSwimmer }}" style="flex:1;padding:10px;border-radius:11px;border:1px solid rgba(255,255,255,.16);cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;background:{{ famRoleSwimmerBg }};color:{{ famRoleSwimmerFg }}">I'm a swimmer</button>
+                      <button onclick="{{ onFamRoleParent }}" style="flex:1;padding:10px;border-radius:11px;border:1px solid rgba(255,255,255,.16);cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;background:{{ famRoleParentBg }};color:{{ famRoleParentFg }}">{{ tx.imParent }}</button>
+                      <button onclick="{{ onFamRoleSwimmer }}" style="flex:1;padding:10px;border-radius:11px;border:1px solid rgba(255,255,255,.16);cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;background:{{ famRoleSwimmerBg }};color:{{ famRoleSwimmerFg }}">{{ tx.imSwimmer }}</button>
                     </div>
-                    <input value="{{ famName }}" oninput="{{ onFamName }}" placeholder="Full name" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
-                    <input value="{{ famPhone }}" oninput="{{ onFamPhone }}" placeholder="WhatsApp number (e.g. +974 5555 1234)" type="tel" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
+                    <input value="{{ famName }}" oninput="{{ onFamName }}" placeholder="{{ tx.fullName }}" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
+                    <input value="{{ famPhone }}" oninput="{{ onFamPhone }}" placeholder="{{ tx.whatsapp }}" type="tel" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
                   </sc-if>
 
                   <sc-if value="{{ famShowEmail }}" hint-placeholder-val="{{ true }}">
-                    <input value="{{ famEmail }}" oninput="{{ onFamEmail }}" placeholder="Email" type="email" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
+                    <input value="{{ famEmail }}" oninput="{{ onFamEmail }}" placeholder="{{ tx.email }}" type="email" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
                   </sc-if>
                   <sc-if value="{{ famIsForgot }}" hint-placeholder-val="{{ false }}">
-                    <p style="margin:0;font-size:12px;color:rgba(255,255,255,.65);line-height:1.5">Enter your email and we'll send you a secure link to reset your password.</p>
+                    <p style="margin:0;font-size:12px;color:rgba(255,255,255,.65);line-height:1.5">{{ tx.forgotHint }}</p>
                   </sc-if>
                   <sc-if value="{{ famIsSetnew }}" hint-placeholder-val="{{ false }}">
-                    <p style="margin:0;font-size:12px;color:rgba(255,255,255,.65);line-height:1.5">Choose a new password for your account below, then tap Set new password.</p>
+                    <p style="margin:0;font-size:12px;color:rgba(255,255,255,.65);line-height:1.5">{{ tx.setnewHint }}</p>
                   </sc-if>
                   <sc-if value="{{ famShowPass }}" hint-placeholder-val="{{ true }}">
                     <input value="{{ famPass }}" oninput="{{ onFamPass }}" placeholder="{{ famPassPlaceholder }}" type="password" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
                   </sc-if>
                   <sc-if value="{{ famShowConfirm }}" hint-placeholder-val="{{ false }}">
-                    <input value="{{ famPass2 }}" oninput="{{ onFamPass2 }}" placeholder="Confirm password" type="password" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
+                    <input value="{{ famPass2 }}" oninput="{{ onFamPass2 }}" placeholder="{{ tx.confirmPassword }}" type="password" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
                   </sc-if>
                   <sc-if value="{{ famIsLogin }}" hint-placeholder-val="{{ true }}">
-                    <button onclick="{{ onFamForgot }}" style="align-self:flex-end;background:none;border:none;color:rgba(255,255,255,.6);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;padding:0">Forgot password?</button>
+                    <button onclick="{{ onFamForgot }}" style="align-self:flex-end;background:none;border:none;color:rgba(255,255,255,.6);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;padding:0">{{ tx.forgot }}</button>
                   </sc-if>
-                  <sc-if value="{{ famResetOkShow }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:12px;color:#22D7D7;font-weight:600">Check your email — we sent you a link to reset your password.</p></sc-if>
+                  <sc-if value="{{ famResetOkShow }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:12px;color:#22D7D7;font-weight:600">{{ tx.resetSent }}</p></sc-if>
                   <sc-if value="{{ famRegisteredMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:12px;color:#22D7D7;font-weight:600;line-height:1.5">{{ famRegisteredMsg }}</p></sc-if>
 
                   <sc-if value="{{ famIsRegister }}" hint-placeholder-val="{{ false }}">
@@ -657,13 +678,13 @@ if ('serviceWorker' in navigator) {
                       </div>
                       <sc-if value="{{ famVerifyShow }}" hint-placeholder-val="{{ false }}">
                         <div style="margin-top:10px;padding:12px;background:rgba(255,255,255,.06);border:1px solid rgba(127,196,255,.35);border-radius:13px">
-                          <p style="margin:0 0 3px;font-size:12px;font-weight:700;color:#fff">Confirm {{ famVerifyName }}</p>
+                          <p style="margin:0 0 3px;font-size:12px;font-weight:700;color:#fff">{{ tx.confirmWord }} {{ famVerifyName }}</p>
                           <p style="margin:0 0 9px;font-size:11px;color:rgba(255,255,255,.6);line-height:1.5">{{ famVerifyQuestion }}</p>
                           <input value="{{ famVerifyInput }}" oninput="{{ onFamVerifyInput }}" placeholder="{{ famVerifyPlaceholder }}" style="width:100%;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.18);border-radius:10px;padding:10px 12px;color:#fff;font-family:var(--font-mono);font-size:13px;outline:none;box-sizing:border-box;margin-bottom:8px">
                           <sc-if value="{{ famVerifyErrShow }}" hint-placeholder-val="{{ false }}"><p style="margin:0 0 8px;font-size:11px;color:#FF8A8D;font-weight:600;line-height:1.4">{{ famVerifyErr }}</p></sc-if>
                           <div style="display:flex;gap:7px">
-                            <button onclick="{{ onFamVerifyConfirm }}" style="flex:1;background:var(--vx-blue);color:#fff;border:none;border-radius:10px;padding:10px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer">Confirm &amp; link</button>
-                            <button onclick="{{ onFamVerifyCancel }}" style="flex:none;background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);border:none;border-radius:10px;padding:10px 14px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer">Cancel</button>
+                            <button onclick="{{ onFamVerifyConfirm }}" style="flex:1;background:var(--vx-blue);color:#fff;border:none;border-radius:10px;padding:10px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer">{{ tx.confirmLink }}</button>
+                            <button onclick="{{ onFamVerifyCancel }}" style="flex:none;background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);border:none;border-radius:10px;padding:10px 14px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer">{{ tx.cancel }}</button>
                           </div>
                         </div>
                       </sc-if>
@@ -684,8 +705,8 @@ if ('serviceWorker' in navigator) {
                   <sc-if value="{{ famErrShow }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:12px;color:#FF8A8D;font-weight:600">{{ famErr }}</p></sc-if>
 
                   <button onclick="{{ onFamSubmit }}" style="background:var(--vx-blue);color:#fff;border:none;border-radius:13px;padding:13px;font-family:inherit;font-weight:700;font-size:14px;cursor:pointer">{{ famSubmitLabel }}</button>
-                  <p style="margin:0;font-size:11px;color:rgba(255,255,255,.4);line-height:1.5">Read-only access to your swimmer's PBs, attendance, results and upcoming meets. No plans, no other squads.</p>
-                  <p style="margin:2px 0 0;font-size:11px;color:rgba(255,255,255,.4);line-height:1.6">By creating an account you agree to our <a href="/privacy" target="_blank" style="color:#7FC4FF;font-weight:600;text-decoration:none">Privacy Policy</a> and <a href="/consent" target="_blank" style="color:#7FC4FF;font-weight:600;text-decoration:none">Parental Consent</a>.</p>
+                  <p style="margin:0;font-size:11px;color:rgba(255,255,255,.4);line-height:1.5">{{ tx.readOnlyNote }}</p>
+                  <p style="margin:2px 0 0;font-size:11px;color:rgba(255,255,255,.4);line-height:1.6">{{ tx.consentPrefix }} <a href="/privacy" target="_blank" style="color:#7FC4FF;font-weight:600;text-decoration:none">{{ tx.privacyPolicy }}</a> {{ tx.andWord }} <a href="/consent" target="_blank" style="color:#7FC4FF;font-weight:600;text-decoration:none">{{ tx.parentalConsent }}</a>.</p>
                 </div>
               </sc-if>
 
@@ -696,7 +717,7 @@ if ('serviceWorker' in navigator) {
                     <span style="font-size:13px;font-weight:600">{{ pickedAcct.label }}</span>
                     <i data-lucide="chevrons-up-down" style="width:14px;height:14px;opacity:.5"></i>
                   </button>
-                  <p style="margin:2px 0 0;font-size:13px;color:rgba(255,255,255,.55)">Enter your PIN</p>
+                  <p style="margin:2px 0 0;font-size:13px;color:rgba(255,255,255,.55)">{{ tx.enterPin }}</p>
                   <div style="display:flex;gap:13px">
                     <sc-for list="{{ pinDots }}" as="d" hint-placeholder-count="4">
                       <span style="width:13px;height:13px;border-radius:50%;border:2px solid rgba(255,255,255,.45);background:{{ d.bg }}"></span>
@@ -988,17 +1009,21 @@ if ('serviceWorker' in navigator) {
                     <img src="assets/a4d3e396.jpg" alt="" style="position:absolute;top:-30px;right:-40px;width:78%;height:200%;object-fit:cover;opacity:.4;mix-blend-mode:screen">
                     <div style="position:relative;display:flex;align-items:center;justify-content:space-between">
                       <img src="assets/9b59d9a2.png" alt="Vortex SC" style="height:19px">
-                      <span style="display:flex;gap:8px">
+                      <span style="display:flex;align-items:center;gap:8px">
+                        <span style="display:flex;gap:3px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:999px;padding:3px">
+                          <button onclick="{{ onLangEn }}" lang="en" style="background:{{ langEnBg }};color:{{ langEnFg }};border:none;border-radius:999px;padding:4px 9px;font-family:inherit;font-size:10.5px;font-weight:700;cursor:pointer">EN</button>
+                          <button onclick="{{ onLangAr }}" lang="ar" style="background:{{ langArBg }};color:{{ langArFg }};border:none;border-radius:999px;padding:4px 9px;font-family:inherit;font-size:10.5px;font-weight:700;cursor:pointer">عربي</button>
+                        </span>
                         <button onclick="{{ onOpenNotifs }}" style="position:relative;width:36px;height:36px;border-radius:11px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer"><i data-lucide="bell" style="width:16px;height:16px"></i><sc-if value="{{ notifUnreadFam }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;top:-3px;right:-3px;min-width:15px;height:15px;padding:0 3px;border-radius:8px;background:#E64B5C;color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ notifUnreadCount }}</span></sc-if></button>
                         <button onclick="{{ onOpenSettings }}" style="width:36px;height:36px;border-radius:11px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer"><i data-lucide="settings" style="width:16px;height:16px"></i></button>
                         <button onclick="{{ onFamLogout }}" style="width:36px;height:36px;border-radius:11px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer"><i data-lucide="log-out" style="width:16px;height:16px"></i></button>
                       </span>
                     </div>
-                    <p style="position:relative;margin:16px 0 0;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:600">Welcome, {{ famPortalName }}</p>
+                    <p style="position:relative;margin:16px 0 0;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:600">{{ tx.welcome }} {{ famPortalName }}</p>
                     <div style="position:relative;display:flex;align-items:center;gap:12px;margin-top:8px">
                       <span style="position:relative;flex:none"><span style="width:50px;height:50px;border-radius:14px;background:{{ famAccent }};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px;color:#fff">{{ famSwInit }}</span><span style="position:absolute;bottom:-3px;right:-3px;width:20px;height:20px;border-radius:50%;background:{{ famGenBg }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;border:2px solid #0A0F1A">{{ famGenIcon }}</span></span>
                       <div style="flex:1;min-width:0"><h1 style="font-size:20px;font-weight:700;letter-spacing:-.02em;margin:0">{{ famSwName }}</h1><p style="margin:2px 0 0;font-size:12.5px;color:rgba(255,255,255,.6)">{{ famSwMeta }}</p></div>
-                      <button onclick="{{ onOpenVortexId }}" style="flex:none;align-self:flex-start;display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.22);border-radius:11px;padding:7px 11px;cursor:pointer;color:#fff"><i data-lucide="badge-check" style="width:15px;height:15px"></i><span style="font-size:11.5px;font-weight:700">Vortex ID</span></button>
+                      <button onclick="{{ onOpenVortexId }}" style="flex:none;align-self:flex-start;display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.22);border-radius:11px;padding:7px 11px;cursor:pointer;color:#fff"><i data-lucide="badge-check" style="width:15px;height:15px"></i><span style="font-size:11.5px;font-weight:700">{{ tx.vortexId }}</span></button>
                     </div>
                     <sc-if value="{{ famMultiKids }}" hint-placeholder-val="{{ false }}">
                       <div class="vx-scroll" style="position:relative;display:flex;gap:7px;overflow-x:auto;margin-top:14px">
@@ -1010,13 +1035,14 @@ if ('serviceWorker' in navigator) {
                   </div>
 
                   <div style="padding:14px 15px 24px">
-                    <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:5px;background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:5px;margin-bottom:14px">
-                      <button onclick="{{ onFamTabPerf }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabPerfBg }};color:{{ famTabPerfFg }}">Performance</button>
-                      <button onclick="{{ onFamTabAttend }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabAttendBg }};color:{{ famTabAttendFg }}">Attendance</button>
-                      <button onclick="{{ onFamTabResults }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabResultsBg }};color:{{ famTabResultsFg }}">Results</button>
-                      <button onclick="{{ onFamTabMeets }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabMeetsBg }};color:{{ famTabMeetsFg }}">Meets</button>
-                      <button onclick="{{ onFamTabDocs }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabDocsBg }};color:{{ famTabDocsFg }}">Documents</button>
-                      <button onclick="{{ onFamTabMsgs }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabMsgsBg }};color:{{ famTabMsgsFg }}">Coach</button>
+                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:5px;margin-bottom:14px">
+                      <button onclick="{{ onFamTabPerf }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabPerfBg }};color:{{ famTabPerfFg }}">{{ tx.tabPerf }}</button>
+                      <button onclick="{{ onFamTabAttend }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabAttendBg }};color:{{ famTabAttendFg }}">{{ tx.tabAttend }}</button>
+                      <button onclick="{{ onFamTabResults }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabResultsBg }};color:{{ famTabResultsFg }}">{{ tx.tabResults }}</button>
+                      <button onclick="{{ onFamTabMeets }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabMeetsBg }};color:{{ famTabMeetsFg }}">{{ tx.tabMeets }}</button>
+                      <button onclick="{{ onFamTabDocs }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabDocsBg }};color:{{ famTabDocsFg }}">{{ tx.tabDocs }}</button>
+                      <button onclick="{{ onFamTabFees }}" style="position:relative;padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabFeesBg }};color:{{ famTabFeesFg }}">{{ tx.tabFees }}<span style="position:absolute;top:5px;right:7px;width:6px;height:6px;border-radius:50%;background:{{ famFeesDotColor }}"></span></button>
+                      <button onclick="{{ onFamTabMsgs }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabMsgsBg }};color:{{ famTabMsgsFg }}">{{ tx.tabCoach }}</button>
                     </div>
 
                     <sc-if value="{{ famShowPerf }}" hint-placeholder-val="{{ true }}">
@@ -1035,8 +1061,8 @@ if ('serviceWorker' in navigator) {
                             </sc-for>
                           </div>
                           <div style="display:flex;gap:6px;background:#F8FAFC;border-radius:9px;padding:3px;margin-bottom:10px">
-                            <button onclick="{{ onFamCourseLcm }}" style="flex:1;padding:6px;border-radius:7px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:11px;background:{{ famCourseLcmBg }};color:{{ famCourseLcmFg }}">Long course</button>
-                            <button onclick="{{ onFamCourseScm }}" style="flex:1;padding:6px;border-radius:7px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:11px;background:{{ famCourseScmBg }};color:{{ famCourseScmFg }}">Short course</button>
+                            <button onclick="{{ onFamCourseLcm }}" style="flex:1;padding:6px;border-radius:7px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:11px;background:{{ famCourseLcmBg }};color:{{ famCourseLcmFg }}">{{ tx.longCourse }}</button>
+                            <button onclick="{{ onFamCourseScm }}" style="flex:1;padding:6px;border-radius:7px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:11px;background:{{ famCourseScmBg }};color:{{ famCourseScmFg }}">{{ tx.shortCourse }}</button>
                           </div>
                           <sc-if value="{{ famChart.hasData }}" hint-placeholder-val="{{ true }}">
                             <svg viewBox="0 0 300 96" style="width:100%;height:96px;overflow:visible">
@@ -1057,7 +1083,7 @@ if ('serviceWorker' in navigator) {
                             </div>
                           </sc-if>
                           <sc-if value="{{ famChart.noData }}" hint-placeholder-val="{{ false }}">
-                            <div style="padding:20px 0;text-align:center;font-size:12px;color:#9AA2B4">No swims recorded for this course yet.</div>
+                            <div style="padding:20px 0;text-align:center;font-size:12px;color:#9AA2B4">{{ tx.noSwims }}</div>
                           </sc-if>
                         </div>
                       </sc-if>
@@ -1066,7 +1092,7 @@ if ('serviceWorker' in navigator) {
                         <div style="background:#0A0F1A;border-radius:16px;padding:15px;box-shadow:0 8px 22px rgba(11,20,40,.18);color:#fff;position:relative;overflow:hidden;margin-bottom:16px">
                           <div style="position:absolute;top:-60px;right:-40px;width:150px;height:150px;border-radius:50%;background:radial-gradient(circle,rgba(34,215,215,.22),transparent 70%);pointer-events:none"></div>
                           <div style="position:relative;display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-                            <div style="display:flex;align-items:center;gap:8px"><i data-lucide="activity" style="width:16px;height:16px;color:#22D7D7"></i><span style="font-size:12.5px;font-weight:700">Recovery</span></div>
+                            <div style="display:flex;align-items:center;gap:8px"><i data-lucide="activity" style="width:16px;height:16px;color:#22D7D7"></i><span style="font-size:12.5px;font-weight:700">{{ tx.recovery }}</span></div>
                             <span style="font-size:10px;color:rgba(255,255,255,.5)">{{ famWearLatestLabel }}</span>
                           </div>
                           <div style="position:relative;display:flex;align-items:center;gap:14px">
@@ -1083,7 +1109,7 @@ if ('serviceWorker' in navigator) {
                         </div>
                       </sc-if>
                       <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05);margin-bottom:16px">
-                        <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px"><i data-lucide="watch" style="width:14px;height:14px;color:var(--vx-blue-dark)"></i><p style="margin:0;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">Log from your band</p></div>
+                        <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px"><i data-lucide="watch" style="width:14px;height:14px;color:var(--vx-blue-dark)"></i><p style="margin:0;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">{{ tx.logFromBand }}</p></div>
                         <div style="display:flex;gap:6px;margin-bottom:6px">
                           <input value="{{ famWearDate }}" oninput="{{ onFamWearDate }}" type="date" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-size:11.5px;color:#0C1116;outline:none">
                           <input value="{{ famWearRecoveryIn }}" oninput="{{ onFamWearRecovery }}" placeholder="Rec %" type="number" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-size:11.5px;color:#0C1116;outline:none">
@@ -1099,7 +1125,7 @@ if ('serviceWorker' in navigator) {
                           <div style="margin-top:8px;display:flex;align-items:center;gap:8px;background:#DCF5EA;border:1px solid #B6E7CF;border-radius:9px;padding:8px 11px">
                             <i data-lucide="check-circle-2" style="width:15px;height:15px;color:#0C7A4F;flex:none"></i>
                             <span style="flex:1;min-width:0;font-size:11px;font-weight:700;color:#0C7A4F">{{ famWearConnLabel }}</span>
-                            <button onclick="{{ onFamWearSyncNow }}" style="flex:none;display:flex;align-items:center;gap:5px;background:#0C7A4F;color:#fff;border:none;border-radius:7px;padding:5px 10px;font-family:inherit;font-weight:700;font-size:10.5px;cursor:pointer"><i data-lucide="refresh-cw" style="width:11px;height:11px"></i>Sync now</button>
+                            <button onclick="{{ onFamWearSyncNow }}" style="flex:none;display:flex;align-items:center;gap:5px;background:#0C7A4F;color:#fff;border:none;border-radius:7px;padding:5px 10px;font-family:inherit;font-weight:700;font-size:10.5px;cursor:pointer"><i data-lucide="refresh-cw" style="width:11px;height:11px"></i>{{ tx.syncNow }}</button>
                           </div>
                         </sc-if>
                         <div style="display:flex;gap:6px;margin-top:8px">
@@ -1110,10 +1136,10 @@ if ('serviceWorker' in navigator) {
                       </div>
                       <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05);margin-bottom:16px">
                         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px">
-                          <div style="display:flex;align-items:center;gap:7px"><i data-lucide="smile" style="width:14px;height:14px;color:#0C7A4F"></i><p style="margin:0;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">Daily check-in</p></div>
+                          <div style="display:flex;align-items:center;gap:7px"><i data-lucide="smile" style="width:14px;height:14px;color:#0C7A4F"></i><p style="margin:0;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">{{ tx.dailyCheckin }}</p></div>
                           <sc-if value="{{ wellHasReadiness }}" hint-placeholder-val="{{ false }}"><span style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:800;color:{{ wellReadinessColor }}">{{ wellReadiness }}<span style="font-size:8.5px;color:#9AA2B4;font-weight:700"> READY</span></span></sc-if>
                         </div>
-                        <sc-if value="{{ wellDoneToday }}" hint-placeholder-val="{{ false }}"><p style="margin:0 0 8px;font-size:10.5px;color:#0C7A4F;font-weight:600">✓ Done today — tap to update.</p></sc-if>
+                        <sc-if value="{{ wellDoneToday }}" hint-placeholder-val="{{ false }}"><p style="margin:0 0 8px;font-size:10.5px;color:#0C7A4F;font-weight:600">{{ tx.doneToday }}</p></sc-if>
                         <div style="display:flex;flex-direction:column;gap:8px">
                           <sc-for list="{{ wellMetrics }}" as="m" hint-placeholder-count="5">
                             <div style="display:flex;align-items:center;gap:8px">
@@ -1126,12 +1152,12 @@ if ('serviceWorker' in navigator) {
                             </div>
                           </sc-for>
                         </div>
-                        <button onclick="{{ onWellSave }}" style="margin-top:10px;width:100%;background:#0C7A4F;color:#fff;border:none;border-radius:10px;padding:11px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer">Save check-in</button>
+                        <button onclick="{{ onWellSave }}" style="margin-top:10px;width:100%;background:#0C7A4F;color:#fff;border:none;border-radius:10px;padding:11px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer">{{ tx.saveCheckin }}</button>
                         <sc-if value="{{ wellMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:7px 2px 0;font-size:11px;font-weight:600;color:#0C7A4F">{{ wellMsg }}</p></sc-if>
                       </div>
                       <sc-if value="{{ famMemHas }}" hint-placeholder-val="{{ false }}">
                         <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05);margin-bottom:11px">
-                          <p style="margin:0 0 9px;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:#7A8296;font-weight:700">Membership</p>
+                          <p style="margin:0 0 9px;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:#7A8296;font-weight:700">{{ tx.membership }}</p>
                           <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px">
                             <span style="flex:1;min-width:0"><span style="display:block;font-size:14px;font-weight:800;color:#0C1116">{{ famMemPkg }}</span><span style="display:block;font-size:11.5px;color:#7A8296">{{ famMemCost }}</span></span>
                             <span style="flex:none;background:{{ famMemPaidBg }};color:{{ famMemPaidFg }};border-radius:999px;padding:4px 11px;font-size:11px;font-weight:800">{{ famMemPaid }}</span>
@@ -1144,7 +1170,7 @@ if ('serviceWorker' in navigator) {
                         </div>
                       </sc-if>
                       <sc-if value="{{ famQualHas }}" hint-placeholder-val="{{ false }}">
-                        <p style="margin:0 2px 8px;font-size:11.5px;font-weight:700;color:#7A8296;text-transform:uppercase;letter-spacing:.04em">Qualified for</p>
+                        <p style="margin:0 2px 8px;font-size:11.5px;font-weight:700;color:#7A8296;text-transform:uppercase;letter-spacing:.04em">{{ tx.qualifiedFor }}</p>
                         <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px">
                           <sc-for list="{{ famQualRows }}" as="q" hint-placeholder-count="1">
                             <div style="display:flex;align-items:center;gap:11px;background:#F0FBF5;border:1px solid #BEEBD3;border-radius:13px;padding:11px 13px">
@@ -1156,7 +1182,7 @@ if ('serviceWorker' in navigator) {
                         </div>
                       </sc-if>
                       <sc-if value="{{ famHasPbs }}" hint-placeholder-val="{{ true }}">
-                        <p style="margin:0 2px 8px;font-size:11.5px;font-weight:700;color:#7A8296;text-transform:uppercase;letter-spacing:.04em">Personal bests</p>
+                        <p style="margin:0 2px 8px;font-size:11.5px;font-weight:700;color:#7A8296;text-transform:uppercase;letter-spacing:.04em">{{ tx.personalBests }}</p>
                         <div style="display:flex;flex-direction:column;gap:8px">
                           <sc-for list="{{ famPbs }}" as="p" hint-placeholder-count="6">
                             <div style="display:flex;align-items:center;justify-content:space-between;background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:12px 14px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
@@ -1168,7 +1194,7 @@ if ('serviceWorker' in navigator) {
                       </sc-if>
 
                       <sc-if value="{{ famHasFit }}" hint-placeholder-val="{{ false }}">
-                        <p style="margin:16px 2px 8px;font-size:11.5px;font-weight:700;color:#7A8296;text-transform:uppercase;letter-spacing:.04em">Fitness tests</p>
+                        <p style="margin:16px 2px 8px;font-size:11.5px;font-weight:700;color:#7A8296;text-transform:uppercase;letter-spacing:.04em">{{ tx.fitnessTests }}</p>
                         <div style="display:flex;flex-direction:column;gap:7px">
                           <sc-for list="{{ famFitRows }}" as="f" hint-placeholder-count="3">
                             <div style="background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:10px 13px;box-shadow:0 1px 4px rgba(11,20,40,.04)"><span style="display:block;font-size:11px;color:#9AA2B4;font-weight:600">{{ f.dateLabel }}</span><span style="display:block;font-size:12.5px;color:#3A4152;margin-top:2px">{{ f.summary }}</span></div>
@@ -1177,7 +1203,7 @@ if ('serviceWorker' in navigator) {
                       </sc-if>
 
                       <sc-if value="{{ famHasInbody }}" hint-placeholder-val="{{ false }}">
-                        <p style="margin:16px 2px 8px;font-size:11.5px;font-weight:700;color:#7A8296;text-transform:uppercase;letter-spacing:.04em">InBody scans</p>
+                        <p style="margin:16px 2px 8px;font-size:11.5px;font-weight:700;color:#7A8296;text-transform:uppercase;letter-spacing:.04em">{{ tx.inbodyScans }}</p>
                         <div style="display:flex;flex-direction:column;gap:7px">
                           <sc-for list="{{ famInbodyRows }}" as="ib" hint-placeholder-count="2">
                             <div style="background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:10px 13px;box-shadow:0 1px 4px rgba(11,20,40,.04)"><span style="display:block;font-size:11px;color:#9AA2B4;font-weight:600">{{ ib.dateLabel }}</span><span style="display:block;font-size:12.5px;color:#3A4152;margin-top:2px">{{ ib.summary }}</span></div>
@@ -1186,39 +1212,39 @@ if ('serviceWorker' in navigator) {
                       </sc-if>
 
                       <sc-if value="{{ famAiSugg.hasData }}" hint-placeholder-val="{{ false }}">
-                        <p style="margin:16px 2px 8px;font-size:11.5px;font-weight:700;color:#7A8296;text-transform:uppercase;letter-spacing:.04em">Coach suggestion</p>
+                        <p style="margin:16px 2px 8px;font-size:11.5px;font-weight:700;color:#7A8296;text-transform:uppercase;letter-spacing:.04em">{{ tx.coachSuggestion }}</p>
                         <div style="background:#0A0F1A;color:#fff;border-radius:16px;padding:15px;display:flex;flex-direction:column;gap:11px">
-                          <div style="display:flex;align-items:center;gap:8px"><i data-lucide="sparkles" style="width:16px;height:16px;color:#22D7D7"></i><span style="font-weight:700;font-size:12.5px">Focus &amp; targets</span></div>
+                          <div style="display:flex;align-items:center;gap:8px"><i data-lucide="sparkles" style="width:16px;height:16px;color:#22D7D7"></i><span style="font-weight:700;font-size:12.5px">{{ tx.focusTargets }}</span></div>
                           <div>
-                            <p style="margin:0;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">Compete in</p>
+                            <p style="margin:0;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">{{ tx.competeIn }}</p>
                             <p style="margin:3px 0 0;font-size:15px;font-weight:700">{{ famAiSugg.competeEvent }}</p>
                             <p style="margin:2px 0 0;font-size:11.5px;color:rgba(255,255,255,.65)">Current best {{ famAiSugg.currentBest }} · target <span style="color:#22D7D7;font-weight:700">{{ famAiSugg.targetTime }}</span></p>
                           </div>
                           <div style="border-top:1px solid rgba(255,255,255,.12);padding-top:10px">
-                            <p style="margin:0;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">Double down on</p>
+                            <p style="margin:0;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">{{ tx.doubleDownOn }}</p>
                             <p style="margin:3px 0 0;font-size:13px;font-weight:700">{{ famAiSugg.focusStroke }}</p>
                             <p style="margin:2px 0 0;font-size:11.5px;color:rgba(255,255,255,.65);line-height:1.4">{{ famAiSugg.focusReason }}</p>
                           </div>
                           <sc-if value="{{ famAiSugg.hasWeak }}" hint-placeholder-val="{{ false }}">
                             <div style="border-top:1px solid rgba(255,255,255,.12);padding-top:10px">
-                              <p style="margin:0;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">Needs attention</p>
+                              <p style="margin:0;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">{{ tx.needsAttention }}</p>
                               <p style="margin:3px 0 0;font-size:13px;font-weight:700">{{ famAiSugg.weakStroke }}</p>
                               <p style="margin:2px 0 0;font-size:11.5px;color:rgba(255,255,255,.65);line-height:1.4">{{ famAiSugg.weakReason }}</p>
                             </div>
                           </sc-if>
                           <sc-if value="{{ famAiSugg.secondaryEvent }}" hint-placeholder-val="{{ false }}">
                             <div style="border-top:1px solid rgba(255,255,255,.12);padding-top:10px">
-                              <p style="margin:0;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">Consider entering</p>
+                              <p style="margin:0;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">{{ tx.considerEntering }}</p>
                               <p style="margin:3px 0 0;font-size:13px;font-weight:700">{{ famAiSugg.secondaryEvent }}</p>
                               <p style="margin:2px 0 0;font-size:11.5px;color:rgba(255,255,255,.65);line-height:1.4">{{ famAiSugg.secondaryReason }}</p>
                             </div>
                           </sc-if>
                           <div style="border-top:1px solid rgba(255,255,255,.12);padding-top:10px">
-                            <p style="margin:0;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">Fitness &amp; dryland</p>
+                            <p style="margin:0;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">{{ tx.fitnessDryland }}</p>
                             <p style="margin:3px 0 0;font-size:11.5px;color:rgba(255,255,255,.75);line-height:1.4">{{ famAiSugg.fitnessInsight }}</p>
                           </div>
                           <div style="border-top:1px solid rgba(255,255,255,.12);padding-top:10px">
-                            <p style="margin:0;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">Nutrition</p>
+                            <p style="margin:0;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">{{ tx.nutrition }}</p>
                             <p style="margin:3px 0 0;font-size:11.5px;color:rgba(255,255,255,.75);line-height:1.4">{{ famAiSugg.nutritionTip }}</p>
                           </div>
                         </div>
@@ -1248,13 +1274,56 @@ if ('serviceWorker' in navigator) {
                           </div>
                         </sc-for>
                       </div>
-                      <p style="margin:11px 2px 0;font-size:11px;color:#9AA2B4;line-height:1.5">Upload a PDF or photo of each document. You and your child's coach can view them here at any time.</p>
+                      <p style="margin:11px 2px 0;font-size:11px;color:#9AA2B4;line-height:1.5">{{ tx.docsNote }}</p>
+                    </sc-if>
+
+                    <sc-if value="{{ famShowFees }}" hint-placeholder-val="{{ false }}">
+                      <sc-if value="{{ famFeesOwes }}" hint-placeholder-val="{{ true }}">
+                        <div style="background:#0A0F1A;color:#fff;border-radius:16px;padding:14px;margin-bottom:11px">
+                          <span style="display:block;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;opacity:.6">{{ tx.outstanding }}</span>
+                          <span style="display:block;font-family:var(--font-mono);font-size:26px;font-weight:700;margin-top:3px">{{ famFeesDue }}</span>
+                          <span style="display:block;font-size:11.5px;opacity:.7;margin-top:2px">{{ famFeesDueSub }}</span>
+                          <sc-if value="{{ famPayLinkHas }}" hint-placeholder-val="{{ false }}">
+                            <button onclick="{{ onFamPayLink }}" style="width:100%;margin-top:11px;display:flex;align-items:center;justify-content:center;gap:7px;background:var(--vx-blue);color:#fff;border:none;border-radius:11px;padding:11px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer"><i data-lucide="credit-card" style="width:15px;height:15px"></i>{{ tx.payNow }}</button>
+                          </sc-if>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ famFeesClear }}" hint-placeholder-val="{{ false }}">
+                        <div style="background:#DCF5EA;border-radius:14px;padding:13px;margin-bottom:11px;display:flex;align-items:center;gap:10px">
+                          <i data-lucide="check-circle-2" style="width:19px;height:19px;color:#0C7A4F;flex:none"></i>
+                          <span style="font-size:12.5px;font-weight:700;color:#0C7A4F">{{ tx.nothingOutstanding }}</span>
+                        </div>
+                      </sc-if>
+                      <div style="display:flex;flex-direction:column;gap:8px">
+                        <sc-for list="{{ famFeeRows }}" as="fe" hint-placeholder-count="3">
+                          <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                            <div style="display:flex;align-items:center;gap:10px">
+                              <span style="flex:1;min-width:0"><span style="display:block;font-size:13px;font-weight:700;color:#0C1116">{{ fe.periodLabel }}</span><span style="display:block;font-size:11px;color:#7A8296;margin-top:1px">{{ fe.what }}</span></span>
+                              <span style="flex:none;font-family:var(--font-mono);font-size:14px;font-weight:700;color:#0C1116">{{ fe.amount }}</span>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:7px;margin-top:8px">
+                              <span style="flex:none;background:{{ fe.statusBg }};color:{{ fe.statusFg }};border-radius:7px;padding:3px 9px;font-size:10.5px;font-weight:700">{{ fe.statusLabel }}</span>
+                              <span style="flex:1;min-width:0;font-size:10.5px;color:#9AA2B4">{{ fe.dueLabel }}</span>
+                            </div>
+                            <sc-if value="{{ fe.canReport }}" hint-placeholder-val="{{ true }}">
+                              <div style="display:flex;gap:7px;margin-top:10px">
+                                <input value="{{ fe.ref }}" oninput="{{ fe.onRef }}" placeholder="{{ tx.transferRef }}" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12px;color:#3A4152;outline:none">
+                                <button onclick="{{ fe.onSent }}" style="flex:none;background:var(--vx-blue);color:#fff;border:none;border-radius:9px;padding:8px 12px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">{{ tx.ivePaid }}</button>
+                              </div>
+                            </sc-if>
+                          </div>
+                        </sc-for>
+                      </div>
+                      <sc-if value="{{ famFeesNone }}" hint-placeholder-val="{{ false }}">
+                        <p style="margin:0;background:#F8FAFC;border:1px dashed #E5E9F0;border-radius:12px;padding:16px;font-size:11.5px;color:#9AA2B4;line-height:1.5;text-align:center">{{ tx.noInvoices }}</p>
+                      </sc-if>
+                      <p style="margin:11px 2px 0;font-size:11px;color:#9AA2B4;line-height:1.5">{{ tx.feesNote }}</p>
                     </sc-if>
 
                     <sc-if value="{{ famShowMsgs }}" hint-placeholder-val="{{ false }}">
                       <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
-                        <p style="margin:0 0 10px;font-size:12px;font-weight:700;color:#0C1116">Private messages with your coach</p>
-                        <sc-if value="{{ famMsgEmpty }}" hint-placeholder-val="{{ true }}"><p style="margin:0 0 9px;font-size:11.5px;color:#9AA2B4;line-height:1.5">No messages yet. Ask a question, send a set to check, or share a video for feedback — your coach replies right here.</p></sc-if>
+                        <p style="margin:0 0 10px;font-size:12px;font-weight:700;color:#0C1116">{{ tx.privateMessages }}</p>
+                        <sc-if value="{{ famMsgEmpty }}" hint-placeholder-val="{{ true }}"><p style="margin:0 0 9px;font-size:11.5px;color:#9AA2B4;line-height:1.5">{{ tx.noMessagesYet }}</p></sc-if>
                         <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:11px">
                           <sc-for list="{{ famMsgThread }}" as="mm" hint-placeholder-count="0">
                             <div style="display:flex;flex-direction:column;align-items:{{ mm.align }}">
@@ -1268,10 +1337,10 @@ if ('serviceWorker' in navigator) {
                             </div>
                           </sc-for>
                         </div>
-                        <textarea value="{{ fmBody }}" oninput="{{ onFmBody }}" placeholder="Write a message to your coach…" style="width:100%;border:1px solid #E5E9F0;border-radius:10px;padding:9px;outline:none;resize:none;font-family:inherit;font-size:13px;color:#0C1116;min-height:48px;box-sizing:border-box"></textarea>
+                        <textarea value="{{ fmBody }}" oninput="{{ onFmBody }}" placeholder="{{ tx.writeMessage }}" style="width:100%;border:1px solid #E5E9F0;border-radius:10px;padding:9px;outline:none;resize:none;font-family:inherit;font-size:13px;color:#0C1116;min-height:48px;box-sizing:border-box"></textarea>
                         <div style="display:flex;gap:7px;margin-top:7px;align-items:center">
                           <i data-lucide="video" style="width:15px;height:15px;color:#8A22D5;flex:none"></i>
-                          <input value="{{ fmVideo }}" oninput="{{ onFmVideo }}" placeholder="Video link for feedback (optional)" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12px;color:#3A4152;outline:none">
+                          <input value="{{ fmVideo }}" oninput="{{ onFmVideo }}" placeholder="{{ tx.videoLinkOptional }}" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12px;color:#3A4152;outline:none">
                           <button onclick="{{ onFamSendMsg }}" style="flex:none;width:38px;height:38px;border-radius:11px;background:var(--vx-blue);border:none;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center"><i data-lucide="send" style="width:16px;height:16px"></i></button>
                         </div>
                       </div>
@@ -1560,21 +1629,59 @@ if ('serviceWorker' in navigator) {
                       </div>
 
                       <div style="margin-top:16px;padding-top:14px;border-top:1px solid #E5E9F0">
-                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><h2 style="margin:0;font-size:13px;font-weight:700;color:#0C1116">Invoicing — {{ invMonthLabel }}</h2>
-                          <select value="{{ invSquadSel }}" onchange="{{ onInvSquadSel }}" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:8px;padding:6px 8px;font-family:inherit;font-size:12px;color:#0C1116;outline:none">
-                            <sc-for list="{{ invSquadOptions }}" as="o" hint-placeholder-count="9"><option value="{{ o.value }}">{{ o.label }}</option></sc-for>
-                          </select>
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
+                          <h2 style="margin:0;font-size:13px;font-weight:700;color:#0C1116">Invoicing</h2>
+                          <div style="display:flex;align-items:center;gap:4px">
+                            <button onclick="{{ onBillPrev }}" aria-label="Previous month" style="flex:none;width:26px;height:26px;border-radius:8px;border:1px solid #E5E9F0;background:#fff;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="chevron-left" style="width:14px;height:14px"></i></button>
+                            <span style="min-width:104px;text-align:center;font-size:12px;font-weight:700;color:#0C1116">{{ invMonthLabel }}</span>
+                            <button onclick="{{ onBillNext }}" aria-label="Next month" style="flex:none;width:26px;height:26px;border-radius:8px;border:1px solid #E5E9F0;background:#fff;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="chevron-right" style="width:14px;height:14px"></i></button>
+                          </div>
                         </div>
                         <div style="display:flex;gap:8px;margin-bottom:10px">
                           <div style="flex:1;background:#DCF5EA;border-radius:11px;padding:10px;text-align:center"><span style="display:block;font-size:16px;font-weight:700;color:#0C7A4F">{{ invCollected }}</span><span style="display:block;font-size:9.5px;color:#0C7A4F;font-weight:700;text-transform:uppercase">Collected</span></div>
                           <div style="flex:1;background:#FBE4E4;border-radius:11px;padding:10px;text-align:center"><span style="display:block;font-size:16px;font-weight:700;color:#B42318">{{ invOutstanding }}</span><span style="display:block;font-size:9.5px;color:#B42318;font-weight:700;text-transform:uppercase">Outstanding</span></div>
+                          <sc-if value="{{ invHasOverdue }}" hint-placeholder-val="{{ true }}">
+                            <div style="flex:1;background:#FDE3D0;border-radius:11px;padding:10px;text-align:center"><span style="display:block;font-size:16px;font-weight:700;color:#9A3A0B">{{ invOverdue }}</span><span style="display:block;font-size:9.5px;color:#9A3A0B;font-weight:700;text-transform:uppercase">Overdue</span></div>
+                          </sc-if>
                         </div>
+                        <div style="display:flex;gap:7px;margin-bottom:10px">
+                          <button onclick="{{ onBillIssue }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;background:var(--vx-blue);color:#fff;border:none;border-radius:10px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer"><i data-lucide="file-plus" style="width:14px;height:14px"></i>{{ invIssueLabel }}</button>
+                          <button onclick="{{ onBillExport }}" aria-label="Export this month as CSV" style="flex:none;width:38px;background:#F4F6F8;color:#3A4152;border:none;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="download" style="width:15px;height:15px"></i></button>
+                        </div>
+                        <sc-if value="{{ billMsgShow }}" hint-placeholder-val="{{ false }}">
+                          <p style="margin:0 0 10px;background:#EEF4FF;border:1px solid #D4E2FB;border-radius:10px;padding:8px 10px;font-size:11.5px;color:#1B4CA1">{{ billMsg }}</p>
+                        </sc-if>
+                        <select value="{{ invSquadSel }}" onchange="{{ onInvSquadSel }}" style="width:100%;box-sizing:border-box;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12px;color:#0C1116;outline:none;margin-bottom:10px">
+                          <sc-for list="{{ invSquadOptions }}" as="o" hint-placeholder-count="10"><option value="{{ o.value }}">{{ o.label }}</option></sc-for>
+                        </select>
+                        <sc-if value="{{ invEmpty }}" hint-placeholder-val="{{ false }}">
+                          <p style="margin:0;background:#F8FAFC;border:1px dashed #E5E9F0;border-radius:11px;padding:14px;font-size:11.5px;color:#9AA2B4;line-height:1.5;text-align:center">No invoices for this month yet. "Issue invoices" bills every active swimmer who has a membership package or a squad fee — swimmers signed off as injured or travelling are left out.</p>
+                        </sc-if>
                         <div style="display:flex;flex-direction:column;gap:6px">
                           <sc-for list="{{ invRows }}" as="v" hint-placeholder-count="6">
-                            <div style="display:flex;align-items:center;gap:9px;background:#fff;border:1px solid #E5E9F0;border-radius:11px;padding:9px 11px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
-                              <span style="flex:1;min-width:0;font-size:12.5px;font-weight:600;color:#0C1116;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ v.name }}</span>
-                              <span style="font-family:var(--font-mono);font-size:12px;font-weight:700;color:#3A4152">{{ v.amount }}</span>
-                              <button onclick="{{ v.onToggle }}" style="flex:none;background:{{ v.bg }};color:{{ v.fg }};border:none;border-radius:7px;padding:5px 10px;font-family:inherit;font-weight:700;font-size:10.5px;cursor:pointer">{{ v.label }}</button>
+                            <div style="background:#fff;border:1px solid #E5E9F0;border-radius:11px;padding:10px 11px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
+                              <div style="display:flex;align-items:center;gap:9px">
+                                <span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;font-weight:700;color:#0C1116;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ v.name }}</span><span style="display:block;font-size:10.5px;color:#7A8296;margin-top:1px">{{ v.squad }} · {{ v.what }}</span></span>
+                                <span style="flex:none;font-family:var(--font-mono);font-size:12.5px;font-weight:700;color:#3A4152">{{ v.amount }}</span>
+                                <span style="flex:none;background:{{ v.statusBg }};color:{{ v.statusFg }};border-radius:7px;padding:3px 8px;font-size:10px;font-weight:700">{{ v.statusLabel }}</span>
+                              </div>
+                              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px">
+                                <span style="font-size:10.5px;color:#9AA2B4">{{ v.dueLabel }}</span>
+                                <sc-if value="{{ v.hasRef }}" hint-placeholder-val="{{ false }}"><span style="font-size:10.5px;color:#1B4CA1;font-weight:600">{{ v.refLine }}</span></sc-if>
+                              </div>
+                              <div style="display:flex;gap:6px;margin-top:8px">
+                                <sc-if value="{{ v.canSettle }}" hint-placeholder-val="{{ true }}">
+                                  <button onclick="{{ v.onMarkPaid }}" style="flex:1;background:#DCF5EA;color:#0C7A4F;border:none;border-radius:8px;padding:7px;font-family:inherit;font-weight:700;font-size:11px;cursor:pointer">Paid — cash</button>
+                                  <button onclick="{{ v.onMarkTransfer }}" style="flex:1;background:#E7EEFC;color:#1B4CA1;border:none;border-radius:8px;padding:7px;font-family:inherit;font-weight:700;font-size:11px;cursor:pointer">Paid — transfer</button>
+                                  <button onclick="{{ v.onRemind }}" aria-label="Send a reminder" style="flex:none;width:32px;background:#F4F6F8;color:#3A4152;border:none;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="bell" style="width:14px;height:14px"></i></button>
+                                </sc-if>
+                                <sc-if value="{{ v.canUndo }}" hint-placeholder-val="{{ false }}">
+                                  <button onclick="{{ v.onUndo }}" style="flex:1;background:#F4F6F8;color:#3A4152;border:none;border-radius:8px;padding:7px;font-family:inherit;font-weight:700;font-size:11px;cursor:pointer">Not paid after all</button>
+                                </sc-if>
+                                <sc-if value="{{ v.canVoid }}" hint-placeholder-val="{{ true }}">
+                                  <button onclick="{{ v.onVoid }}" aria-label="Void this invoice" style="flex:none;width:32px;background:#FDECEC;color:#E5484D;border:none;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="ban" style="width:14px;height:14px"></i></button>
+                                </sc-if>
+                              </div>
                             </div>
                           </sc-for>
                         </div>
@@ -2681,6 +2788,82 @@ if ('serviceWorker' in navigator) {
                           <button onclick="{{ mc.onClick }}" style="flex:none;background:{{ mc.bg }};color:{{ mc.fg }};border:1px solid {{ mc.border }};border-radius:999px;padding:7px 13px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer">{{ mc.label }}</button>
                         </sc-for>
                       </div>
+                      <div style="display:flex;gap:5px;background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:4px">
+                        <button onclick="{{ onMeetModeEntries }}" style="flex:1;padding:9px;border-radius:9px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:12px;background:{{ meetModeEntriesBg }};color:{{ meetModeEntriesFg }}">Entries &amp; heats</button>
+                        <button onclick="{{ onMeetModeDay }}" style="flex:1;padding:9px;border-radius:9px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:12px;background:{{ meetModeDayBg }};color:{{ meetModeDayFg }}">Meet day</button>
+                      </div>
+
+                      <sc-if value="{{ meetDayOn }}" hint-placeholder-val="{{ false }}">
+                        <div style="background:#0A0F1A;color:#fff;border-radius:16px;padding:14px">
+                          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                            <span style="flex:1;min-width:0"><span style="display:block;font-size:14px;font-weight:700">{{ meetDayTitle }}</span><span style="display:block;font-size:11px;opacity:.65;margin-top:1px">{{ meetDaySub }}</span></span>
+                            <span style="flex:none;font-family:var(--font-mono);font-size:20px;font-weight:700">{{ meetDayPct }}</span>
+                          </div>
+                          <div style="height:5px;border-radius:999px;background:rgba(255,255,255,.16);margin-top:10px;overflow:hidden"><span style="display:block;height:100%;width:{{ meetDayPct }};background:var(--vx-blue);border-radius:999px"></span></div>
+                          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+                            <span style="font-size:11px;opacity:.65">{{ meetDayProgress }}</span>
+                            <span style="font-size:11px;font-weight:700;color:#C89B3C">{{ meetDayPbLine }}</span>
+                          </div>
+                        </div>
+                        <sc-if value="{{ meetDayMsgShow }}" hint-placeholder-val="{{ false }}">
+                          <p style="margin:0;background:#EEF4FF;border:1px solid #D4E2FB;border-radius:10px;padding:8px 10px;font-size:11.5px;color:#1B4CA1">{{ meetDayMsg }}</p>
+                        </sc-if>
+                        <sc-if value="{{ meetDayHasHeats }}" hint-placeholder-val="{{ true }}">
+                          <div style="display:flex;flex-direction:column;gap:10px">
+                            <sc-for list="{{ meetDayHeats }}" as="hh" hint-placeholder-count="2">
+                              <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px">
+                                  <p style="margin:0;font-size:12.5px;font-weight:700;color:#0C1116">{{ hh.label }}</p>
+                                  <span style="font-family:var(--font-mono);font-size:11px;font-weight:700;color:#7A8296">{{ hh.doneLabel }}</span>
+                                </div>
+                                <div style="display:flex;flex-direction:column;gap:6px">
+                                  <sc-for list="{{ hh.rows }}" as="ln" hint-placeholder-count="6">
+                                    <div style="display:flex;align-items:center;gap:8px;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:11px;padding:8px 9px">
+                                      <span style="flex:none;width:22px;height:22px;border-radius:7px;background:#fff;border:1px solid #E5E9F0;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:11px;font-weight:700;color:#3A4152">{{ ln.lane }}</span>
+                                      <span style="flex:1;min-width:0"><span style="display:block;font-size:12px;font-weight:700;color:#0C1116;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ ln.name }}</span><span style="display:block;font-size:10px;color:#9AA2B4;margin-top:1px">Seed {{ ln.pb }}</span></span>
+                                      <sc-if value="{{ ln.notDone }}" hint-placeholder-val="{{ true }}">
+                                        <input value="{{ ln.draft }}" oninput="{{ ln.onDraft }}" inputmode="decimal" placeholder="26.20" style="flex:none;width:74px;background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:7px 8px;font-family:var(--font-mono);font-size:12.5px;color:#0C1116;outline:none;text-align:center">
+                                        <button onclick="{{ ln.onSave }}" aria-label="Save this time" style="flex:none;width:32px;height:32px;border-radius:9px;background:var(--vx-blue);border:none;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center"><i data-lucide="check" style="width:15px;height:15px"></i></button>
+                                      </sc-if>
+                                      <sc-if value="{{ ln.done }}" hint-placeholder-val="{{ false }}">
+                                        <span style="flex:none;text-align:right"><span style="display:block;font-family:var(--font-mono);font-size:13px;font-weight:700;color:#0C1116">{{ ln.timeLabel }}</span><span style="display:block;font-size:10px;font-weight:700;color:#7A8296">{{ ln.placeLabel }}</span></span>
+                                        <sc-if value="{{ ln.pbShow }}" hint-placeholder-val="{{ true }}">
+                                          <span style="flex:none;background:#FBF0DD;color:#7A5A0C;border-radius:7px;padding:3px 7px;font-size:9.5px;font-weight:700;white-space:nowrap">{{ ln.pbLabel }}</span>
+                                        </sc-if>
+                                        <button onclick="{{ ln.onClear }}" aria-label="Remove this time" style="flex:none;width:28px;height:28px;border-radius:8px;background:#FDECEC;border:none;cursor:pointer;color:#E5484D;display:flex;align-items:center;justify-content:center"><i data-lucide="undo-2" style="width:13px;height:13px"></i></button>
+                                      </sc-if>
+                                    </div>
+                                  </sc-for>
+                                </div>
+                              </div>
+                            </sc-for>
+                          </div>
+                        </sc-if>
+                        <sc-if value="{{ meetDayHasBoards }}" hint-placeholder-val="{{ false }}">
+                          <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                            <p style="margin:0 0 10px;font-size:13px;font-weight:700;color:#0C1116">Results so far</p>
+                            <div style="display:flex;flex-direction:column;gap:12px">
+                              <sc-for list="{{ meetDayBoards }}" as="bd" hint-placeholder-count="2">
+                                <div>
+                                  <p style="margin:0 0 6px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">{{ bd.event }}</p>
+                                  <div style="display:flex;flex-direction:column;gap:4px">
+                                    <sc-for list="{{ bd.rows }}" as="pl" hint-placeholder-count="3">
+                                      <div style="display:flex;align-items:center;gap:9px;background:#F8FAFC;border-radius:9px;padding:7px 9px">
+                                        <span style="flex:none;min-width:26px;text-align:center;background:{{ pl.medal }};color:{{ pl.medalFg }};border-radius:6px;padding:2px 5px;font-size:10px;font-weight:700">{{ pl.place }}</span>
+                                        <span style="flex:1;min-width:0;font-size:12px;font-weight:600;color:#0C1116;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ pl.name }}</span>
+                                        <span style="flex:none;font-family:var(--font-mono);font-size:12px;font-weight:700;color:#3A4152">{{ pl.time }}</span>
+                                      </div>
+                                    </sc-for>
+                                  </div>
+                                </div>
+                              </sc-for>
+                            </div>
+                          </div>
+                        </sc-if>
+                        <p style="margin:0 2px;font-size:11px;color:#9AA2B4;line-height:1.5">Times saved here go straight into the swimmer's history, so their PB, their chart and their family's app are all up to date before the next heat is called. Got a lane wrong? Undo takes the swim back out again.</p>
+                      </sc-if>
+
+                      <sc-if value="{{ meetEntriesOn }}" hint-placeholder-val="{{ true }}">
                       <sc-if value="{{ reqHasRows }}" hint-placeholder-val="{{ false }}">
                         <div style="background:#FBF0DD;border:1px solid #F0D9A8;border-radius:14px;padding:12px">
                           <p style="margin:0 0 8px;font-size:11.5px;font-weight:700;color:#7A5A0C">Swimmer / parent requests</p>
@@ -2739,6 +2922,7 @@ if ('serviceWorker' in navigator) {
                           <button onclick="{{ onPrintProgram }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:#0A0F1A;color:#fff;border:none;border-radius:12px;padding:12px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer"><i data-lucide="printer" style="width:16px;height:16px"></i>Print heat sheet</button>
                         </div>
                         <button onclick="{{ onExportEntries }}" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:#0C7A4F;color:#fff;border:none;border-radius:12px;padding:12px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer"><i data-lucide="download" style="width:16px;height:16px"></i>Export entries (CSV for Hy-Tek)</button>
+                      </sc-if>
                       </sc-if>
                     </div>
                   </sc-if>
@@ -3155,6 +3339,118 @@ if ('serviceWorker' in navigator) {
                           <i data-lucide="chevron-right" style="width:16px;height:16px;color:#C89B3C"></i>
                         </button>
                       </sc-for>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ toolRace }}" hint-placeholder-val="{{ true }}">
+                    <div style="display:flex;flex-direction:column;gap:12px">
+                      <div style="background:#0A0F1A;color:#fff;border-radius:16px;padding:16px;display:flex;align-items:center;gap:12px">
+                        <span style="width:42px;height:42px;flex:none;border-radius:12px;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center"><i data-lucide="gauge" style="width:22px;height:22px;color:#FF8FB1"></i></span>
+                        <div><p style="margin:0;font-size:14px;font-weight:800">Race Strategy</p><p style="margin:2px 0 0;font-size:12px;color:rgba(255,255,255,.6)">{{ raceScopeLabel }}</p></div>
+                      </div>
+
+                      <sc-if value="{{ raceNoSel }}" hint-placeholder-val="{{ true }}">
+                        <input value="{{ raceQuery }}" oninput="{{ onRaceQuery }}" placeholder="Search a swimmer…" style="width:100%;box-sizing:border-box;background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:11px 13px;font-family:inherit;font-size:13px;color:#0C1116;outline:none">
+                        <div style="display:flex;flex-direction:column;gap:6px">
+                          <sc-for list="{{ raceSwRows }}" as="rs" hint-placeholder-count="6">
+                            <button onclick="{{ rs.onPick }}" style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:10px 11px;cursor:pointer;font-family:inherit">
+                              <span style="width:32px;height:32px;flex:none;border-radius:10px;background:#EEF1F5;color:#5A657E;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">{{ rs.initials }}</span>
+                              <span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;font-weight:700;color:#0C1116">{{ rs.name }}</span><span style="display:block;font-size:10.5px;color:#9AA2B4;margin-top:1px">{{ rs.sub }}</span></span>
+                              <i data-lucide="chevron-right" style="width:15px;height:15px;color:#C7CDDA;flex:none"></i>
+                            </button>
+                          </sc-for>
+                        </div>
+                      </sc-if>
+
+                      <sc-if value="{{ raceHasSel }}" hint-placeholder-val="{{ false }}">
+                        <div style="display:flex;align-items:center;gap:10px">
+                          <button onclick="{{ onRaceBack }}" aria-label="Pick another swimmer" style="flex:none;width:32px;height:32px;border-radius:10px;border:1px solid #E5E9F0;background:#fff;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="chevron-left" style="width:15px;height:15px"></i></button>
+                          <span style="width:34px;height:34px;flex:none;border-radius:11px;background:#EEF1F5;color:#5A657E;display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:800">{{ raceSelInitials }}</span>
+                          <span style="flex:1;min-width:0;font-size:14px;font-weight:800;color:#0C1116">{{ raceSelName }}</span>
+                        </div>
+                        <sc-if value="{{ raceHasEvents }}" hint-placeholder-val="{{ true }}">
+                          <div class="vx-scroll" style="display:flex;gap:6px;overflow-x:auto">
+                            <sc-for list="{{ raceEventChips }}" as="rc" hint-placeholder-count="4">
+                              <button onclick="{{ rc.onClick }}" style="flex:none;background:{{ rc.bg }};color:{{ rc.fg }};border:1px solid {{ rc.border }};border-radius:999px;padding:7px 13px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer">{{ rc.label }}</button>
+                            </sc-for>
+                          </div>
+                          <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                            <div style="display:flex;gap:8px">
+                              <div style="flex:1;background:#F8FAFC;border-radius:11px;padding:10px;text-align:center"><span style="display:block;font-family:var(--font-mono);font-size:17px;font-weight:700;color:#0C1116">{{ racePbLabel }}</span><span style="display:block;font-size:9.5px;color:#7A8296;font-weight:700;text-transform:uppercase;margin-top:2px">Current PB</span></div>
+                              <div style="flex:1;background:#EAF1FE;border-radius:11px;padding:10px;text-align:center"><span style="display:block;font-family:var(--font-mono);font-size:17px;font-weight:700;color:#1B4CA1">{{ raceTargetLabel }}</span><span style="display:block;font-size:9.5px;color:#1B4CA1;font-weight:700;text-transform:uppercase;margin-top:2px">Target</span></div>
+                            </div>
+                            <p style="margin:9px 0 0;font-size:11px;color:#9AA2B4;line-height:1.5">{{ raceTargetSource }}</p>
+                            <p style="margin:4px 0 0;font-size:12px;font-weight:700;color:{{ raceGapColor }}">{{ raceGapLabel }}</p>
+                          </div>
+                          <sc-if value="{{ raceHasRows }}" hint-placeholder-val="{{ true }}">
+                            <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+                                <p style="margin:0;font-size:13px;font-weight:700;color:#0C1116">{{ raceEventLabel }} — the plan</p>
+                                <button onclick="{{ onRaceClearActual }}" style="background:none;border:none;color:var(--vx-blue);font-family:inherit;font-weight:700;font-size:11px;cursor:pointer">Clear splits</button>
+                              </div>
+                              <div style="display:flex;align-items:center;gap:8px;padding:0 3px 7px;border-bottom:1px solid #EEF1F5">
+                                <span style="flex:none;width:42px;font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4">At</span>
+                                <span style="flex:1;font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4">Target 50 · cum</span>
+                                <span style="flex:none;width:74px;text-align:center;font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4">Swam</span>
+                                <span style="flex:none;width:52px;text-align:right;font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4">Diff</span>
+                              </div>
+                              <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">
+                                <sc-for list="{{ raceRows }}" as="rr" hint-placeholder-count="4">
+                                  <div style="display:flex;align-items:center;gap:8px">
+                                    <span style="flex:none;width:42px;font-family:var(--font-mono);font-size:11.5px;font-weight:700;color:#3A4152">{{ rr.label }}</span>
+                                    <span style="flex:1;min-width:0"><span style="display:block;font-family:var(--font-mono);font-size:13px;font-weight:700;color:#0C1116">{{ rr.target }}</span><span style="display:block;font-family:var(--font-mono);font-size:10px;color:#9AA2B4">{{ rr.targetCum }}</span></span>
+                                    <input value="{{ rr.actualDraft }}" onchange="{{ rr.onActual }}" inputmode="decimal" placeholder="—" style="flex:none;width:74px;box-sizing:border-box;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:7px 6px;font-family:var(--font-mono);font-size:12px;color:#0C1116;outline:none;text-align:center">
+                                    <span style="flex:none;width:52px;text-align:center;background:{{ rr.deltaBg }};color:{{ rr.deltaFg }};border-radius:7px;padding:5px 4px;font-family:var(--font-mono);font-size:11px;font-weight:700">{{ rr.deltaLabel }}</span>
+                                  </div>
+                                </sc-for>
+                              </div>
+                              <sc-if value="{{ raceActualHas }}" hint-placeholder-val="{{ false }}">
+                                <div style="margin-top:11px;padding-top:11px;border-top:1px solid #EEF1F5;display:flex;align-items:center;justify-content:space-between">
+                                  <span style="font-family:var(--font-mono);font-size:16px;font-weight:700;color:#0C1116">{{ raceActualTotalLabel }}</span>
+                                  <span style="font-size:11.5px;font-weight:700;color:{{ raceActualVerdictColor }}">{{ raceActualVerdict }}</span>
+                                </div>
+                              </sc-if>
+                            </div>
+                          </sc-if>
+                          <p style="margin:0 2px;font-size:11px;color:#9AA2B4;line-height:1.5">The plan spreads the target across the race the way a well-swum one goes: out quick off the dive, holding through the middle, coming back on the finish. Type the 50s the swimmer actually swam and each length says whether it was on the plan.</p>
+                        </sc-if>
+                        <sc-if value="{{ raceNoEvents }}" hint-placeholder-val="{{ false }}">
+                          <div style="text-align:center;padding:30px 20px;color:#9AA2B4"><i data-lucide="gauge" style="width:28px;height:28px"></i><p style="font-size:12.5px;margin-top:10px;line-height:1.5">No times on record for this swimmer yet.<br>A race plan needs a PB to work from — add one on their profile, or record a swim on meet day.</p></div>
+                        </sc-if>
+                      </sc-if>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ toolRisk }}" hint-placeholder-val="{{ true }}">
+                    <div style="display:flex;flex-direction:column;gap:12px">
+                      <div style="background:#0A0F1A;color:#fff;border-radius:16px;padding:16px;display:flex;align-items:center;gap:12px">
+                        <span style="width:42px;height:42px;flex:none;border-radius:12px;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center"><i data-lucide="shield-alert" style="width:22px;height:22px;color:#FFD666"></i></span>
+                        <div><p style="margin:0;font-size:14px;font-weight:800">Load &amp; Risk</p><p style="margin:2px 0 0;font-size:12px;color:rgba(255,255,255,.6)">{{ riskScopeLabel }} · {{ riskCountLine }}</p></div>
+                      </div>
+                      <sc-if value="{{ riskEmpty }}" hint-placeholder-val="{{ false }}">
+                        <div style="text-align:center;padding:36px 20px;color:#9AA2B4"><i data-lucide="shield-check" style="width:30px;height:30px"></i><p style="font-size:12.5px;margin-top:10px;line-height:1.5">Nobody is flagged.<br>Swimmers appear here when their training load jumps, their wellness check-ins drop, or their attendance falls away.</p></div>
+                      </sc-if>
+                      <div style="display:flex;flex-direction:column;gap:8px">
+                        <sc-for list="{{ riskRows }}" as="rk" hint-placeholder-count="3">
+                          <button onclick="{{ rk.onOpen }}" style="display:block;width:100%;text-align:left;background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:13px;cursor:pointer;font-family:inherit;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                            <div style="display:flex;align-items:center;gap:10px">
+                              <span style="flex:1;min-width:0"><span style="display:block;font-size:13px;font-weight:700;color:#0C1116">{{ rk.name }}</span><span style="display:block;font-size:10.5px;color:#9AA2B4;margin-top:1px">{{ rk.sqName }}</span></span>
+                              <span style="flex:none;background:{{ rk.levelBg }};color:{{ rk.levelFg }};border-radius:7px;padding:3px 9px;font-size:10.5px;font-weight:700">{{ rk.level }}</span>
+                            </div>
+                            <div style="display:flex;flex-direction:column;gap:4px;margin-top:9px">
+                              <sc-for list="{{ rk.reasons }}" as="rn" hint-placeholder-count="2">
+                                <span style="display:flex;align-items:center;gap:7px;font-size:11.5px;color:#3A4152"><span style="flex:none;width:6px;height:6px;border-radius:50%;background:{{ rn.dot }}"></span>{{ rn.text }}</span>
+                              </sc-for>
+                            </div>
+                            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:9px">
+                              <span style="background:#F8FAFC;border-radius:7px;padding:4px 8px;font-size:10px;color:#7A8296">{{ rk.acwrLabel }}</span>
+                              <span style="background:#F8FAFC;border-radius:7px;padding:4px 8px;font-size:10px;color:#7A8296">{{ rk.readinessLabel }}</span>
+                              <span style="background:#F8FAFC;border-radius:7px;padding:4px 8px;font-size:10px;color:#7A8296">{{ rk.attendLabel }}</span>
+                            </div>
+                          </button>
+                        </sc-for>
+                      </div>
+                      <p style="margin:0 2px;font-size:11px;color:#9AA2B4;line-height:1.5">Built only from what the club already records: the metres in the sessions a swimmer was marked in for, their own wellness check-ins, and their register. It is a prompt to have a conversation, not a medical assessment.</p>
                     </div>
                   </sc-if>
 
@@ -4110,6 +4406,11 @@ if ('serviceWorker' in navigator) {
                             <option value="QAR">QAR — Qatari Riyal</option><option value="USD">USD — US Dollar</option><option value="EUR">EUR — Euro</option><option value="GBP">GBP — British Pound</option><option value="AED">AED — UAE Dirham</option><option value="EGP">EGP — Egyptian Pound</option>
                           </select>
                         </div>
+                        <div>
+                          <p style="margin:0 0 7px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#9AA2B4;font-weight:700">Payment link</p>
+                          <input value="{{ brandView.payLink }}" oninput="{{ brandView.onPayLink }}" placeholder="https://…" style="width:100%;box-sizing:border-box;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:10px 12px;font-family:inherit;font-size:13px;color:#0C1116;outline:none">
+                          <p style="margin:6px 2px 0;font-size:11px;color:#9AA2B4;line-height:1.5">Paste the club's own payment page (Tap, MyFatoorah, Stripe — whatever you already use). Families get a "Pay now" button on their Fees tab that opens it. Leave it empty and they simply pay you the way they do today.</p>
+                        </div>
                         <button onclick="{{ brandView.onSave }}" style="background:var(--vx-blue);color:#fff;border:none;border-radius:11px;padding:12px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer">Save club configuration</button>
                         <sc-if value="{{ settingsMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:12px;font-weight:600;color:#0C7A4F">{{ settingsMsg }}</p></sc-if>
                       </div>
@@ -4824,7 +5125,7 @@ class Component extends DCLogic {
     this.fitnessTests=this._loadJSON('vx_fitness_tests', {});
     this.aiSuggOverrides=this._loadJSON('vx_ai_sugg_ovr', {});
     this.promoStore=this._loadJSON('vx_promo', {});
-    this.brandConfig=this._loadJSON('vx_brand', {clubName:'Vortex Swimming Club', zoneMethod:'6', locale:'en', rtl:false, currency:'QAR'});
+    this.brandConfig=this._loadJSON('vx_brand', {clubName:'Vortex Swimming Club', zoneMethod:'6', locale:'en', rtl:false, currency:'QAR', payLink:''});
     this.meetStatus=this._loadJSON('vx_meet_status', {});
     this.meetEntries=this._loadJSON('vx_meet_entries', {});
     this.customMeets=this._loadJSON('vx_custom_meets', []);
@@ -4858,6 +5159,11 @@ class Component extends DCLogic {
     // Per swimmer: which package, whether they take fitness, paid or not, the dates, a note.
     this.memberships=this._loadJSON('vx_memberships', {});
     this.invoices=this._loadJSON('vx_invoices', {});
+    // Real invoices, one row each, so a fee has a history: when it was issued, what it was
+    // for, when it was paid and how. The old vx_invoices was a paid/unpaid tick per month
+    // with no amount and no record, so nobody could answer "what did we bill in March".
+    this.billing=this._loadJSON('vx_billing', null);   // normalised (and migrated once) by _billing()
+    this.raceSplitLog=this._loadJSON('vx_race_splits', {});   // actual 50s a coach timed, per swimmer per event
     this.academySchedule={preteam:'Mon/Wed/Fri · 4:00–5:00pm', advb:'Mon/Wed/Fri · 4:00–5:30pm', adva:'Mon–Fri · 4:00–5:30pm', junior:'Mon–Fri · 4:00–6:00pm', seniorb:'Mon–Sat · 4:00–6:00pm', seniora:'Mon–Sat · 4:00–6:30pm', vortexb:'Mon–Sat · 5:00–7:00pm', vortexa:'Mon–Sat · 5:00–7:30pm', legend:'Mon–Sat · 5:30–8:00pm'};
     this.videoLib=this._loadJSON('vx_videos', []).filter(v=>v && v.url && /^https?:\/\//i.test(v.url)).map(v=>({
       ...v,
@@ -5343,6 +5649,325 @@ class Component extends DCLogic {
     this.meetEntries={...this.meetEntries, [meetName]:list};
     this._saveJSON('vx_meet_entries', this.meetEntries);
     this.setState({shareNote:'Auto-seeded '+list.length+' entries by PB \u2713'});
+  }
+  // ---- Language ---------------------------------------------------------------------------
+  // Arabic for the people who need it most: the parents and swimmers. The club's own default
+  // lives in the white-label config, but the choice is per device — a family reading Arabic on
+  // their phone must not flip the language on the coach's iPad, and they cannot reach the
+  // admin settings to change it back.
+  //
+  // Only the family-facing screens are translated so far: sign-in and registration, and the
+  // whole portal. The staff side is still English and is a separate pass.
+  _langKey(){ return 'vx_lang'; }
+  _lang(){
+    try{ const v=localStorage.getItem(this._langKey()); if(v==='ar'||v==='en') return v; }catch(e){}
+    return (this.brandConfig && this.brandConfig.locale==='ar') ? 'ar' : 'en';
+  }
+  setLang(code){
+    try{ localStorage.setItem(this._langKey(), code==='ar'?'ar':'en'); }catch(e){}
+    this._applyLang(); this.forceUpdate();
+  }
+  // The document itself carries the direction, so the browser's own bidi handling does the
+  // work — text, inputs, and every flex row flip together instead of one stylesheet at a time.
+  _applyLang(){
+    try{
+      const ar=this._lang()==='ar';
+      document.documentElement.setAttribute('lang', ar?'ar':'en');
+      document.documentElement.setAttribute('dir', ar?'rtl':'ltr');
+    }catch(e){}
+  }
+  _i18n(){
+    return {
+      // sign-in / registration
+      welcomeBack:['Welcome back.','أهلاً بعودتك.'],
+      tagline:['Vortex SC — squad management for the technical team, coaches & families.','فورتكس — إدارة المجموعات للجهاز الفني والمدربين والأسر.'],
+      staffSignIn:['Staff sign in','دخول الطاقم'],
+      username:['Username','اسم المستخدم'],
+      pinLabel:['PIN','الرقم السري'],
+      enterPin:['Enter your PIN','أدخل رقمك السري'],
+      signIn:['Sign in','تسجيل الدخول'],
+      familyCta:['Parent or swimmer? Sign in / register','ولي أمر أو سبّاح؟ سجّل الدخول أو أنشئ حساباً'],
+      back:['Back','رجوع'],
+      register:['Register','حساب جديد'],
+      imParent:['I’m a parent','أنا ولي أمر'],
+      imSwimmer:['I’m a swimmer','أنا سبّاح'],
+      fullName:['Full name','الاسم الكامل'],
+      whatsapp:['WhatsApp number (e.g. +974 5555 1234)','رقم واتساب (مثال +974 5555 1234)'],
+      email:['Email','البريد الإلكتروني'],
+      confirmPassword:['Confirm password','تأكيد كلمة المرور'],
+      forgot:['Forgot password?','نسيت كلمة المرور؟'],
+      forgotHint:['Enter your email and we’ll send you a secure link to reset your password.','أدخل بريدك الإلكتروني وسنرسل لك رابطاً آمناً لإعادة تعيين كلمة المرور.'],
+      setnewHint:['Choose a new password for your account below, then tap Set new password.','اختر كلمة مرور جديدة لحسابك ثم اضغط على تعيين كلمة مرور جديدة.'],
+      resetSent:['Check your email — we sent you a link to reset your password.','تحقق من بريدك الإلكتروني — أرسلنا لك رابطاً لإعادة تعيين كلمة المرور.'],
+      confirmWord:['Confirm','تأكيد'],
+      confirmLink:['Confirm & link','تأكيد والربط'],
+      cancel:['Cancel','إلغاء'],
+      readOnlyNote:['Read-only access to your swimmer’s PBs, attendance, results and upcoming meets. No plans, no other squads.','اطّلاع فقط على أفضل أزمنة سبّاحك وحضوره ونتائجه وبطولاته القادمة. لا خطط تدريب ولا مجموعات أخرى.'],
+      consentPrefix:['By creating an account you agree to our','بإنشاء حساب فإنك توافق على'],
+      privacyPolicy:['Privacy Policy','سياسة الخصوصية'],
+      andWord:['and','و'],
+      parentalConsent:['Parental Consent','موافقة ولي الأمر'],
+      // portal chrome
+      welcome:['Welcome,','أهلاً،'],
+      vortexId:['Vortex ID','بطاقة فورتكس'],
+      tabPerf:['Performance','الأداء'],
+      tabAttend:['Attendance','الحضور'],
+      tabResults:['Results','النتائج'],
+      tabMeets:['Meets','البطولات'],
+      tabDocs:['Documents','المستندات'],
+      tabFees:['Fees','الرسوم'],
+      tabCoach:['Coach','المدرب'],
+      // performance
+      personalBests:['Personal bests','أفضل الأزمنة'],
+      longCourse:['Long course','حوض طويل'],
+      shortCourse:['Short course','حوض قصير'],
+      noSwims:['No swims recorded for this course yet.','لا توجد سباحات مسجّلة في هذا الحوض بعد.'],
+      membership:['Membership','الاشتراك'],
+      qualifiedFor:['Qualified for','مؤهّل لـ'],
+      coachSuggestion:['Coach suggestion','توصية المدرب'],
+      focusTargets:['Focus & targets','التركيز والأهداف'],
+      competeIn:['Compete in','المنافسة في'],
+      considerEntering:['Consider entering','يُنصح بالمشاركة في'],
+      doubleDownOn:['Double down on','التركيز أكثر على'],
+      needsAttention:['Needs attention','يحتاج إلى اهتمام'],
+      fitnessDryland:['Fitness & dryland','اللياقة والتدريب الأرضي'],
+      nutrition:['Nutrition','التغذية'],
+      fitnessTests:['Fitness tests','اختبارات اللياقة'],
+      inbodyScans:['InBody scans','قياسات InBody'],
+      // wellness / wearables
+      dailyCheckin:['Daily check-in','التسجيل اليومي'],
+      saveCheckin:['Save check-in','حفظ التسجيل'],
+      doneToday:['✓ Done today — tap to update.','✓ تم اليوم — اضغط للتحديث.'],
+      recovery:['Recovery','الاستشفاء'],
+      logFromBand:['Log from your band','السجل من ساعتك'],
+      syncNow:['Sync now','مزامنة الآن'],
+      // documents
+      docsNote:['Upload a PDF or photo of each document. You and your child’s coach can view them here at any time.','ارفع ملف PDF أو صورة لكل مستند. يمكنك أنت ومدرب ابنك الاطلاع عليها هنا في أي وقت.'],
+      // fees
+      outstanding:['Outstanding','المستحق'],
+      payNow:['Pay now','ادفع الآن'],
+      nothingOutstanding:['Nothing outstanding — thank you','لا يوجد مستحق — شكراً لك'],
+      noInvoices:['No invoices yet. Fees appear here as soon as the club issues them.','لا توجد فواتير بعد. تظهر الرسوم هنا فور إصدارها من النادي.'],
+      ivePaid:['I’ve paid','قمت بالدفع'],
+      transferRef:['Transfer reference (optional)','رقم مرجع الحوالة (اختياري)'],
+      feesNote:['"I’ve paid" tells the club a transfer is on its way — they confirm it here once the money arrives.','"قمت بالدفع" تُعلم النادي بأن الحوالة في طريقها — ويؤكدها هنا عند وصول المبلغ.'],
+      // coach messages
+      privateMessages:['Private messages with your coach','رسائل خاصة مع مدربك'],
+      noMessagesYet:['No messages yet. Ask a question, send a set to check, or share a video for feedback — your coach replies right here.','لا توجد رسائل بعد. اسأل سؤالاً أو أرسل مجموعة تدريب للمراجعة أو شارك مقطعاً للتقييم — يردّ مدربك هنا مباشرة.'],
+      writeMessage:['Write a message to your coach…','اكتب رسالة إلى مدربك…'],
+      videoLinkOptional:['Video link for feedback (optional)','رابط فيديو للتقييم (اختياري)'],
+    };
+  }
+  // Every string resolved for the current language in one object, so the template reads
+  // {{ t.tabFees }} and an untranslated key quietly falls back to English rather than blank.
+  _t(){
+    const i=this._lang()==='ar'?1:0; const dict=this._i18n(); const out={};
+    Object.keys(dict).forEach(k=>{ out[k]=dict[k][i] || dict[k][0]; });
+    return out;
+  }
+
+  // ---- Race strategy -------------------------------------------------------------------
+  // A goal time on its own tells a 13-year-old nothing at the 100m turn. This turns it into
+  // the splits that would actually produce it — "through 100 in 1:05.8" — and then holds the
+  // race they swam against the plan, 50 by 50, so the fix is a specific length, not "go faster".
+  _raceDistance(event){ const m=String(event||'').match(/(\d+)/); return m?parseInt(m[1],10):0; }
+  // How a well-swum race is spread across its 50s, as a cost per 50 relative to the average.
+  // The first 50 is cheap (a dive and no lactate), the middle drifts, and the last comes back
+  // on the finish. Normalised so the legs always add back to exactly the goal time.
+  _raceShape(n){
+    if(n<=1) return [1];
+    const out=[];
+    for(let i=0;i<n;i++){
+      const p = i/(n-1);
+      let f;
+      if(n===2) f = i===0 ? 0.955 : 1.045;                        // 100: the classic positive split
+      else if(n===4) f = [0.945, 1.015, 1.035, 1.005][i];         // 200: out fast, hold, bring it home
+      else f = 0.955 + 0.075*Math.min(p*1.15, 1) - (i===n-1 ? 0.055 : 0);   // 400+: even, with a finish
+      out.push(f);
+    }
+    const sum=out.reduce((a,b)=>a+b,0);
+    return out.map(f=>f*n/sum);
+  }
+  raceSplits(event, targetSec){
+    const dist=this._raceDistance(event);
+    const n=Math.max(1, Math.round(dist/50));
+    if(!dist || !targetSec || targetSec<=0) return [];
+    const shape=this._raceShape(n); const avg=targetSec/n;
+    let cum=0;
+    return shape.map((f,i)=>{ const split=avg*f; cum+=split;
+      return { leg:i+1, from:i*50, to:(i+1)*50, split:+split.toFixed(2), cumulative:+cum.toFixed(2) }; });
+  }
+  _raceActual(swId, event){ const s=(this.raceSplitLog||{})[swId]; const r=s&&s[event]; return (r&&Array.isArray(r.splits))?r : null; }
+  raceActualSet(swId, event, leg, raw){
+    const sec=this.parseTimeStr(raw);
+    const all={...(this.raceSplitLog||{})};
+    const forSw={...(all[swId]||{})};
+    const rec={...(forSw[event]||{splits:[], date:this.todayISO()})};
+    const splits=(rec.splits||[]).slice();
+    // A blank box clears that leg rather than storing 0 — a 0.00 split would poison every
+    // comparison it touched and read as an impossibly fast length.
+    splits[leg-1] = (sec!=null && sec>0) ? +sec.toFixed(2) : null;
+    rec.splits=splits; rec.date=this.todayISO();
+    forSw[event]=rec; all[swId]=forSw;
+    this.raceSplitLog=all; this._saveJSON('vx_race_splits', all); this.forceUpdate();
+  }
+  raceActualClear(swId, event){
+    const all={...(this.raceSplitLog||{})}; const forSw={...(all[swId]||{})};
+    delete forSw[event]; all[swId]=forSw;
+    this.raceSplitLog=all; this._saveJSON('vx_race_splits', all); this.forceUpdate();
+  }
+
+  // ---- Training load & injury risk -------------------------------------------------------
+  // Three things reliably run ahead of a swimmer breaking down, and the club already records
+  // all three: a sharp jump in training load, a run of poor wellness check-ins, and attendance
+  // quietly falling away. Any one of them alone is noise. Together they are worth a
+  // conversation — which is all this claims to be. It is not a medical assessment.
+  //
+  // The load a swimmer actually did is the session's metres on the days they were marked in,
+  // not the metres the squad was set.
+  _swLoadSeries(sqId, swId, idx, days){
+    const today=this.todayISO(); const out=[];
+    const sessions={}; (((this.savedPlans||{})[sqId])||[]).forEach(r=>{ if(r.date) sessions[r.date]=(sessions[r.date]||0)+(r.totalM||0); });
+    for(let k=days-1;k>=0;k--){
+      const d=this.shiftDate(today, -k);
+      const st=this.getAttendStatus(sqId, d, swId, idx);
+      out.push({date:d, m:(st==='present'||st==='late') ? (sessions[d]||0) : 0, status:st});
+    }
+    return out;
+  }
+  _attendPct(sqId, swId, idx, fromDaysAgo, toDaysAgo){
+    let seen=0, inPool=0;
+    for(let k=fromDaysAgo;k>toDaysAgo;k--){
+      const st=this.getAttendStatus(sqId, this.shiftDate(this.todayISO(), -k), swId, idx);
+      if(st==='unmarked') continue;
+      seen++; if(st==='present'||st==='late') inPool++;
+    }
+    return seen ? Math.round((inPool/seen)*100) : null;   // null = nobody marked, not 0%
+  }
+  _riskFor(sqId, sw, idx){
+    const series=this._swLoadSeries(sqId, sw.id, idx, 28);
+    const week=(w)=>series.slice(28-7*(w+1), 28-7*w).reduce((a,x)=>a+x.m, 0);
+    const acute=week(0);
+    const priors=[week(1), week(2), week(3)].filter(v=>v>0);
+    const chronic=priors.length ? priors.reduce((a,b)=>a+b,0)/priors.length : 0;
+    // Acute:chronic workload ratio — this week against the weeks behind it. Above ~1.5 is the
+    // spike that shows up before injuries; below ~0.6 is a swimmer who has stopped training.
+    const acwr = chronic>0 ? +(acute/chronic).toFixed(2) : null;
+
+    const checkins=((this.wellness||{})[sw.id]||[]).slice(0,7);
+    const readings=checkins.map(w=>this._wellReadiness(w)).filter(v=>v!=null);
+    const readiness = readings.length ? Math.round(readings.reduce((a,b)=>a+b,0)/readings.length) : null;
+    const soreVals=checkins.map(w=>w.soreness).filter(v=>v!=null&&v>0);
+    const soreness = soreVals.length ? +(soreVals.reduce((a,b)=>a+b,0)/soreVals.length).toFixed(1) : null;
+
+    const attNow=this._attendPct(sqId, sw.id, idx, 13, -1);
+    const attWas=this._attendPct(sqId, sw.id, idx, 27, 13);
+    const attDrop = (attNow!=null && attWas!=null) ? (attWas-attNow) : null;
+
+    const status=this._swStatus(sw.id);
+    const flags=[];
+    if(!status.active && (status.reason==='injured'||status.reason==='sick'))
+      flags.push({key:'signed-off', level:2, text:'Signed off '+(status.reason==='injured'?'injured':'sick')});
+    if(acwr!=null && acwr>1.5)
+      flags.push({key:'spike', level:2, text:'Training load '+Math.round((acwr-1)*100)+'% above their recent average'});
+    else if(acwr!=null && acwr<0.6 && chronic>0)
+      flags.push({key:'drop', level:1, text:'Training load has fallen away — '+Math.round((1-acwr)*100)+'% below their average'});
+    if(readiness!=null && readiness<55)
+      flags.push({key:'readiness', level:2, text:'Wellness check-ins averaging '+readiness+'/100'});
+    if(soreness!=null && soreness>=4)
+      flags.push({key:'soreness', level:2, text:'Reporting persistent soreness ('+soreness+'/5)'});
+    if(attDrop!=null && attDrop>=25)
+      flags.push({key:'attendance', level:1, text:'Attendance down '+attDrop+' points on the fortnight before'});
+
+    // A level-2 flag — a load spike, a run of bad check-ins, an injury sign-off — is worth a
+    // conversation on its own. The level-1 ones only are once two of them line up.
+    const score=flags.reduce((a,f)=>a+f.level, 0);
+    const level = score>=2 ? 'check' : (score>=1 ? 'watch' : 'ok');
+    return { swId:sw.id, name:sw.name, acute, chronic:Math.round(chronic), acwr, readiness, soreness,
+      attNow, attDrop, flags, score, level };
+  }
+  // The whole club, worst first. A swimmer with nothing recorded has nothing to say about
+  // them, so they are simply absent rather than reported as fine.
+  _riskBoard(squadIds){
+    const out=[];
+    (squadIds||this.squads.map(s=>s.id)).forEach(sqId=>(this.roster[sqId]||[]).forEach((sw,idx)=>{
+      const r=this._riskFor(sqId, sw, idx);
+      if(r.level!=='ok') out.push({...r, sqId, sqName:(this.squadById[sqId]||{}).name||''});
+    }));
+    return out.sort((a,b)=>b.score-a.score || a.name.localeCompare(b.name));
+  }
+
+  // ---- Live meet day -----------------------------------------------------------------
+  // A meet in progress is run straight off the heat sheet: every lane gets a box, and the
+  // time typed into it is saved to that swimmer's own history there and then. The PB, the
+  // progression chart and the family's app are all right before the next heat is called,
+  // instead of waiting for somebody to type the whole meet up on Sunday night.
+  //
+  // The swims are read back off the swimmers rather than kept in a second table, so there is
+  // no parallel copy of the meet to drift out of step with the roster.
+  _meetISO(m){
+    if(!m || !m.date) return this.todayISO();
+    const p=String(m.date).split('/');
+    if(p.length!==3) return this.todayISO();
+    return p[2]+'-'+String(p[0]).padStart(2,'0')+'-'+String(p[1]).padStart(2,'0');
+  }
+  _meetSwims(meetName){
+    const out={};
+    this.squads.forEach(sq=>(this.roster[sq.id]||[]).forEach(sw=>{
+      (this._swEntries(sw)||[]).forEach(p=>{ if((p.meet||'')===meetName) out[sw.id+'|'+p.event]={swId:sw.id, event:p.event, sec:p.sec}; });
+    }));
+    return out;
+  }
+  // Timed finals: a place is the swimmer's rank across every heat of the event, not their
+  // rank in the heat they happened to be seeded into.
+  _meetPlaces(meetName){
+    const byEvent={}; const swims=this._meetSwims(meetName);
+    Object.keys(swims).forEach(k=>{ const s=swims[k]; (byEvent[s.event]=byEvent[s.event]||[]).push(s); });
+    const place={};
+    Object.keys(byEvent).forEach(ev=>byEvent[ev].slice().sort((a,b)=>a.sec-b.sec)
+      .forEach((s,i)=>{ place[s.swId+'|'+ev]=i+1; }));
+    return place;
+  }
+  // The swimmer's best at this event BEFORE today, so "PB" means beat what they came in with
+  // — including when the coach is correcting a time already typed for this meet.
+  _bestBefore(sw, event, exceptMeet){
+    let best=null;
+    (this._swEntries(sw)||[]).forEach(p=>{
+      if(p.event!==event) return;
+      if(exceptMeet && (p.meet||'')===exceptMeet) return;
+      if(best==null || p.sec<best) best=p.sec;
+    });
+    return best;
+  }
+  meetLiveSave(meetName, meetDate, courseLabel, swId, event, raw){
+    const sec=this.parseTimeStr(raw);
+    if(sec==null || sec<=0) return this.setState({meetDayMsg:'Enter a time like 26.20 or 2:15.00'});
+    const hit=this.allSwimmersFlat().find(s=>s.id===swId);
+    if(!hit) return this.setState({meetDayMsg:'That swimmer is no longer on the roster.'});
+    const before=this._bestBefore(hit, event, meetName);
+    // Replace this meet's swim for the event rather than stacking a second one, so fixing a
+    // mistyped time corrects the record instead of inventing an extra race.
+    const entries=(this._swEntries(hit)||[]).filter(p=>!(p.event===event && (p.meet||'')===meetName));
+    entries.push({event, sec, course:(courseLabel==='SCM'?'S':'L'), courseLabel:courseLabel||'LCM',
+      meet:meetName, meetDate:meetDate||this.todayISO()});
+    this.adminEditSwimmer(hit.squadId, swId, {pbs:entries});
+    const drop=(before!=null && sec<before) ? (before-sec) : 0;
+    const first=before==null;
+    const title=first ? 'First time recorded' : (drop>0 ? 'New personal best' : 'Race result');
+    const body=hit.name+' — '+event+' '+this.fmt(sec)+(drop>0?(' · '+drop.toFixed(2)+'s faster'):'')+' at '+meetName;
+    try{ this.notify('family_sw:'+swId, drop>0?'trophy':'timer', title, body); }catch(e){}
+    try{ this._pushSend({swimmerIds:[swId]}, title, body, '/'); }catch(e){}
+    const drafts={...(this.state.meetTimeDrafts||{})}; delete drafts[swId+'|'+event];
+    this.setState({meetTimeDrafts:drafts,
+      meetDayMsg: drop>0 ? (hit.name+' — PB by '+drop.toFixed(2)+'s ✓') : (hit.name+' — '+this.fmt(sec)+' saved ✓')});
+  }
+  // Struck a wrong swimmer's lane: take the swim back out rather than leaving a time that
+  // never happened sitting in their history and their PB.
+  meetLiveClear(meetName, swId, event){
+    const hit=this.allSwimmersFlat().find(s=>s.id===swId); if(!hit) return;
+    const entries=(this._swEntries(hit)||[]).filter(p=>!(p.event===event && (p.meet||'')===meetName));
+    this.adminEditSwimmer(hit.squadId, swId, {pbs:entries});
+    this.setState({meetDayMsg:'Removed '+hit.name+' — '+event});
   }
   toggleCompEvent(ev){ const cur=this.state.compEvents.slice(); const i=cur.indexOf(ev); if(i>=0) cur.splice(i,1); else cur.push(ev); this.setState({compEvents:cur}); }
   createCompetition(){ const S=this.state;
@@ -6421,7 +7046,9 @@ class Component extends DCLogic {
     return R.createElement('span', null, parts.map((seg,i)=> /^@[\w]+$/.test(seg) ? R.createElement('span',{key:i, style:{color:'#067EEA',fontWeight:700}}, seg) : seg )); }
   notify(audience, icon, title, body){
     const rec={id:this._uid('notif'), audience, icon, title, body, at:new Date().toISOString(), read:false};
-    this.notifications=[rec, ...this.notifications];
+    // Capped: this list is one shared blob synced to every device, and a meet day can add a
+    // notification per swim. Unbounded, it grows until the write is too big to save.
+    this.notifications=[rec, ...this.notifications].slice(0, 600);
     this._saveJSON('vx_notifications', this.notifications);
     this._pushNotify(title, body);
   }
@@ -6512,6 +7139,139 @@ class Component extends DCLogic {
   feeSave(sqid, val){ const n=parseFloat(val); if(isNaN(n)) return; this.academyFees={...this.academyFees, [sqid]:n}; this._saveJSON('vx_academy_fees', this.academyFees); this.forceUpdate(); }
   invMonthKey(){ const n=new Date(); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0'); }
   invoiceToggle(swId){ const mk=this.invMonthKey(); const cur={...this.invoices}; const monthMap={...(cur[mk]||{})}; monthMap[swId]=!monthMap[swId]; cur[mk]=monthMap; this.invoices=cur; this._saveJSON('vx_invoices', cur); this.forceUpdate(); }
+
+  // ---- Billing: invoices with a history, not a tick box ---------------------------------
+  // Every fee is now its own row: what it was for, when it was issued, when it fell due and
+  // how it was settled. The old list held one paid/unpaid tick per swimmer per month with no
+  // amount on it, so nobody could answer "what did the club bill in March, and who still owes".
+  // Status runs unpaid → sent (the family says they have paid) → paid (the club confirms it).
+  // A mistake is voided rather than deleted, so the month's totals still reconcile.
+  _billing(){
+    const b=(this.billing && typeof this.billing==='object') ? this.billing : {};
+    if(Array.isArray(b.invoices) && b.migrated) return b;
+    const out={ invoices: Array.isArray(b.invoices) ? b.invoices.slice() : [], migrated:true };
+    // Bring the old ticks across once so the months already collected are not lost. The old
+    // data never stored an amount, so the fee in force today is used and the row says so.
+    try{
+      const old=this.invoices||{};
+      const where={}; this.squads.forEach(sq=>(this.roster[sq.id]||[]).forEach(sw=>{ where[sw.id]=sq.id; }));
+      Object.keys(old).forEach(period=>Object.keys(old[period]||{}).forEach(swId=>{
+        if(!old[period][swId]) return;
+        if(out.invoices.some(iv=>iv.swId===swId && iv.period===period)) return;
+        const amount=this._feeFor(swId, where[swId]);
+        out.invoices.push({ id:'mig_'+period+'_'+swId, swId, sqId:where[swId]||'', period,
+          issued:period+'-01', due:period+'-07', items:[{label:'Monthly training fee', amount}],
+          total:amount, status:'paid', paid:{date:period+'-01', method:'other', ref:'', by:''},
+          note:'Imported from the old paid/unpaid list — amount is the current fee' });
+      }));
+    }catch(e){}
+    this.billing=out; this._saveJSON('vx_billing', out);
+    return out;
+  }
+  _billingSave(invoices){ const out={invoices, migrated:true}; this.billing=out; this._saveJSON('vx_billing', out); this.forceUpdate(); }
+  // What a swimmer owes for a month: their membership package if one is set, otherwise the
+  // squad's academy fee. Owing nothing means they are skipped when invoices are issued.
+  _feeFor(swId, sqId){
+    const cost=this._membershipCost(this._membership(swId));
+    if(cost>0) return cost;
+    if(sqId) return Number(this.academyFees[sqId])||0;
+    const hit=this.allSwimmersFlat().find(s=>s.id===swId);
+    return hit ? (Number(this.academyFees[hit.squadId])||0) : 0;
+  }
+  _feeLabel(swId){
+    const m=this._membership(swId); const parts=[];
+    if(m.pkg) parts.push(m.pkg+' per week'); if(m.fitness) parts.push('Fitness 3x');
+    return parts.length ? ('Membership — '+parts.join(' + ')) : 'Monthly training fee';
+  }
+  billPeriod(){ return this.state.billPeriod || this.invMonthKey(); }
+  _periodShift(p, delta){ const a=String(p).split('-').map(Number); const d=new Date(a[0], a[1]-1+delta, 1);
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+  _periodLabel(p){ const a=String(p).split('-').map(Number);
+    return new Date(a[0], a[1]-1, 1).toLocaleDateString('en-GB',{month:'long', year:'numeric'}); }
+  _periodDue(p){ return p+'-07'; }          // fees fall due on the 7th of the month they cover
+  _invById(id){ return this._billing().invoices.find(iv=>iv.id===id)||null; }
+  // Overdue is a derived fact, never a stored status: an unpaid invoice whose due date has
+  // passed. Storing it would go stale the moment the clock rolled over.
+  _invOverdue(iv){ return iv.status!=='paid' && iv.status!=='void' && !!iv.due && iv.due < this.todayISO(); }
+
+  // Issue the month's invoices. Re-running is safe — a swimmer who already has one for the
+  // period is skipped — so a late joiner can be added without double-billing everyone else.
+  billingIssue(period){
+    const p=period||this.billPeriod();
+    const list=this._billing().invoices.slice();
+    const have={}; list.forEach(iv=>{ if(iv.period===p && iv.status!=='void') have[iv.swId]=true; });
+    const due=this._periodDue(p); const made=[];
+    this.squads.forEach(sq=>(this.roster[sq.id]||[]).forEach(sw=>{
+      if(have[sw.id]) return;
+      if(!this._swStatus(sw.id).active) return;   // signed off (injured, travelling): not billed
+      const amount=this._feeFor(sw.id, sq.id); if(amount<=0) return;
+      const iv={ id:this._uid('inv'), swId:sw.id, sqId:sq.id, period:p, issued:this.todayISO(), due,
+        items:[{label:this._feeLabel(sw.id), amount}], total:amount, status:'unpaid', paid:null, note:'' };
+      list.push(iv); made.push(iv);
+    }));
+    if(!made.length){ this.setState({billMsg:'Nothing to issue — every active swimmer already has an invoice for '+this._periodLabel(p)}); return; }
+    this._billingSave(list);
+    this.setState({billMsg:made.length+' invoice'+(made.length===1?'':'s')+' issued for '+this._periodLabel(p)});
+    // One push for the whole run. A notification per family would put hundreds of rows into
+    // the shared notifications blob every month for no extra information.
+    try{ this._pushSend({swimmerIds:made.map(iv=>iv.swId)}, 'Fees for '+this._periodLabel(p),
+      'Your invoice is ready in the app under Fees.', '/'); }catch(e){}
+    try{ this.notify('coach', 'credit-card', 'Invoices issued',
+      made.length+' invoice'+(made.length===1?'':'s')+' for '+this._periodLabel(p)+' · '+
+      (this.brandConfig.currency||'QAR')+' '+made.reduce((s,iv)=>s+iv.total,0).toLocaleString()); }catch(e){}
+  }
+  _billingPatch(id, patch){ this._billingSave(this._billing().invoices.map(iv=> iv.id===id ? {...iv, ...patch} : iv)); }
+  billingMarkPaid(id, method){
+    const iv=this._invById(id); if(!iv) return;
+    this._billingPatch(id, { status:'paid', paid:{ date:this.todayISO(), method:method||'cash',
+      ref:(iv.paid&&iv.paid.ref)||'', by:(this._me().label||'') } });
+  }
+  billingUnpay(id){ this._billingPatch(id, {status:'unpaid', paid:null}); }
+  billingVoid(id){ this._billingPatch(id, {status:'void', paid:null}); }
+  billingRemind(id){
+    const iv=this._invById(id); if(!iv) return;
+    const hit=this._famResolve(iv.swId); const name=hit?hit.sw.name:'Your swimmer';
+    const cur=this.brandConfig.currency||'QAR';
+    const late=this._invOverdue(iv);
+    const title=late?'Fee overdue':'Fee due';
+    const body=name+' — '+cur+' '+iv.total.toLocaleString()+' for '+this._periodLabel(iv.period)+
+      (iv.due?(late?(', due '+this._fmtDMY(iv.due)):(', due by '+this._fmtDMY(iv.due))):'')+'.';
+    try{ this.notify('family_sw:'+iv.swId, 'credit-card', title, body); }catch(e){}
+    try{ this._pushSend({swimmerIds:[iv.swId]}, title, body, '/'); }catch(e){}
+    this.setState({billMsg:'Reminder sent to '+name+' ✓'});
+  }
+  // The family's side: they say they have paid and give a reference. That is a claim, not a
+  // receipt, so it lands as "sent" for the club to confirm — the money is not counted yet.
+  famBillingSent(id){
+    const iv=this._invById(id); if(!iv) return;
+    const ref=String((this.state.billRefDrafts||{})[id]||'').trim();
+    this._billingPatch(id, { status:'sent', paid:{ date:this.todayISO(), method:'transfer', ref, by:'family' } });
+    const hit=this._famResolve(iv.swId); const name=hit?hit.sw.name:'A swimmer';
+    const cur=this.brandConfig.currency||'QAR';
+    const body=name+' — '+cur+' '+iv.total.toLocaleString()+' for '+this._periodLabel(iv.period)+(ref?(' · ref '+ref):'');
+    try{ this.notify('coach', 'credit-card', 'Payment reported by a family', body); }catch(e){}
+    try{ this._pushSend({role:'staff'}, 'Payment reported', body, '/'); }catch(e){}
+    this.setState({billRefDrafts:{...(this.state.billRefDrafts||{}), [id]:''}, billMsg:'Sent to the club to confirm ✓'});
+  }
+  _billingTotals(period){
+    const rows=this._billing().invoices.filter(iv=>iv.period===period && iv.status!=='void');
+    let paid=0, due=0, overdue=0;
+    rows.forEach(iv=>{ if(iv.status==='paid') paid+=iv.total; else { due+=iv.total; if(this._invOverdue(iv)) overdue+=iv.total; } });
+    return {paid, due, overdue, count:rows.length};
+  }
+  billingExportCsv(period){
+    const p=period||this.billPeriod();
+    const names={}; this.squads.forEach(sq=>(this.roster[sq.id]||[]).forEach(sw=>{ names[sw.id]={name:sw.name, squad:sq.name}; }));
+    const rows=[['Invoice','Swimmer','Squad','Period','Issued','Due','Description','Amount','Currency','Status','Paid on','Method','Reference']];
+    this._billing().invoices.filter(iv=>iv.period===p).forEach(iv=>{
+      const who=names[iv.swId]||{name:iv.swId, squad:''};
+      rows.push([iv.id, who.name, who.squad, iv.period, iv.issued, iv.due,
+        (iv.items||[]).map(i=>i.label).join(' + '), iv.total, this.brandConfig.currency||'QAR',
+        this._invOverdue(iv)?'overdue':iv.status,
+        (iv.paid&&iv.paid.date)||'', (iv.paid&&iv.paid.method)||'', (iv.paid&&iv.paid.ref)||'']);
+    });
+    this.exportCsv('vortex-invoices-'+p+'.csv', rows);
+  }
 
   // ---- Video Analysis ----
   parseVideoUrl(url){
@@ -7987,7 +8747,7 @@ class Component extends DCLogic {
     this._printAnchor.remove();
     this._printAnchor=null;
   }
-  componentDidMount(){ this._icons(); this._clock=setInterval(()=>{ if(this.state.clockRunning && this.state.tool==='clock') this.tickClock(); }, 1000);
+  componentDidMount(){ this._applyLang(); this._icons(); this._clock=setInterval(()=>{ if(this.state.clockRunning && this.state.tool==='clock') this.tickClock(); }, 1000);
     this._onBeforePrint=()=>this._printEscape(); this._onAfterPrint=()=>this._printRestore();
     window.addEventListener('beforeprint', this._onBeforePrint); window.addEventListener('afterprint', this._onAfterPrint);
     if(location.hash==='#print-preview') this.setState({screen:'app', pickedId:'ahmed', view:'squad', squadId:'seniora', tab:'plans', printPreviewOpen:true});
@@ -8106,6 +8866,7 @@ class Component extends DCLogic {
     this.customMeets=g('vx_custom_meets', this.customMeets); this.eventRequests=g('vx_event_requests', this.eventRequests); this.meetCuts=g('vx_meet_cuts', this.meetCuts);
     this.academyTrials=g('vx_academy_trials', this.academyTrials); this.academyFees=g('vx_academy_fees', this.academyFees);
     this.feePlans=g('vx_fee_plans', this.feePlans); this.memberships=g('vx_memberships', this.memberships); this.invoices=g('vx_invoices', this.invoices);
+    this.billing=g('vx_billing', this.billing); this.raceSplitLog=g('vx_race_splits', this.raceSplitLog);
     this.brandConfig=g('vx_brand', this.brandConfig); this.notifications=g('vx_notifications', this.notifications);
     this.tpaceTests=g('vx_tpace', this.tpaceTests); this.fitnessTests=g('vx_fitness_tests', this.fitnessTests);
     this.fitnessPlans=g('vx_fitness_plans', this.fitnessPlans); this.fitnessMedia=g('vx_fitness_media', this.fitnessMedia); this.waTargets=g('vx_wa_targets', this.waTargets); this.promoStore=g('vx_promo', this.promoStore); this.aiSuggOverrides=g('vx_ai_sugg_ovr', this.aiSuggOverrides);
@@ -8357,6 +9118,8 @@ class Component extends DCLogic {
       {id:'standards', icon:'badge-check', title:'Meet Standards', sub:'Cut times · who has qualified', tint:'rgba(12,122,79,.1)', color:'#0C7A4F'},
       {id:'relay', icon:'users-round', title:'Relay Builder', sub:'Fastest lineup by stroke', tint:'rgba(12,122,79,.1)', color:'#0C7A4F'},
       {id:'season', icon:'calendar-range', title:'Season Plan', sub:'Phases · weeks · peak & taper', tint:'rgba(124,77,255,.12)', color:'#7C4DFF'},
+      {id:'race', icon:'gauge', title:'Race Strategy', sub:'Split targets vs the race swum', tint:'rgba(200,30,91,.1)', color:'#C81E5B'},
+      {id:'risk', icon:'shield-alert', title:'Load & Risk', sub:'Who is ramping up too fast', tint:'rgba(245,166,35,.12)', color:'#C77E12'},
     ];
     // A staff member whose role contains "fitness" (e.g. Coach Nedhal, role "Fitness Coach")
     // is limited to the Fitness Plan tool only — every other tool is hidden for them.
@@ -8576,8 +9339,61 @@ class Component extends DCLogic {
     const mainPadBottom = (S.view==='squad') ? '78px' : '0px';
 
     // ---- tool overlay content ----
-    const toolTitleMap={attday:'Daily Attendance',insights:'Insights',boards:'Boards',video:'Video Analysis',lounge:'Vortex Lounge',goals:'Season Goals',ai:'AI Assistants',review:'AI Plan Review',clock:'Pace Clock',talent:'Talent Board',recovery:'Recovery Board',improvers:'Top Improvers',rankings:'Rankings',standards:'Meet Standards',relay:'Relay Builder',zoneeng:'Zone Engine',sponsors:'Sponsors',tpace:'T-Pace Tests',promo:'Level-Up Review',entries:'Meet Entries',fitness:'Fitness Plan',inbody:'InBody Import',season:'Season Plan'};
+    const toolTitleMap={attday:'Daily Attendance',insights:'Insights',boards:'Boards',video:'Video Analysis',lounge:'Vortex Lounge',goals:'Season Goals',ai:'AI Assistants',review:'AI Plan Review',clock:'Pace Clock',talent:'Talent Board',recovery:'Recovery Board',improvers:'Top Improvers',rankings:'Rankings',standards:'Meet Standards',relay:'Relay Builder',zoneeng:'Zone Engine',sponsors:'Sponsors',tpace:'T-Pace Tests',promo:'Level-Up Review',entries:'Meet Entries',fitness:'Fitness Plan',inbody:'InBody Import',season:'Season Plan',race:'Race Strategy',risk:'Load & Risk'};
     const toolScope = S.toolScopeClub ? ('Club-wide · '+this.allSwimmersFlat().length+' swimmers') : squad.name+' · '+squad.count+' swimmers';
+
+    // ---- Race strategy ----
+    const racePool = S.toolScopeClub ? this.allSwimmersFlat() : (this.roster[S.squadId]||[]).map(sw=>({...sw, squadId:S.squadId, squadName:squad.name}));
+    const raceQ=(S.raceQuery||'').trim().toLowerCase();
+    const raceSel = racePool.find(sw=>sw.id===S.raceSwId) || null;
+    const raceSwRows = raceSel ? [] : racePool
+      .filter(sw=>!raceQ || sw.name.toLowerCase().includes(raceQ))
+      .slice(0,30)
+      .map(sw=>({ id:sw.id, name:sw.name, initials:sw.initials, sub:(sw.squadName||squad.name)+' · best '+(sw.topEvent||'—'),
+        onPick:()=>this.setState({raceSwId:sw.id, raceEvent:null, raceQuery:''}) }));
+    const raceEvents = raceSel ? (raceSel.pbs||[]).filter(p=>this._raceDistance(p.event)>=50).map(p=>p.event) : [];
+    const raceEvent = (raceSel && raceEvents.includes(S.raceEvent)) ? S.raceEvent : raceEvents[0]||null;
+    const racePb = raceSel && raceEvent ? (raceSel.pbs||[]).find(p=>p.event===raceEvent) : null;
+    // The target is the coach's season goal where one is set. Otherwise it falls back to the
+    // same age-scaled suggestion Season Goals uses, so the planner always has something to
+    // plan against — clearly labelled, so nobody mistakes the fallback for a coach's decision.
+    const raceGoalOv = raceSel && raceEvent ? ((this.swimmerGoals[raceSel.id]||{})[raceEvent]||null) : null;
+    const raceTargetSec = racePb ? (raceGoalOv ? raceGoalOv.sec : this._aiSuggestSec(racePb.sec, raceSel.age)) : null;
+    const raceActual = raceSel && raceEvent ? this._raceActual(raceSel.id, raceEvent) : null;
+    const racePlan = raceEvent && raceTargetSec ? this.raceSplits(raceEvent, raceTargetSec) : [];
+    const raceActualTotal = (raceActual && raceActual.splits.every(v=>v!=null) && raceActual.splits.length===racePlan.length)
+      ? raceActual.splits.reduce((a,b)=>a+b, 0) : null;
+    let raceCumActual=0;
+    const raceRows = racePlan.map((leg,i)=>{
+      const act = raceActual ? raceActual.splits[i] : null;
+      if(act!=null) raceCumActual+=act;
+      const delta = act!=null ? +(act-leg.split).toFixed(2) : null;
+      return { label: leg.to+'m', legNo:leg.leg,
+        target:this.fmt(leg.split), targetCum:this.fmt(leg.cumulative),
+        actualDraft: act!=null ? act.toFixed(2) : '',
+        onActual:(e)=>this.raceActualSet(raceSel.id, raceEvent, leg.leg, e.target.value),
+        hasActual: act!=null,
+        actualCum: act!=null ? this.fmt(raceCumActual) : '',
+        deltaLabel: delta==null ? '' : ((delta>0?'+':'')+delta.toFixed(2)),
+        deltaBg: delta==null ? '#F8FAFC' : (delta>0.10 ? '#FBE4E4' : (delta<-0.10 ? '#DCF5EA' : '#EEF1F5')),
+        deltaFg: delta==null ? '#9AA2B4' : (delta>0.10 ? '#B42318' : (delta<-0.10 ? '#0C7A4F' : '#7A8296')) };
+    });
+    const raceGap = (racePb && raceTargetSec!=null) ? +(racePb.sec-raceTargetSec).toFixed(2) : null;
+
+    // ---- Load & injury risk ----
+    const riskSquadIds = S.toolScopeClub ? this.squads.map(s=>s.id) : [S.squadId];
+    const riskBoard = S.tool==='risk' ? this._riskBoard(riskSquadIds) : [];
+    const riskRows = riskBoard.map(r=>({
+      name:r.name, sqName:r.sqName,
+      level: r.level==='check' ? 'Worth a check-in' : 'Keep an eye on',
+      levelBg: r.level==='check' ? '#FBE4E4' : '#FBF0DD',
+      levelFg: r.level==='check' ? '#B42318' : '#7A5A0C',
+      acwrLabel: r.acwr==null ? 'Not enough sessions logged yet' : ('Load ratio '+r.acwr.toFixed(2)+' · '+Math.round(r.acute/100)/10+'km this week vs '+Math.round(r.chronic/100)/10+'km average'),
+      readinessLabel: r.readiness==null ? 'No wellness check-ins' : ('Readiness '+r.readiness+'/100'),
+      attendLabel: r.attNow==null ? 'No attendance marked' : ('Attendance '+r.attNow+'%'),
+      reasons: r.flags.map(f=>({ text:f.text, dot: f.level>=2 ? '#B42318' : '#B4690E' })),
+      onOpen:()=>this.setState({view:'squad', squadId:r.sqId, tab:'group', swimmerId:r.swId, tool:null}),
+    }));
 
     // ---- Talent / Move-up board ----
     const squadMaxAge={preteam:7,advb:9,adva:11,junior:13,seniorb:13,seniora:14,vortexb:15,vortexa:16,legend:99};
@@ -8915,6 +9731,69 @@ class Component extends DCLogic {
     const entrySwRows = entrySwOptions.slice(0,60).map(sw=>{ const on=entrySwSel.includes(sw.id); return {id:sw.id, name:sw.name, initials:sw.initials, selected:on?'#C7D6FF':'#F1F3F7', onSelect:()=>this.toggleEntrySwimmer(sw.id)}; });
     const entrySelName = entrySwSel.length? (entrySwSel.length+' swimmer'+(entrySwSel.length>1?'s':'')+' selected') : '';
     const entryHasSw = entrySwSel.length>0;
+
+    // ---- Meet day (live results) ----
+    const meetDayOn = S.meetMode==='day';
+    const entryMeetObj = this.allMeets().find(m=>m.name===entryMeetName) || null;
+    const entryMeetISO = this._meetISO(entryMeetObj);
+    const entryMeetCourse = (entryMeetObj && entryMeetObj.course) || 'LCM';
+    const mdSwims = meetDayOn ? this._meetSwims(entryMeetName) : {};
+    const mdPlaces = meetDayOn ? this._meetPlaces(entryMeetName) : {};
+    const mdDrafts = S.meetTimeDrafts||{};
+    const mdFlatById = {}; entryRoster.forEach(sw=>{ mdFlatById[sw.id]=sw; });
+    const mdOrdinal = (n)=> n+(n===1?'st':n===2?'nd':n===3?'rd':'th');
+    let mdDone=0, mdPbs=0;
+    const mdRowFor = (e)=>{
+      const key=e.swId+'|'+e.event;
+      const swim=mdSwims[key]||null;
+      const sw=mdFlatById[e.swId];
+      const before=sw ? this._bestBefore(sw, e.event, entryMeetName) : null;
+      const drop=(swim && before!=null && swim.sec<before) ? (before-swim.sec) : 0;
+      if(swim){ mdDone++; if(drop>0 || before==null) mdPbs++; }
+      const place=mdPlaces[key];
+      return { lane:e.lane, name:e.name, event:e.event, pb:this._pbTimeFor(e.swId, e.event),
+        done:!!swim, notDone:!swim,
+        timeLabel: swim ? this.fmt(swim.sec) : '',
+        placeLabel: place ? mdOrdinal(place) : '',
+        pbLabel: swim ? (before==null ? 'First time' : (drop>0 ? ('PB −'+drop.toFixed(2)+'s') : '')) : '',
+        pbShow: !!swim && (before==null || drop>0),
+        draft: mdDrafts[key]||'',
+        onDraft:(ev)=>this.setState({meetTimeDrafts:{...(this.state.meetTimeDrafts||{}), [key]:ev.target.value}}),
+        onSave:()=>this.meetLiveSave(entryMeetName, entryMeetISO, entryMeetCourse, e.swId, e.event, (this.state.meetTimeDrafts||{})[key]),
+        onClear:()=>this.meetLiveClear(entryMeetName, e.swId, e.event) };
+    };
+    const meetDayHeats = (()=>{
+      if(!meetDayOn) return [];
+      const byEv={}; entriesList.forEach(e=>{ (byEv[e.event]=byEv[e.event]||[]).push(e); });
+      const out=[];
+      Object.keys(byEv).sort().forEach(ev=>{
+        const byHeat={}; byEv[ev].forEach(e=>{ (byHeat[e.heat||1]=byHeat[e.heat||1]||[]).push(e); });
+        Object.keys(byHeat).sort((a,b)=>a-b).forEach(h=>{
+          const rows=byHeat[h].slice().sort((a,b)=>(a.lane||0)-(b.lane||0)).map(mdRowFor);
+          out.push({ label:ev+' — Heat '+h, event:ev,
+            doneLabel: rows.filter(r=>r.done).length+' / '+rows.length,
+            complete: rows.every(r=>r.done), rows });
+        });
+      });
+      return out;
+    })();
+    // Standings rebuild themselves from the times as they land, so the board on the wall and
+    // the app never disagree about who won.
+    const meetDayBoards = (()=>{
+      if(!meetDayOn) return [];
+      const byEvent={};
+      Object.keys(mdSwims).forEach(k=>{ const s=mdSwims[k]; (byEvent[s.event]=byEvent[s.event]||[]).push(s); });
+      return Object.keys(byEvent).sort().map(ev=>({
+        event:ev,
+        rows: byEvent[ev].slice().sort((a,b)=>a.sec-b.sec).slice(0,8).map((s,i)=>({
+          place: mdOrdinal(i+1),
+          name: (mdFlatById[s.swId]||{}).name || '—',
+          time: this.fmt(s.sec),
+          medal: i===0?'#C89B3C':(i===1?'#9AA2B4':(i===2?'#B0762F':'#EEF1F5')),
+          medalFg: i<3?'#fff':'#7A8296' })),
+      }));
+    })();
+    const mdTotal = entriesList.length;
 
     // ---- Academy ----
     const acadTabs=['trials','ladder','schedule','fees'];
@@ -9458,11 +10337,19 @@ class Component extends DCLogic {
       onRtlOn:()=>this.setState({brandDraft:{...bd, rtl:true}}), onRtlOff:()=>this.setState({brandDraft:{...bd, rtl:false}}),
       locale:bd.locale, onLocale:(e)=>this.setState({brandDraft:{...bd, locale:e.target.value}}),
       currency:bd.currency, onCurrency:(e)=>this.setState({brandDraft:{...bd, currency:e.target.value}}),
+      payLink:bd.payLink||'', onPayLink:(e)=>this.setState({brandDraft:{...bd, payLink:e.target.value}}),
       onSave:()=>this.brandSave(),
       squadCount:this.squads.length, ruleset: bd.zoneMethod==='6'?'6-zone (EN1–EN3, SP1–SP3)':'5-zone (Zone 1 – Zone 5)',
     };
 
     return {
+      tx:this._t(),
+      langIsAr: this._lang()==='ar', langIsEn: this._lang()!=='ar',
+      onLangEn:()=>this.setLang('en'), onLangAr:()=>this.setLang('ar'),
+      langEnBg: this._lang()!=='ar' ? 'rgba(255,255,255,.9)' : 'transparent',
+      langEnFg: this._lang()!=='ar' ? '#0A0F1A' : 'rgba(255,255,255,.6)',
+      langArBg: this._lang()==='ar' ? 'rgba(255,255,255,.9)' : 'transparent',
+      langArFg: this._lang()==='ar' ? '#0A0F1A' : 'rgba(255,255,255,.6)',
       showLogin: S.screen==='login', showApp: S.screen==='app',
       loginAccounts: S.loginStage==='accounts', loginPin: S.loginStage==='pin',
       accountTiles, pinDots, padKeys,
@@ -9676,18 +10563,54 @@ class Component extends DCLogic {
       renewRows, renewHas:renewRows.length>0,
       renewTitle:renewRows.length+' membership'+(renewRows.length===1?'':'s')+' need renewing', acadHasTrials: acadTrialRows.length>0, acadCurrency:curr,
       ...(()=>{
-        const mk=this.invMonthKey(); const monthMap=this.invoices[mk]||{};
-        const invSquadSel = S.invSquadSel && this.squadById[S.invSquadSel] ? S.invSquadSel : this.squads[0].id;
-        const invSquadOptions = this.squads.map(sq=>({value:sq.id, label:sq.name}));
-        const swList = this.roster[invSquadSel]||[];
-        const fee = this.academyFees[invSquadSel]||0;
-        let collected=0, outstanding=0;
-        const invRows = swList.map(sw=>{ const paid=!!monthMap[sw.id]; if(paid) collected+=fee; else outstanding+=fee;
-          return { name:sw.name, amount:curr+' '+fee, label: paid?'Paid':'Mark paid', bg: paid?'#DCF5EA':'#FBE4E4', fg: paid?'#0C7A4F':'#B42318', onToggle:()=>this.invoiceToggle(sw.id) };
-        });
-        const now=new Date();
-        return { invMonthLabel: now.toLocaleDateString('en-GB',{month:'long', year:'numeric'}), invSquadSel, onInvSquadSel:(e)=>this.setState({invSquadSel:e.target.value}), invSquadOptions,
-          invCollected: curr+' '+collected.toLocaleString(), invOutstanding: curr+' '+outstanding.toLocaleString(), invRows };
+        const p=this.billPeriod();
+        const invSquadSel = (S.invSquadSel && (S.invSquadSel==='all' || this.squadById[S.invSquadSel])) ? S.invSquadSel : 'all';
+        const invSquadOptions = [{value:'all', label:'All squads'}].concat(this.squads.map(sq=>({value:sq.id, label:sq.name})));
+        const who={}; this.squads.forEach(sq=>(this.roster[sq.id]||[]).forEach(sw=>{ who[sw.id]={name:sw.name, squad:sq.name, sqId:sq.id}; }));
+        const t=this._billingTotals(p);
+        const money=(n)=>curr+' '+Number(n||0).toLocaleString();
+        const STATUS={
+          paid:   {label:'Paid',            bg:'#DCF5EA', fg:'#0C7A4F'},
+          sent:   {label:'Payment reported',bg:'#E7EEFC', fg:'#1B4CA1'},
+          unpaid: {label:'Unpaid',          bg:'#FBE4E4', fg:'#B42318'},
+          overdue:{label:'Overdue',         bg:'#FDE3D0', fg:'#9A3A0B'},
+          void:   {label:'Void',            bg:'#EEF1F5', fg:'#7A8296'},
+        };
+        const invRows=this._billing().invoices
+          .filter(iv=>iv.period===p)
+          .filter(iv=>invSquadSel==='all' || (who[iv.swId] ? who[iv.swId].sqId===invSquadSel : iv.sqId===invSquadSel))
+          .sort((a,b)=>{
+            const rank=(iv)=>this._invOverdue(iv)?0:(iv.status==='sent'?1:(iv.status==='unpaid'?2:(iv.status==='paid'?3:4)));
+            return rank(a)-rank(b) || (who[a.swId]?who[a.swId].name:'').localeCompare(who[b.swId]?who[b.swId].name:'');
+          })
+          .map(iv=>{
+            const key=this._invOverdue(iv)?'overdue':(STATUS[iv.status]?iv.status:'unpaid');
+            const st=STATUS[key];
+            const settled=iv.status==='paid', dead=iv.status==='void';
+            const ref=(iv.paid&&iv.paid.ref)||'';
+            return { id:iv.id,
+              name:(who[iv.swId]||{}).name||'(swimmer removed)', squad:(who[iv.swId]||{}).squad||'',
+              amount:money(iv.total), what:(iv.items||[]).map(i=>i.label).join(' + '),
+              statusLabel:st.label, statusBg:st.bg, statusFg:st.fg,
+              dueLabel: settled ? ('Paid '+this._fmtDMY((iv.paid&&iv.paid.date)||iv.issued)+((iv.paid&&iv.paid.method)?(' · '+iv.paid.method):''))
+                : dead ? 'Voided'
+                : (iv.due ? ('Due '+this._fmtDMY(iv.due)) : ''),
+              hasRef: !!ref, refLine: ref ? ('Reference: '+ref) : '',
+              canSettle: !settled && !dead, canUndo: settled, canVoid: !dead && !settled,
+              onMarkPaid:()=>this.billingMarkPaid(iv.id,'cash'), onMarkTransfer:()=>this.billingMarkPaid(iv.id,'transfer'),
+              onUndo:()=>this.billingUnpay(iv.id), onVoid:()=>this.billingVoid(iv.id), onRemind:()=>this.billingRemind(iv.id) };
+          });
+        return {
+          invMonthLabel:this._periodLabel(p),
+          onBillPrev:()=>this.setState({billPeriod:this._periodShift(p,-1), billMsg:''}),
+          onBillNext:()=>this.setState({billPeriod:this._periodShift(p,1), billMsg:''}),
+          invSquadSel, onInvSquadSel:(e)=>this.setState({invSquadSel:e.target.value}), invSquadOptions,
+          invCollected:money(t.paid), invOutstanding:money(t.due),
+          invOverdue:money(t.overdue), invHasOverdue:t.overdue>0,
+          invRows, invEmpty:invRows.length===0,
+          invIssueLabel:'Issue invoices for '+this._periodLabel(p),
+          onBillIssue:()=>this.billingIssue(p), onBillExport:()=>this.billingExportCsv(p),
+          billMsg:S.billMsg||'', billMsgShow:!!S.billMsg };
       })(),
       trialChildName:acadTrialForm.childName, onTrialChildName:(e)=>this.setState({trialForm:{...acadTrialForm, childName:e.target.value}}),
       trialAge:acadTrialForm.age, onTrialAge:(e)=>this.setState({trialForm:{...acadTrialForm, age:e.target.value}}),
@@ -10192,9 +11115,48 @@ class Component extends DCLogic {
       famTabResultsBg:S.famTab==='results'?'#0A0F1A':'#fff', famTabResultsFg:S.famTab==='results'?'#fff':'#3A4152',
       famTabMeetsBg:S.famTab==='meets'?'#0A0F1A':'#fff', famTabMeetsFg:S.famTab==='meets'?'#fff':'#3A4152',
       famTabDocsBg:S.famTab==='docs'?'#0A0F1A':'#fff', famTabDocsFg:S.famTab==='docs'?'#fff':'#3A4152',
+      famTabFeesBg:S.famTab==='fees'?'#0A0F1A':'#fff', famTabFeesFg:S.famTab==='fees'?'#fff':'#3A4152',
       famTabMsgsBg:S.famTab==='msgs'?'#0A0F1A':'#fff', famTabMsgsFg:S.famTab==='msgs'?'#fff':'#3A4152',
-      onFamTabPerf:()=>this.setState({famTab:'perf'}), onFamTabAttend:()=>this.setState({famTab:'attend'}), onFamTabResults:()=>this.setState({famTab:'results'}), onFamTabMeets:()=>this.setState({famTab:'meets'}), onFamTabDocs:()=>this.setState({famTab:'docs'}), onFamTabMsgs:()=>{ this.setState({famTab:'msgs'}); try{ this._famMsgFetch(); }catch(e){} },
-      famShowPerf:(S.famTab||'perf')==='perf', famShowAttend:S.famTab==='attend', famShowResults:S.famTab==='results', famShowMeets:S.famTab==='meets', famShowDocs:S.famTab==='docs', famShowMsgs:S.famTab==='msgs',
+      onFamTabPerf:()=>this.setState({famTab:'perf'}), onFamTabAttend:()=>this.setState({famTab:'attend'}), onFamTabResults:()=>this.setState({famTab:'results'}), onFamTabMeets:()=>this.setState({famTab:'meets'}), onFamTabDocs:()=>this.setState({famTab:'docs'}), onFamTabFees:()=>this.setState({famTab:'fees'}), onFamTabMsgs:()=>{ this.setState({famTab:'msgs'}); try{ this._famMsgFetch(); }catch(e){} },
+      famShowPerf:(S.famTab||'perf')==='perf', famShowAttend:S.famTab==='attend', famShowResults:S.famTab==='results', famShowMeets:S.famTab==='meets', famShowDocs:S.famTab==='docs', famShowFees:S.famTab==='fees', famShowMsgs:S.famTab==='msgs',
+      // ---- what this family owes -----------------------------------------------------
+      ...(()=>{
+        const fu=S.familyUser;
+        const blank={famFeeRows:[], famFeesNone:true, famFeesOwes:false, famFeesClear:false, famFeesDotColor:'transparent',
+          famFeesDue:'', famFeesDueSub:'', famPayLinkHas:false, onFamPayLink:()=>{}};
+        if(!fu) return blank;
+        const uid=fu.swimmerIds[Math.min(S.familyActiveIdx, fu.swimmerIds.length-1)]||fu.swimmerIds[0];
+        const hit=this._famResolve(uid); if(!hit) return blank;
+        const cur=this.brandConfig.currency||'QAR';
+        const money=(n)=>cur+' '+Number(n||0).toLocaleString();
+        const drafts=S.billRefDrafts||{};
+        const mine=this._billing().invoices.filter(iv=>iv.swId===hit.sw.id && iv.status!=='void')
+          .sort((a,b)=>String(b.period).localeCompare(String(a.period)));
+        let owed=0, late=0;
+        mine.forEach(iv=>{ if(iv.status!=='paid'){ owed+=iv.total; if(this._invOverdue(iv)) late++; } });
+        const STATUS={ paid:{label:'Paid',bg:'#DCF5EA',fg:'#0C7A4F'}, sent:{label:'Waiting for the club to confirm',bg:'#E7EEFC',fg:'#1B4CA1'},
+          unpaid:{label:'Due',bg:'#FBE4E4',fg:'#B42318'}, overdue:{label:'Overdue',bg:'#FDE3D0',fg:'#9A3A0B'} };
+        const link=String(this.brandConfig.payLink||'').trim();
+        return {
+          famFeeRows: mine.map(iv=>{
+            const st=STATUS[this._invOverdue(iv)?'overdue':(STATUS[iv.status]?iv.status:'unpaid')];
+            return { id:iv.id, periodLabel:this._periodLabel(iv.period), what:(iv.items||[]).map(i=>i.label).join(' + '),
+              amount:money(iv.total), statusLabel:st.label, statusBg:st.bg, statusFg:st.fg,
+              dueLabel: iv.status==='paid' ? ('Paid '+this._fmtDMY((iv.paid&&iv.paid.date)||iv.issued))
+                : (iv.due ? ('Due '+this._fmtDMY(iv.due)) : ''),
+              canReport: iv.status==='unpaid',
+              ref: drafts[iv.id]||'',
+              onRef:(e)=>this.setState({billRefDrafts:{...(this.state.billRefDrafts||{}), [iv.id]:e.target.value}}),
+              onSent:()=>this.famBillingSent(iv.id) };
+          }),
+          famFeesNone: mine.length===0,
+          famFeesOwes: owed>0, famFeesClear: mine.length>0 && owed===0,
+          famFeesDotColor: late>0 ? '#E5484D' : 'transparent',
+          famFeesDue: money(owed),
+          famFeesDueSub: late>0 ? (late+' invoice'+(late===1?'':'s')+' past the due date') : 'across '+mine.filter(iv=>iv.status!=='paid').length+' invoice'+(mine.filter(iv=>iv.status!=='paid').length===1?'':'s'),
+          famPayLinkHas: !!link, onFamPayLink:()=>this._openUrl(link),
+        };
+      })(),
       ...(()=>{ const fu=S.familyUser; if(!fu) return {};
         const uid=fu.swimmerIds[Math.min(S.familyActiveIdx, fu.swimmerIds.length-1)]||fu.swimmerIds[0];
         const _h=this._famResolve(uid); const sw=_h?_h.sw:null;
@@ -10431,6 +11393,33 @@ class Component extends DCLogic {
       promoRows, promoEmpty, promoScopeLabel,
       toolEntries:S.tool==='entries', toolFitness:S.tool==='fitness', toolInbody:S.tool==='inbody', toolSponsors:S.tool==='sponsors',
       toolTalent:S.tool==='talent', talentRows, talentEmpty, talentScopeLabel:toolScope,
+      // ---- race strategy ----
+      toolRace:S.tool==='race', raceScopeLabel:toolScope,
+      raceQuery:S.raceQuery||'', onRaceQuery:(e)=>this.setState({raceQuery:e.target.value}),
+      raceSwRows, raceNoSel:!raceSel, raceHasSel:!!raceSel,
+      raceSelName: raceSel?raceSel.name:'', raceSelInitials: raceSel?raceSel.initials:'',
+      onRaceBack:()=>this.setState({raceSwId:null, raceEvent:null, raceQuery:''}),
+      raceEventChips: raceEvents.map(ev=>({ label:ev, onClick:()=>this.setState({raceEvent:ev}),
+        bg: ev===raceEvent?squad.accent:'#fff', fg: ev===raceEvent?'#fff':'#3A4152', border: ev===raceEvent?squad.accent:'#E5E9F0' })),
+      raceHasEvents: raceEvents.length>0, raceNoEvents: !!raceSel && raceEvents.length===0,
+      raceEventLabel: raceEvent||'',
+      racePbLabel: racePb ? this.fmt(racePb.sec) : '—',
+      raceTargetLabel: raceTargetSec!=null ? this.fmt(raceTargetSec) : '—',
+      raceTargetSource: raceGoalOv ? (raceGoalOv.source==='coach'?'Season goal set by the coach':'Season goal (suggested)') : 'No season goal set — using the age-scaled suggestion',
+      raceGapLabel: raceGap==null ? '' : (raceGap>0 ? ('Needs to find '+raceGap.toFixed(2)+'s') : 'Already inside the target'),
+      raceGapColor: raceGap==null ? '#9AA2B4' : (raceGap>0 ? '#B4690E' : '#0C7A4F'),
+      raceRows, raceHasRows: raceRows.length>0,
+      raceActualTotalLabel: raceActualTotal!=null ? this.fmt(raceActualTotal) : '',
+      raceActualHas: raceActualTotal!=null,
+      raceActualVerdict: raceActualTotal==null ? '' : (raceActualTotal<=raceTargetSec
+        ? ('On the plan — '+this.fmt(raceTargetSec-raceActualTotal)+'s inside it')
+        : (this.fmt(raceActualTotal-raceTargetSec)+'s outside the plan')),
+      raceActualVerdictColor: (raceActualTotal!=null && raceActualTotal<=raceTargetSec) ? '#0C7A4F' : '#B42318',
+      onRaceClearActual: (raceSel&&raceEvent) ? ()=>this.raceActualClear(raceSel.id, raceEvent) : ()=>{},
+      // ---- load & injury risk ----
+      toolRisk:S.tool==='risk', riskRows, riskScopeLabel:toolScope,
+      riskEmpty: riskRows.length===0,
+      riskCountLine: riskRows.length ? (riskRows.length+' swimmer'+(riskRows.length===1?'':'s')+' worth looking at') : '',
       toolAttDay:S.tool==='attday',
       ...(()=>{
         if(S.tool!=='attday') return {};
@@ -10552,6 +11541,20 @@ class Component extends DCLogic {
       entriesLane:S.entriesLane, onEntriesLane:(e)=>this.setState({entriesLane:e.target.value}),
       onEntryAdd:()=>this.entryAdd(entryMeetName, S.squadId),
       entryRows, entryHasRows: entryRows.length>0, onExportEntries:()=>this.exportMeetEntries(entryMeetName),
+      // ---- meet day ----
+      meetDayOn, meetEntriesOn: !meetDayOn,
+      onMeetModeEntries:()=>this.setState({meetMode:'entries', meetDayMsg:''}),
+      onMeetModeDay:()=>this.setState({meetMode:'day', meetDayMsg:''}),
+      meetModeEntriesBg: meetDayOn?'transparent':squad.accent, meetModeEntriesFg: meetDayOn?'#7A8296':'#fff',
+      meetModeDayBg: meetDayOn?squad.accent:'transparent', meetModeDayFg: meetDayOn?'#fff':'#7A8296',
+      meetDayHeats, meetDayBoards, meetDayHasHeats: meetDayHeats.length>0,
+      meetDayTitle: entryMeetName,
+      meetDaySub: entryMeetObj ? (this._fmtDMY(entryMeetISO, true)+' · '+entryMeetCourse) : 'No date set',
+      meetDayProgress: mdDone+' of '+mdTotal+' swim'+(mdTotal===1?'':'s')+' recorded',
+      meetDayPbLine: mdPbs+' personal best'+(mdPbs===1?'':'s')+' today',
+      meetDayPct: mdTotal ? Math.round((mdDone/mdTotal)*100)+'%' : '0%',
+      meetDayMsg:S.meetDayMsg||'', meetDayMsgShow:!!S.meetDayMsg,
+      meetDayHasBoards: meetDayBoards.length>0,
       entryNewOpen:S.entryNewOpen, entryNewToggleLabel: S.entryNewOpen?'Cancel':'+ New swimmer',
       onEntryNewToggle:()=>this.setState({entryNewOpen:!S.entryNewOpen, entryNewErr:''}),
       entryNewName:S.entryNewName, onEntryNewName:(e)=>this.setState({entryNewName:e.target.value}),
@@ -10593,7 +11596,9 @@ class Component extends DCLogic {
       onClockToggle:()=> S.clockRunning?this.clockPause():this.clockStart(), onClockReset:()=>this.clockReset(), onClockPrev:()=>this.clockJump(-1), onClockNext:()=>this.clockJump(1),
       clockRows, onClockStartBeginning:()=>this.clockStartFrom(0), onClockStartSelected:()=>this.clockStartFrom(S.clockSetIdx),
       clockFs:S.clockFs, onClockFsEnter:()=>this.clockFsEnter(), onClockFsExit:()=>this.clockFsExit(),
-      energyZones, insightAttend, insightStats, insChips, insightsShowPicker, insightScopeLabel,
+      // loadBars was computed but never handed over, so Insights drew an empty "Weekly
+      // training load" chart — bars for a week the coach could see the numbers behind.
+      loadBars, energyZones, insightAttend, insightStats, insChips, insightsShowPicker, insightScopeLabel,
       boardChips, boardTitle, boardMeta, boardRows, boardEmpty, boardIsComp, boardEvent, onBoardEvent,
       boardEventOptionsV: boardEventOptions.map(e=>({value:e, label:e})),
       lapBars, videoHasActive, videoChips, activeVideoTitle: activeVid?activeVid.title:'', activeVideoTag: activeVid?activeVid.tag:'',

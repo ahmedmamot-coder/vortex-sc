@@ -190,6 +190,466 @@ describe("tab bar", () => {
     eq(/prefers-reduced-motion:reduce\)\{ \.vx-wave\{animation:none\}/.test(SOURCE), true));
 });
 
+/* -------------------------------------------------------------------- arabic
+   The family screens are what a parent who reads Arabic actually opens. The
+   choice has to be theirs and stay on their phone — a parent switching to Arabic
+   must not flip the language on the coach's iPad, and they cannot reach the admin
+   settings to put it back. */
+describe("arabic", () => {
+  const store = {};
+  globalThis.localStorage = {
+    getItem: (k) => (k in store ? store[k] : null),
+    setItem: (k, v) => { store[k] = String(v); },
+    removeItem: (k) => { delete store[k]; },
+  };
+  const ctx = (locale, device) => {
+    for (const k of Object.keys(store)) delete store[k];
+    if (device) store.vx_lang = device;
+    return { brandConfig: { locale } };
+  };
+
+  const langOf = (c) => bind("_lang", c, ["_langKey"])();
+  it("falls back to the club's configured language", () => eq(langOf(ctx("ar")), "ar"));
+  it("English club, English app", () => eq(langOf(ctx("en")), "en"));
+  it("the device's own choice wins over the club default", () => eq(langOf(ctx("en", "ar")), "ar"));
+  it("and wins the other way too", () => eq(langOf(ctx("ar", "en")), "en"));
+  it("a junk stored value does not leave the app in no language", () => eq(langOf(ctx("en", "klingon")), "en"));
+
+  const t = (c) => bind("_t", c, ["_i18n", "_lang", "_langKey"])();
+  it("Arabic really is Arabic", () => eq(/[؀-ۿ]/.test(t(ctx("ar")).tabFees), true));
+  it("English really is English", () => eq(t(ctx("en")).tabFees, "Fees"));
+  it("the fees tab a parent taps is translated", () => eq(t(ctx("ar")).tabFees !== "Fees", true));
+
+  const dict = bind("_i18n", {})();
+  it("every phrase carries both languages", () => {
+    const missing = Object.keys(dict).filter((k) => !dict[k][1] || !dict[k][0]);
+    eq(missing, [], "an untranslated key renders English inside an Arabic screen");
+  });
+  it("no Arabic string was left as a copy of the English", () => {
+    const copies = Object.keys(dict).filter((k) => dict[k][0] === dict[k][1]);
+    eq(copies, []);
+  });
+  it("every Arabic string actually contains Arabic", () => {
+    const notArabic = Object.keys(dict).filter((k) => !/[؀-ۿ]/.test(dict[k][1]));
+    eq(notArabic, []);
+  });
+
+  it("the family screens go through the dictionary, not hardcoded English", () => {
+    const tpl = SOURCE.slice(0, SOURCE.indexOf("class Component"));
+    const portal = tpl.slice(tpl.indexOf('value="{{ showFamily }}"'), tpl.indexOf('value="{{ showSquad }}"'));
+    for (const gone of ["-->Fees<", ">Documents</button>", ">Personal bests</p>", ">Nutrition</"])
+      eq(portal.includes(gone), false, `${gone} is still hardcoded`);
+    eq(portal.includes("{{ tx.tabFees }}"), true);
+  });
+  it("the direction is set on the document, not patched per element", () =>
+    eq(/document\.documentElement\.setAttribute\('dir'/.test(SOURCE), true));
+  it("Arabic has a font fallback — Funnel Display has no Arabic glyphs", () =>
+    eq(/\[dir="rtl"\] body[\s\S]{0,200}Noto Naskh Arabic/.test(SOURCE), true));
+  it("letter-spacing is off in Arabic, or the letters stop joining", () =>
+    eq(/\[dir="rtl"\] \*\{letter-spacing:normal/.test(SOURCE), true));
+});
+
+/* -------------------------------------------------------------- race strategy
+   The split targets are what a swimmer is told to swim to. They have to add back
+   up to the goal exactly, and they have to describe a race a coach recognises —
+   out quick off the dive, drifting through the middle, coming back on the finish. */
+describe("race strategy", () => {
+  const ctx = { parseTimeStr: null };
+  const splits = bind("raceSplits", ctx, ["_raceDistance", "_raceShape"]);
+  const dist = bind("_raceDistance", ctx);
+  const sum = (rows) => +rows.reduce((a, r) => a + r.split, 0).toFixed(2);
+
+  it("reads the distance out of the event name", () => eq(dist("200 Breast"), 200));
+  it("reads it out of an IM too", () => eq(dist("400 IM"), 400));
+  it("an event with no distance plans nothing", () => eq(splits("Mystery", 60).length, 0));
+
+  it("a 50 is one leg, not zero", () => eq(splits("50 Free", 26.2).length, 1));
+  it("a 100 splits into two 50s", () => eq(splits("100 Free", 60).length, 2));
+  it("a 400 splits into eight", () => eq(splits("400 Free", 300).length, 8));
+
+  it("the legs add back up to the goal (100)", () => eq(sum(splits("100 Free", 60)), 60));
+  it("the legs add back up to the goal (200)", () => eq(sum(splits("200 Free", 130)), 130));
+  it("the legs add back up to the goal (400)", () => eq(sum(splits("400 Free", 300)), 300));
+  it("the last cumulative IS the goal", () => {
+    const r = splits("200 Free", 130);
+    eq(r[r.length - 1].cumulative, 130);
+  });
+
+  it("the first 50 is the quickest — that is the dive", () => {
+    const r = splits("100 Free", 60);
+    eq(r[0].split < r[1].split, true);
+  });
+  it("a 200 comes home faster than its third 50", () => {
+    const r = splits("200 Free", 130);
+    eq(r[3].split < r[2].split, true);
+  });
+  it("a 400 finishes faster than it drifted", () => {
+    const r = splits("400 Free", 300);
+    eq(r[7].split < r[6].split, true);
+  });
+  it("nobody is asked to negative-split the whole race", () => {
+    const r = splits("100 Free", 60);
+    eq(r[0].split < 30 && r[1].split > 30, true);
+  });
+
+  it("a target of nothing plans nothing rather than dividing by zero", () => eq(splits("100 Free", 0).length, 0));
+
+  const setActual = bind("raceActualSet", {
+    raceSplitLog: {}, todayISO: () => "2026-08-08", _saveJSON: () => {}, forceUpdate: () => {},
+  }, ["parseTimeStr"]);
+  it("a typed split is stored against its leg", () => {
+    const c = { raceSplitLog: {}, todayISO: () => "2026-08-08", _saveJSON: () => {}, forceUpdate: () => {} };
+    const set = bind("raceActualSet", c, ["parseTimeStr"]);
+    set("s1", "100 Free", 2, "31.40");
+    eq(c.raceSplitLog.s1["100 Free"].splits[1], 31.4);
+  });
+  it("clearing a box removes the split instead of storing a 0.00 length", () => {
+    const c = { raceSplitLog: {}, todayISO: () => "2026-08-08", _saveJSON: () => {}, forceUpdate: () => {} };
+    const set = bind("raceActualSet", c, ["parseTimeStr"]);
+    set("s1", "100 Free", 1, "28.10");
+    set("s1", "100 Free", 1, "");
+    eq(c.raceSplitLog.s1["100 Free"].splits[0], null);
+  });
+  it("a minutes:seconds split is understood", () => {
+    const c = { raceSplitLog: {}, todayISO: () => "2026-08-08", _saveJSON: () => {}, forceUpdate: () => {} };
+    const set = bind("raceActualSet", c, ["parseTimeStr"]);
+    set("s1", "400 Free", 1, "1:05.50");
+    eq(c.raceSplitLog.s1["400 Free"].splits[0], 65.5);
+  });
+  void setActual;
+});
+
+/* ------------------------------------------------------------------ load risk
+   This flags children to their coach. Flagging one who is fine wastes a
+   conversation; flagging on data that does not exist destroys trust in the whole
+   board, so "nothing recorded" must never read as "something is wrong". */
+describe("load risk", () => {
+  const DAY = 86400000;
+  const iso = (back) => new Date(Date.parse("2026-08-28T00:00:00Z") - back * DAY).toISOString().slice(0, 10);
+  // 28 days of sessions, 3000m each, every day.
+  const plans = (metres) => Array.from({ length: 28 }, (_, k) => ({ date: iso(k), totalM: metres }));
+
+  const ctxFor = ({ sessions, present, wellness = [], status = {} }) => ({
+    squads: [{ id: "junior", name: "Junior" }],
+    squadById: { junior: { name: "Junior" } },
+    roster: { junior: [{ id: "s1", name: "Hannah Millen" }] },
+    savedPlans: { junior: sessions },
+    wellness: { s1: wellness },
+    swimmerStatus: status,
+    todayISO: () => "2026-08-28",
+    getAttendStatus: (sq, day) => present(day),
+  });
+
+  const riskOf = (ctx) => bind("_riskFor", ctx, [
+    "_swLoadSeries", "_attendPct", "_wellReadiness", "_swStatus", "shiftDate",
+  ])("junior", ctx.roster.junior[0], 0);
+
+  it("a steady swimmer is not flagged", () => {
+    const r = riskOf(ctxFor({ sessions: plans(3000), present: () => "present" }));
+    eq(r.level, "ok");
+  });
+  it("a steady swimmer's load ratio sits around 1", () => {
+    const r = riskOf(ctxFor({ sessions: plans(3000), present: () => "present" }));
+    eq(r.acwr, 1);
+  });
+  it("a swimmer with nothing recorded is not flagged as fine OR as at risk", () => {
+    const r = riskOf(ctxFor({ sessions: [], present: () => "unmarked" }));
+    eq(r.acwr, null);
+    eq(r.level, "ok");
+    eq(r.attNow, null, "no register marked must not read as 0% attendance");
+  });
+  it("a load spike is flagged", () => {
+    // Triple the metres for the last 7 days only.
+    const sessions = plans(3000).map((p, k) => (k < 7 ? { ...p, totalM: 9000 } : p));
+    const r = riskOf(ctxFor({ sessions, present: () => "present" }));
+    eq(r.acwr, 3);
+    eq(r.flags.some((f) => f.key === "spike"), true);
+    eq(r.level, "check");
+  });
+  it("a swimmer who has stopped training is flagged, but more gently", () => {
+    const sessions = plans(3000).map((p, k) => (k < 7 ? { ...p, totalM: 0 } : p));
+    const r = riskOf(ctxFor({ sessions, present: () => "present" }));
+    eq(r.flags.some((f) => f.key === "drop"), true);
+    eq(r.level, "watch");
+  });
+  it("a run of poor check-ins is flagged", () => {
+    const wellness = Array.from({ length: 7 }, () => ({ sleep: 2, energy: 2, mood: 2, hydration: 2, soreness: 4 }));
+    const r = riskOf(ctxFor({ sessions: plans(3000), present: () => "present", wellness }));
+    eq(r.flags.some((f) => f.key === "readiness"), true);
+    eq(r.flags.some((f) => f.key === "soreness"), true);
+  });
+  it("good check-ins are not flagged", () => {
+    const wellness = Array.from({ length: 7 }, () => ({ sleep: 5, energy: 5, mood: 5, hydration: 5, soreness: 1 }));
+    const r = riskOf(ctxFor({ sessions: plans(3000), present: () => "present", wellness }));
+    eq(r.flags.length, 0);
+  });
+  it("attendance falling away is flagged", () => {
+    const cut = iso(13);
+    const r = riskOf(ctxFor({ sessions: plans(3000), present: (d) => (d > cut ? "absent" : "present") }));
+    eq(r.flags.some((f) => f.key === "attendance"), true);
+  });
+  it("a swimmer already signed off injured is surfaced, not hidden", () => {
+    const r = riskOf(ctxFor({
+      sessions: plans(3000), present: () => "present",
+      status: { s1: { active: false, reason: "injured", from: "2026-08-01", to: "" } },
+    }));
+    eq(r.flags.some((f) => f.key === "signed-off"), true);
+  });
+  it("the board leaves out everyone with nothing to say about them", () => {
+    const ctx = ctxFor({ sessions: plans(3000), present: () => "present" });
+    const board = bind("_riskBoard", ctx, ["_riskFor", "_swLoadSeries", "_attendPct", "_wellReadiness", "_swStatus", "shiftDate"]);
+    eq(board(["junior"]).length, 0);
+  });
+});
+
+/* ------------------------------------------------------------------- meet day
+   Times typed poolside go straight into the swimmer's permanent history, so a
+   mistake here is not a display glitch — it is a race that never happened sitting
+   in a child's record and, if it is fast enough, in their PB. */
+describe("meet day", () => {
+  const swimmers = () => ({
+    junior: [
+      { id: "s1", name: "Hannah Millen", entries: [
+        { event: "50 Free", sec: 31.20, meet: "Spring Cup", meetDate: "2026-03-01" },
+        { event: "50 Free", sec: 30.80, meet: "Doha Open", meetDate: "2026-08-08" },
+        { event: "100 Free", sec: 68.10, meet: "Spring Cup", meetDate: "2026-03-01" },
+      ] },
+      { id: "s2", name: "Omar Ali", entries: [
+        { event: "50 Free", sec: 29.90, meet: "Doha Open", meetDate: "2026-08-08" },
+      ] },
+    ],
+    senior: [
+      { id: "s3", name: "Lilliana Millen", entries: [
+        { event: "50 Free", sec: 30.10, meet: "Doha Open", meetDate: "2026-08-08" },
+      ] },
+    ],
+  });
+  const baseCtx = () => ({
+    squads: [{ id: "junior", name: "Junior" }, { id: "senior", name: "Senior" }],
+    roster: swimmers(),
+    state: {},
+    todayISO: () => "2026-08-08",
+    notify: () => {},
+    _pushSend: () => {},
+    setState: function (p) { Object.assign(this.state, p); },
+  });
+
+  describeIso();
+  function describeIso() {
+    const ctx = baseCtx();
+    const iso = bind("_meetISO", ctx);
+    it("reads the meet's American date order", () => eq(iso({ date: "3/9/2026" }), "2026-03-09"));
+    it("pads a single-digit month and day", () => eq(iso({ date: "3/9/2026" }).length, 10));
+    it("a meet with no date falls back to today, not to nothing", () => eq(iso({}), "2026-08-08"));
+    it("an unparseable date does not produce a broken ISO string", () => eq(iso({ date: "next Friday" }), "2026-08-08"));
+  }
+
+  describeSwims();
+  function describeSwims() {
+    const ctx = baseCtx();
+    const swims = bind("_meetSwims", ctx, ["_swEntries"]);
+    const out = swims("Doha Open");
+    it("collects this meet's swims across every squad", () => eq(Object.keys(out).length, 3));
+    it("leaves another meet's swims alone", () => eq(out["s1|100 Free"], undefined));
+    it("keys a swim by swimmer and event", () => eq(out["s1|50 Free"].sec, 30.8));
+  }
+
+  describePlaces();
+  function describePlaces() {
+    const ctx = baseCtx();
+    const places = bind("_meetPlaces", ctx, ["_meetSwims", "_swEntries"]);
+    const p = places("Doha Open");
+    it("first place is the fastest of the whole event", () => eq(p["s2|50 Free"], 1));
+    it("places run across heats, not within one", () => eq(p["s3|50 Free"], 2));
+    it("the slowest of the event is last", () => eq(p["s1|50 Free"], 3));
+  }
+
+  describeBest();
+  function describeBest() {
+    const ctx = baseCtx();
+    const best = bind("_bestBefore", ctx, ["_swEntries"]);
+    const hannah = ctx.roster.junior[0];
+    it("the best they came in with", () => eq(best(hannah, "50 Free", "Doha Open"), 31.2));
+    it("without today's meet excluded it would beat itself", () => eq(best(hannah, "50 Free", ""), 30.8));
+    it("an event they have never swum has no best", () => eq(best(hannah, "200 Fly", "Doha Open"), null));
+  }
+
+  describeSave();
+  function describeSave() {
+    const ctx = baseCtx();
+    ctx.allSwimmersFlat = () => [{ ...ctx.roster.junior[0], squadId: "junior" }];
+    let saved = null;
+    ctx.adminEditSwimmer = (sqId, id, patch) => { saved = { sqId, id, patch }; };
+    const save = bind("meetLiveSave", ctx, ["parseTimeStr", "_bestBefore", "_swEntries", "fmt"]);
+
+    save("Doha Open", "2026-08-08", "LCM", "s1", "50 Free", "30.10");
+    it("saves against the swimmer's own squad", () => eq(saved.sqId, "junior"));
+    it("correcting a time replaces the swim, it does not stack a second one", () =>
+      eq(saved.patch.pbs.filter((p) => p.event === "50 Free" && p.meet === "Doha Open").length, 1));
+    it("the corrected time is the one kept", () =>
+      eq(saved.patch.pbs.find((p) => p.event === "50 Free" && p.meet === "Doha Open").sec, 30.1));
+    it("their other races are untouched", () =>
+      eq(saved.patch.pbs.filter((p) => p.meet === "Spring Cup").length, 2));
+    it("a PB is measured against what they came in with", () =>
+      eq(/PB by 1\.10s/.test(ctx.state.meetDayMsg), true));
+    it("SCM is recorded as short course", () => {
+      save("Doha Open", "2026-08-08", "SCM", "s1", "50 Free", "29.00");
+      eq(saved.patch.pbs.find((p) => p.meet === "Doha Open").course, "S");
+    });
+
+    it("a time that is not a time is refused, not saved as NaN", () => {
+      saved = null;
+      save("Doha Open", "2026-08-08", "LCM", "s1", "50 Free", "hand timed");
+      eq(saved, null);
+      eq(/Enter a time/.test(ctx.state.meetDayMsg), true);
+    });
+    it("a swimmer who has left the club is refused", () => {
+      saved = null;
+      save("Doha Open", "2026-08-08", "LCM", "gone", "50 Free", "30.00");
+      eq(saved, null);
+    });
+  }
+
+  describeClear();
+  function describeClear() {
+    const ctx = baseCtx();
+    ctx.allSwimmersFlat = () => [{ ...ctx.roster.junior[0], squadId: "junior" }];
+    let saved = null;
+    ctx.adminEditSwimmer = (sqId, id, patch) => { saved = patch; };
+    const clear = bind("meetLiveClear", ctx, ["_swEntries"]);
+    clear("Doha Open", "s1", "50 Free");
+    it("undo takes the swim back out of the record", () =>
+      eq(saved.pbs.some((p) => p.event === "50 Free" && p.meet === "Doha Open"), false));
+    it("and leaves every other race in place", () => eq(saved.pbs.length, 2));
+  }
+});
+
+/* -------------------------------------------------------------------- billing
+   Money is the one place where "roughly right" is not good enough. A fee that is
+   billed twice, billed to a swimmer who is signed off injured, or counted as
+   collected before the club has seen it, all end up as an argument with a parent. */
+describe("billing", () => {
+  const clubCtx = () => ({
+    squads: [{ id: "junior", name: "Junior" }, { id: "senior", name: "Senior" }],
+    roster: {
+      junior: [{ id: "s1", name: "Hannah Millen" }, { id: "s2", name: "Omar Ali" }],
+      senior: [{ id: "s3", name: "Lilliana Millen" }],
+    },
+    academyFees: { junior: 550, senior: 650 },
+    feePlans: { "3x": 650, "4x": 750, "6x": 850, fitness: 360 },
+    memberships: { s3: { pkg: "4x", fitness: true } },
+    swimmerStatus: { s2: { active: false, reason: "injured", from: "2026-08-01", to: "" } },
+    invoices: {},
+    billing: { invoices: [], migrated: true },
+    state: {},
+    brandConfig: { currency: "QAR" },
+    todayISO: () => "2026-08-15",
+    _uid: (p) => p + "_" + Math.random().toString(36).slice(2, 7),
+    _saveJSON: () => {},
+    forceUpdate: () => {},
+    setState: function (p) { Object.assign(this.state, p); },
+    _pushSend: () => {},
+    notify: () => {},
+    _me: () => ({ label: "Coach" }),
+  });
+
+  const FEE_DEPS = ["_membership", "_membershipCost", "_feePlans", "allSwimmersFlat"];
+
+  describeFee();
+  function describeFee() {
+    const ctx = clubCtx();
+    const feeFor = bind("_feeFor", ctx, FEE_DEPS);
+    it("a membership package is what the swimmer owes", () => eq(feeFor("s3", "senior"), 750 + 360));
+    it("without a package it falls back to the squad fee", () => eq(feeFor("s1", "junior"), 550));
+    it("the squad is found even when the caller does not pass it", () => eq(feeFor("s1"), 550));
+    it("a swimmer in no squad owes nothing", () => eq(feeFor("ghost"), 0));
+  }
+
+  describeOverdue();
+  function describeOverdue() {
+    const ctx = clubCtx();
+    const overdue = bind("_invOverdue", ctx);
+    it("unpaid and past the due date is overdue", () => eq(overdue({ status: "unpaid", due: "2026-08-07" }), true));
+    it("unpaid but not yet due is not overdue", () => eq(overdue({ status: "unpaid", due: "2026-08-31" }), false));
+    it("paid is never overdue, however late", () => eq(overdue({ status: "paid", due: "2026-01-07" }), false));
+    it("a voided invoice is never overdue", () => eq(overdue({ status: "void", due: "2026-01-07" }), false));
+    it("a family's reported payment can still be overdue", () => eq(overdue({ status: "sent", due: "2026-08-07" }), true));
+  }
+
+  describeIssue();
+  function describeIssue() {
+    const ctx = clubCtx();
+    const issue = bind("billingIssue", ctx, [
+      "_billing", "_billingSave", "billPeriod", "_periodDue", "_periodLabel", "_feeFor", "_feeLabel", ...FEE_DEPS, "_swStatus",
+    ]);
+    issue("2026-08");
+    const first = ctx.billing.invoices.slice();
+
+    it("bills every swimmer who owes something", () => eq(first.length, 2));
+    it("leaves out a swimmer signed off injured", () => eq(first.some((iv) => iv.swId === "s2"), false));
+    it("bills the membership amount, not the squad fee", () => eq(first.find((iv) => iv.swId === "s3").total, 1110));
+    it("says what the invoice is for", () => eq(first.find((iv) => iv.swId === "s3").items[0].label, "Membership — 4x per week + Fitness 3x"));
+    it("falls due on the 7th of the month it covers", () => eq(first[0].due, "2026-08-07"));
+    it("starts unpaid", () => eq(first.every((iv) => iv.status === "unpaid"), true));
+
+    issue("2026-08");
+    it("running it again bills nobody twice", () => eq(ctx.billing.invoices.length, 2));
+    it("and says so instead of failing silently", () => eq(/already has an invoice/.test(ctx.state.billMsg), true));
+
+    // A swimmer who comes back from injury mid-month should be billable without
+    // re-billing the squad.
+    ctx.swimmerStatus = {};
+    issue("2026-08");
+    it("a late joiner can still be added on a second run", () => eq(ctx.billing.invoices.length, 3));
+  }
+
+  describeTotals();
+  function describeTotals() {
+    const ctx = clubCtx();
+    ctx.billing = { migrated: true, invoices: [
+      { id: "a", swId: "s1", period: "2026-08", total: 550, status: "paid", due: "2026-08-07" },
+      { id: "b", swId: "s2", period: "2026-08", total: 550, status: "unpaid", due: "2026-08-07" },
+      { id: "c", swId: "s3", period: "2026-08", total: 1110, status: "sent", due: "2026-08-31" },
+      { id: "d", swId: "s1", period: "2026-08", total: 900, status: "void", due: "2026-08-07" },
+      { id: "e", swId: "s1", period: "2026-07", total: 550, status: "unpaid", due: "2026-07-07" },
+    ] };
+    const totals = bind("_billingTotals", ctx, ["_billing", "_invOverdue", ...FEE_DEPS, "_feeFor"]);
+    const t = totals("2026-08");
+
+    it("only counts money the club has actually seen", () => eq(t.paid, 550));
+    it("a family's own 'I have paid' is not collected yet", () => eq(t.due, 1660));
+    it("overdue is a subset of outstanding, not a third bucket", () => eq(t.overdue, 550));
+    it("a voided invoice is in no total", () => eq(t.count, 3));
+    it("another month's debt does not leak in", () => eq(totals("2026-07").due, 550));
+  }
+
+  describeMigration();
+  function describeMigration() {
+    const ctx = clubCtx();
+    ctx.billing = null;
+    ctx.invoices = { "2026-06": { s1: true, s2: false }, "2026-07": { s3: true } };
+    const billing = bind("_billing", ctx, ["_feeFor", ...FEE_DEPS]);
+    const out = billing();
+
+    it("the old paid ticks become real invoices", () => eq(out.invoices.length, 2));
+    it("an unticked swimmer is not invented as paid", () => eq(out.invoices.some((iv) => iv.swId === "s2"), false));
+    it("they come across as paid, since that is what the tick meant", () => eq(out.invoices.every((iv) => iv.status === "paid"), true));
+    it("the amount is the fee in force today", () => eq(out.invoices.find((iv) => iv.swId === "s3").total, 1110));
+    it("and the row admits where the number came from", () => eq(/Imported/.test(out.invoices[0].note), true));
+    it("migrating twice does not double the history", () => eq(billing().invoices.length, 2));
+  }
+
+  describePeriods();
+  function describePeriods() {
+    const ctx = clubCtx();
+    const shift = bind("_periodShift", ctx);
+    it("steps back a month", () => eq(shift("2026-08", -1), "2026-07"));
+    it("steps back over new year", () => eq(shift("2026-01", -1), "2025-12"));
+    it("steps forward over new year", () => eq(shift("2026-12", 1), "2027-01"));
+    it("keeps the two-digit month", () => eq(shift("2026-10", -1), "2026-09"));
+  }
+});
+
 /* ------------------------------------------------------------ expired session
    A coach leaves the app open on the poolside iPad, it sleeps for an hour, and the
    Supabase token quietly expires. iOS suspends the refresh timer, so the app carried

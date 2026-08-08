@@ -46,17 +46,42 @@ Rule of thumb: **schema/RLS/security changes → always test on a preview + stag
 | 7 | Wellness / hydration daily check-ins | ✅ shipped |
 | 8 | Progress analytics — Top Improvers board | ✅ shipped (grows as dated history is entered) |
 | 10 | Calendar sync (meets → ICS feed) | ✅ shipped |
-| 9 | Arabic / multi-language (RTL) | 📋 planned — needs a dedicated i18n pass (see below) |
+| 9 | Arabic / multi-language (RTL) | ✅ family side shipped · staff side still English (see below) |
 | 6 | Break the single file into modules | 📋 partial — routes/libs already modular; proto.html is a design-runtime artifact (see below) |
 
-### Why #9 and #6 are dedicated efforts, not quick wins
+### Beyond the ten
 
-- **#9 Arabic / RTL** — every user-facing string is currently hardcoded English inside the
-  markup and render bindings (many hundreds). Doing it right means: (a) extract all strings into
-  a dictionary, (b) route each through a `t(key)` lookup, (c) add an Arabic dictionary, (d) flip
-  layout with `dir="rtl"` and fix mirrored/absolutely-positioned elements. A rushed partial pass
-  makes the app look broken for parents, so this should be its own focused sprint. Recommended
-  first slice: the **login/register + family portal** (what parents see first), then squads/tools.
+| Item | Status |
+|------|--------|
+| Fees & invoicing (issue, chase, mark paid, family "I've paid", CSV) | ✅ shipped |
+| Live meet day (poolside times → PBs, charts and family app at once) | ✅ shipped |
+| Race Strategy (split targets from a goal, vs the race swum) | ✅ shipped |
+| Load & Risk (acute:chronic load, wellness, attendance) | ✅ shipped |
+| Card payments taken inside the app | ❌ not built — see below |
+
+### Arabic: what is done and what is not
+
+Shipped: a `tx.<key>` dictionary (`_i18n()`), a per-device language choice (`vx_lang`, so a
+parent switching to Arabic does not flip the coach's iPad), `dir`/`lang` set on the document so
+the browser's own bidi handling flips rows, inputs and scrollers together, and an EN/عربي toggle
+on both the family sign-in screen and the portal header. Translated: **family sign-in and
+registration, and the whole family portal** — the screens a parent actually opens.
+
+Not translated yet: the **staff side** (squads, plans, attendance, tools, admin). It is a much
+larger surface and no parent sees it. To extend, add the key to `_i18n()` and replace the literal
+in the markup with `{{ tx.key }}` — the test suite fails on a key that has no Arabic, on an Arabic
+string that is just a copy of the English, and on family-portal strings slipping back to
+hardcoded English.
+
+### Payments: the deliberate boundary
+
+The app runs the **ledger** — issue, chase, confirm, export — not the card rail. There is no
+payment provider integrated and no keys are stored. A club pastes its own payment page (Tap,
+MyFatoorah, Stripe) into Settings → Payment link and families get a "Pay now" button that opens
+it. Taking card details inside the app would mean a provider account, a server-side secret and
+PCI scope, and is a deliberate next decision rather than an oversight.
+
+### Why #6 is a dedicated effort, not a quick win
 
 - **#6 Modularize** — the Next.js side (API routes, `src/lib/*`) is **already modular**. The giant
   file is `public/proto.html`, which is a **Claude Design runtime** artifact: its inline `<script>`
