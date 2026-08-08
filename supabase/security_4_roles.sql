@@ -16,6 +16,11 @@
 --      can read a club of children's data. Have the rollback open in another tab.
 -- =====================================================================================
 
+--  Everything below runs as one transaction. If any statement fails, nothing is applied —
+--  the alternative is a club where some tables are locked down and others are not, which is
+--  worse than either state and hard to see from the outside.
+begin;
+
 -- -------------------------------------------------------------------------------------
 --  STEP 1 — who is staff
 -- -------------------------------------------------------------------------------------
@@ -131,12 +136,18 @@ begin
   -- ---- per-swimmer records: staff see all, a family sees its own children ----
   foreach t in array per_swimmer loop
     if to_regclass('public.'||t) is null then continue; end if;
-    -- these tables name the swimmer column differently
-    swcol := case t when 'family_messages' then 'swimmer_id' else 'sw_id' end;
-    if to_regclass('public.'||t) is not null
-       and not exists (select 1 from information_schema.columns
-                        where table_schema='public' and table_name=t and column_name=swcol) then
-      swcol := case swcol when 'sw_id' then 'swimmer_id' else 'sw_id' end;
+    -- These tables do not agree on what the swimmer column is called: attendance_marks,
+    -- wellness_checkins, hr_sets and wearable_readings use sw_id, while family_messages and
+    -- swimmer_docs use swimmer_id. Ask the table rather than assuming, and stop rather than
+    -- leave a table half-locked if it turns out to be neither.
+    select c.column_name into swcol
+      from information_schema.columns c
+     where c.table_schema='public' and c.table_name=t
+       and c.column_name in ('sw_id','swimmer_id')
+     order by case c.column_name when 'sw_id' then 1 else 2 end
+     limit 1;
+    if swcol is null then
+      raise exception 'public.% has neither sw_id nor swimmer_id — cannot scope it to a family', t;
     end if;
 
     execute format('drop policy if exists lk_select on public.%I', t);
@@ -242,6 +253,8 @@ create policy vx4_cs_update on public.club_state for update to authenticated
   using      (public.vx_is_staff() or key in ('vx_billing','vx_sw_meta','vx_event_requests','vx_notifications'))
   with check (public.vx_is_staff() or key in ('vx_billing','vx_sw_meta','vx_event_requests','vx_notifications'));
 create policy vx4_cs_delete on public.club_state for delete to authenticated using (public.vx_is_staff());
+
+commit;
 
 -- -------------------------------------------------------------------------------------
 --  STEP 4 — check it before you trust it
