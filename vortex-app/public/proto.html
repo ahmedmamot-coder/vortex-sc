@@ -5738,6 +5738,16 @@ class Component extends DCLogic {
       });
       const extra=(ed.added[sq.id]||[]);
       merged[sq.id]=[...arr, ...extra];
+      // A stored age goes stale the moment a birthday passes, and it is read straight from the
+      // swimmer in about twenty places — the talent board, the promotion checks, the relay age
+      // bands, every age-scaled suggestion, the roster export. Where a real date of birth
+      // exists that date is the truth, so the age is worked out once here and nothing
+      // downstream has to remember to ask for the derived one. Swimmers with no date on file
+      // keep the age the club typed.
+      merged[sq.id]=merged[sq.id].map(sw=>{
+        const a=this._ageFromDob(sw && sw.dob);
+        return (a!=null && a!==sw.age) ? {...sw, age:a} : sw;
+      });
       sq.count=merged[sq.id].length;
     });
     this.roster=merged;
@@ -6222,7 +6232,7 @@ class Component extends DCLogic {
   _swEntries(sw){ if(Array.isArray(sw.entries)&&sw.entries.length) return sw.entries.map(p=>({event:p.event, sec:p.sec, course:p.course||'L', courseLabel:p.courseLabel||(p.course==='S'?'SCM':'LCM'), meet:p.meet||'', meetDate:p.meetDate||''}));
     if(Array.isArray(sw.results)&&sw.results.length) return sw.results.map(r=>({event:r.event, sec:r.sec, course:r.course||'L', courseLabel:r.courseLabel||(r.course==='S'?'SCM':'LCM'), meet:(r.meet&&r.meet!=='Time trial')?r.meet:'', meetDate:r.meetDate||''}));
     return (sw.pbs||[]).map(p=>({event:p.event, sec:p.sec, course:p.course||'L', courseLabel:p.courseLabel||(p.course==='S'?'SCM':'LCM'), meet:p.meet||'', meetDate:p.meetDate||''})); }
-  swEditOpen(squadId, id, sw){ this.setState({swEditId:squadId+'::'+id, swEditDraft:{name:sw.name, age:sw.age, dob:(sw.dob||''), gender:sw.gender, squadId:squadId}, swEditPbs:this._swEntries(sw), swEditPbEventSel:'50 Free', swEditPbTimeDraft:'', swEditPbCourse:'LCM', swEditPbMeet:'', swEditPbMeetDate:''}); }
+  swEditOpen(squadId, id, sw){ this.setState({swEditId:squadId+'::'+id, swEditDraft:{name:sw.name, age:this._swAge(sw), dob:(sw.dob||''), gender:sw.gender, squadId:squadId}, swEditPbs:this._swEntries(sw), swEditPbEventSel:'50 Free', swEditPbTimeDraft:'', swEditPbCourse:'LCM', swEditPbMeet:'', swEditPbMeetDate:''}); }
   swEditAddPb(){ const S=this.state; const sec=this.parseTimeStr(S.swEditPbTimeDraft); if(sec==null) return;
     const courseCode=(S.swEditPbCourse==='LCM')?'L':'S'; const meet=(S.swEditPbMeet||'').trim(), meetDate=(S.swEditPbMeetDate||'');
     const dup=(S.swEditPbs||[]).some(p=>p.event===S.swEditPbEventSel && p.course===courseCode && (p.meet||'')===meet && p.sec===sec);
@@ -10509,7 +10519,9 @@ class Component extends DCLogic {
       const editDraftSquad = editing ? (S.swEditDraft?.squadId ?? sw.squadId) : sw.squadId;
       const genderBEdit = editDraftGender!=='Girls';
       return { editing, name:sw.name, age:this._swAge(sw), squadName:sq.name, initials:sw.initials, genIcon:gm.icon, genBg:gm.bg, accent:sq.accent, inactive:!this._swStatus(sw.id).active, statusText:this._statusLabel(this._swStatus(sw.id).reason),
-        editName: editing? (S.swEditDraft?.name ?? sw.name) : sw.name, editAge: editing? (S.swEditDraft?.age ?? sw.age) : sw.age,
+        editName: editing? (S.swEditDraft?.name ?? sw.name) : sw.name,
+        // Follows the date of birth when there is one — it read 8 beside 17/04/2017.
+        editAge: editing? (S.swEditDraft?.age ?? this._swAge(sw)) : this._swAge(sw),
         editDob: editing? (S.swEditDraft?.dob ?? (sw.dob||'')) : (sw.dob||''),
         onEditName:(e)=>this.setState({swEditDraft:{...(S.swEditDraft||{name:sw.name,age:sw.age,gender:sw.gender,squadId:sw.squadId}), name:e.target.value}}),
         onEditAge:(e)=>this.setState({swEditDraft:{...(S.swEditDraft||{name:sw.name,age:sw.age,gender:sw.gender,squadId:sw.squadId}), age:e.target.value}}),

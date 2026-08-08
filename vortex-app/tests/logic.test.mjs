@@ -924,6 +924,26 @@ describe("editing a swimmer", () => {
     eq(c.rosterEdits.added.adva[0].pbs.length, 1, "a moved swimmer must not arrive empty");
   });
 
+  // The roster is where ~20 places read a swimmer's age straight off the object: the talent
+  // board, the promotion checks, the relay age bands, the age-scaled suggestions, the export.
+  // Deriving it once here is what makes all of them right at the same time.
+  it("the age on the roster follows the date of birth", () => {
+    const c = {
+      squads: [{ id: "junior", name: "Junior", count: 0 }],
+      rosterEdits: { edits: {}, deleted: {}, added: {} },
+    };
+    globalThis.window = { VX_ROSTER: { junior: [
+      { id: "s1", name: "Tamara Aly", dob: "17/04/2017", age: 8 },   // stale stored age
+      { id: "s2", name: "No Dob", age: 11 },                          // nothing to derive from
+    ] } };
+    bind("rebuildRoster", c, ["_ageFromDob", "_dobParts"])();
+    const now = new Date();
+    let expected = now.getFullYear() - 2017;
+    if (now.getMonth() + 1 < 4 || (now.getMonth() + 1 === 4 && now.getDate() < 17)) expected--;
+    eq(c.roster.junior[0].age, expected, "the stored 8 must not survive a real date of birth");
+    eq(c.roster.junior[1].age, 11, "a swimmer with no date keeps the age the club typed");
+  });
+
   it("only the club's managers get the editor", () =>
     eq(/const canEdit=this\._isAdmin\(\);\s*\n\s*if\(!canEdit\) return \{profCanEdit:false\}/.test(SOURCE), true));
   it("a date that is not a date is refused before it is saved", () =>
