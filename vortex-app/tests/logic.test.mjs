@@ -1,6 +1,7 @@
 // Tests for the logic that has actually caused problems for the club.
 // Every case here is a real bug that reached coaches or parents.
 
+import { readFileSync } from "node:fs";
 import { bind, describe, it, itAsync, eq, report, SOURCE, sourceBetween, runInSandbox } from "./harness.mjs";
 
 /* ---------------------------------------------------------------- attendance
@@ -150,6 +151,25 @@ describe("shipped source", () => {
   // "486 is not a function" and white-screened the live site. Nothing catches this at
   // parse time and unit tests bind methods onto a bare object where the field never exists,
   // so it has to be checked against the shipped source.
+  // The home-screen icon and the app shell are both served by the service worker's
+  // cache-first path, which is never revalidated. A failure stored there is stored for good.
+  it("the service worker never caches a failed response", () => {
+    const sw = readFileSync(new URL("../public/sw.js", import.meta.url), "utf8");
+    const puts = [...sw.matchAll(/caches\.open\((APP_SHELL|STATIC)\)/g)].length;
+    const guards = [...sw.matchAll(/res && res\.ok/g)].length;
+    eq(guards >= puts - 1, true, "a cached 404 is how the icon stayed broken forever");
+  });
+  it("the app HTML may be kept and revalidated, not re-downloaded whole", () => {
+    const cfg = readFileSync(new URL("../next.config.ts", import.meta.url), "utf8");
+    const header = (cfg.match(/value:\s*"([^"]*must-revalidate[^"]*)"/) || [])[1] || "";
+    eq(/no-store/.test(header), false, "no-store re-downloaded 1.2MB on every single open");
+    eq(/no-cache, must-revalidate/.test(cfg), true, "deploys must still show immediately");
+  });
+  it("iOS gets an apple-touch-icon at a size it actually is", () =>
+    eq(/apple-touch-icon" sizes="192x192" href="\/assets\/icon-192\.png"/.test(SOURCE), true));
+  it("the icon paths do not depend on the page's URL", () =>
+    eq(/apple-touch-icon" href="assets\//.test(SOURCE), false, "a relative icon path resolves against whatever URL was opened"));
+
   it("no method name is shadowed by a field on the same instance", () => {
     const body = SOURCE.slice(SOURCE.indexOf("class Component"));
     const methods = new Set(

@@ -6,7 +6,7 @@
  *  - Cache static assets (icons, fonts, images) cache-first for speed/offline.
  *  - Never touch Supabase API calls — those must always hit the network.
  */
-const VERSION = 'vortex-v1';
+const VERSION = 'vortex-v2';
 const APP_SHELL = 'vortex-shell-' + VERSION;
 const STATIC = 'vortex-static-' + VERSION;
 const OFFLINE_URL = '/';
@@ -39,8 +39,12 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(req)
         .then((res) => {
-          const copy = res.clone();
-          caches.open(APP_SHELL).then((c) => c.put(OFFLINE_URL, copy)).catch(() => {});
+          // Only keep a good copy. Storing a 404 or a 502 here would make the offline
+          // fallback an error page, permanently.
+          if (res && res.ok) {
+            const copy = res.clone();
+            caches.open(APP_SHELL).then((c) => c.put(OFFLINE_URL, copy)).catch(() => {});
+          }
           return res;
         })
         .catch(() => caches.match(OFFLINE_URL).then((r) => r || caches.match(req)))
@@ -54,8 +58,14 @@ self.addEventListener('fetch', (event) => {
       caches.match(req).then((cached) =>
         cached ||
         fetch(req).then((res) => {
-          const copy = res.clone();
-          caches.open(STATIC).then((c) => c.put(req, copy)).catch(() => {});
+          // This cache is read first and never revalidated, so a failure stored here is
+          // stored for good. That is how the home-screen icon stayed broken: the icon was
+          // fetched once before it existed, the 404 went into the cache, and every load
+          // afterwards was served that 404 without ever asking the network again.
+          if (res && res.ok && res.type !== 'opaque') {
+            const copy = res.clone();
+            caches.open(STATIC).then((c) => c.put(req, copy)).catch(() => {});
+          }
           return res;
         }).catch(() => cached)
       )

@@ -3,9 +3,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Vortex Swimming Club</title>
-<link rel="icon" type="image/png" href="assets/icon-black.png">
-<link rel="apple-touch-icon" href="assets/icon-black.png">
-<link rel="apple-touch-icon" sizes="180x180" href="assets/icon-black.png">
+<!-- Absolute paths: a relative one resolves against whatever URL the page was opened
+     at, and iOS reads these while adding to the home screen, not while browsing.
+     iOS ignores the web manifest for the home-screen icon and uses apple-touch-icon
+     only, so it needs its own real sizes — 180x180 was declared on a 512 file. -->
+<link rel="icon" type="image/png" sizes="192x192" href="/assets/icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="/assets/icon-512.png">
+<link rel="apple-touch-icon" href="/assets/icon-192.png">
+<link rel="apple-touch-icon" sizes="192x192" href="/assets/icon-192.png">
+<link rel="apple-touch-icon" sizes="512x512" href="/assets/icon-512.png">
 <meta name="theme-color" content="#0A0F1A">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -23,7 +29,10 @@ if ('serviceWorker' in navigator) {
 </script>
 <script src="assets/react.js"></script>
 <script src="assets/react-dom.js"></script>
-<script src="assets/vx-photos.js"></script>
+<!-- 483KB of staff photos inlined as base64, and it was blocking the parser before a
+     single pixel could be drawn. Nothing needs it to boot: av() falls back on its own,
+     and a deferred script still runs before the app finishes its first data fetch. -->
+<script defer src="assets/vx-photos.js"></script>
 <script src="assets/roster.js"></script>
 <!-- Real shared-database sync via the Supabase REST API using the browser's built-in
      fetch() — NO external library/CDN, so it can't be broken by a blocked script.
