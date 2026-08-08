@@ -2744,6 +2744,82 @@ if ('serviceWorker' in navigator) {
                           <button onclick="{{ mc.onClick }}" style="flex:none;background:{{ mc.bg }};color:{{ mc.fg }};border:1px solid {{ mc.border }};border-radius:999px;padding:7px 13px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer">{{ mc.label }}</button>
                         </sc-for>
                       </div>
+                      <div style="display:flex;gap:5px;background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:4px">
+                        <button onclick="{{ onMeetModeEntries }}" style="flex:1;padding:9px;border-radius:9px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:12px;background:{{ meetModeEntriesBg }};color:{{ meetModeEntriesFg }}">Entries &amp; heats</button>
+                        <button onclick="{{ onMeetModeDay }}" style="flex:1;padding:9px;border-radius:9px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:12px;background:{{ meetModeDayBg }};color:{{ meetModeDayFg }}">Meet day</button>
+                      </div>
+
+                      <sc-if value="{{ meetDayOn }}" hint-placeholder-val="{{ false }}">
+                        <div style="background:#0A0F1A;color:#fff;border-radius:16px;padding:14px">
+                          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                            <span style="flex:1;min-width:0"><span style="display:block;font-size:14px;font-weight:700">{{ meetDayTitle }}</span><span style="display:block;font-size:11px;opacity:.65;margin-top:1px">{{ meetDaySub }}</span></span>
+                            <span style="flex:none;font-family:var(--font-mono);font-size:20px;font-weight:700">{{ meetDayPct }}</span>
+                          </div>
+                          <div style="height:5px;border-radius:999px;background:rgba(255,255,255,.16);margin-top:10px;overflow:hidden"><span style="display:block;height:100%;width:{{ meetDayPct }};background:var(--vx-blue);border-radius:999px"></span></div>
+                          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+                            <span style="font-size:11px;opacity:.65">{{ meetDayProgress }}</span>
+                            <span style="font-size:11px;font-weight:700;color:#C89B3C">{{ meetDayPbLine }}</span>
+                          </div>
+                        </div>
+                        <sc-if value="{{ meetDayMsgShow }}" hint-placeholder-val="{{ false }}">
+                          <p style="margin:0;background:#EEF4FF;border:1px solid #D4E2FB;border-radius:10px;padding:8px 10px;font-size:11.5px;color:#1B4CA1">{{ meetDayMsg }}</p>
+                        </sc-if>
+                        <sc-if value="{{ meetDayHasHeats }}" hint-placeholder-val="{{ true }}">
+                          <div style="display:flex;flex-direction:column;gap:10px">
+                            <sc-for list="{{ meetDayHeats }}" as="hh" hint-placeholder-count="2">
+                              <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px">
+                                  <p style="margin:0;font-size:12.5px;font-weight:700;color:#0C1116">{{ hh.label }}</p>
+                                  <span style="font-family:var(--font-mono);font-size:11px;font-weight:700;color:#7A8296">{{ hh.doneLabel }}</span>
+                                </div>
+                                <div style="display:flex;flex-direction:column;gap:6px">
+                                  <sc-for list="{{ hh.rows }}" as="ln" hint-placeholder-count="6">
+                                    <div style="display:flex;align-items:center;gap:8px;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:11px;padding:8px 9px">
+                                      <span style="flex:none;width:22px;height:22px;border-radius:7px;background:#fff;border:1px solid #E5E9F0;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:11px;font-weight:700;color:#3A4152">{{ ln.lane }}</span>
+                                      <span style="flex:1;min-width:0"><span style="display:block;font-size:12px;font-weight:700;color:#0C1116;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ ln.name }}</span><span style="display:block;font-size:10px;color:#9AA2B4;margin-top:1px">Seed {{ ln.pb }}</span></span>
+                                      <sc-if value="{{ ln.notDone }}" hint-placeholder-val="{{ true }}">
+                                        <input value="{{ ln.draft }}" oninput="{{ ln.onDraft }}" inputmode="decimal" placeholder="26.20" style="flex:none;width:74px;background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:7px 8px;font-family:var(--font-mono);font-size:12.5px;color:#0C1116;outline:none;text-align:center">
+                                        <button onclick="{{ ln.onSave }}" aria-label="Save this time" style="flex:none;width:32px;height:32px;border-radius:9px;background:var(--vx-blue);border:none;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center"><i data-lucide="check" style="width:15px;height:15px"></i></button>
+                                      </sc-if>
+                                      <sc-if value="{{ ln.done }}" hint-placeholder-val="{{ false }}">
+                                        <span style="flex:none;text-align:right"><span style="display:block;font-family:var(--font-mono);font-size:13px;font-weight:700;color:#0C1116">{{ ln.timeLabel }}</span><span style="display:block;font-size:10px;font-weight:700;color:#7A8296">{{ ln.placeLabel }}</span></span>
+                                        <sc-if value="{{ ln.pbShow }}" hint-placeholder-val="{{ true }}">
+                                          <span style="flex:none;background:#FBF0DD;color:#7A5A0C;border-radius:7px;padding:3px 7px;font-size:9.5px;font-weight:700;white-space:nowrap">{{ ln.pbLabel }}</span>
+                                        </sc-if>
+                                        <button onclick="{{ ln.onClear }}" aria-label="Remove this time" style="flex:none;width:28px;height:28px;border-radius:8px;background:#FDECEC;border:none;cursor:pointer;color:#E5484D;display:flex;align-items:center;justify-content:center"><i data-lucide="undo-2" style="width:13px;height:13px"></i></button>
+                                      </sc-if>
+                                    </div>
+                                  </sc-for>
+                                </div>
+                              </div>
+                            </sc-for>
+                          </div>
+                        </sc-if>
+                        <sc-if value="{{ meetDayHasBoards }}" hint-placeholder-val="{{ false }}">
+                          <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                            <p style="margin:0 0 10px;font-size:13px;font-weight:700;color:#0C1116">Results so far</p>
+                            <div style="display:flex;flex-direction:column;gap:12px">
+                              <sc-for list="{{ meetDayBoards }}" as="bd" hint-placeholder-count="2">
+                                <div>
+                                  <p style="margin:0 0 6px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">{{ bd.event }}</p>
+                                  <div style="display:flex;flex-direction:column;gap:4px">
+                                    <sc-for list="{{ bd.rows }}" as="pl" hint-placeholder-count="3">
+                                      <div style="display:flex;align-items:center;gap:9px;background:#F8FAFC;border-radius:9px;padding:7px 9px">
+                                        <span style="flex:none;min-width:26px;text-align:center;background:{{ pl.medal }};color:{{ pl.medalFg }};border-radius:6px;padding:2px 5px;font-size:10px;font-weight:700">{{ pl.place }}</span>
+                                        <span style="flex:1;min-width:0;font-size:12px;font-weight:600;color:#0C1116;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ pl.name }}</span>
+                                        <span style="flex:none;font-family:var(--font-mono);font-size:12px;font-weight:700;color:#3A4152">{{ pl.time }}</span>
+                                      </div>
+                                    </sc-for>
+                                  </div>
+                                </div>
+                              </sc-for>
+                            </div>
+                          </div>
+                        </sc-if>
+                        <p style="margin:0 2px;font-size:11px;color:#9AA2B4;line-height:1.5">Times saved here go straight into the swimmer's history, so their PB, their chart and their family's app are all up to date before the next heat is called. Got a lane wrong? Undo takes the swim back out again.</p>
+                      </sc-if>
+
+                      <sc-if value="{{ meetEntriesOn }}" hint-placeholder-val="{{ true }}">
                       <sc-if value="{{ reqHasRows }}" hint-placeholder-val="{{ false }}">
                         <div style="background:#FBF0DD;border:1px solid #F0D9A8;border-radius:14px;padding:12px">
                           <p style="margin:0 0 8px;font-size:11.5px;font-weight:700;color:#7A5A0C">Swimmer / parent requests</p>
@@ -2802,6 +2878,7 @@ if ('serviceWorker' in navigator) {
                           <button onclick="{{ onPrintProgram }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:#0A0F1A;color:#fff;border:none;border-radius:12px;padding:12px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer"><i data-lucide="printer" style="width:16px;height:16px"></i>Print heat sheet</button>
                         </div>
                         <button onclick="{{ onExportEntries }}" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:#0C7A4F;color:#fff;border:none;border-radius:12px;padding:12px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer"><i data-lucide="download" style="width:16px;height:16px"></i>Export entries (CSV for Hy-Tek)</button>
+                      </sc-if>
                       </sc-if>
                     </div>
                   </sc-if>
@@ -5388,6 +5465,78 @@ class Component extends DCLogic {
     this._saveJSON('vx_meet_entries', this.meetEntries);
     this.setState({shareNote:'Auto-seeded '+list.length+' entries by PB \u2713'});
   }
+  // ---- Live meet day -----------------------------------------------------------------
+  // A meet in progress is run straight off the heat sheet: every lane gets a box, and the
+  // time typed into it is saved to that swimmer's own history there and then. The PB, the
+  // progression chart and the family's app are all right before the next heat is called,
+  // instead of waiting for somebody to type the whole meet up on Sunday night.
+  //
+  // The swims are read back off the swimmers rather than kept in a second table, so there is
+  // no parallel copy of the meet to drift out of step with the roster.
+  _meetISO(m){
+    if(!m || !m.date) return this.todayISO();
+    const p=String(m.date).split('/');
+    if(p.length!==3) return this.todayISO();
+    return p[2]+'-'+String(p[0]).padStart(2,'0')+'-'+String(p[1]).padStart(2,'0');
+  }
+  _meetSwims(meetName){
+    const out={};
+    this.squads.forEach(sq=>(this.roster[sq.id]||[]).forEach(sw=>{
+      (this._swEntries(sw)||[]).forEach(p=>{ if((p.meet||'')===meetName) out[sw.id+'|'+p.event]={swId:sw.id, event:p.event, sec:p.sec}; });
+    }));
+    return out;
+  }
+  // Timed finals: a place is the swimmer's rank across every heat of the event, not their
+  // rank in the heat they happened to be seeded into.
+  _meetPlaces(meetName){
+    const byEvent={}; const swims=this._meetSwims(meetName);
+    Object.keys(swims).forEach(k=>{ const s=swims[k]; (byEvent[s.event]=byEvent[s.event]||[]).push(s); });
+    const place={};
+    Object.keys(byEvent).forEach(ev=>byEvent[ev].slice().sort((a,b)=>a.sec-b.sec)
+      .forEach((s,i)=>{ place[s.swId+'|'+ev]=i+1; }));
+    return place;
+  }
+  // The swimmer's best at this event BEFORE today, so "PB" means beat what they came in with
+  // — including when the coach is correcting a time already typed for this meet.
+  _bestBefore(sw, event, exceptMeet){
+    let best=null;
+    (this._swEntries(sw)||[]).forEach(p=>{
+      if(p.event!==event) return;
+      if(exceptMeet && (p.meet||'')===exceptMeet) return;
+      if(best==null || p.sec<best) best=p.sec;
+    });
+    return best;
+  }
+  meetLiveSave(meetName, meetDate, courseLabel, swId, event, raw){
+    const sec=this.parseTimeStr(raw);
+    if(sec==null || sec<=0) return this.setState({meetDayMsg:'Enter a time like 26.20 or 2:15.00'});
+    const hit=this.allSwimmersFlat().find(s=>s.id===swId);
+    if(!hit) return this.setState({meetDayMsg:'That swimmer is no longer on the roster.'});
+    const before=this._bestBefore(hit, event, meetName);
+    // Replace this meet's swim for the event rather than stacking a second one, so fixing a
+    // mistyped time corrects the record instead of inventing an extra race.
+    const entries=(this._swEntries(hit)||[]).filter(p=>!(p.event===event && (p.meet||'')===meetName));
+    entries.push({event, sec, course:(courseLabel==='SCM'?'S':'L'), courseLabel:courseLabel||'LCM',
+      meet:meetName, meetDate:meetDate||this.todayISO()});
+    this.adminEditSwimmer(hit.squadId, swId, {pbs:entries});
+    const drop=(before!=null && sec<before) ? (before-sec) : 0;
+    const first=before==null;
+    const title=first ? 'First time recorded' : (drop>0 ? 'New personal best' : 'Race result');
+    const body=hit.name+' — '+event+' '+this.fmt(sec)+(drop>0?(' · '+drop.toFixed(2)+'s faster'):'')+' at '+meetName;
+    try{ this.notify('family_sw:'+swId, drop>0?'trophy':'timer', title, body); }catch(e){}
+    try{ this._pushSend({swimmerIds:[swId]}, title, body, '/'); }catch(e){}
+    const drafts={...(this.state.meetTimeDrafts||{})}; delete drafts[swId+'|'+event];
+    this.setState({meetTimeDrafts:drafts,
+      meetDayMsg: drop>0 ? (hit.name+' — PB by '+drop.toFixed(2)+'s ✓') : (hit.name+' — '+this.fmt(sec)+' saved ✓')});
+  }
+  // Struck a wrong swimmer's lane: take the swim back out rather than leaving a time that
+  // never happened sitting in their history and their PB.
+  meetLiveClear(meetName, swId, event){
+    const hit=this.allSwimmersFlat().find(s=>s.id===swId); if(!hit) return;
+    const entries=(this._swEntries(hit)||[]).filter(p=>!(p.event===event && (p.meet||'')===meetName));
+    this.adminEditSwimmer(hit.squadId, swId, {pbs:entries});
+    this.setState({meetDayMsg:'Removed '+hit.name+' — '+event});
+  }
   toggleCompEvent(ev){ const cur=this.state.compEvents.slice(); const i=cur.indexOf(ev); if(i>=0) cur.splice(i,1); else cur.push(ev); this.setState({compEvents:cur}); }
   createCompetition(){ const S=this.state;
     if(!S.compName.trim()) return this.setState({compErr:'Enter a competition name.'});
@@ -6465,7 +6614,9 @@ class Component extends DCLogic {
     return R.createElement('span', null, parts.map((seg,i)=> /^@[\w]+$/.test(seg) ? R.createElement('span',{key:i, style:{color:'#067EEA',fontWeight:700}}, seg) : seg )); }
   notify(audience, icon, title, body){
     const rec={id:this._uid('notif'), audience, icon, title, body, at:new Date().toISOString(), read:false};
-    this.notifications=[rec, ...this.notifications];
+    // Capped: this list is one shared blob synced to every device, and a meet day can add a
+    // notification per swim. Unbounded, it grows until the write is too big to save.
+    this.notifications=[rec, ...this.notifications].slice(0, 600);
     this._saveJSON('vx_notifications', this.notifications);
     this._pushNotify(title, body);
   }
@@ -9041,6 +9192,69 @@ class Component extends DCLogic {
     const entrySelName = entrySwSel.length? (entrySwSel.length+' swimmer'+(entrySwSel.length>1?'s':'')+' selected') : '';
     const entryHasSw = entrySwSel.length>0;
 
+    // ---- Meet day (live results) ----
+    const meetDayOn = S.meetMode==='day';
+    const entryMeetObj = this.allMeets().find(m=>m.name===entryMeetName) || null;
+    const entryMeetISO = this._meetISO(entryMeetObj);
+    const entryMeetCourse = (entryMeetObj && entryMeetObj.course) || 'LCM';
+    const mdSwims = meetDayOn ? this._meetSwims(entryMeetName) : {};
+    const mdPlaces = meetDayOn ? this._meetPlaces(entryMeetName) : {};
+    const mdDrafts = S.meetTimeDrafts||{};
+    const mdFlatById = {}; entryRoster.forEach(sw=>{ mdFlatById[sw.id]=sw; });
+    const mdOrdinal = (n)=> n+(n===1?'st':n===2?'nd':n===3?'rd':'th');
+    let mdDone=0, mdPbs=0;
+    const mdRowFor = (e)=>{
+      const key=e.swId+'|'+e.event;
+      const swim=mdSwims[key]||null;
+      const sw=mdFlatById[e.swId];
+      const before=sw ? this._bestBefore(sw, e.event, entryMeetName) : null;
+      const drop=(swim && before!=null && swim.sec<before) ? (before-swim.sec) : 0;
+      if(swim){ mdDone++; if(drop>0 || before==null) mdPbs++; }
+      const place=mdPlaces[key];
+      return { lane:e.lane, name:e.name, event:e.event, pb:this._pbTimeFor(e.swId, e.event),
+        done:!!swim, notDone:!swim,
+        timeLabel: swim ? this.fmt(swim.sec) : '',
+        placeLabel: place ? mdOrdinal(place) : '',
+        pbLabel: swim ? (before==null ? 'First time' : (drop>0 ? ('PB −'+drop.toFixed(2)+'s') : '')) : '',
+        pbShow: !!swim && (before==null || drop>0),
+        draft: mdDrafts[key]||'',
+        onDraft:(ev)=>this.setState({meetTimeDrafts:{...(this.state.meetTimeDrafts||{}), [key]:ev.target.value}}),
+        onSave:()=>this.meetLiveSave(entryMeetName, entryMeetISO, entryMeetCourse, e.swId, e.event, (this.state.meetTimeDrafts||{})[key]),
+        onClear:()=>this.meetLiveClear(entryMeetName, e.swId, e.event) };
+    };
+    const meetDayHeats = (()=>{
+      if(!meetDayOn) return [];
+      const byEv={}; entriesList.forEach(e=>{ (byEv[e.event]=byEv[e.event]||[]).push(e); });
+      const out=[];
+      Object.keys(byEv).sort().forEach(ev=>{
+        const byHeat={}; byEv[ev].forEach(e=>{ (byHeat[e.heat||1]=byHeat[e.heat||1]||[]).push(e); });
+        Object.keys(byHeat).sort((a,b)=>a-b).forEach(h=>{
+          const rows=byHeat[h].slice().sort((a,b)=>(a.lane||0)-(b.lane||0)).map(mdRowFor);
+          out.push({ label:ev+' — Heat '+h, event:ev,
+            doneLabel: rows.filter(r=>r.done).length+' / '+rows.length,
+            complete: rows.every(r=>r.done), rows });
+        });
+      });
+      return out;
+    })();
+    // Standings rebuild themselves from the times as they land, so the board on the wall and
+    // the app never disagree about who won.
+    const meetDayBoards = (()=>{
+      if(!meetDayOn) return [];
+      const byEvent={};
+      Object.keys(mdSwims).forEach(k=>{ const s=mdSwims[k]; (byEvent[s.event]=byEvent[s.event]||[]).push(s); });
+      return Object.keys(byEvent).sort().map(ev=>({
+        event:ev,
+        rows: byEvent[ev].slice().sort((a,b)=>a.sec-b.sec).slice(0,8).map((s,i)=>({
+          place: mdOrdinal(i+1),
+          name: (mdFlatById[s.swId]||{}).name || '—',
+          time: this.fmt(s.sec),
+          medal: i===0?'#C89B3C':(i===1?'#9AA2B4':(i===2?'#B0762F':'#EEF1F5')),
+          medalFg: i<3?'#fff':'#7A8296' })),
+      }));
+    })();
+    const mdTotal = entriesList.length;
+
     // ---- Academy ----
     const acadTabs=['trials','ladder','schedule','fees'];
     const acadTab = acadTabs.includes(S.academyTab)?S.academyTab:'trials';
@@ -10731,6 +10945,20 @@ class Component extends DCLogic {
       entriesLane:S.entriesLane, onEntriesLane:(e)=>this.setState({entriesLane:e.target.value}),
       onEntryAdd:()=>this.entryAdd(entryMeetName, S.squadId),
       entryRows, entryHasRows: entryRows.length>0, onExportEntries:()=>this.exportMeetEntries(entryMeetName),
+      // ---- meet day ----
+      meetDayOn, meetEntriesOn: !meetDayOn,
+      onMeetModeEntries:()=>this.setState({meetMode:'entries', meetDayMsg:''}),
+      onMeetModeDay:()=>this.setState({meetMode:'day', meetDayMsg:''}),
+      meetModeEntriesBg: meetDayOn?'transparent':squad.accent, meetModeEntriesFg: meetDayOn?'#7A8296':'#fff',
+      meetModeDayBg: meetDayOn?squad.accent:'transparent', meetModeDayFg: meetDayOn?'#fff':'#7A8296',
+      meetDayHeats, meetDayBoards, meetDayHasHeats: meetDayHeats.length>0,
+      meetDayTitle: entryMeetName,
+      meetDaySub: entryMeetObj ? (this._fmtDMY(entryMeetISO, true)+' · '+entryMeetCourse) : 'No date set',
+      meetDayProgress: mdDone+' of '+mdTotal+' swim'+(mdTotal===1?'':'s')+' recorded',
+      meetDayPbLine: mdPbs+' personal best'+(mdPbs===1?'':'s')+' today',
+      meetDayPct: mdTotal ? Math.round((mdDone/mdTotal)*100)+'%' : '0%',
+      meetDayMsg:S.meetDayMsg||'', meetDayMsgShow:!!S.meetDayMsg,
+      meetDayHasBoards: meetDayBoards.length>0,
       entryNewOpen:S.entryNewOpen, entryNewToggleLabel: S.entryNewOpen?'Cancel':'+ New swimmer',
       onEntryNewToggle:()=>this.setState({entryNewOpen:!S.entryNewOpen, entryNewErr:''}),
       entryNewName:S.entryNewName, onEntryNewName:(e)=>this.setState({entryNewName:e.target.value}),
@@ -10772,7 +11000,9 @@ class Component extends DCLogic {
       onClockToggle:()=> S.clockRunning?this.clockPause():this.clockStart(), onClockReset:()=>this.clockReset(), onClockPrev:()=>this.clockJump(-1), onClockNext:()=>this.clockJump(1),
       clockRows, onClockStartBeginning:()=>this.clockStartFrom(0), onClockStartSelected:()=>this.clockStartFrom(S.clockSetIdx),
       clockFs:S.clockFs, onClockFsEnter:()=>this.clockFsEnter(), onClockFsExit:()=>this.clockFsExit(),
-      energyZones, insightAttend, insightStats, insChips, insightsShowPicker, insightScopeLabel,
+      // loadBars was computed but never handed over, so Insights drew an empty "Weekly
+      // training load" chart — bars for a week the coach could see the numbers behind.
+      loadBars, energyZones, insightAttend, insightStats, insChips, insightsShowPicker, insightScopeLabel,
       boardChips, boardTitle, boardMeta, boardRows, boardEmpty, boardIsComp, boardEvent, onBoardEvent,
       boardEventOptionsV: boardEventOptions.map(e=>({value:e, label:e})),
       lapBars, videoHasActive, videoChips, activeVideoTitle: activeVid?activeVid.title:'', activeVideoTag: activeVid?activeVid.tag:'',

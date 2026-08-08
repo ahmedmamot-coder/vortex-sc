@@ -190,6 +190,128 @@ describe("tab bar", () => {
     eq(/prefers-reduced-motion:reduce\)\{ \.vx-wave\{animation:none\}/.test(SOURCE), true));
 });
 
+/* ------------------------------------------------------------------- meet day
+   Times typed poolside go straight into the swimmer's permanent history, so a
+   mistake here is not a display glitch — it is a race that never happened sitting
+   in a child's record and, if it is fast enough, in their PB. */
+describe("meet day", () => {
+  const swimmers = () => ({
+    junior: [
+      { id: "s1", name: "Hannah Millen", entries: [
+        { event: "50 Free", sec: 31.20, meet: "Spring Cup", meetDate: "2026-03-01" },
+        { event: "50 Free", sec: 30.80, meet: "Doha Open", meetDate: "2026-08-08" },
+        { event: "100 Free", sec: 68.10, meet: "Spring Cup", meetDate: "2026-03-01" },
+      ] },
+      { id: "s2", name: "Omar Ali", entries: [
+        { event: "50 Free", sec: 29.90, meet: "Doha Open", meetDate: "2026-08-08" },
+      ] },
+    ],
+    senior: [
+      { id: "s3", name: "Lilliana Millen", entries: [
+        { event: "50 Free", sec: 30.10, meet: "Doha Open", meetDate: "2026-08-08" },
+      ] },
+    ],
+  });
+  const baseCtx = () => ({
+    squads: [{ id: "junior", name: "Junior" }, { id: "senior", name: "Senior" }],
+    roster: swimmers(),
+    state: {},
+    todayISO: () => "2026-08-08",
+    notify: () => {},
+    _pushSend: () => {},
+    setState: function (p) { Object.assign(this.state, p); },
+  });
+
+  describeIso();
+  function describeIso() {
+    const ctx = baseCtx();
+    const iso = bind("_meetISO", ctx);
+    it("reads the meet's American date order", () => eq(iso({ date: "3/9/2026" }), "2026-03-09"));
+    it("pads a single-digit month and day", () => eq(iso({ date: "3/9/2026" }).length, 10));
+    it("a meet with no date falls back to today, not to nothing", () => eq(iso({}), "2026-08-08"));
+    it("an unparseable date does not produce a broken ISO string", () => eq(iso({ date: "next Friday" }), "2026-08-08"));
+  }
+
+  describeSwims();
+  function describeSwims() {
+    const ctx = baseCtx();
+    const swims = bind("_meetSwims", ctx, ["_swEntries"]);
+    const out = swims("Doha Open");
+    it("collects this meet's swims across every squad", () => eq(Object.keys(out).length, 3));
+    it("leaves another meet's swims alone", () => eq(out["s1|100 Free"], undefined));
+    it("keys a swim by swimmer and event", () => eq(out["s1|50 Free"].sec, 30.8));
+  }
+
+  describePlaces();
+  function describePlaces() {
+    const ctx = baseCtx();
+    const places = bind("_meetPlaces", ctx, ["_meetSwims", "_swEntries"]);
+    const p = places("Doha Open");
+    it("first place is the fastest of the whole event", () => eq(p["s2|50 Free"], 1));
+    it("places run across heats, not within one", () => eq(p["s3|50 Free"], 2));
+    it("the slowest of the event is last", () => eq(p["s1|50 Free"], 3));
+  }
+
+  describeBest();
+  function describeBest() {
+    const ctx = baseCtx();
+    const best = bind("_bestBefore", ctx, ["_swEntries"]);
+    const hannah = ctx.roster.junior[0];
+    it("the best they came in with", () => eq(best(hannah, "50 Free", "Doha Open"), 31.2));
+    it("without today's meet excluded it would beat itself", () => eq(best(hannah, "50 Free", ""), 30.8));
+    it("an event they have never swum has no best", () => eq(best(hannah, "200 Fly", "Doha Open"), null));
+  }
+
+  describeSave();
+  function describeSave() {
+    const ctx = baseCtx();
+    ctx.allSwimmersFlat = () => [{ ...ctx.roster.junior[0], squadId: "junior" }];
+    let saved = null;
+    ctx.adminEditSwimmer = (sqId, id, patch) => { saved = { sqId, id, patch }; };
+    const save = bind("meetLiveSave", ctx, ["parseTimeStr", "_bestBefore", "_swEntries", "fmt"]);
+
+    save("Doha Open", "2026-08-08", "LCM", "s1", "50 Free", "30.10");
+    it("saves against the swimmer's own squad", () => eq(saved.sqId, "junior"));
+    it("correcting a time replaces the swim, it does not stack a second one", () =>
+      eq(saved.patch.pbs.filter((p) => p.event === "50 Free" && p.meet === "Doha Open").length, 1));
+    it("the corrected time is the one kept", () =>
+      eq(saved.patch.pbs.find((p) => p.event === "50 Free" && p.meet === "Doha Open").sec, 30.1));
+    it("their other races are untouched", () =>
+      eq(saved.patch.pbs.filter((p) => p.meet === "Spring Cup").length, 2));
+    it("a PB is measured against what they came in with", () =>
+      eq(/PB by 1\.10s/.test(ctx.state.meetDayMsg), true));
+    it("SCM is recorded as short course", () => {
+      save("Doha Open", "2026-08-08", "SCM", "s1", "50 Free", "29.00");
+      eq(saved.patch.pbs.find((p) => p.meet === "Doha Open").course, "S");
+    });
+
+    it("a time that is not a time is refused, not saved as NaN", () => {
+      saved = null;
+      save("Doha Open", "2026-08-08", "LCM", "s1", "50 Free", "hand timed");
+      eq(saved, null);
+      eq(/Enter a time/.test(ctx.state.meetDayMsg), true);
+    });
+    it("a swimmer who has left the club is refused", () => {
+      saved = null;
+      save("Doha Open", "2026-08-08", "LCM", "gone", "50 Free", "30.00");
+      eq(saved, null);
+    });
+  }
+
+  describeClear();
+  function describeClear() {
+    const ctx = baseCtx();
+    ctx.allSwimmersFlat = () => [{ ...ctx.roster.junior[0], squadId: "junior" }];
+    let saved = null;
+    ctx.adminEditSwimmer = (sqId, id, patch) => { saved = patch; };
+    const clear = bind("meetLiveClear", ctx, ["_swEntries"]);
+    clear("Doha Open", "s1", "50 Free");
+    it("undo takes the swim back out of the record", () =>
+      eq(saved.pbs.some((p) => p.event === "50 Free" && p.meet === "Doha Open"), false));
+    it("and leaves every other race in place", () => eq(saved.pbs.length, 2));
+  }
+});
+
 /* -------------------------------------------------------------------- billing
    Money is the one place where "roughly right" is not good enough. A fee that is
    billed twice, billed to a swimmer who is signed off injured, or counted as
