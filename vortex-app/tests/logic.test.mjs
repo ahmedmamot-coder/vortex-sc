@@ -1096,6 +1096,21 @@ describe("InBody sheet", () => {
     });
   }
 
+  // Automatic reading needs an account somebody has to set up and pay for. Typing the sheet
+  // out has to be a real option, not three boxes and a shrug.
+  it("the whole sheet can be typed, not just three boxes", () => {
+    const fields = (SOURCE.match(/ibFullFields: \[[\s\S]*?\]\.map/) || [""])[0];
+    for (const k of ["height", "bodyFatMass", "bmi", "score", "visceralFat", "tbw", "icw", "ecw",
+                     "ecwRatio", "protein", "minerals", "ffm", "slm", "boneMineral",
+                     "bodyCellMass", "bmr", "whr", "obesityDegree", "smi", "phaseAngle"])
+      eq(fields.includes("'" + k + "'"), true, k + " cannot be entered by hand");
+  });
+  it("a typed value beats an import's reading of the same field", () =>
+    eq(/const extra=\{\.\.\.\(\(pend&&pend\.extra\)\|\|\{\}\), \.\.\.typed\}/.test(SOURCE), true,
+       "the person has the paper in front of them"));
+  it("a typed test date puts the scan on the right day", () =>
+    eq(/const typedDate=\/\^\\d\{4\}-\\d\{2\}-\\d\{2\}\$\/\.test/.test(SOURCE), true));
+
   it("height is kept, not read and thrown away", () => {
     eq(/height:data\.height\|\|null/.test(SOURCE), true);
     eq(/\['height','Height',' cm'\]/.test(SOURCE), true);

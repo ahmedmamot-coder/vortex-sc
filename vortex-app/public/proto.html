@@ -2414,6 +2414,24 @@ if ('serviceWorker' in navigator) {
                             <input value="{{ inbodyMuscle }}" oninput="{{ onInbodyMuscle }}" placeholder="Muscle kg" type="number" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-size:11.5px;color:#0C1116;outline:none">
                             <button onclick="{{ onInbodyAdd }}" style="flex:none;width:36px;background:var(--vx-blue);color:#fff;border:none;border-radius:9px;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="plus" style="width:16px;height:16px"></i></button>
                           </div>
+                          <button onclick="{{ onIbFullToggle }}" style="width:100%;margin-top:6px;background:none;border:none;color:var(--vx-blue);font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer;text-align:left;padding:3px">{{ ibFullLabel }}</button>
+                          <sc-if value="{{ ibFullOpen }}" hint-placeholder-val="{{ false }}">
+                            <div style="background:#F8FAFC;border:1px solid #EEF1F5;border-radius:11px;padding:11px;margin-top:4px">
+                              <p style="margin:0 0 8px;font-size:11px;color:#7A8296;line-height:1.5">Copy the rest off the printout. Anything you leave empty is simply left off the record.</p>
+                              <div style="margin-bottom:9px">
+                                <span style="display:block;font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4;margin-bottom:3px">Test date on the sheet</span>
+                                <input value="{{ ibTestDate }}" oninput="{{ onIbTestDate }}" type="date" style="width:100%;box-sizing:border-box;background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                              </div>
+                              <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:7px">
+                                <sc-for list="{{ ibFullFields }}" as="ibf" hint-placeholder-count="20">
+                                  <span>
+                                    <span style="display:block;font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#9AA2B4;margin-bottom:2px">{{ ibf.label }} {{ ibf.unit }}</span>
+                                    <input value="{{ ibf.value }}" oninput="{{ ibf.onInput }}" type="number" inputmode="decimal" style="width:100%;box-sizing:border-box;background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:8px 9px;font-family:var(--font-mono);font-size:12.5px;color:#0C1116;outline:none">
+                                  </span>
+                                </sc-for>
+                              </div>
+                            </div>
+                          </sc-if>
                           <input id="{{ profileIbInputId }}" type="file" accept="application/pdf,image/*" onchange="{{ onProfileIbPdf }}" style="display:none">
                           <button onclick="{{ onProfileIbPdfClick }}" style="margin-top:8px;width:100%;display:flex;align-items:center;justify-content:center;gap:7px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border:1.5px dashed var(--vx-blue);border-radius:9px;padding:10px;cursor:pointer;font-family:inherit;font-weight:700;font-size:11.5px"><i data-lucide="file-up" style="width:14px;height:14px"></i> Import InBody sheet — PDF or photo</button>
                           <sc-if value="{{ profileIbMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:6px 2px 0;font-size:11px;font-weight:600;color:{{ profileIbMsgColor }}">{{ profileIbMsg }}</p></sc-if>
@@ -6979,8 +6997,14 @@ class Component extends DCLogic {
     // Carry the imported sheet onto the record being saved. Without this an imported photo
     // left its file on one entry and the numbers on another.
     const pend=this.state.ibPending||null;
-    const extra=(pend&&pend.extra)||{};
-    const rec={date:(pend&&pend.testDate)||new Date().toISOString().slice(0,10), weight:w, fat: isNaN(fat)?null:fat, muscle: isNaN(mus)?null:mus,
+    // Typed values win over an import's reading of the same field: the person has the paper.
+    const typed={};
+    ['height','bodyFatMass','bmi','score','visceralFat','tbw','icw','ecw','ecwRatio','protein',
+     'minerals','ffm','slm','boneMineral','bodyCellMass','bmr','whr','obesityDegree','smi','phaseAngle']
+      .forEach(k=>{ const n=parseFloat(f[k]); if(!isNaN(n)) typed[k]=n; });
+    const extra={...((pend&&pend.extra)||{}), ...typed};
+    const typedDate=/^\d{4}-\d{2}-\d{2}$/.test(f.testDate||'') ? f.testDate : null;
+    const rec={date:typedDate||(pend&&pend.testDate)||new Date().toISOString().slice(0,10), weight:w, fat: isNaN(fat)?null:fat, muscle: isNaN(mus)?null:mus,
       bmr:extra.bmr||null, visceralFat:extra.visceralFat||null, whr:extra.whr||null, protein:extra.protein||null,
       minerals:extra.minerals||null, tbw:extra.tbw||null, bmi:extra.bmi||null, score:extra.score||null,
       phaseAngle:extra.phaseAngle||null, icw:extra.icw||null, ecw:extra.ecw||null, ecwRatio:extra.ecwRatio||null,
@@ -6989,7 +7013,7 @@ class Component extends DCLogic {
       height:extra.height||null, bodyFatMass:extra.bodyFatMass||null, slm:extra.slm||null,
       fileUrl:(pend&&pend.fileUrl)||null, fileName:(pend&&pend.fileName)||''};
     this._saveSwMeta(swId, {...m, inbody:[rec, ...(m.inbody||[])]});
-    this.setState({inbodyForm:{weight:'',fat:'',muscle:''}, ibPending:null,
+    this.setState({inbodyForm:{weight:'',fat:'',muscle:''}, ibPending:null, ibFullOpen:false,
       profileIbMsg: pend ? 'Saved with the sheet attached \u2713' : ''});
   }
   deleteInbody(swId, idx){ const m=this._swMeta(swId); const list=(m.inbody||[]).slice(); list.splice(idx,1); this._saveSwMeta(swId, {...m, inbody:list}); }
@@ -11585,6 +11609,29 @@ class Component extends DCLogic {
           onViewDocId:()=>this._openDoc(docId),
           onRemoveDocBirth:()=>this.removeDoc(swObj.id,'birth'), onRemoveDocId:()=>this.removeDoc(swObj.id,'id'),
           inbodyRows, inbodyHasRows:inbodyRows.length>0,
+          // Typing the sheet out is the fallback when nothing can read it automatically, and
+          // three boxes made that fallback useless: a coach with the printout in front of them
+          // could enter a weight and had nowhere to put the other twenty readings.
+          ibFullOpen: !!S.ibFullOpen,
+          onIbFullToggle:()=>this.setState({ibFullOpen: !S.ibFullOpen}),
+          ibFullLabel: S.ibFullOpen ? 'Hide the rest of the sheet' : 'Type the rest of the sheet',
+          ibFullFields: [
+            ['height','Height','cm'], ['bodyFatMass','Body fat mass','kg'], ['bmi','BMI',''],
+            ['score','InBody score','/100'], ['visceralFat','Visceral fat area',''],
+            ['tbw','Total body water','L'], ['icw','Intracellular water','L'],
+            ['ecw','Extracellular water','L'], ['ecwRatio','ECW ratio',''],
+            ['protein','Protein','kg'], ['minerals','Minerals','kg'],
+            ['ffm','Fat free mass','kg'], ['slm','Soft lean mass','kg'],
+            ['boneMineral','Bone mineral','kg'], ['bodyCellMass','Body cell mass','kg'],
+            ['bmr','BMR','kcal'], ['whr','Waist-hip ratio',''],
+            ['obesityDegree','Obesity degree','%'], ['smi','SMI','kg/m²'],
+            ['phaseAngle','Phase angle','°'],
+          ].map(f=>({ label:f[1], unit:f[2],
+            value:(S2.inbodyForm[f[0]]!=null?S2.inbodyForm[f[0]]:''),
+            onInput:(e)=>this.setState({inbodyForm:{...this.state.inbodyForm, [f[0]]:e.target.value}}) })),
+          // A sheet from July should sit on the chart in July, whoever typed it in.
+          ibTestDate: S2.inbodyForm.testDate||'',
+          onIbTestDate:(e)=>this.setState({inbodyForm:{...this.state.inbodyForm, testDate:e.target.value}}),
           inbodyWeight:S2.inbodyForm.weight, inbodyFat:S2.inbodyForm.fat, inbodyMuscle:S2.inbodyForm.muscle,
           onInbodyWeight:(e)=>this.setState({inbodyForm:{...S2.inbodyForm, weight:e.target.value}}),
           onInbodyFat:(e)=>this.setState({inbodyForm:{...S2.inbodyForm, fat:e.target.value}}),
