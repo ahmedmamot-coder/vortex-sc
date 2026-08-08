@@ -35,7 +35,7 @@ if ('serviceWorker' in navigator) {
   var REST = SB_URL + "/rest/v1/club_state";
   var HEAD = { "apikey": SB_ANON, "Authorization": "Bearer " + SB_ANON, "Content-Type": "application/json" };
   // Every shared data type the club edits. The only key kept per-device is vx_api_key.
-  var SYNC = ["vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_meet_events","vx_meet_cuts","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_sw_status","vx_memberships","vx_fee_plans","vx_billing"];
+  var SYNC = ["vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_meet_events","vx_meet_cuts","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_sw_status","vx_memberships","vx_fee_plans","vx_billing","vx_race_splits"];
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
   // Auth-retry queue: if a write is rejected because we weren't signed in yet (401/403 under the
@@ -3298,6 +3298,118 @@ if ('serviceWorker' in navigator) {
                     </div>
                   </sc-if>
 
+                  <sc-if value="{{ toolRace }}" hint-placeholder-val="{{ true }}">
+                    <div style="display:flex;flex-direction:column;gap:12px">
+                      <div style="background:#0A0F1A;color:#fff;border-radius:16px;padding:16px;display:flex;align-items:center;gap:12px">
+                        <span style="width:42px;height:42px;flex:none;border-radius:12px;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center"><i data-lucide="gauge" style="width:22px;height:22px;color:#FF8FB1"></i></span>
+                        <div><p style="margin:0;font-size:14px;font-weight:800">Race Strategy</p><p style="margin:2px 0 0;font-size:12px;color:rgba(255,255,255,.6)">{{ raceScopeLabel }}</p></div>
+                      </div>
+
+                      <sc-if value="{{ raceNoSel }}" hint-placeholder-val="{{ true }}">
+                        <input value="{{ raceQuery }}" oninput="{{ onRaceQuery }}" placeholder="Search a swimmer…" style="width:100%;box-sizing:border-box;background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:11px 13px;font-family:inherit;font-size:13px;color:#0C1116;outline:none">
+                        <div style="display:flex;flex-direction:column;gap:6px">
+                          <sc-for list="{{ raceSwRows }}" as="rs" hint-placeholder-count="6">
+                            <button onclick="{{ rs.onPick }}" style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:10px 11px;cursor:pointer;font-family:inherit">
+                              <span style="width:32px;height:32px;flex:none;border-radius:10px;background:#EEF1F5;color:#5A657E;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">{{ rs.initials }}</span>
+                              <span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;font-weight:700;color:#0C1116">{{ rs.name }}</span><span style="display:block;font-size:10.5px;color:#9AA2B4;margin-top:1px">{{ rs.sub }}</span></span>
+                              <i data-lucide="chevron-right" style="width:15px;height:15px;color:#C7CDDA;flex:none"></i>
+                            </button>
+                          </sc-for>
+                        </div>
+                      </sc-if>
+
+                      <sc-if value="{{ raceHasSel }}" hint-placeholder-val="{{ false }}">
+                        <div style="display:flex;align-items:center;gap:10px">
+                          <button onclick="{{ onRaceBack }}" aria-label="Pick another swimmer" style="flex:none;width:32px;height:32px;border-radius:10px;border:1px solid #E5E9F0;background:#fff;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="chevron-left" style="width:15px;height:15px"></i></button>
+                          <span style="width:34px;height:34px;flex:none;border-radius:11px;background:#EEF1F5;color:#5A657E;display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:800">{{ raceSelInitials }}</span>
+                          <span style="flex:1;min-width:0;font-size:14px;font-weight:800;color:#0C1116">{{ raceSelName }}</span>
+                        </div>
+                        <sc-if value="{{ raceHasEvents }}" hint-placeholder-val="{{ true }}">
+                          <div class="vx-scroll" style="display:flex;gap:6px;overflow-x:auto">
+                            <sc-for list="{{ raceEventChips }}" as="rc" hint-placeholder-count="4">
+                              <button onclick="{{ rc.onClick }}" style="flex:none;background:{{ rc.bg }};color:{{ rc.fg }};border:1px solid {{ rc.border }};border-radius:999px;padding:7px 13px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer">{{ rc.label }}</button>
+                            </sc-for>
+                          </div>
+                          <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                            <div style="display:flex;gap:8px">
+                              <div style="flex:1;background:#F8FAFC;border-radius:11px;padding:10px;text-align:center"><span style="display:block;font-family:var(--font-mono);font-size:17px;font-weight:700;color:#0C1116">{{ racePbLabel }}</span><span style="display:block;font-size:9.5px;color:#7A8296;font-weight:700;text-transform:uppercase;margin-top:2px">Current PB</span></div>
+                              <div style="flex:1;background:#EAF1FE;border-radius:11px;padding:10px;text-align:center"><span style="display:block;font-family:var(--font-mono);font-size:17px;font-weight:700;color:#1B4CA1">{{ raceTargetLabel }}</span><span style="display:block;font-size:9.5px;color:#1B4CA1;font-weight:700;text-transform:uppercase;margin-top:2px">Target</span></div>
+                            </div>
+                            <p style="margin:9px 0 0;font-size:11px;color:#9AA2B4;line-height:1.5">{{ raceTargetSource }}</p>
+                            <p style="margin:4px 0 0;font-size:12px;font-weight:700;color:{{ raceGapColor }}">{{ raceGapLabel }}</p>
+                          </div>
+                          <sc-if value="{{ raceHasRows }}" hint-placeholder-val="{{ true }}">
+                            <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+                                <p style="margin:0;font-size:13px;font-weight:700;color:#0C1116">{{ raceEventLabel }} — the plan</p>
+                                <button onclick="{{ onRaceClearActual }}" style="background:none;border:none;color:var(--vx-blue);font-family:inherit;font-weight:700;font-size:11px;cursor:pointer">Clear splits</button>
+                              </div>
+                              <div style="display:flex;align-items:center;gap:8px;padding:0 3px 7px;border-bottom:1px solid #EEF1F5">
+                                <span style="flex:none;width:42px;font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4">At</span>
+                                <span style="flex:1;font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4">Target 50 · cum</span>
+                                <span style="flex:none;width:74px;text-align:center;font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4">Swam</span>
+                                <span style="flex:none;width:52px;text-align:right;font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4">Diff</span>
+                              </div>
+                              <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">
+                                <sc-for list="{{ raceRows }}" as="rr" hint-placeholder-count="4">
+                                  <div style="display:flex;align-items:center;gap:8px">
+                                    <span style="flex:none;width:42px;font-family:var(--font-mono);font-size:11.5px;font-weight:700;color:#3A4152">{{ rr.label }}</span>
+                                    <span style="flex:1;min-width:0"><span style="display:block;font-family:var(--font-mono);font-size:13px;font-weight:700;color:#0C1116">{{ rr.target }}</span><span style="display:block;font-family:var(--font-mono);font-size:10px;color:#9AA2B4">{{ rr.targetCum }}</span></span>
+                                    <input value="{{ rr.actualDraft }}" onchange="{{ rr.onActual }}" inputmode="decimal" placeholder="—" style="flex:none;width:74px;box-sizing:border-box;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:7px 6px;font-family:var(--font-mono);font-size:12px;color:#0C1116;outline:none;text-align:center">
+                                    <span style="flex:none;width:52px;text-align:center;background:{{ rr.deltaBg }};color:{{ rr.deltaFg }};border-radius:7px;padding:5px 4px;font-family:var(--font-mono);font-size:11px;font-weight:700">{{ rr.deltaLabel }}</span>
+                                  </div>
+                                </sc-for>
+                              </div>
+                              <sc-if value="{{ raceActualHas }}" hint-placeholder-val="{{ false }}">
+                                <div style="margin-top:11px;padding-top:11px;border-top:1px solid #EEF1F5;display:flex;align-items:center;justify-content:space-between">
+                                  <span style="font-family:var(--font-mono);font-size:16px;font-weight:700;color:#0C1116">{{ raceActualTotalLabel }}</span>
+                                  <span style="font-size:11.5px;font-weight:700;color:{{ raceActualVerdictColor }}">{{ raceActualVerdict }}</span>
+                                </div>
+                              </sc-if>
+                            </div>
+                          </sc-if>
+                          <p style="margin:0 2px;font-size:11px;color:#9AA2B4;line-height:1.5">The plan spreads the target across the race the way a well-swum one goes: out quick off the dive, holding through the middle, coming back on the finish. Type the 50s the swimmer actually swam and each length says whether it was on the plan.</p>
+                        </sc-if>
+                        <sc-if value="{{ raceNoEvents }}" hint-placeholder-val="{{ false }}">
+                          <div style="text-align:center;padding:30px 20px;color:#9AA2B4"><i data-lucide="gauge" style="width:28px;height:28px"></i><p style="font-size:12.5px;margin-top:10px;line-height:1.5">No times on record for this swimmer yet.<br>A race plan needs a PB to work from — add one on their profile, or record a swim on meet day.</p></div>
+                        </sc-if>
+                      </sc-if>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ toolRisk }}" hint-placeholder-val="{{ true }}">
+                    <div style="display:flex;flex-direction:column;gap:12px">
+                      <div style="background:#0A0F1A;color:#fff;border-radius:16px;padding:16px;display:flex;align-items:center;gap:12px">
+                        <span style="width:42px;height:42px;flex:none;border-radius:12px;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center"><i data-lucide="shield-alert" style="width:22px;height:22px;color:#FFD666"></i></span>
+                        <div><p style="margin:0;font-size:14px;font-weight:800">Load &amp; Risk</p><p style="margin:2px 0 0;font-size:12px;color:rgba(255,255,255,.6)">{{ riskScopeLabel }} · {{ riskCountLine }}</p></div>
+                      </div>
+                      <sc-if value="{{ riskEmpty }}" hint-placeholder-val="{{ false }}">
+                        <div style="text-align:center;padding:36px 20px;color:#9AA2B4"><i data-lucide="shield-check" style="width:30px;height:30px"></i><p style="font-size:12.5px;margin-top:10px;line-height:1.5">Nobody is flagged.<br>Swimmers appear here when their training load jumps, their wellness check-ins drop, or their attendance falls away.</p></div>
+                      </sc-if>
+                      <div style="display:flex;flex-direction:column;gap:8px">
+                        <sc-for list="{{ riskRows }}" as="rk" hint-placeholder-count="3">
+                          <button onclick="{{ rk.onOpen }}" style="display:block;width:100%;text-align:left;background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:13px;cursor:pointer;font-family:inherit;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                            <div style="display:flex;align-items:center;gap:10px">
+                              <span style="flex:1;min-width:0"><span style="display:block;font-size:13px;font-weight:700;color:#0C1116">{{ rk.name }}</span><span style="display:block;font-size:10.5px;color:#9AA2B4;margin-top:1px">{{ rk.sqName }}</span></span>
+                              <span style="flex:none;background:{{ rk.levelBg }};color:{{ rk.levelFg }};border-radius:7px;padding:3px 9px;font-size:10.5px;font-weight:700">{{ rk.level }}</span>
+                            </div>
+                            <div style="display:flex;flex-direction:column;gap:4px;margin-top:9px">
+                              <sc-for list="{{ rk.reasons }}" as="rn" hint-placeholder-count="2">
+                                <span style="display:flex;align-items:center;gap:7px;font-size:11.5px;color:#3A4152"><span style="flex:none;width:6px;height:6px;border-radius:50%;background:{{ rn.dot }}"></span>{{ rn.text }}</span>
+                              </sc-for>
+                            </div>
+                            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:9px">
+                              <span style="background:#F8FAFC;border-radius:7px;padding:4px 8px;font-size:10px;color:#7A8296">{{ rk.acwrLabel }}</span>
+                              <span style="background:#F8FAFC;border-radius:7px;padding:4px 8px;font-size:10px;color:#7A8296">{{ rk.readinessLabel }}</span>
+                              <span style="background:#F8FAFC;border-radius:7px;padding:4px 8px;font-size:10px;color:#7A8296">{{ rk.attendLabel }}</span>
+                            </div>
+                          </button>
+                        </sc-for>
+                      </div>
+                      <p style="margin:0 2px;font-size:11px;color:#9AA2B4;line-height:1.5">Built only from what the club already records: the metres in the sessions a swimmer was marked in for, their own wellness check-ins, and their register. It is a prompt to have a conversation, not a medical assessment.</p>
+                    </div>
+                  </sc-if>
+
                   <sc-if value="{{ toolTalent }}" hint-placeholder-val="{{ true }}">
                     <div style="display:flex;flex-direction:column;gap:12px">
                       <div style="background:#0A0F1A;color:#fff;border-radius:16px;padding:16px;display:flex;align-items:center;gap:12px">
@@ -5007,6 +5119,7 @@ class Component extends DCLogic {
     // for, when it was paid and how. The old vx_invoices was a paid/unpaid tick per month
     // with no amount and no record, so nobody could answer "what did we bill in March".
     this.billing=this._loadJSON('vx_billing', null);   // normalised (and migrated once) by _billing()
+    this.raceSplitLog=this._loadJSON('vx_race_splits', {});   // actual 50s a coach timed, per swimmer per event
     this.academySchedule={preteam:'Mon/Wed/Fri · 4:00–5:00pm', advb:'Mon/Wed/Fri · 4:00–5:30pm', adva:'Mon–Fri · 4:00–5:30pm', junior:'Mon–Fri · 4:00–6:00pm', seniorb:'Mon–Sat · 4:00–6:00pm', seniora:'Mon–Sat · 4:00–6:30pm', vortexb:'Mon–Sat · 5:00–7:00pm', vortexa:'Mon–Sat · 5:00–7:30pm', legend:'Mon–Sat · 5:30–8:00pm'};
     this.videoLib=this._loadJSON('vx_videos', []).filter(v=>v && v.url && /^https?:\/\//i.test(v.url)).map(v=>({
       ...v,
@@ -5465,6 +5578,137 @@ class Component extends DCLogic {
     this._saveJSON('vx_meet_entries', this.meetEntries);
     this.setState({shareNote:'Auto-seeded '+list.length+' entries by PB \u2713'});
   }
+  // ---- Race strategy -------------------------------------------------------------------
+  // A goal time on its own tells a 13-year-old nothing at the 100m turn. This turns it into
+  // the splits that would actually produce it — "through 100 in 1:05.8" — and then holds the
+  // race they swam against the plan, 50 by 50, so the fix is a specific length, not "go faster".
+  _raceDistance(event){ const m=String(event||'').match(/(\d+)/); return m?parseInt(m[1],10):0; }
+  // How a well-swum race is spread across its 50s, as a cost per 50 relative to the average.
+  // The first 50 is cheap (a dive and no lactate), the middle drifts, and the last comes back
+  // on the finish. Normalised so the legs always add back to exactly the goal time.
+  _raceShape(n){
+    if(n<=1) return [1];
+    const out=[];
+    for(let i=0;i<n;i++){
+      const p = i/(n-1);
+      let f;
+      if(n===2) f = i===0 ? 0.955 : 1.045;                        // 100: the classic positive split
+      else if(n===4) f = [0.945, 1.015, 1.035, 1.005][i];         // 200: out fast, hold, bring it home
+      else f = 0.955 + 0.075*Math.min(p*1.15, 1) - (i===n-1 ? 0.055 : 0);   // 400+: even, with a finish
+      out.push(f);
+    }
+    const sum=out.reduce((a,b)=>a+b,0);
+    return out.map(f=>f*n/sum);
+  }
+  raceSplits(event, targetSec){
+    const dist=this._raceDistance(event);
+    const n=Math.max(1, Math.round(dist/50));
+    if(!dist || !targetSec || targetSec<=0) return [];
+    const shape=this._raceShape(n); const avg=targetSec/n;
+    let cum=0;
+    return shape.map((f,i)=>{ const split=avg*f; cum+=split;
+      return { leg:i+1, from:i*50, to:(i+1)*50, split:+split.toFixed(2), cumulative:+cum.toFixed(2) }; });
+  }
+  _raceActual(swId, event){ const s=(this.raceSplitLog||{})[swId]; const r=s&&s[event]; return (r&&Array.isArray(r.splits))?r : null; }
+  raceActualSet(swId, event, leg, raw){
+    const sec=this.parseTimeStr(raw);
+    const all={...(this.raceSplitLog||{})};
+    const forSw={...(all[swId]||{})};
+    const rec={...(forSw[event]||{splits:[], date:this.todayISO()})};
+    const splits=(rec.splits||[]).slice();
+    // A blank box clears that leg rather than storing 0 — a 0.00 split would poison every
+    // comparison it touched and read as an impossibly fast length.
+    splits[leg-1] = (sec!=null && sec>0) ? +sec.toFixed(2) : null;
+    rec.splits=splits; rec.date=this.todayISO();
+    forSw[event]=rec; all[swId]=forSw;
+    this.raceSplitLog=all; this._saveJSON('vx_race_splits', all); this.forceUpdate();
+  }
+  raceActualClear(swId, event){
+    const all={...(this.raceSplitLog||{})}; const forSw={...(all[swId]||{})};
+    delete forSw[event]; all[swId]=forSw;
+    this.raceSplitLog=all; this._saveJSON('vx_race_splits', all); this.forceUpdate();
+  }
+
+  // ---- Training load & injury risk -------------------------------------------------------
+  // Three things reliably run ahead of a swimmer breaking down, and the club already records
+  // all three: a sharp jump in training load, a run of poor wellness check-ins, and attendance
+  // quietly falling away. Any one of them alone is noise. Together they are worth a
+  // conversation — which is all this claims to be. It is not a medical assessment.
+  //
+  // The load a swimmer actually did is the session's metres on the days they were marked in,
+  // not the metres the squad was set.
+  _swLoadSeries(sqId, swId, idx, days){
+    const today=this.todayISO(); const out=[];
+    const sessions={}; (((this.savedPlans||{})[sqId])||[]).forEach(r=>{ if(r.date) sessions[r.date]=(sessions[r.date]||0)+(r.totalM||0); });
+    for(let k=days-1;k>=0;k--){
+      const d=this.shiftDate(today, -k);
+      const st=this.getAttendStatus(sqId, d, swId, idx);
+      out.push({date:d, m:(st==='present'||st==='late') ? (sessions[d]||0) : 0, status:st});
+    }
+    return out;
+  }
+  _attendPct(sqId, swId, idx, fromDaysAgo, toDaysAgo){
+    let seen=0, inPool=0;
+    for(let k=fromDaysAgo;k>toDaysAgo;k--){
+      const st=this.getAttendStatus(sqId, this.shiftDate(this.todayISO(), -k), swId, idx);
+      if(st==='unmarked') continue;
+      seen++; if(st==='present'||st==='late') inPool++;
+    }
+    return seen ? Math.round((inPool/seen)*100) : null;   // null = nobody marked, not 0%
+  }
+  _riskFor(sqId, sw, idx){
+    const series=this._swLoadSeries(sqId, sw.id, idx, 28);
+    const week=(w)=>series.slice(28-7*(w+1), 28-7*w).reduce((a,x)=>a+x.m, 0);
+    const acute=week(0);
+    const priors=[week(1), week(2), week(3)].filter(v=>v>0);
+    const chronic=priors.length ? priors.reduce((a,b)=>a+b,0)/priors.length : 0;
+    // Acute:chronic workload ratio — this week against the weeks behind it. Above ~1.5 is the
+    // spike that shows up before injuries; below ~0.6 is a swimmer who has stopped training.
+    const acwr = chronic>0 ? +(acute/chronic).toFixed(2) : null;
+
+    const checkins=((this.wellness||{})[sw.id]||[]).slice(0,7);
+    const readings=checkins.map(w=>this._wellReadiness(w)).filter(v=>v!=null);
+    const readiness = readings.length ? Math.round(readings.reduce((a,b)=>a+b,0)/readings.length) : null;
+    const soreVals=checkins.map(w=>w.soreness).filter(v=>v!=null&&v>0);
+    const soreness = soreVals.length ? +(soreVals.reduce((a,b)=>a+b,0)/soreVals.length).toFixed(1) : null;
+
+    const attNow=this._attendPct(sqId, sw.id, idx, 13, -1);
+    const attWas=this._attendPct(sqId, sw.id, idx, 27, 13);
+    const attDrop = (attNow!=null && attWas!=null) ? (attWas-attNow) : null;
+
+    const status=this._swStatus(sw.id);
+    const flags=[];
+    if(!status.active && (status.reason==='injured'||status.reason==='sick'))
+      flags.push({key:'signed-off', level:2, text:'Signed off '+(status.reason==='injured'?'injured':'sick')});
+    if(acwr!=null && acwr>1.5)
+      flags.push({key:'spike', level:2, text:'Training load '+Math.round((acwr-1)*100)+'% above their recent average'});
+    else if(acwr!=null && acwr<0.6 && chronic>0)
+      flags.push({key:'drop', level:1, text:'Training load has fallen away — '+Math.round((1-acwr)*100)+'% below their average'});
+    if(readiness!=null && readiness<55)
+      flags.push({key:'readiness', level:2, text:'Wellness check-ins averaging '+readiness+'/100'});
+    if(soreness!=null && soreness>=4)
+      flags.push({key:'soreness', level:2, text:'Reporting persistent soreness ('+soreness+'/5)'});
+    if(attDrop!=null && attDrop>=25)
+      flags.push({key:'attendance', level:1, text:'Attendance down '+attDrop+' points on the fortnight before'});
+
+    // A level-2 flag — a load spike, a run of bad check-ins, an injury sign-off — is worth a
+    // conversation on its own. The level-1 ones only are once two of them line up.
+    const score=flags.reduce((a,f)=>a+f.level, 0);
+    const level = score>=2 ? 'check' : (score>=1 ? 'watch' : 'ok');
+    return { swId:sw.id, name:sw.name, acute, chronic:Math.round(chronic), acwr, readiness, soreness,
+      attNow, attDrop, flags, score, level };
+  }
+  // The whole club, worst first. A swimmer with nothing recorded has nothing to say about
+  // them, so they are simply absent rather than reported as fine.
+  _riskBoard(squadIds){
+    const out=[];
+    (squadIds||this.squads.map(s=>s.id)).forEach(sqId=>(this.roster[sqId]||[]).forEach((sw,idx)=>{
+      const r=this._riskFor(sqId, sw, idx);
+      if(r.level!=='ok') out.push({...r, sqId, sqName:(this.squadById[sqId]||{}).name||''});
+    }));
+    return out.sort((a,b)=>b.score-a.score || a.name.localeCompare(b.name));
+  }
+
   // ---- Live meet day -----------------------------------------------------------------
   // A meet in progress is run straight off the heat sheet: every lane gets a box, and the
   // time typed into it is saved to that swimmer's own history there and then. The PB, the
@@ -8401,7 +8645,7 @@ class Component extends DCLogic {
     this.customMeets=g('vx_custom_meets', this.customMeets); this.eventRequests=g('vx_event_requests', this.eventRequests); this.meetCuts=g('vx_meet_cuts', this.meetCuts);
     this.academyTrials=g('vx_academy_trials', this.academyTrials); this.academyFees=g('vx_academy_fees', this.academyFees);
     this.feePlans=g('vx_fee_plans', this.feePlans); this.memberships=g('vx_memberships', this.memberships); this.invoices=g('vx_invoices', this.invoices);
-    this.billing=g('vx_billing', this.billing);
+    this.billing=g('vx_billing', this.billing); this.raceSplitLog=g('vx_race_splits', this.raceSplitLog);
     this.brandConfig=g('vx_brand', this.brandConfig); this.notifications=g('vx_notifications', this.notifications);
     this.tpaceTests=g('vx_tpace', this.tpaceTests); this.fitnessTests=g('vx_fitness_tests', this.fitnessTests);
     this.fitnessPlans=g('vx_fitness_plans', this.fitnessPlans); this.fitnessMedia=g('vx_fitness_media', this.fitnessMedia); this.waTargets=g('vx_wa_targets', this.waTargets); this.promoStore=g('vx_promo', this.promoStore); this.aiSuggOverrides=g('vx_ai_sugg_ovr', this.aiSuggOverrides);
@@ -8633,6 +8877,8 @@ class Component extends DCLogic {
       {id:'standards', icon:'badge-check', title:'Meet Standards', sub:'Cut times · who has qualified', tint:'rgba(12,122,79,.1)', color:'#0C7A4F'},
       {id:'relay', icon:'users-round', title:'Relay Builder', sub:'Fastest lineup by stroke', tint:'rgba(12,122,79,.1)', color:'#0C7A4F'},
       {id:'season', icon:'calendar-range', title:'Season Plan', sub:'Phases · weeks · peak & taper', tint:'rgba(124,77,255,.12)', color:'#7C4DFF'},
+      {id:'race', icon:'gauge', title:'Race Strategy', sub:'Split targets vs the race swum', tint:'rgba(200,30,91,.1)', color:'#C81E5B'},
+      {id:'risk', icon:'shield-alert', title:'Load & Risk', sub:'Who is ramping up too fast', tint:'rgba(245,166,35,.12)', color:'#C77E12'},
     ];
     // A staff member whose role contains "fitness" (e.g. Coach Nedhal, role "Fitness Coach")
     // is limited to the Fitness Plan tool only — every other tool is hidden for them.
@@ -8852,8 +9098,61 @@ class Component extends DCLogic {
     const mainPadBottom = (S.view==='squad') ? '78px' : '0px';
 
     // ---- tool overlay content ----
-    const toolTitleMap={attday:'Daily Attendance',insights:'Insights',boards:'Boards',video:'Video Analysis',lounge:'Vortex Lounge',goals:'Season Goals',ai:'AI Assistants',review:'AI Plan Review',clock:'Pace Clock',talent:'Talent Board',recovery:'Recovery Board',improvers:'Top Improvers',rankings:'Rankings',standards:'Meet Standards',relay:'Relay Builder',zoneeng:'Zone Engine',sponsors:'Sponsors',tpace:'T-Pace Tests',promo:'Level-Up Review',entries:'Meet Entries',fitness:'Fitness Plan',inbody:'InBody Import',season:'Season Plan'};
+    const toolTitleMap={attday:'Daily Attendance',insights:'Insights',boards:'Boards',video:'Video Analysis',lounge:'Vortex Lounge',goals:'Season Goals',ai:'AI Assistants',review:'AI Plan Review',clock:'Pace Clock',talent:'Talent Board',recovery:'Recovery Board',improvers:'Top Improvers',rankings:'Rankings',standards:'Meet Standards',relay:'Relay Builder',zoneeng:'Zone Engine',sponsors:'Sponsors',tpace:'T-Pace Tests',promo:'Level-Up Review',entries:'Meet Entries',fitness:'Fitness Plan',inbody:'InBody Import',season:'Season Plan',race:'Race Strategy',risk:'Load & Risk'};
     const toolScope = S.toolScopeClub ? ('Club-wide · '+this.allSwimmersFlat().length+' swimmers') : squad.name+' · '+squad.count+' swimmers';
+
+    // ---- Race strategy ----
+    const racePool = S.toolScopeClub ? this.allSwimmersFlat() : (this.roster[S.squadId]||[]).map(sw=>({...sw, squadId:S.squadId, squadName:squad.name}));
+    const raceQ=(S.raceQuery||'').trim().toLowerCase();
+    const raceSel = racePool.find(sw=>sw.id===S.raceSwId) || null;
+    const raceSwRows = raceSel ? [] : racePool
+      .filter(sw=>!raceQ || sw.name.toLowerCase().includes(raceQ))
+      .slice(0,30)
+      .map(sw=>({ id:sw.id, name:sw.name, initials:sw.initials, sub:(sw.squadName||squad.name)+' · best '+(sw.topEvent||'—'),
+        onPick:()=>this.setState({raceSwId:sw.id, raceEvent:null, raceQuery:''}) }));
+    const raceEvents = raceSel ? (raceSel.pbs||[]).filter(p=>this._raceDistance(p.event)>=50).map(p=>p.event) : [];
+    const raceEvent = (raceSel && raceEvents.includes(S.raceEvent)) ? S.raceEvent : raceEvents[0]||null;
+    const racePb = raceSel && raceEvent ? (raceSel.pbs||[]).find(p=>p.event===raceEvent) : null;
+    // The target is the coach's season goal where one is set. Otherwise it falls back to the
+    // same age-scaled suggestion Season Goals uses, so the planner always has something to
+    // plan against — clearly labelled, so nobody mistakes the fallback for a coach's decision.
+    const raceGoalOv = raceSel && raceEvent ? ((this.swimmerGoals[raceSel.id]||{})[raceEvent]||null) : null;
+    const raceTargetSec = racePb ? (raceGoalOv ? raceGoalOv.sec : this._aiSuggestSec(racePb.sec, raceSel.age)) : null;
+    const raceActual = raceSel && raceEvent ? this._raceActual(raceSel.id, raceEvent) : null;
+    const racePlan = raceEvent && raceTargetSec ? this.raceSplits(raceEvent, raceTargetSec) : [];
+    const raceActualTotal = (raceActual && raceActual.splits.every(v=>v!=null) && raceActual.splits.length===racePlan.length)
+      ? raceActual.splits.reduce((a,b)=>a+b, 0) : null;
+    let raceCumActual=0;
+    const raceRows = racePlan.map((leg,i)=>{
+      const act = raceActual ? raceActual.splits[i] : null;
+      if(act!=null) raceCumActual+=act;
+      const delta = act!=null ? +(act-leg.split).toFixed(2) : null;
+      return { label: leg.to+'m', legNo:leg.leg,
+        target:this.fmt(leg.split), targetCum:this.fmt(leg.cumulative),
+        actualDraft: act!=null ? act.toFixed(2) : '',
+        onActual:(e)=>this.raceActualSet(raceSel.id, raceEvent, leg.leg, e.target.value),
+        hasActual: act!=null,
+        actualCum: act!=null ? this.fmt(raceCumActual) : '',
+        deltaLabel: delta==null ? '' : ((delta>0?'+':'')+delta.toFixed(2)),
+        deltaBg: delta==null ? '#F8FAFC' : (delta>0.10 ? '#FBE4E4' : (delta<-0.10 ? '#DCF5EA' : '#EEF1F5')),
+        deltaFg: delta==null ? '#9AA2B4' : (delta>0.10 ? '#B42318' : (delta<-0.10 ? '#0C7A4F' : '#7A8296')) };
+    });
+    const raceGap = (racePb && raceTargetSec!=null) ? +(racePb.sec-raceTargetSec).toFixed(2) : null;
+
+    // ---- Load & injury risk ----
+    const riskSquadIds = S.toolScopeClub ? this.squads.map(s=>s.id) : [S.squadId];
+    const riskBoard = S.tool==='risk' ? this._riskBoard(riskSquadIds) : [];
+    const riskRows = riskBoard.map(r=>({
+      name:r.name, sqName:r.sqName,
+      level: r.level==='check' ? 'Worth a check-in' : 'Keep an eye on',
+      levelBg: r.level==='check' ? '#FBE4E4' : '#FBF0DD',
+      levelFg: r.level==='check' ? '#B42318' : '#7A5A0C',
+      acwrLabel: r.acwr==null ? 'Not enough sessions logged yet' : ('Load ratio '+r.acwr.toFixed(2)+' · '+Math.round(r.acute/100)/10+'km this week vs '+Math.round(r.chronic/100)/10+'km average'),
+      readinessLabel: r.readiness==null ? 'No wellness check-ins' : ('Readiness '+r.readiness+'/100'),
+      attendLabel: r.attNow==null ? 'No attendance marked' : ('Attendance '+r.attNow+'%'),
+      reasons: r.flags.map(f=>({ text:f.text, dot: f.level>=2 ? '#B42318' : '#B4690E' })),
+      onOpen:()=>this.setState({view:'squad', squadId:r.sqId, tab:'group', swimmerId:r.swId, tool:null}),
+    }));
 
     // ---- Talent / Move-up board ----
     const squadMaxAge={preteam:7,advb:9,adva:11,junior:13,seniorb:13,seniora:14,vortexb:15,vortexa:16,legend:99};
@@ -10824,6 +11123,33 @@ class Component extends DCLogic {
       promoRows, promoEmpty, promoScopeLabel,
       toolEntries:S.tool==='entries', toolFitness:S.tool==='fitness', toolInbody:S.tool==='inbody', toolSponsors:S.tool==='sponsors',
       toolTalent:S.tool==='talent', talentRows, talentEmpty, talentScopeLabel:toolScope,
+      // ---- race strategy ----
+      toolRace:S.tool==='race', raceScopeLabel:toolScope,
+      raceQuery:S.raceQuery||'', onRaceQuery:(e)=>this.setState({raceQuery:e.target.value}),
+      raceSwRows, raceNoSel:!raceSel, raceHasSel:!!raceSel,
+      raceSelName: raceSel?raceSel.name:'', raceSelInitials: raceSel?raceSel.initials:'',
+      onRaceBack:()=>this.setState({raceSwId:null, raceEvent:null, raceQuery:''}),
+      raceEventChips: raceEvents.map(ev=>({ label:ev, onClick:()=>this.setState({raceEvent:ev}),
+        bg: ev===raceEvent?squad.accent:'#fff', fg: ev===raceEvent?'#fff':'#3A4152', border: ev===raceEvent?squad.accent:'#E5E9F0' })),
+      raceHasEvents: raceEvents.length>0, raceNoEvents: !!raceSel && raceEvents.length===0,
+      raceEventLabel: raceEvent||'',
+      racePbLabel: racePb ? this.fmt(racePb.sec) : '—',
+      raceTargetLabel: raceTargetSec!=null ? this.fmt(raceTargetSec) : '—',
+      raceTargetSource: raceGoalOv ? (raceGoalOv.source==='coach'?'Season goal set by the coach':'Season goal (suggested)') : 'No season goal set — using the age-scaled suggestion',
+      raceGapLabel: raceGap==null ? '' : (raceGap>0 ? ('Needs to find '+raceGap.toFixed(2)+'s') : 'Already inside the target'),
+      raceGapColor: raceGap==null ? '#9AA2B4' : (raceGap>0 ? '#B4690E' : '#0C7A4F'),
+      raceRows, raceHasRows: raceRows.length>0,
+      raceActualTotalLabel: raceActualTotal!=null ? this.fmt(raceActualTotal) : '',
+      raceActualHas: raceActualTotal!=null,
+      raceActualVerdict: raceActualTotal==null ? '' : (raceActualTotal<=raceTargetSec
+        ? ('On the plan — '+this.fmt(raceTargetSec-raceActualTotal)+'s inside it')
+        : (this.fmt(raceActualTotal-raceTargetSec)+'s outside the plan')),
+      raceActualVerdictColor: (raceActualTotal!=null && raceActualTotal<=raceTargetSec) ? '#0C7A4F' : '#B42318',
+      onRaceClearActual: (raceSel&&raceEvent) ? ()=>this.raceActualClear(raceSel.id, raceEvent) : ()=>{},
+      // ---- load & injury risk ----
+      toolRisk:S.tool==='risk', riskRows, riskScopeLabel:toolScope,
+      riskEmpty: riskRows.length===0,
+      riskCountLine: riskRows.length ? (riskRows.length+' swimmer'+(riskRows.length===1?'':'s')+' worth looking at') : '',
       toolAttDay:S.tool==='attday',
       ...(()=>{
         if(S.tool!=='attday') return {};

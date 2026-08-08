@@ -190,6 +190,159 @@ describe("tab bar", () => {
     eq(/prefers-reduced-motion:reduce\)\{ \.vx-wave\{animation:none\}/.test(SOURCE), true));
 });
 
+/* -------------------------------------------------------------- race strategy
+   The split targets are what a swimmer is told to swim to. They have to add back
+   up to the goal exactly, and they have to describe a race a coach recognises —
+   out quick off the dive, drifting through the middle, coming back on the finish. */
+describe("race strategy", () => {
+  const ctx = { parseTimeStr: null };
+  const splits = bind("raceSplits", ctx, ["_raceDistance", "_raceShape"]);
+  const dist = bind("_raceDistance", ctx);
+  const sum = (rows) => +rows.reduce((a, r) => a + r.split, 0).toFixed(2);
+
+  it("reads the distance out of the event name", () => eq(dist("200 Breast"), 200));
+  it("reads it out of an IM too", () => eq(dist("400 IM"), 400));
+  it("an event with no distance plans nothing", () => eq(splits("Mystery", 60).length, 0));
+
+  it("a 50 is one leg, not zero", () => eq(splits("50 Free", 26.2).length, 1));
+  it("a 100 splits into two 50s", () => eq(splits("100 Free", 60).length, 2));
+  it("a 400 splits into eight", () => eq(splits("400 Free", 300).length, 8));
+
+  it("the legs add back up to the goal (100)", () => eq(sum(splits("100 Free", 60)), 60));
+  it("the legs add back up to the goal (200)", () => eq(sum(splits("200 Free", 130)), 130));
+  it("the legs add back up to the goal (400)", () => eq(sum(splits("400 Free", 300)), 300));
+  it("the last cumulative IS the goal", () => {
+    const r = splits("200 Free", 130);
+    eq(r[r.length - 1].cumulative, 130);
+  });
+
+  it("the first 50 is the quickest — that is the dive", () => {
+    const r = splits("100 Free", 60);
+    eq(r[0].split < r[1].split, true);
+  });
+  it("a 200 comes home faster than its third 50", () => {
+    const r = splits("200 Free", 130);
+    eq(r[3].split < r[2].split, true);
+  });
+  it("a 400 finishes faster than it drifted", () => {
+    const r = splits("400 Free", 300);
+    eq(r[7].split < r[6].split, true);
+  });
+  it("nobody is asked to negative-split the whole race", () => {
+    const r = splits("100 Free", 60);
+    eq(r[0].split < 30 && r[1].split > 30, true);
+  });
+
+  it("a target of nothing plans nothing rather than dividing by zero", () => eq(splits("100 Free", 0).length, 0));
+
+  const setActual = bind("raceActualSet", {
+    raceSplitLog: {}, todayISO: () => "2026-08-08", _saveJSON: () => {}, forceUpdate: () => {},
+  }, ["parseTimeStr"]);
+  it("a typed split is stored against its leg", () => {
+    const c = { raceSplitLog: {}, todayISO: () => "2026-08-08", _saveJSON: () => {}, forceUpdate: () => {} };
+    const set = bind("raceActualSet", c, ["parseTimeStr"]);
+    set("s1", "100 Free", 2, "31.40");
+    eq(c.raceSplitLog.s1["100 Free"].splits[1], 31.4);
+  });
+  it("clearing a box removes the split instead of storing a 0.00 length", () => {
+    const c = { raceSplitLog: {}, todayISO: () => "2026-08-08", _saveJSON: () => {}, forceUpdate: () => {} };
+    const set = bind("raceActualSet", c, ["parseTimeStr"]);
+    set("s1", "100 Free", 1, "28.10");
+    set("s1", "100 Free", 1, "");
+    eq(c.raceSplitLog.s1["100 Free"].splits[0], null);
+  });
+  it("a minutes:seconds split is understood", () => {
+    const c = { raceSplitLog: {}, todayISO: () => "2026-08-08", _saveJSON: () => {}, forceUpdate: () => {} };
+    const set = bind("raceActualSet", c, ["parseTimeStr"]);
+    set("s1", "400 Free", 1, "1:05.50");
+    eq(c.raceSplitLog.s1["400 Free"].splits[0], 65.5);
+  });
+  void setActual;
+});
+
+/* ------------------------------------------------------------------ load risk
+   This flags children to their coach. Flagging one who is fine wastes a
+   conversation; flagging on data that does not exist destroys trust in the whole
+   board, so "nothing recorded" must never read as "something is wrong". */
+describe("load risk", () => {
+  const DAY = 86400000;
+  const iso = (back) => new Date(Date.parse("2026-08-28T00:00:00Z") - back * DAY).toISOString().slice(0, 10);
+  // 28 days of sessions, 3000m each, every day.
+  const plans = (metres) => Array.from({ length: 28 }, (_, k) => ({ date: iso(k), totalM: metres }));
+
+  const ctxFor = ({ sessions, present, wellness = [], status = {} }) => ({
+    squads: [{ id: "junior", name: "Junior" }],
+    squadById: { junior: { name: "Junior" } },
+    roster: { junior: [{ id: "s1", name: "Hannah Millen" }] },
+    savedPlans: { junior: sessions },
+    wellness: { s1: wellness },
+    swimmerStatus: status,
+    todayISO: () => "2026-08-28",
+    getAttendStatus: (sq, day) => present(day),
+  });
+
+  const riskOf = (ctx) => bind("_riskFor", ctx, [
+    "_swLoadSeries", "_attendPct", "_wellReadiness", "_swStatus", "shiftDate",
+  ])("junior", ctx.roster.junior[0], 0);
+
+  it("a steady swimmer is not flagged", () => {
+    const r = riskOf(ctxFor({ sessions: plans(3000), present: () => "present" }));
+    eq(r.level, "ok");
+  });
+  it("a steady swimmer's load ratio sits around 1", () => {
+    const r = riskOf(ctxFor({ sessions: plans(3000), present: () => "present" }));
+    eq(r.acwr, 1);
+  });
+  it("a swimmer with nothing recorded is not flagged as fine OR as at risk", () => {
+    const r = riskOf(ctxFor({ sessions: [], present: () => "unmarked" }));
+    eq(r.acwr, null);
+    eq(r.level, "ok");
+    eq(r.attNow, null, "no register marked must not read as 0% attendance");
+  });
+  it("a load spike is flagged", () => {
+    // Triple the metres for the last 7 days only.
+    const sessions = plans(3000).map((p, k) => (k < 7 ? { ...p, totalM: 9000 } : p));
+    const r = riskOf(ctxFor({ sessions, present: () => "present" }));
+    eq(r.acwr, 3);
+    eq(r.flags.some((f) => f.key === "spike"), true);
+    eq(r.level, "check");
+  });
+  it("a swimmer who has stopped training is flagged, but more gently", () => {
+    const sessions = plans(3000).map((p, k) => (k < 7 ? { ...p, totalM: 0 } : p));
+    const r = riskOf(ctxFor({ sessions, present: () => "present" }));
+    eq(r.flags.some((f) => f.key === "drop"), true);
+    eq(r.level, "watch");
+  });
+  it("a run of poor check-ins is flagged", () => {
+    const wellness = Array.from({ length: 7 }, () => ({ sleep: 2, energy: 2, mood: 2, hydration: 2, soreness: 4 }));
+    const r = riskOf(ctxFor({ sessions: plans(3000), present: () => "present", wellness }));
+    eq(r.flags.some((f) => f.key === "readiness"), true);
+    eq(r.flags.some((f) => f.key === "soreness"), true);
+  });
+  it("good check-ins are not flagged", () => {
+    const wellness = Array.from({ length: 7 }, () => ({ sleep: 5, energy: 5, mood: 5, hydration: 5, soreness: 1 }));
+    const r = riskOf(ctxFor({ sessions: plans(3000), present: () => "present", wellness }));
+    eq(r.flags.length, 0);
+  });
+  it("attendance falling away is flagged", () => {
+    const cut = iso(13);
+    const r = riskOf(ctxFor({ sessions: plans(3000), present: (d) => (d > cut ? "absent" : "present") }));
+    eq(r.flags.some((f) => f.key === "attendance"), true);
+  });
+  it("a swimmer already signed off injured is surfaced, not hidden", () => {
+    const r = riskOf(ctxFor({
+      sessions: plans(3000), present: () => "present",
+      status: { s1: { active: false, reason: "injured", from: "2026-08-01", to: "" } },
+    }));
+    eq(r.flags.some((f) => f.key === "signed-off"), true);
+  });
+  it("the board leaves out everyone with nothing to say about them", () => {
+    const ctx = ctxFor({ sessions: plans(3000), present: () => "present" });
+    const board = bind("_riskBoard", ctx, ["_riskFor", "_swLoadSeries", "_attendPct", "_wellReadiness", "_swStatus", "shiftDate"]);
+    eq(board(["junior"]).length, 0);
+  });
+});
+
 /* ------------------------------------------------------------------- meet day
    Times typed poolside go straight into the swimmer's permanent history, so a
    mistake here is not a display glitch — it is a race that never happened sitting
