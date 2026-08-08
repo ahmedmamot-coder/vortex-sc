@@ -865,6 +865,34 @@ describe("expired session", () => {
   it("the banner's button checks the live flag, not the rendered one", () =>
     eq(/const dead = \(typeof window!=='undefined'\) \? !!window\.__vxAuthDead/.test(SOURCE), true));
 
+  // Once the database tells staff and families apart, a parent's phone will be refused
+  // writes it was never meant to make. A refusal retried for ever is a red banner that
+  // never clears, about a change that was never theirs.
+  itAsync("a refused write is not retried, because the answer cannot change", async () => {
+    const REFUSED = [{ id: "r1", op: "upsert", table: "attendance_marks", payload: [{}], status: 403, refused: true, ts: NOW }];
+    const t = boot({ auth: LIVE, failed: REFUSED, reply: () => GOOD_TOKEN });
+    const r = await t.win.__vxRetryFailed();
+    eq(r.tried, 0);
+    eq(t.upserted.length, 0);
+  });
+  itAsync("but it is kept on file rather than silently dropped", async () => {
+    const REFUSED = [{ id: "r1", op: "upsert", table: "attendance_marks", payload: [{}], status: 403, refused: true, ts: NOW }];
+    const t = boot({ auth: LIVE, failed: REFUSED, reply: () => GOOD_TOKEN });
+    await t.win.__vxRetryFailed();
+    eq(t.win.__vxFailedCount(), 1, "somebody has to be able to see what was refused");
+  });
+  itAsync("a refusal does not hold up the writes that can still succeed", async () => {
+    const mixed = [
+      { id: "r1", op: "upsert", table: "attendance_marks", payload: [{}], status: 403, refused: true, ts: NOW },
+      { id: "q1", op: "upsert", table: "attendance_marks", payload: [{ sw_id: "s1" }], status: 401, ts: NOW },
+    ];
+    const t = boot({ auth: LIVE, failed: mixed, reply: () => GOOD_TOKEN });
+    await t.win.__vxRetryFailed();
+    eq(t.upserted.length, 1, "the recoverable one must still go through");
+  });
+  it("the backfill of the whole register is staff-only", () =>
+    eq(/window\.__VX_AUTH\.token && this\._isStaffSession\(\)/.test(SOURCE), true));
+
   itAsync("signing out on purpose is not the same as being thrown out", async () => {
     const t = boot({ auth: LIVE, reply: () => GOOD_TOKEN });
     t.win.__vxAuthDead = true;
@@ -1201,7 +1229,7 @@ describe("sign-in speed", () => {
     stubWindow(); asked.length = 0;
     stubWindow();
     const ctx = newCtx();
-    bind("_attendFetchStaged", ctx, ["_attendFetch", "shiftDate"])();
+    bind("_attendFetchStaged", ctx, ["_attendFetch", "shiftDate", "_isStaffSession"])();
     await new Promise((r) => setTimeout(r, 5));
     eq(asked.length, 1, "one read, not a full-table read as well");
     eq(asked[0].includes("day=gte.2026-04-10"), true, "120 days back from 2026-08-08");
@@ -1209,7 +1237,7 @@ describe("sign-in speed", () => {
   itAsync("the full history follows later, so nothing is lost", async () => {
     stubWindow();
     const ctx = newCtx();
-    bind("_attendFetchStaged", ctx, ["_attendFetch", "shiftDate"])();
+    bind("_attendFetchStaged", ctx, ["_attendFetch", "shiftDate", "_isStaffSession"])();
     await new Promise((r) => setTimeout(r, 5));
     eq(!!ctx._attendFullTimer, true, "the catch-up must be scheduled, not skipped");
     clearTimeout(ctx._attendFullTimer);
@@ -1218,7 +1246,7 @@ describe("sign-in speed", () => {
     const ctx = newCtx();
     let migrated = false;
     ctx._attendMigrate = () => { migrated = true; };
-    bind("_attendFetchStaged", ctx, ["_attendFetch", "shiftDate"])();
+    bind("_attendFetchStaged", ctx, ["_attendFetch", "shiftDate", "_isStaffSession"])();
     await new Promise((r) => setTimeout(r, 5));
     eq(migrated, false, "it uploads the whole history in batches — never while signing in");
     clearTimeout(ctx._attendFullTimer);

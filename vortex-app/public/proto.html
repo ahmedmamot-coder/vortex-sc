@@ -64,8 +64,11 @@ if ('serviceWorker' in navigator) {
   var _lastAuthFix=0;
   function _failAdd(op, table, payload, status, body){
     var a=_failLoad();
+    // 403 is the database saying "understood, and no". Sending it again cannot change the
+    // answer, so it is kept in the log where somebody can see it but left out of the retries
+    // — otherwise one wrong permission would leave a red banner on a phone for ever.
     a.push({ id:Date.now()+"_"+Math.random().toString(36).slice(2,7), op:op, table:table, payload:payload,
-             status:status||0, body:String(body||"").slice(0,300), ts:Date.now() });
+             status:status||0, refused:(status===403), body:String(body||"").slice(0,300), ts:Date.now() });
     _failSave(a);
     window.__vxLastError = { table:table, status:status, body:String(body||"").slice(0,300), ts:Date.now() };
     // A 401 means the token died, not that the data was bad. Refresh and replay at once
@@ -99,8 +102,10 @@ if ('serviceWorker' in navigator) {
     if(window.__vxAuthDead) return Promise.resolve({tried:0, fixed:0, signedOut:true});
     // Refresh an expired token first, otherwise every replay repeats the same 401.
     return (window.__vxEnsureAuth ? window.__vxEnsureAuth() : Promise.resolve(true)).then(function(){
-    var a=_failLoad(); if(!a.length) return {tried:0, fixed:0};
-    _failSave([]);                       // take the batch; failures re-queue themselves
+    var all=_failLoad(); if(!all.length) return {tried:0, fixed:0};
+    var a=all.filter(function(x){ return !x.refused; });
+    _failSave(all.filter(function(x){ return x.refused; }));   // keep the refusals, retry the rest
+    if(!a.length) return {tried:0, fixed:0};
     var fixed=0;
     return a.reduce(function(p, it){
       return p.then(function(){
@@ -5572,7 +5577,10 @@ class Component extends DCLogic {
       }
       // Same for the one-time backfill of marks made before this table existed: it uploads
       // the whole history in 500-row batches, which has no business being on the sign-in path.
-      if(!this._attendMigrated && window.__VX_AUTH && window.__VX_AUTH.token){
+      // Staff only: it writes the register, which is a coaching action. On a parent's
+      // phone every one of those hundreds of rows would be refused, and the queue would
+      // show them a red banner about changes that were never theirs to make.
+      if(!this._attendMigrated && window.__VX_AUTH && window.__VX_AUTH.token && this._isStaffSession()){
         this._attendMigrated=true;
         setTimeout(()=>{ try{ this._attendMigrate(); }catch(e){} }, 8000);
       }
@@ -5669,9 +5677,10 @@ class Component extends DCLogic {
     try{
       const n = window.__vxFailedCount ? window.__vxFailedCount() : 0;
       const list = (n && window.__vxFailed) ? window.__vxFailed() : [];
+      const refused = list.filter(x=>x && x.refused).length;
       const last = list.length ? list[list.length-1] : null;
       const dead = !!window.__vxAuthDead;
-      if(n!==this.state.saveFailCount || dead!==this.state.authDead) this.setState({saveFailCount:n, saveFailLast:last, authDead:dead, saveFailHidden: n>this.state.saveFailCount ? false : this.state.saveFailHidden});
+      if(n!==this.state.saveFailCount || dead!==this.state.authDead || refused!==this.state.saveRefused) this.setState({saveFailCount:n, saveFailLast:last, authDead:dead, saveRefused:refused, saveFailHidden: n>this.state.saveFailCount ? false : this.state.saveFailHidden});
       // Only un-hide once there is genuinely nothing wrong. Bringing a dismissed banner back
       // every 20 seconds while the session is still dead just makes it noise to swipe away.
       else if(n===0 && !dead && this.state.saveFailHidden) this.setState({saveFailHidden:false});
@@ -11592,7 +11601,10 @@ class Component extends DCLogic {
         ? (S.saveFailCount>0
             ? 'Your session expired. Sign in again and these will save automatically.'
             : 'Your session expired. Sign in again before you mark anything.')
-        : (S.saveFailLast ? (S.saveFailLast.table+' · '+(S.saveFailLast.status?('HTTP '+S.saveFailLast.status):'no connection')) : '') + ' · retrying automatically',
+        : (S.saveFailLast ? (S.saveFailLast.table+' · '+(S.saveFailLast.status?('HTTP '+S.saveFailLast.status):'no connection')) : '')
+          + ((S.saveRefused>0 && S.saveRefused>=S.saveFailCount)
+              ? ' · refused — this account is not allowed to make that change'
+              : ' · retrying automatically'),
       // Signed out, the Retry button is a lie — there is nothing it can do. It becomes the
       // one action that does work: go and sign in. The marks are already safe in the queue
       // and replay by themselves the moment the sign-in lands.

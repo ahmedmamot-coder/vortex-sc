@@ -18,6 +18,58 @@ The safe way to change the app without risking the live site at vortexswimmingcl
 
 Rule of thumb: **schema/RLS/security changes → always test on a preview + staging DB first.**
 
+## Who can see what (row-level security)
+
+Until Stage 4, every policy read `to authenticated using (true)`. `authenticated` means *any*
+signed-in user, and parents sign in through the same Supabase Auth as coaches — so the database
+treated a parent and the head coach identically. The screens never offered a parent another
+family's messages or the club's billing; but screens are not a security boundary, RLS is.
+
+`supabase/security_4_roles.sql` tells them apart. Undo with `security_4_rollback.sql`.
+
+**Before running it**, open it and put the managers' sign-in emails in the marked block —
+Ahmed and Sameh are built into the app rather than the `staff_accounts` table, so they are not
+picked up automatically and would lock themselves out. The script refuses to run with an empty
+staff list rather than bricking the club.
+
+After Stage 4:
+
+| | staff | a family |
+|---|---|---|
+| plans, seasons, dryland, lounge, sign-up alerts | everything | nothing |
+| messages, documents, wellness, HR, wearables | the club | only their own linked children |
+| attendance | mark and read | read their own children only |
+| family accounts | the list | their own row |
+| staff accounts | change | look up a username to sign in; no changes |
+| announcements | write | read |
+| club_state | everything | read; may write only `vx_billing`, `vx_sw_meta`, `vx_event_requests`, `vx_notifications` |
+
+### The part that is still open, and why
+
+`club_state` holds the whole club in a handful of JSON rows — roster, fees, memberships,
+billing, staff overrides — and the family portal reads it for the roster and results. RLS works
+on rows, not on fields inside a JSON document, so it cannot hand a family a partial view of one.
+**Reads of `club_state` are therefore still open to any signed-in user.** Writes are pinned to
+the four keys the family portal actually uses.
+
+Closing it properly means one of: splitting `club_state` into per-concern tables that can carry
+their own policies, or serving the family portal from a Next.js route that holds the service-role
+key and returns only that family's slice. The second is smaller and is the recommended next step.
+
+### Testing it
+
+Run it against a **staging Supabase project** and a branch preview first, with the rollback open
+in another tab, and check all four in that order:
+
+1. a coach signs in, marks a register, saves a plan;
+2. a parent signs in, sees their own child and **not** another family's messages;
+3. a parent's "I've paid" still saves;
+4. a brand-new parent can register and link a child.
+
+A write the database refuses now shows in the app as *"refused — this account is not allowed to
+make that change"* and is **not** retried, so a policy that is too tight shows up as a clear
+message rather than a red banner that never clears.
+
 ## Backups
 
 - **Supabase's own daily backups**: enable in Supabase → Database → Backups (Pro plan keeps 7 days;
