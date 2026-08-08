@@ -307,6 +307,45 @@ describe("expired session", () => {
     eq(t.upserted.length, 0);
   });
 
+  // The state a coach was actually stuck in: the app still signed in, the database session
+  // long gone, so every attendance mark came back 401 under "retrying automatically" — a
+  // retry that could never work, for as long as the app stayed open.
+  itAsync("no database session at all is reported as signed out, not as retrying", async () => {
+    const t = boot({
+      failed: QUEUED,
+      reply: (url) => (url.includes("/attendance_marks") ? res(401, { message: "JWT expired" }) : GOOD_TOKEN),
+    });
+    await flush();
+    eq(t.win.__vxAuthDead, false, "nothing has been refused yet");
+    // A write is refused, exactly as attendance_marks was.
+    t.win.__vxInsert("attendance_marks", [{ sw_id: "s1", status: "present" }]);
+    await flush();
+    await flush();
+    eq(t.win.__vxAuthDead, true, "the banner must say sign in, not 'retrying automatically'");
+  });
+  itAsync("and the pointless retrying stops until somebody signs in", async () => {
+    const t = boot({ failed: QUEUED, reply: () => GOOD_TOKEN });
+    t.win.__vxAuthDead = true;
+    const r = await t.win.__vxRetryFailed();
+    eq(r.signedOut, true);
+    eq(t.upserted.length, 0, "no request can succeed, so none should be sent");
+    eq(t.win.__vxFailedCount(), 1, "and the coach's mark is still held, not dropped");
+  });
+  itAsync("signing in again clears it and the held marks go through", async () => {
+    const t = boot({ failed: QUEUED, reply: () => GOOD_TOKEN });
+    t.win.__vxAuthDead = true;
+    t.win.__vxSetAuth({ access_token: "fresh.jwt", refresh_token: "r9", expires_in: 3600, user: { id: "u1" } });
+    await flush();
+    eq(t.win.__vxAuthDead, false);
+    eq(t.upserted.length, 1);
+  });
+  itAsync("signing out on purpose is not the same as being thrown out", async () => {
+    const t = boot({ auth: LIVE, reply: () => GOOD_TOKEN });
+    t.win.__vxAuthDead = true;
+    t.win.__vxClearAuth();
+    eq(t.win.__vxAuthDead, false, "the login screen must not warn the next person");
+  });
+
   itAsync("many stale calls at once cause one refresh, not a stampede", async () => {
     let release;
     const held = new Promise((r) => { release = r; });
