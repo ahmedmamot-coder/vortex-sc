@@ -190,6 +190,132 @@ describe("tab bar", () => {
     eq(/prefers-reduced-motion:reduce\)\{ \.vx-wave\{animation:none\}/.test(SOURCE), true));
 });
 
+/* -------------------------------------------------------------------- billing
+   Money is the one place where "roughly right" is not good enough. A fee that is
+   billed twice, billed to a swimmer who is signed off injured, or counted as
+   collected before the club has seen it, all end up as an argument with a parent. */
+describe("billing", () => {
+  const clubCtx = () => ({
+    squads: [{ id: "junior", name: "Junior" }, { id: "senior", name: "Senior" }],
+    roster: {
+      junior: [{ id: "s1", name: "Hannah Millen" }, { id: "s2", name: "Omar Ali" }],
+      senior: [{ id: "s3", name: "Lilliana Millen" }],
+    },
+    academyFees: { junior: 550, senior: 650 },
+    feePlans: { "3x": 650, "4x": 750, "6x": 850, fitness: 360 },
+    memberships: { s3: { pkg: "4x", fitness: true } },
+    swimmerStatus: { s2: { active: false, reason: "injured", from: "2026-08-01", to: "" } },
+    invoices: {},
+    billing: { invoices: [], migrated: true },
+    state: {},
+    brandConfig: { currency: "QAR" },
+    todayISO: () => "2026-08-15",
+    _uid: (p) => p + "_" + Math.random().toString(36).slice(2, 7),
+    _saveJSON: () => {},
+    forceUpdate: () => {},
+    setState: function (p) { Object.assign(this.state, p); },
+    _pushSend: () => {},
+    notify: () => {},
+    _me: () => ({ label: "Coach" }),
+  });
+
+  const FEE_DEPS = ["_membership", "_membershipCost", "_feePlans", "allSwimmersFlat"];
+
+  describeFee();
+  function describeFee() {
+    const ctx = clubCtx();
+    const feeFor = bind("_feeFor", ctx, FEE_DEPS);
+    it("a membership package is what the swimmer owes", () => eq(feeFor("s3", "senior"), 750 + 360));
+    it("without a package it falls back to the squad fee", () => eq(feeFor("s1", "junior"), 550));
+    it("the squad is found even when the caller does not pass it", () => eq(feeFor("s1"), 550));
+    it("a swimmer in no squad owes nothing", () => eq(feeFor("ghost"), 0));
+  }
+
+  describeOverdue();
+  function describeOverdue() {
+    const ctx = clubCtx();
+    const overdue = bind("_invOverdue", ctx);
+    it("unpaid and past the due date is overdue", () => eq(overdue({ status: "unpaid", due: "2026-08-07" }), true));
+    it("unpaid but not yet due is not overdue", () => eq(overdue({ status: "unpaid", due: "2026-08-31" }), false));
+    it("paid is never overdue, however late", () => eq(overdue({ status: "paid", due: "2026-01-07" }), false));
+    it("a voided invoice is never overdue", () => eq(overdue({ status: "void", due: "2026-01-07" }), false));
+    it("a family's reported payment can still be overdue", () => eq(overdue({ status: "sent", due: "2026-08-07" }), true));
+  }
+
+  describeIssue();
+  function describeIssue() {
+    const ctx = clubCtx();
+    const issue = bind("billingIssue", ctx, [
+      "_billing", "_billingSave", "billPeriod", "_periodDue", "_periodLabel", "_feeFor", "_feeLabel", ...FEE_DEPS, "_swStatus",
+    ]);
+    issue("2026-08");
+    const first = ctx.billing.invoices.slice();
+
+    it("bills every swimmer who owes something", () => eq(first.length, 2));
+    it("leaves out a swimmer signed off injured", () => eq(first.some((iv) => iv.swId === "s2"), false));
+    it("bills the membership amount, not the squad fee", () => eq(first.find((iv) => iv.swId === "s3").total, 1110));
+    it("says what the invoice is for", () => eq(first.find((iv) => iv.swId === "s3").items[0].label, "Membership — 4x per week + Fitness 3x"));
+    it("falls due on the 7th of the month it covers", () => eq(first[0].due, "2026-08-07"));
+    it("starts unpaid", () => eq(first.every((iv) => iv.status === "unpaid"), true));
+
+    issue("2026-08");
+    it("running it again bills nobody twice", () => eq(ctx.billing.invoices.length, 2));
+    it("and says so instead of failing silently", () => eq(/already has an invoice/.test(ctx.state.billMsg), true));
+
+    // A swimmer who comes back from injury mid-month should be billable without
+    // re-billing the squad.
+    ctx.swimmerStatus = {};
+    issue("2026-08");
+    it("a late joiner can still be added on a second run", () => eq(ctx.billing.invoices.length, 3));
+  }
+
+  describeTotals();
+  function describeTotals() {
+    const ctx = clubCtx();
+    ctx.billing = { migrated: true, invoices: [
+      { id: "a", swId: "s1", period: "2026-08", total: 550, status: "paid", due: "2026-08-07" },
+      { id: "b", swId: "s2", period: "2026-08", total: 550, status: "unpaid", due: "2026-08-07" },
+      { id: "c", swId: "s3", period: "2026-08", total: 1110, status: "sent", due: "2026-08-31" },
+      { id: "d", swId: "s1", period: "2026-08", total: 900, status: "void", due: "2026-08-07" },
+      { id: "e", swId: "s1", period: "2026-07", total: 550, status: "unpaid", due: "2026-07-07" },
+    ] };
+    const totals = bind("_billingTotals", ctx, ["_billing", "_invOverdue", ...FEE_DEPS, "_feeFor"]);
+    const t = totals("2026-08");
+
+    it("only counts money the club has actually seen", () => eq(t.paid, 550));
+    it("a family's own 'I have paid' is not collected yet", () => eq(t.due, 1660));
+    it("overdue is a subset of outstanding, not a third bucket", () => eq(t.overdue, 550));
+    it("a voided invoice is in no total", () => eq(t.count, 3));
+    it("another month's debt does not leak in", () => eq(totals("2026-07").due, 550));
+  }
+
+  describeMigration();
+  function describeMigration() {
+    const ctx = clubCtx();
+    ctx.billing = null;
+    ctx.invoices = { "2026-06": { s1: true, s2: false }, "2026-07": { s3: true } };
+    const billing = bind("_billing", ctx, ["_feeFor", ...FEE_DEPS]);
+    const out = billing();
+
+    it("the old paid ticks become real invoices", () => eq(out.invoices.length, 2));
+    it("an unticked swimmer is not invented as paid", () => eq(out.invoices.some((iv) => iv.swId === "s2"), false));
+    it("they come across as paid, since that is what the tick meant", () => eq(out.invoices.every((iv) => iv.status === "paid"), true));
+    it("the amount is the fee in force today", () => eq(out.invoices.find((iv) => iv.swId === "s3").total, 1110));
+    it("and the row admits where the number came from", () => eq(/Imported/.test(out.invoices[0].note), true));
+    it("migrating twice does not double the history", () => eq(billing().invoices.length, 2));
+  }
+
+  describePeriods();
+  function describePeriods() {
+    const ctx = clubCtx();
+    const shift = bind("_periodShift", ctx);
+    it("steps back a month", () => eq(shift("2026-08", -1), "2026-07"));
+    it("steps back over new year", () => eq(shift("2026-01", -1), "2025-12"));
+    it("steps forward over new year", () => eq(shift("2026-12", 1), "2027-01"));
+    it("keeps the two-digit month", () => eq(shift("2026-10", -1), "2026-09"));
+  }
+});
+
 /* ------------------------------------------------------------ expired session
    A coach leaves the app open on the poolside iPad, it sleeps for an hour, and the
    Supabase token quietly expires. iOS suspends the refresh timer, so the app carried
