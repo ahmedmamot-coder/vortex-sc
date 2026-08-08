@@ -2108,6 +2108,50 @@ if ('serviceWorker' in navigator) {
                     </div>
                   </div>
                   <div style="padding:15px;display:flex;flex-direction:column;gap:13px">
+                    <sc-if value="{{ profCanEdit }}" hint-placeholder-val="{{ true }}">
+                      <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                          <span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;font-weight:700;color:#0C1116">Swimmer details</span><span style="display:block;font-size:11px;color:#9AA2B4;margin-top:1px">{{ profEditSubtitle }}</span></span>
+                          <button onclick="{{ onProfEditToggle }}" style="flex:none;background:{{ profEditBtnBg }};color:{{ profEditBtnFg }};border:1px solid #E5E9F0;border-radius:9px;padding:7px 13px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">{{ profEditBtnLabel }}</button>
+                        </div>
+                        <sc-if value="{{ profEditOpen }}" hint-placeholder-val="{{ false }}">
+                          <div style="display:flex;flex-direction:column;gap:9px;margin-top:12px;padding-top:12px;border-top:1px solid #EEF1F5">
+                            <div>
+                              <p style="margin:0 0 5px;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#9AA2B4">Full name</p>
+                              <input value="{{ profEditName }}" oninput="{{ onProfEditName }}" style="width:100%;box-sizing:border-box;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:10px 12px;font-family:inherit;font-size:13px;color:#0C1116;outline:none">
+                            </div>
+                            <div>
+                              <p style="margin:0 0 5px;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#9AA2B4">Date of birth</p>
+                              <input value="{{ profEditDob }}" oninput="{{ onProfEditDob }}" placeholder="dd/mm/yyyy" inputmode="numeric" style="width:100%;box-sizing:border-box;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:10px 12px;font-family:var(--font-mono);font-size:13px;color:#0C1116;outline:none">
+                              <p style="margin:5px 2px 0;font-size:11px;font-weight:600;color:{{ profEditDobColor }}">{{ profEditDobHint }}</p>
+                            </div>
+                            <div>
+                              <p style="margin:0 0 5px;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#9AA2B4">Gender</p>
+                              <div style="display:flex;gap:7px">
+                                <button onclick="{{ onProfEditBoys }}" style="flex:1;padding:9px;border-radius:10px;border:1px solid #E5E9F0;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;background:{{ profEditBoysBg }};color:{{ profEditBoysFg }}">Boys</button>
+                                <button onclick="{{ onProfEditGirls }}" style="flex:1;padding:9px;border-radius:10px;border:1px solid #E5E9F0;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;background:{{ profEditGirlsBg }};color:{{ profEditGirlsFg }}">Girls</button>
+                              </div>
+                            </div>
+                            <div>
+                              <p style="margin:0 0 5px;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#9AA2B4">Squad</p>
+                              <select value="{{ profEditSquad }}" onchange="{{ onProfEditSquad }}" style="width:100%;box-sizing:border-box;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:10px 12px;font-family:inherit;font-size:13px;color:#0C1116;outline:none">
+                                <sc-for list="{{ profEditSquadOptions }}" as="po" hint-placeholder-count="9"><option value="{{ po.value }}">{{ po.label }}</option></sc-for>
+                              </select>
+                            </div>
+                            <sc-if value="{{ profEditErrShow }}" hint-placeholder-val="{{ false }}">
+                              <p style="margin:0;font-size:11.5px;font-weight:600;color:#B42318">{{ profEditErr }}</p>
+                            </sc-if>
+                            <div style="display:flex;gap:7px">
+                              <button onclick="{{ onProfEditSave }}" style="flex:1;background:var(--vx-blue);color:#fff;border:none;border-radius:11px;padding:11px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer">Save</button>
+                              <button onclick="{{ onProfEditCancel }}" style="flex:none;background:#F4F6F8;color:#3A4152;border:none;border-radius:11px;padding:11px 16px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer">Cancel</button>
+                            </div>
+                          </div>
+                        </sc-if>
+                        <sc-if value="{{ profEditSavedShow }}" hint-placeholder-val="{{ false }}">
+                          <p style="margin:10px 0 0;background:#DCF5EA;border:1px solid #B7E0C7;border-radius:10px;padding:8px 10px;font-size:11.5px;font-weight:600;color:#0C7A4F">{{ profEditSaved }}</p>
+                        </sc-if>
+                      </div>
+                    </sc-if>
                     <div>
                       <h2 style="font-size:11.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#7A8296;margin:0 2px 9px">Attendance this season</h2>
                       <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
@@ -11036,6 +11080,66 @@ class Component extends DCLogic {
       lcmChart:{ hasData:lcmSeries.hasData, noData:!lcmSeries.hasData, best:lcmSeries.best||'—', linePts:lcmSeries.linePts, lineArea:lcmSeries.lineArea, dots:lcmSeries.dots, caption:lcmSeries.caption, drop:lcmSeries.drop, swims:lcmSeries.swims },
       scmChart:{ hasData:scmSeries.hasData, noData:!scmSeries.hasData, best:scmSeries.best||'—', linePts:scmSeries.linePts, lineArea:scmSeries.lineArea, dots:scmSeries.dots, caption:scmSeries.caption, drop:scmSeries.drop, swims:scmSeries.swims },
       swimmerKpis, swimmerPbs, swimmerResults, swQualRows, swQualHas, onBackToSquad:()=>this.setState({view:'squad', tab:'group'}),
+      // ---- edit a swimmer from their own profile ----
+      // A manager looking at a wrong date of birth had to leave the swimmer, find them again
+      // in Admin → Swimmers and fix it there. Now it is fixed where it is seen, and the
+      // profile above redraws from the saved record straight away.
+      ...(()=>{
+        const canEdit=this._isAdmin();
+        if(!canEdit) return {profCanEdit:false};
+        const d=S.profEdit;
+        const open=!!d;
+        const dobRaw = open ? (d.dob||'') : '';
+        const parsed = dobRaw.trim() ? this._dobParts(dobRaw) : null;
+        const liveAge = parsed ? this._ageFromDob(parsed.iso) : null;
+        const gender = open ? d.gender : swObj.gender;
+        return {
+          profCanEdit:true, profEditOpen:open,
+          profEditSubtitle: 'Age '+this._swAge(swObj)+' · DOB '+this._swDob(swObj)+' · '+swObj.gender,
+          profEditBtnLabel: open ? 'Close' : 'Edit',
+          profEditBtnBg: open ? '#F4F6F8' : '#fff', profEditBtnFg: open ? '#3A4152' : 'var(--vx-blue)',
+          onProfEditToggle:()=> this.setState({ profEdit: open ? null : {
+            name:swObj.name, dob:(swObj.dob||''), gender:swObj.gender, squadId:S.squadId }, profEditErr:'', profEditSaved:'' }),
+          profEditName: open ? d.name : '',
+          onProfEditName:(e)=>this.setState({profEdit:{...d, name:e.target.value}, profEditErr:''}),
+          profEditDob: dobRaw,
+          onProfEditDob:(e)=>this.setState({profEdit:{...d, dob:e.target.value}, profEditErr:''}),
+          // Says what the date means as it is typed, so a slip is caught before it is saved
+          // rather than showing up as an age a year out.
+          profEditDobHint: !dobRaw.trim() ? 'Leave empty if it is not known — nothing is invented'
+            : (parsed ? (parsed.label+' · turns '+((liveAge!=null?liveAge:0)+1)+' on their next birthday · age '+liveAge+' today')
+                      : 'Not a date — write it as dd/mm/yyyy'),
+          profEditDobColor: !dobRaw.trim() ? '#9AA2B4' : (parsed ? '#0C7A4F' : '#B42318'),
+          profEditBoysBg: gender==='Boys'?'var(--vx-blue)':'#F8FAFC', profEditBoysFg: gender==='Boys'?'#fff':'#3A4152',
+          profEditGirlsBg: gender==='Girls'?'var(--vx-blue)':'#F8FAFC', profEditGirlsFg: gender==='Girls'?'#fff':'#3A4152',
+          onProfEditBoys:()=>this.setState({profEdit:{...d, gender:'Boys'}}),
+          onProfEditGirls:()=>this.setState({profEdit:{...d, gender:'Girls'}}),
+          profEditSquad: open ? d.squadId : S.squadId,
+          profEditSquadOptions: this.squads.map(sq=>({value:sq.id, label:sq.name})),
+          onProfEditSquad:(e)=>this.setState({profEdit:{...d, squadId:e.target.value}}),
+          profEditErr:S.profEditErr||'', profEditErrShow:!!S.profEditErr,
+          profEditSaved:S.profEditSaved||'', profEditSavedShow:!!S.profEditSaved,
+          onProfEditCancel:()=>this.setState({profEdit:null, profEditErr:'', profEditSaved:''}),
+          onProfEditSave:()=>{
+            const name=String((d&&d.name)||'').trim();
+            if(!name) return this.setState({profEditErr:'A swimmer needs a name.'});
+            const dob=String((d&&d.dob)||'').trim();
+            if(dob && !this._dobParts(dob)) return this.setState({profEditErr:'That date of birth is not a real date — write it as dd/mm/yyyy.'});
+            const patch={ name, dob, gender:d.gender };
+            const age=dob ? this._ageFromDob(dob) : null;
+            if(age!=null) patch.age=age;
+            const parts=name.split(/\s+/); patch.first=parts[0]||''; patch.last=parts.slice(1).join(' ');
+            patch.initials=((patch.first[0]||'')+(patch.last[0]||patch.first[1]||'')).toUpperCase();
+            const moved = d.squadId && d.squadId!==S.squadId ? d.squadId : null;
+            this.adminEditSwimmer(S.squadId, swObj.id, patch, moved);
+            // Stay with the swimmer: if they were moved, follow them to their new squad so the
+            // screen still shows the person who was just edited.
+            this.setState({ profEdit:null, profEditErr:'',
+              profEditSaved:'Saved ✓'+(moved?(' · moved to '+((this.squadById[moved]||{}).name||'their new squad')):''),
+              squadId: moved || S.squadId, swimmerId: swObj.id });
+          },
+        };
+      })(),
       // ---- profile enrichments: sponsorship, identity docs, InBody ----
       ...(()=>{ const meta=this._swMeta(swObj.id); const S2=S;
         const sponsorOn=!!meta.sponsored;

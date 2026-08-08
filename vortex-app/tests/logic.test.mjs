@@ -886,6 +886,52 @@ describe("expired session", () => {
   });
 });
 
+/* --------------------------------------------------- editing from the profile
+   A manager fixing a swimmer's record must not lose the rest of it, and must not
+   lose the swimmer either — an edit that moves them to another squad while you are
+   looking at them has to keep them on screen. */
+describe("editing a swimmer", () => {
+  const base = () => ({
+    roster: { junior: [{ id: "s1", name: "Tamara Aly", dob: "17/04/2017", pbs: [{ event: "50 Free", sec: 40 }], results: [{ meet: "Cup", sec: 40 }] }],
+              adva: [] },
+    squads: [{ id: "junior", name: "Junior" }, { id: "adva", name: "Advanced A" }],
+    rosterEdits: { edits: { junior: { s1: { results: [{ meet: "Cup", sec: 40 }] } } }, deleted: {}, added: {} },
+    persistRosterEdits() { this.persisted = true; },
+    setState() {},
+  });
+
+  it("an edit keeps everything it did not touch", () => {
+    const c = base();
+    bind("adminEditSwimmer", c, ["_deriveFromEntries"])("junior", "s1", { name: "Tamara Aly", dob: "2017-04-17" });
+    const saved = c.rosterEdits.edits.junior.s1;
+    eq(saved.dob, "2017-04-17");
+    eq(saved.results.length, 1, "the swimmer's meet history must survive a name change");
+  });
+  it("the edit is written where the roster reads it back from", () => {
+    const c = base();
+    bind("adminEditSwimmer", c, ["_deriveFromEntries"])("junior", "s1", { dob: "2017-04-17" });
+    eq(c.persisted, true, "without this the change would not survive a reload");
+  });
+  it("moving a swimmer takes them out of the old squad", () => {
+    const c = base();
+    bind("adminEditSwimmer", c, ["_deriveFromEntries"])("junior", "s1", { name: "Tamara Aly" }, "adva");
+    eq(c.rosterEdits.deleted.junior.s1, true);
+    eq(c.rosterEdits.added.adva.length, 1);
+  });
+  it("and carries their record with them", () => {
+    const c = base();
+    bind("adminEditSwimmer", c, ["_deriveFromEntries"])("junior", "s1", { name: "Tamara Aly" }, "adva");
+    eq(c.rosterEdits.added.adva[0].pbs.length, 1, "a moved swimmer must not arrive empty");
+  });
+
+  it("only the club's managers get the editor", () =>
+    eq(/const canEdit=this\._isAdmin\(\);\s*\n\s*if\(!canEdit\) return \{profCanEdit:false\}/.test(SOURCE), true));
+  it("a date that is not a date is refused before it is saved", () =>
+    eq(/That date of birth is not a real date/.test(SOURCE), true));
+  it("saving follows the swimmer if the edit moved them", () =>
+    eq(/squadId: moved \|\| S\.squadId, swimmerId: swObj\.id/.test(SOURCE), true));
+});
+
 /* --------------------------------------------------------- dates of birth
    The club writes them day first. Reading 17/04/2017 as month 17 does not throw —
    JavaScript rolls it into May 2018 — so a real child was shown a year younger than
