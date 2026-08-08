@@ -36,12 +36,13 @@ insert into public.vx_staff_emails (email, note)
    where coalesce(trim(email),'') <> ''
 on conflict (email) do nothing;
 
---  ⚠️  EDIT THIS BEFORE RUNNING: the managers' own sign-in emails.
---      These are the accounts built into the app (Ahmed, Sameh). Use the exact address
---      each of them types on the sign-in screen.
+--  The managers' own sign-in emails. These two accounts are built into the app rather
+--  than the staff_accounts table, so nothing above picks them up. The addresses must be
+--  exactly what each of them types on the sign-in screen — they are stored lowercased and
+--  compared lowercased, so capitals here do not matter.
 insert into public.vx_staff_emails (email, note) values
-  (lower('ahmedmamot@gmail.com'), 'manager — built-in account')
-  -- , (lower('sameh@example.com'), 'manager — built-in account')
+  (lower('ahmedmamot@gmail.com'), 'Ahmed — manager, built-in account'),
+  (lower('Sameh4142@gmail.com'),  'Sameh — manager, built-in account')
 on conflict (email) do nothing;
 
 --  Refuses to go further rather than locking the whole club out of its own database.
