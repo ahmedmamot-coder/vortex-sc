@@ -1035,7 +1035,10 @@ describe("InBody sheet", () => {
   it("the key never leaves the server", () => {
     const route = readFileSync(new URL("../src/app/api/inbody/read/route.ts", import.meta.url), "utf8");
     eq(/process\.env\.ANTHROPIC_API_KEY/.test(route), true);
-    eq(/x-api-key/.test(SOURCE), false, "a secret key must never be in the page");
+    // Look for the header actually being sent, not the words appearing anywhere — a comment
+    // quoting an error message is not a leaked key.
+    eq(/["']x-api-key["']\s*:/.test(SOURCE), false, "a secret key must never be sent from the page");
+    eq(/sk-ant-[A-Za-z0-9_-]{20}/.test(SOURCE), false, "and no key literal in the page either");
   });
   it("only the fields we asked for come back, as numbers", () => {
     const route = readFileSync(new URL("../src/app/api/inbody/read/route.ts", import.meta.url), "utf8");

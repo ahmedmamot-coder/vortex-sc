@@ -7054,7 +7054,11 @@ class Component extends DCLogic {
         // Say which wall we hit. A rejected key and a missing key are different problems and
         // were being reported as the same sentence.
         const st=(j&&j.status)||r.status;
-        const why = st===401 ? 'the key was rejected — check ANTHROPIC_API_KEY in Vercel'
+        // Anthropic's own words, when it gave any. "invalid x-api-key" and "credit balance is
+        // too low" arrive with the same status and send you looking in different places.
+        const said=(j&&j.said)||'';
+        const why = said ? said
+          : st===401 ? 'the key was rejected — it must be an sk-ant- key from console.anthropic.com'
           : st===429 ? 'the reader is rate-limited — try again in a moment'
           : st===413 ? 'that image is too large to send'
           : ((j&&j.error)||('the reader returned HTTP '+r.status));

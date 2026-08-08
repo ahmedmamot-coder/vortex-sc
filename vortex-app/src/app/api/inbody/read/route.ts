@@ -48,17 +48,38 @@ type Body = { image?: string; mime?: string };
 // Adding a variable in Vercel does not change a deployment that is already live — it applies
 // to the next build. If this says configured:false after you have set it, it has not been
 // redeployed, or it was set for Preview rather than Production.
+// Pasting a key into a settings box goes wrong in the same few ways every time: quotes come
+// along with it, a trailing newline, a "Bearer " prefix, or the copy is short. None of those
+// are visible by looking at the box, so they are cleaned off here and reported below.
+function apiKey() {
+  return (process.env.ANTHROPIC_API_KEY || "")
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .replace(/^Bearer\s+/i, "")
+    .trim();
+}
+
 export async function GET() {
-  const key = process.env.ANTHROPIC_API_KEY || "";
+  const rawKey = process.env.ANTHROPIC_API_KEY || "";
+  const key = apiKey();
+  const notes: string[] = [];
+  if (!key) notes.push("ANTHROPIC_API_KEY is not set on this deployment. Set it in Vercel for Production, then redeploy — a new variable does not reach a build that is already running.");
+  else {
+    if (rawKey !== key) notes.push("The stored value had quotes, spaces or a 'Bearer' prefix around it. Those are being stripped, but it is worth pasting it in clean.");
+    if (!key.startsWith("sk-ant-")) notes.push("This does not look like an Anthropic API key. It must come from console.anthropic.com → API keys and begin sk-ant-. A claude.ai login or a key from another provider will not work.");
+    if (key.length < 60) notes.push("The key looks short — check the whole thing was copied.");
+  }
+  // Shape only. The key itself is never returned.
   return Response.json({
     configured: !!key,
-    keyLooksRight: key ? key.startsWith("sk-ant-") : null,
-    hint: key ? "ready" : "Set ANTHROPIC_API_KEY in Vercel (Production) and redeploy — a new variable does not reach a deployment that is already running.",
+    keyPrefix: key ? key.slice(0, 11) + "…" : null,
+    keyLength: key ? key.length : 0,
+    notes: notes.length ? notes : ["ready"],
   });
 }
 
 export async function POST(request: Request) {
-  const key = process.env.ANTHROPIC_API_KEY;
+  const key = apiKey();
   if (!key) return Response.json({ notConfigured: true, values: {} });
 
   let body: Body;
@@ -93,8 +114,17 @@ export async function POST(request: Request) {
   }
 
   if (!r.ok) {
-    const detail = await r.text().catch(() => "");
-    return Response.json({ error: "reader refused the request", status: r.status, detail: detail.slice(0, 300) }, { status: 502 });
+    // Pass back what the reader actually said. "invalid x-api-key" and "credit balance is too
+    // low" are different problems with the same HTTP status, and guessing between them wastes
+    // somebody's evening.
+    const body = await r.text().catch(() => "");
+    let said = "";
+    try { said = (JSON.parse(body) as { error?: { message?: string } })?.error?.message || ""; } catch { said = ""; }
+    return Response.json({
+      error: "reader refused the request",
+      status: r.status,
+      said: (said || body).slice(0, 200),
+    }, { status: 502 });
   }
 
   const j = (await r.json().catch(() => null)) as { content?: Array<{ type?: string; text?: string }> } | null;
