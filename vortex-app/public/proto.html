@@ -4077,7 +4077,7 @@ if ('serviceWorker' in navigator) {
                         <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05);display:flex;flex-direction:column;gap:8px">
                           <p style="margin:0;font-size:12.5px;font-weight:700;color:#0C1116">Add swimmer to {{ swSquadFilterName }}</p>
                           <input value="{{ swForm.name }}" oninput="{{ onSwFormName }}" placeholder="Full name" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:9px 11px;font-family:inherit;font-size:13px;color:#0C1116;outline:none">
-                          <input value="{{ swForm.dob }}" oninput="{{ onSwFormDob }}" placeholder="Date of birth — mm/dd/yyyy" inputmode="numeric" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:9px 11px;font-family:var(--font-mono);font-size:13px;color:#0C1116;outline:none">
+                          <input value="{{ swForm.dob }}" oninput="{{ onSwFormDob }}" placeholder="Date of birth — dd/mm/yyyy" inputmode="numeric" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:9px 11px;font-family:var(--font-mono);font-size:13px;color:#0C1116;outline:none">
                           <div style="display:flex;gap:8px">
                             <input value="{{ swForm.age }}" oninput="{{ onSwFormAge }}" type="number" placeholder="Age" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:9px 11px;font-family:inherit;font-size:13px;color:#0C1116;outline:none">
                             <button onclick="{{ onSwFormGenderB }}" style="flex:1;border-radius:10px;border:1px solid #E5E9F0;background:{{ swForm.genderBBg }};color:{{ swForm.genderBFg }};font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer">Boys</button>
@@ -4133,7 +4133,7 @@ if ('serviceWorker' in navigator) {
                             <sc-if value="{{ r.editing }}" hint-placeholder-val="{{ false }}">
                               <div style="display:flex;flex-direction:column;gap:7px;margin-top:8px">
                                 <input value="{{ r.editName }}" oninput="{{ r.onEditName }}" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
-                                <input value="{{ r.editDob }}" oninput="{{ r.onEditDob }}" placeholder="DOB mm/dd/yyyy" inputmode="numeric" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:var(--font-mono);font-size:12.5px;color:#0C1116;outline:none">
+                                <input value="{{ r.editDob }}" oninput="{{ r.onEditDob }}" placeholder="DOB dd/mm/yyyy" inputmode="numeric" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:var(--font-mono);font-size:12.5px;color:#0C1116;outline:none">
                                 <div style="display:flex;gap:7px">
                                   <input value="{{ r.editAge }}" oninput="{{ r.onEditAge }}" type="number" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
                                   <button onclick="{{ r.onEditGenderB }}" style="flex:1;border:1px solid #E5E9F0;border-radius:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer;background:{{ r.editGenderBBg }};color:{{ r.editGenderBFg }}">Boy</button>
@@ -5353,14 +5353,41 @@ class Component extends DCLogic {
   _timeAgo(iso){ if(!iso) return ''; const diff=Date.now()-new Date(iso).getTime(); const m=Math.floor(diff/60000); if(m<1) return 'just now'; if(m<60) return m+'m ago'; const h=Math.floor(m/60); if(h<24) return h+'h ago'; const d=Math.floor(h/24); return d+'d ago'; }
   dobFromAge(age){ const yr=new Date().getFullYear()-(parseInt(age,10)||0); return '01/01/'+yr; }
   // Compute age from a date of birth (accepts mm/dd/yyyy or yyyy-mm-dd). Returns null if unparseable.
-  _ageFromDob(dob){ try{ const p=(''+(dob||'')).split(/[\/\-.]/); if(p.length!==3) return null; let mo,d,y;
-    if(p[0].length===4){ y=+p[0]; mo=+p[1]; d=+p[2]; } else { mo=+p[0]; d=+p[1]; y=+p[2]; }
-    if(!y||y<1900||!mo||!d) return null; const b=new Date(y, mo-1, d); if(isNaN(b.getTime())) return null;
-    const n=new Date(); let a=n.getFullYear()-b.getFullYear(); const m=n.getMonth()-b.getMonth(); if(m<0||(m===0&&n.getDate()<b.getDate())) a--;
-    return (a>=0 && a<120)? a : null; }catch(e){ return null; } }
+  // One reader for every date of birth in the app.
+  //
+  // The club writes them day first — the profiles show 17/04/2017 — but this took the first
+  // number as the month. 17 is not a month, and JavaScript does not complain: new Date(2017,
+  // 16, 4) quietly rolls forward to 4 May 2018. So Tamara Aly, born 17 April 2017, was shown
+  // as "Age 8" when she is 9, and the same silent slip was in every age band, every promotion
+  // check and every age-scaled suggestion. Where the day was 12 or less it was worse in a
+  // quieter way: the day and month simply swapped, and nothing looked wrong at all.
+  //
+  // Dashed dates are read as yyyy-mm-dd, slashed ones as dd/mm/yyyy, and a combination that
+  // is not a real calendar date is refused rather than rolled into a different month.
+  _dobParts(v){
+    const t=String(v==null?'':v).trim(); if(!t) return null;
+    const p=t.split(/[\/\-.]/); if(p.length!==3) return null;
+    let y,mo,d;
+    if(p[0].length===4){ y=+p[0]; mo=+p[1]; d=+p[2]; }   // 2017-04-17
+    else { d=+p[0]; mo=+p[1]; y=+p[2]; }                 // 17/04/2017
+    if(!y||!mo||!d) return null;
+    if(y<1900||y>2200||mo<1||mo>12||d<1||d>31) return null;
+    const b=new Date(y, mo-1, d);
+    if(b.getFullYear()!==y || b.getMonth()!==mo-1 || b.getDate()!==d) return null;   // 31/02 is nobody's birthday
+    return { y, mo, d, date:b, iso:y+'-'+String(mo).padStart(2,'0')+'-'+String(d).padStart(2,'0'),
+             label:String(d).padStart(2,'0')+'/'+String(mo).padStart(2,'0')+'/'+y };
+  }
+  _ageFromDob(dob){
+    const p=this._dobParts(dob); if(!p) return null;
+    const n=new Date(); let a=n.getFullYear()-p.y; const m=(n.getMonth()+1)-p.mo;
+    if(m<0 || (m===0 && n.getDate()<p.d)) a--;
+    return (a>=0 && a<120) ? a : null;
+  }
   // Age that reflects the DOB when present, else the stored age. DOB display, likewise.
   _swAge(sw){ const a=this._ageFromDob(sw&&sw.dob); return a!=null? a : ((sw&&sw.age)||0); }
-  _swDob(sw){ return (sw&&sw.dob) || this.dobFromAge(sw&&sw.age); }
+  // Was: fall back to a date invented from the swimmer's age, which a profile then printed
+  // as though somebody had checked it. A date nobody has given us is shown as missing.
+  _swDob(sw){ const p=this._dobParts(sw&&sw.dob); return p ? p.label : '—'; }
   vortexIdNumber(swId){ if(!this._vortexIdMap){ const map={}; this.allSwimmersFlat().forEach((sw,i)=>{ map[sw.id]=String(i+1).padStart(5,'0'); }); this._vortexIdMap=map; } return this._vortexIdMap[swId] || '00000'; }
   genMeta(g){ return g==='Girls' ? {icon:'\u2640', bg:'#E64B8B'} : {icon:'\u2642', bg:'#2F6BE0'}; }
   ageIn(sq, r){ const map={preteam:[5,6],advb:[7,8],adva:[9,10],junior:[11,12],seniorb:[13,13],seniora:[14,14],vortexb:[15,15],vortexa:[16,16],legend:[17,18]}; const [lo,hi]=map[sq]; return lo + Math.floor(r()*(hi-lo+1)); }
@@ -7056,7 +7083,7 @@ class Component extends DCLogic {
         rows.push([last, first, sw.gender==='Girls'?'F':'M', this._swAge?this._swAge(sw):(sw.age||''), e.event, this._pbTimeFor(e.swId, e.event)]); });
     this.exportCsv('vortex-entries-'+meetName.replace(/[^a-z0-9]+/gi,'-').toLowerCase()+'.csv', rows);
   }
-  ageFromDob(dobStr){ if(!dobStr) return 0; const d=new Date(dobStr+'T00:00:00'); const t=new Date(); let age=t.getFullYear()-d.getFullYear(); const m=t.getMonth()-d.getMonth(); if(m<0 || (m===0 && t.getDate()<d.getDate())) age--; return Math.max(0,age); }
+  ageFromDob(dobStr){ const a=this._ageFromDob(dobStr); return a==null?0:a; }
   entryAddNewSwimmer(meetName){ const S=this.state;
     const name=S.entryNewName.trim();
     if(!name) return this.setState({entryNewErr:'Enter the swimmer\u2019s name.'});
@@ -8157,10 +8184,9 @@ class Component extends DCLogic {
     this._famAdminUpdate(famId, r=>{ const a=(r.swimmerIds||[]); if(a.indexOf(uid)<0) a.push(uid); r.swimmerIds=a; });
     this.setState({famAdminAddFor:null, famAdminSwQuery:'', famAdminMsg:'Child linked ✓'});
   }
-  _parseDobParts(s){ s=(s||'').trim(); let m;
-    if(m=s.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/)) return {y:+m[1],mo:+m[2],d:+m[3]};
-    if(m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/)) return {y:+m[3],mo:+m[1],d:+m[2]};
-    return null; }
+  // Both sides of the family-verification check go through the same reader, so a parent
+  // typing their child's real date the way the club writes it actually matches.
+  _parseDobParts(s){ const p=this._dobParts(s); return p ? {y:p.y, mo:p.mo, d:p.d} : null; }
   famVerifyConfirm(){ const S=this.state; const v=S.famVerify; if(!v) return;
     const [sqid,swid]=v.uid.split('::'); const sw=(this.roster[sqid]||[]).find(x=>x.id===swid); if(!sw){ this.setState({famVerify:null}); return; }
     // Stop repeated guessing at a child's details.
@@ -8388,7 +8414,7 @@ class Component extends DCLogic {
   // Only a real date of birth counts. _swDob() falls back to a date derived from the swimmer's
   // age when none is on file, which is fine for working out how old somebody is and completely
   // wrong for this: it would wish a child happy birthday on a day the club invented.
-  _bdayISO(sw){ const d=(sw&&sw.dob)||''; return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null; }
+  _bdayISO(sw){ const p=this._dobParts(sw&&sw.dob); return p ? p.iso : null; }
   _bdayMD(sw){ const d=this._bdayISO(sw); return d ? d.slice(5) : null; }
   // A swimmer born on 29 February has a birthday in three years out of four. Mark it on the
   // 28th in a common year rather than skipping the child altogether.
@@ -10667,7 +10693,7 @@ class Component extends DCLogic {
       famVerifyShow: !!S.famVerify,
       famVerifyName: S.famVerify ? S.famVerify.name : '',
       famVerifyQuestion: S.famVerify ? (()=>{ const [sq,sw]=S.famVerify.uid.split('::'); const s=(this.roster[sq]||[]).find(x=>x.id===sw); return (s && s.dob) ? ('Enter '+S.famVerify.name+'’s exact date of birth to confirm you’re their parent/guardian. You must repeat this for each of your children.') : (S.famVerify.name+' can’t be linked automatically — there’s no date of birth on file. Please ask the club to link this child to your account.'); })() : '',
-      famVerifyPlaceholder: S.famVerify ? (()=>{ const [sq,sw]=S.famVerify.uid.split('::'); const s=(this.roster[sq]||[]).find(x=>x.id===sw); return (s && s.dob) ? 'mm/dd/yyyy' : 'Not available'; })() : '',
+      famVerifyPlaceholder: S.famVerify ? (()=>{ const [sq,sw]=S.famVerify.uid.split('::'); const s=(this.roster[sq]||[]).find(x=>x.id===sw); return (s && s.dob) ? 'dd/mm/yyyy' : 'Not available'; })() : '',
       famVerifyInput:S.famVerifyInput||'', onFamVerifyInput:(e)=>this.setState({famVerifyInput:e.target.value}),
       famVerifyErr:S.famVerifyErr||'', famVerifyErrShow:!!S.famVerifyErr,
       onFamVerifyConfirm:()=>this.famVerifyConfirm(), onFamVerifyCancel:()=>this.famVerifyCancel(),

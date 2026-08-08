@@ -886,6 +886,55 @@ describe("expired session", () => {
   });
 });
 
+/* --------------------------------------------------------- dates of birth
+   The club writes them day first. Reading 17/04/2017 as month 17 does not throw —
+   JavaScript rolls it into May 2018 — so a real child was shown a year younger than
+   she is, and the same slip sat inside every age band, promotion check and
+   age-scaled suggestion in the app. */
+describe("dates of birth", () => {
+  const ctx = {};
+  const parts = bind("_dobParts", ctx);
+  const age = bind("_ageFromDob", ctx, ["_dobParts"]);
+  const swDob = bind("_swDob", ctx, ["_dobParts"]);
+
+  it("reads the club's own format, day first", () => eq(parts("17/04/2017").iso, "2017-04-17"));
+  it("17 is not a month, and is not rolled into one", () => eq(parts("17/04/2017").mo, 4));
+  it("Tamara Aly is 9, not 8", () => {
+    // The screenshot that found this: "Age 8 · DOB 17/04/2017".
+    const p = parts("17/04/2017");
+    const now = new Date("2026-08-08T00:00:00");
+    let a = now.getFullYear() - p.y;
+    if (now.getMonth() + 1 < p.mo || (now.getMonth() + 1 === p.mo && now.getDate() < p.d)) a--;
+    eq(a, 9);
+  });
+  it("an ambiguous date is still read day first, not swapped", () => {
+    const p = parts("04/05/2017");
+    eq([p.d, p.mo], [4, 5], "4 May, the way the club writes it");
+  });
+  it("an ISO date is still understood", () => eq(parts("2017-04-17").iso, "2017-04-17"));
+  it("both formats agree on the same day", () => eq(parts("17/04/2017").iso, parts("2017-04-17").iso));
+
+  it("31 February is refused, not rolled into March", () => eq(parts("31/02/2017"), null));
+  it("month 13 is refused", () => eq(parts("01/13/2017"), null));
+  it("day 32 is refused", () => eq(parts("32/01/2017"), null));
+  it("a year nobody was born in is refused", () => eq(parts("17/04/1750"), null));
+  it("nonsense is refused rather than half-read", () => eq(parts("not a date"), null));
+  it("an empty value is simply missing", () => eq(parts(""), null));
+
+  it("age comes back as a number for a real date", () => eq(typeof age("17/04/2017"), "number"));
+  it("and as nothing for a date we do not have", () => eq(age(""), null));
+
+  it("a swimmer with no date shows it as missing", () => eq(swDob({ age: 8 }), "—"));
+  it("not as a date invented from their age", () => eq(/2018|01\/01/.test(swDob({ age: 8 })), false));
+  it("a real date is shown the way the club writes it", () => eq(swDob({ dob: "2017-04-17" }), "17/04/2017"));
+
+  it("the birthday check sees a date in the club's format", () => {
+    const c = {};
+    const iso = bind("_bdayISO", c, ["_dobParts"]);
+    eq(iso({ dob: "17/04/2017" }), "2017-04-17", "298 swimmers were invisible to it");
+  });
+});
+
 /* ------------------------------------------------------------------ birthdays
    This messages children and their parents in the club's name, on its own. Wishing
    the wrong child, wishing one twice, or wishing one on a date the app made up are
@@ -908,10 +957,10 @@ describe("birthdays", () => {
   const sw = (c, id) => c.roster.junior.find((x) => x.id === id);
 
   const c0 = ctx();
-  const isToday = bind("_bdayIsToday", c0, ["_bdayMD", "_bdayISO", "_bdayDateIn"]);
-  const away = bind("_bdayDaysAway", c0, ["_bdayMD", "_bdayISO", "_bdayDateIn"]);
-  const turning = bind("_bdayTurning", c0, ["_bdayISO", "_bdayDateIn"]);
-  const dobOf = bind("_bdayISO", c0);
+  const isToday = bind("_bdayIsToday", c0, ["_bdayMD", "_bdayISO", "_bdayDateIn", "_dobParts"]);
+  const away = bind("_bdayDaysAway", c0, ["_bdayMD", "_bdayISO", "_bdayDateIn", "_dobParts"]);
+  const turning = bind("_bdayTurning", c0, ["_bdayISO", "_bdayDateIn", "_dobParts"]);
+  const dobOf = bind("_bdayISO", c0, ["_dobParts"]);
 
   it("a swimmer whose birthday is today is found", () => eq(isToday(sw(c0, "s1"), "2026-08-08"), true));
   it("and not on any other day", () => eq(isToday(sw(c0, "s1"), "2026-08-09"), false));
@@ -937,7 +986,7 @@ describe("birthdays", () => {
     c.birthdayWish = (id) => { wished.push(id); return Promise.resolve(); };
     c._isStaffSession = () => true;
     globalThis.window = { __VX_AUTH: { token: "t" } };
-    const run = bind("birthdayRun", c, ["_bdayIsToday", "_bdayMD", "_bdayISO", "_bdayDateIn", "_bdayTurning", "_bdaySentMap"]);
+    const run = bind("birthdayRun", c, ["_bdayIsToday", "_bdayMD", "_bdayISO", "_bdayDateIn", "_dobParts", "_bdayTurning", "_bdaySentMap"]);
     await run();
     eq(wished, ["s1"], "only the swimmer whose birthday it actually is");
     eq(c.bdaySent.s1, "2026", "and it is recorded so it cannot go twice");
@@ -951,7 +1000,7 @@ describe("birthdays", () => {
     c.birthdayWish = (id) => { wished.push(id); return Promise.resolve(); };
     c._isStaffSession = () => true;
     globalThis.window = { __VX_AUTH: { token: "t" } };
-    const run = bind("birthdayRun", c, ["_bdayIsToday", "_bdayMD", "_bdayISO", "_bdayDateIn", "_bdayTurning", "_bdaySentMap"]);
+    const run = bind("birthdayRun", c, ["_bdayIsToday", "_bdayMD", "_bdayISO", "_bdayDateIn", "_dobParts", "_bdayTurning", "_bdaySentMap"]);
     await run();
     eq(wished, [], "five coaches opening the app is still one greeting");
   });
@@ -963,7 +1012,7 @@ describe("birthdays", () => {
     c.birthdayWish = (id) => { wished.push(id); return Promise.resolve(); };
     c._isStaffSession = () => false;
     globalThis.window = { __VX_AUTH: { token: "t" } };
-    const run = bind("birthdayRun", c, ["_bdayIsToday", "_bdayMD", "_bdayISO", "_bdayDateIn", "_bdayTurning", "_bdaySentMap"]);
+    const run = bind("birthdayRun", c, ["_bdayIsToday", "_bdayMD", "_bdayISO", "_bdayDateIn", "_dobParts", "_bdayTurning", "_bdaySentMap"]);
     await run();
     eq(wished, []);
   });
@@ -975,7 +1024,7 @@ describe("birthdays", () => {
     c.birthdayWish = (id) => { wished.push(id); return Promise.resolve(); };
     c._isStaffSession = () => true;
     globalThis.window = {};                       // no token
-    const run = bind("birthdayRun", c, ["_bdayIsToday", "_bdayMD", "_bdayISO", "_bdayDateIn", "_bdayTurning", "_bdaySentMap"]);
+    const run = bind("birthdayRun", c, ["_bdayIsToday", "_bdayMD", "_bdayISO", "_bdayDateIn", "_dobParts", "_bdayTurning", "_bdaySentMap"]);
     await run();
     eq(wished, []);
     eq(c.bdaySent.s1, undefined, "marking it sent here would lose the greeting for good");
