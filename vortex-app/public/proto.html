@@ -65,6 +65,15 @@ if ('serviceWorker' in navigator) {
       _lastAuthFix = Date.now();
       setTimeout(function(){
         if(!window.__vxEnsureAuth) return;
+        // No session to refresh at all. The app keeps a coach signed in across reloads in its
+        // own vx_session, but the database session is separate and does expire — so the app
+        // carries on looking signed in while every write is refused. Retrying cannot fix that;
+        // only signing in again can. Say so, and stop hammering the server in the meantime.
+        if(!window.__VX_AUTH || !window.__VX_AUTH.refresh){
+          window.__vxAuthDead = true;
+          try{ window.dispatchEvent(new CustomEvent("vx-write-failed")); }catch(e){}
+          return;
+        }
         window.__vxEnsureAuth(true).then(function(ok){ if(ok) window.__vxRetryFailed(); });
       }, 0);
     }
@@ -76,6 +85,9 @@ if ('serviceWorker' in navigator) {
   // Replay everything still pending. Anything that succeeds is dropped from the log.
   window.__vxRetryFailed = function(){
     if(!_failLoad().length) return Promise.resolve({tried:0, fixed:0});
+    // Nothing can succeed until somebody signs in again, so don't burn the battery or fill
+    // the log retrying. __vxSetAuth clears this flag and replays the queue straight away.
+    if(window.__vxAuthDead) return Promise.resolve({tried:0, fixed:0, signedOut:true});
     // Refresh an expired token first, otherwise every replay repeats the same 401.
     return (window.__vxEnsureAuth ? window.__vxEnsureAuth() : Promise.resolve(true)).then(function(){
     var a=_failLoad(); if(!a.length) return {tried:0, fixed:0};
@@ -142,7 +154,9 @@ if ('serviceWorker' in navigator) {
     // has to be immediate. Without this the queue sat there until the 45s sweep came round
     // and the banner stayed up, looking like the sign-in had not helped.
     try{ if(_failLoad().length) window.__vxRetryFailed(); }catch(e){} };
-  window.__vxClearAuth = function(){ if(_refreshTimer) clearTimeout(_refreshTimer); _saveAuth(null); };
+  // Signing out deliberately is not the same as being thrown out: clear the flag so the
+  // login screen does not greet the next person with "signed out — changes will not save".
+  window.__vxClearAuth = function(){ if(_refreshTimer) clearTimeout(_refreshTimer); _saveAuth(null); window.__vxAuthDead=false; };
   window.__vxAuthUid = function(){ return window.__VX_AUTH ? window.__VX_AUTH.uid : null; };
   try{ var _ra=localStorage.getItem('vx_auth'); if(_ra){ var _pa=JSON.parse(_ra); if(_pa && _pa.token){ window.__VX_AUTH=_pa; if(_pa.exp && Date.now() > (_pa.exp - 60000)) _doRefresh(); else _scheduleRefresh(); } } }catch(e){}
   // Coming back to the app is the moment the token is most likely stale: refresh it, then
@@ -4900,7 +4914,7 @@ if ('serviceWorker' in navigator) {
     <div style="position:fixed;left:0;right:0;bottom:0;z-index:120;background:#7F1D1D;color:#fff;padding:10px 14px calc(10px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:10px;box-shadow:0 -6px 20px rgba(0,0,0,.25)">
       <i data-lucide="cloud-off" style="width:18px;height:18px;flex:none"></i>
       <span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;font-weight:800">{{ saveFailTitle }}</span><span style="display:block;font-size:11px;color:rgba(255,255,255,.8);margin-top:1px">{{ saveFailDetail }}</span></span>
-      <button onclick="{{ onSaveFailRetry }}" style="flex:none;background:#fff;color:#7F1D1D;border:none;border-radius:9px;padding:7px 12px;font-family:inherit;font-weight:800;font-size:11.5px;cursor:pointer">Retry</button>
+      <button onclick="{{ onSaveFailRetry }}" style="flex:none;background:#fff;color:#7F1D1D;border:none;border-radius:9px;padding:7px 12px;font-family:inherit;font-weight:800;font-size:11.5px;cursor:pointer">{{ saveFailActionLabel }}</button>
       <button onclick="{{ onSaveFailDismiss }}" style="flex:none;width:28px;height:28px;border-radius:8px;border:none;background:rgba(255,255,255,.15);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:14px;height:14px"></i></button>
     </div>
   </sc-if>
@@ -5248,6 +5262,14 @@ class Component extends DCLogic {
       if(_sess && _sess.type==='staff' && _sess.id){ var _a=this.accounts.find(function(x){return x.id===_sess.id;}); if(_a){ this.state.screen='app'; this.state.view='hub'; this.state.pickedId=_a.id; if(_a.squadId) this.state.squadId=_a.squadId;
         if(_nav && _nav.view){ this.state.view=_nav.view; if(_nav.squadId) this.state.squadId=_nav.squadId; if(_nav.tab) this.state.tab=_nav.tab; this.state.tool=_nav.tool||null; if(_nav.swimmerId) this.state.swimmerId=_nav.swimmerId; if(_nav.adminSection) this.state.adminSection=_nav.adminSection; } } }
       else if(_sess && _sess.type==='family' && _sess.email){ var _f=(this.state.family||[]).find(function(x){return (x.email||'').toLowerCase()===(''+_sess.email).toLowerCase();}); if(_f){ this.state.screen='app'; this.state.view='family'; this.state.familyUser=_f; this.state.familyActiveIdx=(_nav&&_nav.familyActiveIdx)||0; if(_nav && _nav.famTab) this.state.famTab=_nav.famTab; } }
+      // vx_session (this app) and vx_auth (the database) are two different sessions, and only
+      // the second one expires. Left alone the app looks signed in while every write is
+      // refused — a coach can mark a whole register before anything tells them. Say it up
+      // front instead, the moment the app opens with no database session behind it.
+      if(this.state.screen==='app'){
+        var _dbAuth=null; try{ _dbAuth=JSON.parse(localStorage.getItem('vx_auth')||'null'); }catch(e){}
+        if(!(_dbAuth && _dbAuth.refresh)){ try{ window.__vxAuthDead = true; }catch(e){} }
+      }
     } catch(e){}
   }
   rng(seed){ let t = seed>>>0; return ()=>{ t += 0x6D2B79F5; let r = Math.imul(t ^ (t>>>15), 1|t); r ^= r + Math.imul(r ^ (r>>>7), 61|r); return ((r ^ (r>>>14))>>>0)/4294967296; }; }
@@ -5472,7 +5494,9 @@ class Component extends DCLogic {
       const last = list.length ? list[list.length-1] : null;
       const dead = !!window.__vxAuthDead;
       if(n!==this.state.saveFailCount || dead!==this.state.authDead) this.setState({saveFailCount:n, saveFailLast:last, authDead:dead, saveFailHidden: n>this.state.saveFailCount ? false : this.state.saveFailHidden});
-      else if(n===0 && this.state.saveFailHidden) this.setState({saveFailHidden:false});
+      // Only un-hide once there is genuinely nothing wrong. Bringing a dismissed banner back
+      // every 20 seconds while the session is still dead just makes it noise to swipe away.
+      else if(n===0 && !dead && this.state.saveFailHidden) this.setState({saveFailHidden:false});
     }catch(e){}
   }
   _saveFamily(list){ this.family=list; try{ this._saveLocalOnly('vx_family', list); }catch(e){} this.setState({family:list}); }
@@ -11081,14 +11105,27 @@ class Component extends DCLogic {
       // Anything that isn't the live domain is a test copy — say so loudly, so a
       // preview build is never mistaken for the real club app.
       isStagingEnv: (()=>{ try{ const h=location.hostname; return !(h==='vortexswimmingclub.com' || h==='www.vortexswimmingclub.com' || h==='localhost' || h==='127.0.0.1'); }catch(e){ return false; } })(),
-      saveFailShow: (S.saveFailCount>0) && !S.saveFailHidden,
+      // Shown when something is waiting to save OR when the database session has gone — the
+      // second one has to appear before the coach marks a register that cannot be saved.
+      saveFailShow: (S.saveFailCount>0 || S.authDead) && !S.saveFailHidden,
       saveFailTitle: S.authDead
-        ? 'Signed out — ' + (S.saveFailCount===1 ? '1 change is waiting' : S.saveFailCount+' changes are waiting')
+        ? (S.saveFailCount>0
+            ? ('Signed out — ' + (S.saveFailCount===1 ? '1 change is waiting' : S.saveFailCount+' changes are waiting'))
+            : 'Signed out — changes will not save')
         : (S.saveFailCount===1 ? '1 change has not been saved' : (S.saveFailCount+' changes have not been saved')),
       saveFailDetail: S.authDead
-        ? 'Your session expired. Sign in again and these will save automatically.'
+        ? (S.saveFailCount>0
+            ? 'Your session expired. Sign in again and these will save automatically.'
+            : 'Your session expired. Sign in again before you mark anything.')
         : (S.saveFailLast ? (S.saveFailLast.table+' · '+(S.saveFailLast.status?('HTTP '+S.saveFailLast.status):'no connection')) : '') + ' · retrying automatically',
-      onSaveFailRetry: async()=>{ if(window.__vxRetryFailed){ const r=await window.__vxRetryFailed(); this._refreshFailState(); if(r && r.fixed) this.setState({saveFailHidden:false}); } },
+      // Signed out, the Retry button is a lie — there is nothing it can do. It becomes the
+      // one action that does work: go and sign in. The marks are already safe in the queue
+      // and replay by themselves the moment the sign-in lands.
+      saveFailActionLabel: S.authDead ? 'Sign in' : 'Retry',
+      onSaveFailRetry: async()=>{
+        if(S.authDead){ this.setState({screen:'login', loginStage:'accounts', loginErr:''}); return; }
+        if(window.__vxRetryFailed){ const r=await window.__vxRetryFailed(); this._refreshFailState(); if(r && r.fixed) this.setState({saveFailHidden:false}); }
+      },
       onSaveFailDismiss: ()=>this.setState({saveFailHidden:true}),
       adminOpen: !!S.adminSection, onCloseAdmin,
       adminTitle: adminTitleMap[S.adminSection]||'', adminSub: adminSubMap[S.adminSection]||'',
