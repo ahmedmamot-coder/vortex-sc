@@ -6986,6 +6986,7 @@ class Component extends DCLogic {
       phaseAngle:extra.phaseAngle||null, icw:extra.icw||null, ecw:extra.ecw||null, ecwRatio:extra.ecwRatio||null,
       smi:extra.smi||null, ffm:extra.ffm||null, boneMineral:extra.boneMineral||null,
       bodyCellMass:extra.bodyCellMass||null, obesityDegree:extra.obesityDegree||null,
+      height:extra.height||null, bodyFatMass:extra.bodyFatMass||null, slm:extra.slm||null,
       fileUrl:(pend&&pend.fileUrl)||null, fileName:(pend&&pend.fileName)||''};
     this._saveSwMeta(swId, {...m, inbody:[rec, ...(m.inbody||[])]});
     this.setState({inbodyForm:{weight:'',fat:'',muscle:''}, ibPending:null,
@@ -7067,6 +7068,52 @@ class Component extends DCLogic {
     })();
     return Promise.race([work, deadline]);
   }
+  // An InBody sheet has to add up: fat mass and fat free mass make the weight, percent body
+  // fat follows from the fat mass, BMI follows from height and weight. A reading that does not
+  // reconcile was not read — it was guessed at, and a guess on a child's record looks exactly
+  // as authoritative as a measurement. This throws out the values that contradict the sheet,
+  // and says whether the sheet's own arithmetic came out.
+  _inbodySanity(d){
+    const v={...(d||{})};
+    const drop=(...ks)=>ks.forEach(k=>{ delete v[k]; });
+    const W=v.weight;
+    if(W==null) return {values:{testDate:v.testDate}, reconciled:false};
+
+    // Impossible for a person of this weight, whatever the sheet appeared to say.
+    if(v.smm!=null && (v.smm > W*0.65 || v.smm < W*0.15)) drop('smm');
+    if(v.protein!=null && (v.protein > W*0.25 || v.protein < W*0.08)) drop('protein');
+    if(v.minerals!=null && (v.minerals > W*0.12 || v.minerals < W*0.025)) drop('minerals');
+    if(v.tbw!=null && (v.tbw > W*0.80 || v.tbw < W*0.35)) drop('tbw');
+    if(v.bodyFatMass!=null && v.bodyFatMass > W*0.65) drop('bodyFatMass');
+    if(v.ffm!=null && (v.ffm > W || v.ffm < W*0.3)) drop('ffm');
+    if(v.slm!=null && (v.slm > W || v.slm < W*0.25)) drop('slm');
+    if(v.bodyCellMass!=null && (v.bodyCellMass > W || v.bodyCellMass < W*0.2)) drop('bodyCellMass');
+    if(v.boneMineral!=null && (v.boneMineral > W*0.09 || v.boneMineral < W*0.015)) drop('boneMineral');
+
+    let checks=0;
+    // Fat mass and fat free mass make up the body.
+    if(v.bodyFatMass!=null && v.ffm!=null){
+      if(Math.abs((v.bodyFatMass+v.ffm)-W) <= W*0.05) checks++; else drop('ffm');
+    }
+    // Percent body fat has to follow from the fat mass.
+    if(v.pbf!=null && v.bodyFatMass!=null){
+      if(Math.abs(v.pbf-(v.bodyFatMass/W*100)) <= 2.5) checks++; else drop('pbf');
+    }
+    // BMI has to follow from height and weight.
+    if(v.bmi!=null && v.height!=null){
+      const calc=W/Math.pow(v.height/100, 2);
+      if(Math.abs(v.bmi-calc) <= 1.2) checks++; else drop('bmi');
+    }
+    // The two body waters make the total.
+    if(v.icw!=null && v.ecw!=null && v.tbw!=null){
+      if(Math.abs((v.icw+v.ecw)-v.tbw) <= v.tbw*0.08) checks++; else drop('icw','ecw');
+    }
+    // And the ratio follows from them.
+    if(v.ecwRatio!=null && v.ecw!=null && v.tbw!=null){
+      if(Math.abs(v.ecwRatio-(v.ecw/v.tbw)) <= 0.03) checks++; else drop('ecwRatio');
+    }
+    return {values:v, reconciled: checks>0};
+  }
   async profileInbodyPdf(e, swId){
     const file=e.target.files && e.target.files[0]; e.target.value=''; if(!file) return;
     this.setState({profileIbBusy:true, profileIbMsg:'Saving report\u2026'});
@@ -7076,7 +7123,7 @@ class Component extends DCLogic {
     try{ if(window.__vxUploadFile){ const ext=((file.name||'').match(/\.([a-z0-9]+)$/i)||[])[1] || (/pdf/i.test(file.type||'')?'pdf':'jpg'); fileUrl=await window.__vxUploadFile('inbody/'+swId+'/'+Date.now()+'.'+ext, file); } }catch(err){}
     // 2) Try to auto-read the values from a text-based InBody PDF. A photo/scan has no text layer \u2014
     //    that's fine, the report is still saved and the coach can type the values in.
-    let data={}, fromPhoto=false;
+    let data={}, fromPhoto=false, pictureRead=false, reconciled=true;
     try{
       // A picture — either an image file, or a scanner app's PDF, which is a photograph in a
       // PDF wrapper with no text in it at all.
@@ -7098,6 +7145,7 @@ class Component extends DCLogic {
 
       if(picture){
         fromPhoto=true;
+        pictureRead=true;
         // The server reads it in one request and reads it the way a person does. In-browser
         // OCR has to fetch a worker, a core and a language model first, which is why it hung.
         this.setState({profileIbMsg:'Reading the sheet…'});
@@ -7112,7 +7160,15 @@ class Component extends DCLogic {
         }
       }
     }catch(err){ data=data||{}; }
-    const readCount=Object.keys(data).filter(k=>data[k]!=null).length;
+    if(pictureRead){
+      const checked=this._inbodySanity(data);
+      data=checked.values; reconciled=checked.reconciled;
+      // Reading a photograph off a phone camera gets numbers wrong in ways that look right:
+      // 5 kg of muscle, a phase angle of 10, a protein figure lifted off a printed axis. If the
+      // sheet's own arithmetic does not come out, we did not read it — so nothing is offered.
+      if(!reconciled) data={testDate:data.testDate};
+    }
+    const readCount=Object.keys(data).filter(k=>data[k]!=null && k!=='testDate').length;
 
     // Read off a photograph, these are a machine's guess at what a picture says. A misread
     // digit would put a wrong body-fat figure on a child's record and look exactly as
@@ -7127,7 +7183,9 @@ class Component extends DCLogic {
         profileIbBusy:false,
         profileIbMsg: !fileUrl ? 'The photo could not be uploaded \u2014 check your connection.'
           : readCount ? ('Read '+readCount+' value'+(readCount===1?'':'s')+' off the sheet. Check them against the paper, then Save \u2014 nothing is on the record yet.')
-          : 'The sheet is saved to the record, but nothing could be read off it. Type the values in and Save. (If this keeps happening, ANTHROPIC_API_KEY is not set — see DEVELOPMENT.md.)' });
+          : (reconciled
+              ? 'The sheet is attached, but nothing could be read off it. Type the values in and Save.'
+              : 'The sheet is attached, but what came off the photo did not add up — so none of it is being offered rather than putting a wrong figure on the record. Type the values in, or set ANTHROPIC_API_KEY so the sheet is read properly (see DEVELOPMENT.md).') });
       return;
     }
 
@@ -7137,6 +7195,7 @@ class Component extends DCLogic {
       tbw:data.tbw||null, bmi:data.bmi||null, score:data.score||null, phaseAngle:data.phaseAngle||null,
       icw:data.icw||null, ecw:data.ecw||null, ecwRatio:data.ecwRatio||null, smi:data.smi||null, ffm:data.ffm||null,
       boneMineral:data.boneMineral||null, bodyCellMass:data.bodyCellMass||null, obesityDegree:data.obesityDegree||null,
+      height:data.height||null, bodyFatMass:data.bodyFatMass||null, slm:data.slm||null,
       fileUrl:fileUrl||null, fileName:file.name||''};
     this._saveSwMeta(swId, {...m, inbody:[rec, ...(m.inbody||[])]});
     let msg;
@@ -11403,23 +11462,32 @@ class Component extends DCLogic {
         // The whole sheet, not three numbers off it. Everything the import reads was being
         // stored and then never shown, so a coach had no way to see the body water, the phase
         // angle or the InBody score they had just imported.
+        // The sheet as the coach reads it on paper: the headline figures first, then the
+        // composition, then the research parameters. Anything the sheet did not give us is
+        // simply absent — a blank is more honest than a dash pretending to be a reading.
         const IB_FIELDS=[
-          ['bmi','BMI',''], ['score','InBody score','/100'], ['bodyFatMass','Body fat mass',' kg'],
-          ['ffm','Fat free mass',' kg'], ['slm','Soft lean mass',' kg'], ['tbw','Total body water',' L'],
-          ['icw','Intracellular water',' L'], ['ecw','Extracellular water',' L'], ['ecwRatio','ECW ratio',''],
-          ['protein','Protein',' kg'], ['minerals','Minerals',' kg'], ['boneMineral','Bone mineral',' kg'],
-          ['bodyCellMass','Body cell mass',' kg'], ['bmr','Basal metabolic rate',' kcal'],
-          ['visceralFat','Visceral fat area',''], ['whr','Waist-hip ratio',''],
-          ['obesityDegree','Obesity degree',' %'], ['smi','SMI',' kg/m²'], ['phaseAngle','Phase angle','°'],
+          ['weight','Weight',' kg'], ['smm','SMM',' kg'], ['bodyFatMass','Body fat mass',' kg'],
+          ['fat','PBF',' %'], ['bmi','BMI',''], ['score','InBody score','/100'],
+          ['height','Height',' cm'], ['visceralFat','Visceral fat area',''],
+          ['tbw','Total body water',' L'], ['icw','Intracellular water',' L'],
+          ['ecw','Extracellular water',' L'], ['ecwRatio','ECW ratio',''],
+          ['protein','Protein',' kg'], ['minerals','Minerals',' kg'],
+          ['ffm','Fat free mass',' kg'], ['slm','Soft lean mass',' kg'],
+          ['boneMineral','Bone mineral',' kg'], ['bodyCellMass','Body cell mass',' kg'],
+          ['bmr','BMR',' kcal'], ['whr','Waist-hip ratio',''],
+          ['obesityDegree','Obesity degree',' %'], ['smi','SMI',' kg/m²'],
+          ['phaseAngle','Phase angle','°'],
         ];
         const inbodyRows=(meta.inbody||[]).slice(0,6).map((r,i)=>{
-          const detail=IB_FIELDS.filter(f=>r[f[0]]!=null).map(f=>({label:f[1], value:String(r[f[0]])+f[2]}));
+          // 'muscle' is what the form has always called SMM, and 'fat' what it calls PBF.
+          const val=(k)=> k==='smm' ? (r.smm!=null?r.smm:r.muscle) : r[k];
+          const detail=IB_FIELDS.filter(f=>val(f[0])!=null).map(f=>({label:f[1], value:String(val(f[0]))+f[2]}));
           const open=S.ibOpen===(swObj.id+'::'+i);
           return {
             dateLabel:this.shortDate(r.date.split('-').reverse().join('/')),
             weight: r.weight!=null?(r.weight+' kg'):'—', fat: r.fat!=null?(r.fat+'% fat'):'—', muscle: r.muscle!=null?(r.muscle+' kg muscle'):'—',
             detail, hasDetail:detail.length>0, open,
-            moreLabel: open ? 'Hide the full sheet' : ('Show all '+(detail.length+3)+' readings'),
+            moreLabel: open ? 'Hide the full sheet' : ('Show the full sheet — '+detail.length+' reading'+(detail.length===1?'':'s')),
             onToggle:()=>this.setState({ibOpen: open?null:(swObj.id+'::'+i)}),
             hasFile:!!r.fileUrl, onViewFile: r.fileUrl? ()=>this._openUrl(r.fileUrl) : ()=>{},
             onDelete:()=>this.deleteInbody(swObj.id, i) };

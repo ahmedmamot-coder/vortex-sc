@@ -1044,6 +1044,57 @@ describe("InBody sheet", () => {
       eq(shown.includes("'" + k + "'"), true, k + " is parsed and stored but never shown");
   });
 
+  // What a phone camera actually produced from this sheet: 5 kg of muscle, a protein figure
+  // lifted off a printed axis, a phase angle of 10. Every one of those looks like a reading.
+  describeSanity();
+  function describeSanity() {
+    const check = bind("_inbodySanity", {});
+
+    it("the real sheet reconciles", () => {
+      const r = check({ weight: 55.8, bodyFatMass: 6.3, ffm: 49.5, pbf: 11.4, bmi: 20, height: 167,
+                        tbw: 36.3, icw: 22.5, ecw: 13.8, ecwRatio: 0.379, smm: 27.4, protein: 9.7, minerals: 3.5 });
+      eq(r.reconciled, true);
+      eq(r.values.smm, 27.4);
+      eq(r.values.pbf, 11.4);
+    });
+    it("5 kg of muscle on a 55.8 kg swimmer is thrown out", () => {
+      const r = check({ weight: 55.8, muscle: 5, smm: 5 });
+      eq(r.values.smm, undefined);
+    });
+    it("a phase angle read off an axis does not survive an unreconciled sheet", () => {
+      const r = check({ weight: 55.8, phaseAngle: 10, visceralFat: 60 });
+      eq(r.reconciled, false, "nothing cross-checks, so nothing should be trusted");
+    });
+    it("a percent body fat that contradicts the fat mass is dropped", () => {
+      const r = check({ weight: 55.8, bodyFatMass: 6.3, pbf: 35 });
+      eq(r.values.pbf, undefined);
+      eq(r.values.bodyFatMass, 6.3, "the two disagree; the one with an arithmetic basis stays");
+    });
+    it("a BMI that does not follow from height and weight is dropped", () => {
+      const r = check({ weight: 55.8, height: 167, bmi: 31 });
+      eq(r.values.bmi, undefined);
+    });
+    it("body waters that do not add up to the total are dropped", () => {
+      const r = check({ weight: 55.8, tbw: 36.3, icw: 22.5, ecw: 30 });
+      eq(r.values.icw, undefined);
+      eq(r.values.ecw, undefined);
+    });
+    it("without a weight there is nothing to check anything against", () => {
+      const r = check({ pbf: 11.4, smm: 27.4 });
+      eq(r.reconciled, false);
+      eq(r.values.smm, undefined);
+    });
+    it("the test date survives a sheet that could not be read", () => {
+      const r = check({ testDate: "2026-07-14", pbf: 11.4 });
+      eq(r.values.testDate, "2026-07-14");
+    });
+  }
+
+  it("height is kept, not read and thrown away", () => {
+    eq(/height:data\.height\|\|null/.test(SOURCE), true);
+    eq(/\['height','Height',' cm'\]/.test(SOURCE), true);
+  });
+
   it("an unreadable photo yields nothing rather than a guess", () => {
     const junk = parse("~~~ blurry ~~~ 3 4 5 ~~~");
     eq(junk.weight, undefined);
