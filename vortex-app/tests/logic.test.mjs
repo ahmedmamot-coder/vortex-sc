@@ -840,4 +840,69 @@ describe("expired session", () => {
   });
 });
 
+/* ------------------------------------------------------------- sign-in speed
+   Signing in used to reload the whole page and then read the club's entire
+   attendance history before showing anything. On mobile data that is the
+   difference between "Checking…" for a few seconds and for half a minute. */
+describe("sign-in speed", () => {
+  const asked = [];
+  globalThis.window = {
+    __VX_AUTH: { token: "t", refresh: "r" },
+    __vxSelect: (table, qs) => { asked.push(qs); return Promise.resolve([]); },
+  };
+  const newCtx = () => ({ attendLog: {}, todayISO: () => "2026-08-08", _saveLocalOnly() {}, forceUpdate() {} });
+
+  itAsync("the live poll asks for one day, not the table", async () => {
+    asked.length = 0;
+    await bind("_attendFetch", newCtx(), ["shiftDate"])("2026-08-08");
+    eq(asked[0].includes("day=eq.2026-08-08"), true);
+  });
+  itAsync("a bounded catch-up asks only for days since a date", async () => {
+    asked.length = 0;
+    await bind("_attendFetch", newCtx(), ["shiftDate"])(null, "2026-04-10");
+    eq(asked[0].includes("day=gte.2026-04-10"), true);
+  });
+  itAsync("a single day never also carries a range", async () => {
+    asked.length = 0;
+    await bind("_attendFetch", newCtx(), ["shiftDate"])("2026-08-08", "2026-04-10");
+    eq(asked[0].includes("gte"), false);
+  });
+
+  itAsync("signing in reads the recent window first, not all of history", async () => {
+    asked.length = 0;
+    const ctx = newCtx();
+    bind("_attendFetchStaged", ctx, ["_attendFetch", "shiftDate"])();
+    await new Promise((r) => setTimeout(r, 5));
+    eq(asked.length, 1, "one read, not a full-table read as well");
+    eq(asked[0].includes("day=gte.2026-04-10"), true, "120 days back from 2026-08-08");
+  });
+  itAsync("the full history follows later, so nothing is lost", async () => {
+    const ctx = newCtx();
+    bind("_attendFetchStaged", ctx, ["_attendFetch", "shiftDate"])();
+    await new Promise((r) => setTimeout(r, 5));
+    eq(!!ctx._attendFullTimer, true, "the catch-up must be scheduled, not skipped");
+    clearTimeout(ctx._attendFullTimer);
+  });
+  itAsync("and the backfill of old marks is kept off the sign-in path", async () => {
+    const ctx = newCtx();
+    let migrated = false;
+    ctx._attendMigrate = () => { migrated = true; };
+    bind("_attendFetchStaged", ctx, ["_attendFetch", "shiftDate"])();
+    await new Promise((r) => setTimeout(r, 5));
+    eq(migrated, false, "it uploads the whole history in batches — never while signing in");
+    clearTimeout(ctx._attendFullTimer);
+  });
+
+  it("signing in no longer reloads the whole app", () => {
+    const login = SOURCE.slice(SOURCE.indexOf("_postLoginRefresh()"), SOURCE.indexOf("_refetchAll()"));
+    eq(/location\.reload/.test(login), false, "re-downloading 1.1MB on mobile data was the wait");
+  });
+  it("the app is shown before the background fetches, not after", () => {
+    const i = SOURCE.indexOf("doLogin(acct);\n            try{ this._refetchAll()");
+    eq(i > -1, true, "doLogin must run first so the screen switches immediately");
+  });
+  it("the shared club data is pulled once per sign-in, not twice", () =>
+    eq(/_repullOnce\(\)/.test(SOURCE) && !/if\(window\.__vxRepull\) window\.__vxRepull\(\);\s*\}catch\(e\)\{\}\s*\['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_wearFetch'/.test(SOURCE), true));
+});
+
 await report();
