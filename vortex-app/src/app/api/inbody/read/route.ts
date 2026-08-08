@@ -66,13 +66,17 @@ export async function GET() {
   if (!key) notes.push("ANTHROPIC_API_KEY is not set on this deployment. Set it in Vercel for Production, then redeploy — a new variable does not reach a build that is already running.");
   else {
     if (rawKey !== key) notes.push("The stored value had quotes, spaces or a 'Bearer' prefix around it. Those are being stripped, but it is worth pasting it in clean.");
-    if (!key.startsWith("sk-ant-")) notes.push("This does not look like an Anthropic API key. It must come from console.anthropic.com → API keys and begin sk-ant-. A claude.ai login or a key from another provider will not work.");
-    if (key.length < 60) notes.push("The key looks short — check the whole thing was copied.");
+    // The example from the instructions, pasted in as though it were the key. Easily done,
+    // and it fails looking exactly like a wrong key rather than a missing one.
+    if (/\.\.\.|…|xxx|your[-_ ]?key/i.test(key) || key === "sk-ant-")
+      notes.push("That is the example placeholder, not a key. Copy the real one from console.anthropic.com → API keys — it is about 100 characters and begins sk-ant-api03-.");
+    else if (!key.startsWith("sk-ant-")) notes.push("This does not look like an Anthropic API key. It must come from console.anthropic.com → API keys and begin sk-ant-. A claude.ai login or a key from another provider will not work.");
+    else if (key.length < 60) notes.push("The key looks short — a real one is about 100 characters. Check the whole thing was copied.");
   }
   // Shape only. The key itself is never returned.
   return Response.json({
     configured: !!key,
-    keyPrefix: key ? key.slice(0, 11) + "…" : null,
+    keyPrefix: key ? key.slice(0, 11) + "..." : null,
     keyLength: key ? key.length : 0,
     notes: notes.length ? notes : ["ready"],
   });
