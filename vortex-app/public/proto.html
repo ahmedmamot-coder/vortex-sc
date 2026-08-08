@@ -35,7 +35,7 @@ if ('serviceWorker' in navigator) {
   var REST = SB_URL + "/rest/v1/club_state";
   var HEAD = { "apikey": SB_ANON, "Authorization": "Bearer " + SB_ANON, "Content-Type": "application/json" };
   // Every shared data type the club edits. The only key kept per-device is vx_api_key.
-  var SYNC = ["vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_extra_results","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_sw_photos","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_meet_events","vx_meet_cuts","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_sw_status","vx_memberships","vx_fee_plans","vx_billing","vx_race_splits","vx_bday_sent"];
+  var SYNC = ["vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_meet_events","vx_meet_cuts","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_sw_status","vx_memberships","vx_fee_plans","vx_billing","vx_race_splits","vx_bday_sent"];
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
   // Auth-retry queue: if a write is rejected because we weren't signed in yet (401/403 under the
@@ -5505,7 +5505,7 @@ class Component extends DCLogic {
     const rows=await window.__vxSelect('attendance_marks', qs); if(rows==null) return;
     const log=JSON.parse(JSON.stringify(this.attendLog||{}));
     rows.forEach(r=>{ if(!r.squad_id||!r.day||!r.sw_id) return; (log[r.squad_id]=log[r.squad_id]||{}); (log[r.squad_id][r.day]=log[r.squad_id][r.day]||{}); log[r.squad_id][r.day][r.sw_id]=r.status; });
-    this.attendLog=log; try{ this._saveLocalOnly('vx_attend_log', log); }catch(e){} this.forceUpdate();
+    this.attendLog=log; this._attendVer=(this._attendVer||0)+1; try{ this._saveLocalOnly('vx_attend_log', log); }catch(e){} this.forceUpdate();
   }
   // One CSV of the whole club's register for a single day — a daily record you can keep.
   exportDailyAttendanceCsv(day, sqRows){
@@ -5913,6 +5913,25 @@ class Component extends DCLogic {
       out.push({date:d, m:(st==='present'||st==='late') ? (sessions[d]||0) : 0, status:st});
     }
     return out;
+  }
+  // Club attendance across the last N days, from the register only. It walks every swimmer
+  // for every day, and it is asked for on every render of the admin screen, so the answer is
+  // held until the day rolls over or somebody marks a register.
+  _clubAttendPct(days){
+    const today=this.todayISO();
+    const key=days+'|'+today+'|'+(this._attendVer||0);
+    if(this._clubAttendCache && this._clubAttendCache.key===key) return this._clubAttendCache.pct;
+    let seen=0, inPool=0;
+    for(let k=0;k<days;k++){
+      const dISO=this.shiftDate(today,-k);
+      this.squads.forEach(sq=>(this.roster[sq.id]||[]).forEach((sw,ix)=>{
+        const st=this.getAttendStatus(sq.id, dISO, sw.id, ix);
+        if(st==='unmarked') return; seen++; if(st==='present') inPool++;
+      }));
+    }
+    const pct = seen ? Math.round((inPool/seen)*100) : 0;
+    this._clubAttendCache={key, pct};
+    return pct;
   }
   _attendPct(sqId, swId, idx, fromDaysAgo, toDaysAgo){
     let seen=0, inPool=0;
@@ -7853,8 +7872,21 @@ class Component extends DCLogic {
       else if(code==='D1'){
         const gender = raw.charAt(2)==='F' ? 'G' : 'B';
         const last=raw.slice(8,28).trim(), first=raw.slice(28,48).trim();
-        let age=0; const m=raw.slice(48).match(/(\d{3})(\d{2})(\d{2})(\d{4})\s+(\d{1,3})/); if(m) age=parseInt(m[5],10);
-        cur={name:(first+' '+last).trim(), first, last, age, gender, results:[]}; swimmers.push(cur); ev=null;
+        // The D1 record carries MMDDYYYY — the swimmer's date of birth — right before their
+        // age. It was matched and thrown away, so the club's own Hy-Tek data has been telling
+        // us every birthday all along and the app kept only "age 10".
+        let age=0, dob='';
+        const m=raw.slice(48).match(/(\d{3})(\d{2})(\d{2})(\d{4})\s+(\d{1,3})/);
+        if(m){
+          age=parseInt(m[5],10);
+          const mm=m[2], dd=m[3], yy=m[4];
+          const t=new Date(yy+'-'+mm+'-'+dd+'T00:00:00');
+          // Only if it is a real date that a swimmer could actually have been born on.
+          const yn=parseInt(yy,10);
+          if(!isNaN(t) && t.getFullYear()===yn && (t.getMonth()+1)===parseInt(mm,10) && t.getDate()===parseInt(dd,10)
+             && yn>1940 && yn<=new Date().getFullYear()) dob=yy+'-'+mm+'-'+dd;
+        }
+        cur={name:(first+' '+last).trim(), first, last, age, dob, gender, results:[]}; swimmers.push(cur); ev=null;
       }
       else if(code==='E1' && cur){
         const dist=parseInt(raw.slice(18,21),10);
@@ -7891,10 +7923,18 @@ class Component extends DCLogic {
     let newSwimmers=0, updatedSwimmers=0, newResults=0;
     const flat=this.allSwimmersFlat();
     parsed.forEach(p=>{ const match=flat.find(f=>f.name.toLowerCase()===p.name.trim().toLowerCase()); if(match) updatedSwimmers++; else newSwimmers++; p.results.forEach(r=>{ if(r.valid) newResults++; }); });
-    this.setState({meetImportPreview:{count:parsed.length, newSwimmers, updatedSwimmers, newResults, parsed}});
+    // Count the dates of birth this file would fill in, so it is visible before confirming.
+    const _flatDob=this.allSwimmersFlat();
+    const dobToFill=parsed.filter(p=>{
+      if(!p.dob) return false;
+      const m=_flatDob.find(f=>f.name.toLowerCase()===String(p.name||'').trim().toLowerCase());
+      return m ? !m.dob : true;
+    }).length;
+    this.setState({meetImportPreview:{count:parsed.length, newSwimmers, updatedSwimmers, newResults, dobToFill, parsed}});
   }
   meetImportConfirm(){
     const prev=this.state.meetImportPreview; if(!prev) return;
+    let dobFilled=0;
     const squadForAge=(a)=>a<=6?'preteam':a<=8?'advb':a<=10?'adva':a<=12?'junior':a==13?'seniorb':a==14?'seniora':a==15?'vortexb':a==16?'vortexa':'legend';
     const fmt=(sec)=>{ if(sec<60) return sec.toFixed(2); const m=Math.floor(sec/60); const s=sec-m*60; return m+':'+(s<10?'0':'')+s.toFixed(2); };
     prev.parsed.forEach(p=>{
@@ -7911,7 +7951,12 @@ class Component extends DCLogic {
           const pbs=[]; for(const ev in byEv){ const best=byEv[ev].reduce((a,b)=>b.sec<a.sec?b:a); pbs.push({event:ev, sec:best.sec, time:best.time, drop:'', course:best.course||'L'}); }
           pbs.sort((a,b)=>a.sec-b.sec); sw.pbs=pbs;
           this.rosterEdits.edits[match.squadId]=this.rosterEdits.edits[match.squadId]||{};
-          this.rosterEdits.edits[match.squadId][match.id]={results:sw.results, pbs:sw.pbs};
+          const _patch={results:sw.results, pbs:sw.pbs};
+          // Fill in a date of birth we did not have. Never overwrite one somebody typed —
+          // a person who checked a passport beats a meet file every time.
+          if(p.dob && !sw.dob){ _patch.dob=p.dob; sw.dob=p.dob; dobFilled++; }
+          this.rosterEdits.edits[match.squadId][match.id]=Object.assign(
+            {}, this.rosterEdits.edits[match.squadId][match.id]||{}, _patch);
         }
       } else {
         const np=p.name.trim().split(/\s+/); const first=np[0]; const last=np.slice(1).join(' ');
@@ -7919,13 +7964,14 @@ class Component extends DCLogic {
         const byEv={}; asResults.forEach(r=>{ (byEv[r.event]=byEv[r.event]||[]).push(r); });
         const pbs=[]; for(const ev in byEv){ const best=byEv[ev].reduce((a,b)=>b.sec<a.sec?b:a); pbs.push({event:ev, sec:best.sec, time:best.time, drop:'', course:best.course||'L'}); }
         pbs.sort((a,b)=>a.sec-b.sec);
-        const sw={id:this._uid('sw'), first, last, name:p.name.trim(), initials, age:p.age, gender:p.gender==='G'?'Girls':'Boys', pbs, results:asResults, meets:[...new Set(asResults.map(r=>r.meet))], meetCount:new Set(asResults.map(r=>r.meet)).size, topEvent:pbs[0]?pbs[0].event:'—', topTime:pbs[0]?pbs[0].time:'—', topSec:pbs[0]?pbs[0].sec:999};
+        const sw={id:this._uid('sw'), first, last, name:p.name.trim(), initials, age:p.age, dob:p.dob||'', gender:p.gender==='G'?'Girls':'Boys', pbs, results:asResults, meets:[...new Set(asResults.map(r=>r.meet))], meetCount:new Set(asResults.map(r=>r.meet)).size, topEvent:pbs[0]?pbs[0].event:'—', topTime:pbs[0]?pbs[0].time:'—', topSec:pbs[0]?pbs[0].sec:999};
         this.rosterEdits.added[sqid]=[...(this.rosterEdits.added[sqid]||[]), sw];
       }
     });
     this._saveJSON('vx_roster_edits', this.rosterEdits);
     this.rebuildRoster();
-    this.setState({meetImportOpen:false, meetImportText:'', meetImportPreview:null, settingsMsg:''});
+    this.setState({meetImportOpen:false, meetImportText:'', meetImportPreview:null,
+      settingsMsg: dobFilled ? ('Imported ✓ · '+dobFilled+' date'+(dobFilled===1?'':'s')+' of birth filled in from the file') : ''});
   }
   hytekSetMode(m){ this.setState({hytekMode:m, meetImportPreview:null}); }
   onHytekPdfClick(){ const el=document.getElementById('vx-hytek-pdf-input'); if(el) el.click(); }
@@ -9024,7 +9070,7 @@ class Component extends DCLogic {
     this.family=g('vx_family', this.family);
     this.meetsCal=g('vx_meets_cal', this.meetsCal);
     this.savedPlans=g('vx_saved_plans', this.savedPlans);
-    this.attendLog=g('vx_attend_log', this.attendLog); try{ this._attendFetchStaged(); }catch(e){}
+    this.attendLog=g('vx_attend_log', this.attendLog); this._attendVer=(this._attendVer||0)+1; try{ this._attendFetchStaged(); }catch(e){}
     this.swimmerGoals=g('vx_swimmer_goals', this.swimmerGoals);
     this.squadGoals=g('vx_squad_goals', this.squadGoals);
     this.swimmerMeta=this._sanitizeMeta(g('vx_sw_meta', this.swimmerMeta));
@@ -9204,16 +9250,8 @@ class Component extends DCLogic {
     // Both of these were invented: a hardcoded 87% ring and a fixed seven-number bar chart
     // that never changed whatever the club did. They are measured now — from the register
     // that coaches actually mark, and the sessions actually saved this week.
-    const attendRing=(()=>{
-      let seen=0, inPool=0; const _t=this.todayISO();
-      for(let k=0;k<14;k++){ const dISO=this.shiftDate(_t,-k);
-        this.squads.forEach(sq=>(this.roster[sq.id]||[]).forEach((sw,ix)=>{
-          const st=this.getAttendStatus(sq.id, dISO, sw.id, ix);
-          if(st==='unmarked') return; seen++; if(st==='present') inPool++;
-        })); }
-      const pct = seen ? Math.round((inPool/seen)*100) : 0;
-      return {pct:pct+'%', dash:((pct/100)*326.7).toFixed(1)+' 326.7'};
-    })();
+    const attendRing=(()=>{ const pct=this._clubAttendPct(14);
+      return {pct:pct+'%', dash:((pct/100)*326.7).toFixed(1)+' 326.7'}; })();
     const _wkStart=this._weekStartISO(), _wkEnd=this.shiftDate(_wkStart, 6);
     const _dayTotAdmin=[0,0,0,0,0,0,0];
     this.squads.forEach(sq=>(((this.savedPlans||{})[sq.id])||[]).forEach(r=>{
@@ -9517,7 +9555,8 @@ class Component extends DCLogic {
 
     // ---- Birthdays ----
     const bdayToday=this.todayISO();
-    const bdayPool = S.toolScopeClub ? this.allSwimmersFlat() : (this.roster[S.squadId]||[]).map(sw=>({...sw, squadId:S.squadId, squadName:squad.name}));
+    // Only when the tool is open: this walks the whole roster and is otherwise thrown away.
+    const bdayPool = S.tool!=='bdays' ? [] : (S.toolScopeClub ? this.allSwimmersFlat() : (this.roster[S.squadId]||[]).map(sw=>({...sw, squadId:S.squadId, squadName:squad.name})));
     const bdaySentMap = this._bdaySentMap();
     const bdayYear = bdayToday.slice(0,4);
     const bdayRow = (sw)=>{
@@ -10444,7 +10483,8 @@ class Component extends DCLogic {
     // -- meets admin --
     const meetImportChevron = S.meetImportOpen ? 'chevron-up' : 'chevron-down';
     const meetImportHasPreview = !!S.meetImportPreview;
-    const meetImportSummary = S.meetImportPreview ? (S.meetImportPreview.count+' swimmer block(s) parsed · '+S.meetImportPreview.newSwimmers+' new · '+S.meetImportPreview.updatedSwimmers+' matched existing · '+S.meetImportPreview.newResults+' results to add') : '';
+    const meetImportSummary = S.meetImportPreview ? (S.meetImportPreview.count+' swimmer block(s) parsed · '+S.meetImportPreview.newSwimmers+' new · '+S.meetImportPreview.updatedSwimmers+' matched existing · '+S.meetImportPreview.newResults+' results to add'
+      + (S.meetImportPreview.dobToFill ? (' · '+S.meetImportPreview.dobToFill+' date'+(S.meetImportPreview.dobToFill===1?'':'s')+' of birth to fill in') : '')) : '';
     const meetRows=this.allMeets().map((m,i)=>{
       const expanded=S.meetExpanded===i;
       const status=this.meetStatus[m.name]||'Upcoming';

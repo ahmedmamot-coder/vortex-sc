@@ -117,6 +117,19 @@ describe("Hy-Tek .hy3 import", () => {
   it("reads the swim date", () => eq(out[0].results[0].date, "6/5/2026"));
   it("picks up the meet name", () => eq(out[0].results[0].meet, "H2O Long Course Spring Cup 2026"));
   it("marks it long course", () => eq(out[0].results[1].course, "L"));
+
+  // The D1 record carries MMDDYYYY before the age. It was matched and discarded, so the
+  // club's own meet files held every swimmer's birthday and the app kept only "age 10".
+  it("reads the date of birth the file was already carrying", () => eq(out[0].dob, "2016-04-05"));
+  it("the date agrees with the age in the same record", () =>
+    eq(2026 - Number(out[0].dob.slice(0, 4)), out[0].age));
+  it("a nonsense date is left empty rather than guessed at", () => {
+    const bad = parse([
+      "B1Test Meet                                     Doha Qatar",
+      "D1F 4113Nobody              Test                                                     38013452016 10     0",
+    ].join("\n"));
+    eq(bad[0].dob, "");
+  });
 });
 
 /* ------------------------------------------------------- shipped-source guards
