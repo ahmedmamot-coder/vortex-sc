@@ -1025,7 +1025,10 @@ describe("InBody sheet", () => {
     eq(/Promise\.race\(\[work, deadline\]\)/.test(SOURCE), true));
   it("the server is asked first, and a missing key falls back instead of stalling", () => {
     eq(/_readSheetOnServer/.test(SOURCE), true);
-    eq(/if\(!j \|\| j\.notConfigured\) return null/.test(SOURCE), true);
+    eq(/if\(j\.notConfigured\) return \{notConfigured:true\}/.test(SOURCE), true);
+    // "no key", "key rejected" and "read nothing" are different problems and were all
+    // reported as the same sentence, which sent a coach hunting for a key already set.
+    eq(/the key was rejected/.test(SOURCE), true);
   });
   it("the photo is shrunk before it is sent, not posted at 12 megapixels", () =>
     eq(/const max=1600/.test(SOURCE), true));

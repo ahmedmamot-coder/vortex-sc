@@ -43,6 +43,20 @@ return {}.`;
 
 type Body = { image?: string; mime?: string };
 
+// Open this in a browser to see whether the key has actually reached the running deployment:
+//   https://vortexswimmingclub.com/api/inbody/read
+// Adding a variable in Vercel does not change a deployment that is already live — it applies
+// to the next build. If this says configured:false after you have set it, it has not been
+// redeployed, or it was set for Preview rather than Production.
+export async function GET() {
+  const key = process.env.ANTHROPIC_API_KEY || "";
+  return Response.json({
+    configured: !!key,
+    keyLooksRight: key ? key.startsWith("sk-ant-") : null,
+    hint: key ? "ready" : "Set ANTHROPIC_API_KEY in Vercel (Production) and redeploy — a new variable does not reach a deployment that is already running.",
+  });
+}
+
 export async function POST(request: Request) {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return Response.json({ notConfigured: true, values: {} });

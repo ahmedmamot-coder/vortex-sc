@@ -7049,11 +7049,21 @@ class Component extends DCLogic {
     try{
       const r=await fetch('/api/inbody/read', {method:'POST', headers:{'Content-Type':'application/json'},
         body:JSON.stringify({image:dataUrl, mime:'image/jpeg'})});
-      if(!r.ok) return null;
-      const j=await r.json();
-      if(!j || j.notConfigured) return null;
-      return j.values && Object.keys(j.values).length ? j.values : {};
-    }catch(e){ return null; }
+      let j=null; try{ j=await r.json(); }catch(e){}
+      if(!r.ok || (j && j.error)){
+        // Say which wall we hit. A rejected key and a missing key are different problems and
+        // were being reported as the same sentence.
+        const st=(j&&j.status)||r.status;
+        const why = st===401 ? 'the key was rejected — check ANTHROPIC_API_KEY in Vercel'
+          : st===429 ? 'the reader is rate-limited — try again in a moment'
+          : st===413 ? 'that image is too large to send'
+          : ((j&&j.error)||('the reader returned HTTP '+r.status));
+        return {failed:true, why:why};
+      }
+      if(!j) return {failed:true, why:'the reader sent nothing back'};
+      if(j.notConfigured) return {notConfigured:true};
+      return {values:(j.values||{})};
+    }catch(e){ return {failed:true, why:'could not reach the reader'}; }
   }
   // In-browser OCR, kept as the fallback. It has to fetch a worker, a WASM core and a large
   // language model before it can read anything, so it gets a deadline: without one the app
@@ -7123,7 +7133,7 @@ class Component extends DCLogic {
     try{ if(window.__vxUploadFile){ const ext=((file.name||'').match(/\.([a-z0-9]+)$/i)||[])[1] || (/pdf/i.test(file.type||'')?'pdf':'jpg'); fileUrl=await window.__vxUploadFile('inbody/'+swId+'/'+Date.now()+'.'+ext, file); } }catch(err){}
     // 2) Try to auto-read the values from a text-based InBody PDF. A photo/scan has no text layer \u2014
     //    that's fine, the report is still saved and the coach can type the values in.
-    let data={}, fromPhoto=false, pictureRead=false, reconciled=true;
+    let data={}, fromPhoto=false, pictureRead=false, reconciled=true, serverRead=false, serverWhy='';
     try{
       // A picture — either an image file, or a scanner app's PDF, which is a photograph in a
       // PDF wrapper with no text in it at all.
@@ -7150,9 +7160,13 @@ class Component extends DCLogic {
         // OCR has to fetch a worker, a core and a language model first, which is why it hung.
         this.setState({profileIbMsg:'Reading the sheet…'});
         const viaServer=await this._readSheetOnServer(picture);
-        if(viaServer && Object.keys(viaServer).length){ data=viaServer; }
-        else {
-          this.setState({profileIbMsg: viaServer ? 'Reading the sheet… (nothing found yet, trying again on the device)' : 'Reading the sheet on this device… this takes up to a minute'});
+        if(viaServer && viaServer.values && Object.keys(viaServer.values).length){
+          data=viaServer.values; serverRead=true;
+        } else {
+          serverWhy = viaServer && viaServer.notConfigured
+            ? 'automatic reading is not switched on yet (ANTHROPIC_API_KEY is not set on the running deployment — adding it in Vercel needs a redeploy to take effect)'
+            : (viaServer && viaServer.failed ? viaServer.why : 'the reader found nothing on the sheet');
+          this.setState({profileIbMsg:'Reading it on this device instead — '+serverWhy+'. This takes up to a minute.'});
           try{
             const ocr=await this._ocrSheet(picture, 45);
             data=this._extractInbodyFields(ocr)||{};
@@ -7160,7 +7174,7 @@ class Component extends DCLogic {
         }
       }
     }catch(err){ data=data||{}; }
-    if(pictureRead){
+    if(pictureRead && !serverRead){
       const checked=this._inbodySanity(data);
       data=checked.values; reconciled=checked.reconciled;
       // Reading a photograph off a phone camera gets numbers wrong in ways that look right:
@@ -7185,7 +7199,8 @@ class Component extends DCLogic {
           : readCount ? ('Read '+readCount+' value'+(readCount===1?'':'s')+' off the sheet. Check them against the paper, then Save \u2014 nothing is on the record yet.')
           : (reconciled
               ? 'The sheet is attached, but nothing could be read off it. Type the values in and Save.'
-              : 'The sheet is attached, but what came off the photo did not add up — so none of it is being offered rather than putting a wrong figure on the record. Type the values in, or set ANTHROPIC_API_KEY so the sheet is read properly (see DEVELOPMENT.md).') });
+              : ('The sheet is attached, but what came off the photo did not add up — so none of it is being offered rather than putting a wrong figure on the record. Type the values in.'
+                 + (serverWhy ? (' Automatic reading did not run: '+serverWhy+'.') : ''))) });
       return;
     }
 
