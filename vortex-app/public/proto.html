@@ -6967,10 +6967,12 @@ class Component extends DCLogic {
     // left its file on one entry and the numbers on another.
     const pend=this.state.ibPending||null;
     const extra=(pend&&pend.extra)||{};
-    const rec={date:new Date().toISOString().slice(0,10), weight:w, fat: isNaN(fat)?null:fat, muscle: isNaN(mus)?null:mus,
+    const rec={date:(pend&&pend.testDate)||new Date().toISOString().slice(0,10), weight:w, fat: isNaN(fat)?null:fat, muscle: isNaN(mus)?null:mus,
       bmr:extra.bmr||null, visceralFat:extra.visceralFat||null, whr:extra.whr||null, protein:extra.protein||null,
       minerals:extra.minerals||null, tbw:extra.tbw||null, bmi:extra.bmi||null, score:extra.score||null,
-      phaseAngle:extra.phaseAngle||null,
+      phaseAngle:extra.phaseAngle||null, icw:extra.icw||null, ecw:extra.ecw||null, ecwRatio:extra.ecwRatio||null,
+      smi:extra.smi||null, ffm:extra.ffm||null, boneMineral:extra.boneMineral||null,
+      bodyCellMass:extra.bodyCellMass||null, obesityDegree:extra.obesityDegree||null,
       fileUrl:(pend&&pend.fileUrl)||null, fileName:(pend&&pend.fileName)||''};
     this._saveSwMeta(swId, {...m, inbody:[rec, ...(m.inbody||[])]});
     this.setState({inbodyForm:{weight:'',fat:'',muscle:''}, ibPending:null,
@@ -7040,6 +7042,31 @@ class Component extends DCLogic {
         const buf=await file.arrayBuffer(); const doc=await window.pdfjsLib.getDocument({data:buf}).promise;
         let text=''; for(let i=1;i<=doc.numPages;i++){ const page=await doc.getPage(i); const c=await page.getTextContent(); text+=' '+c.items.map(it=>it.str).join(' '); }
         data=this._extractInbodyFields(text)||{};
+
+        // A scanner app gives you a photograph wrapped in a PDF: one image, no text layer at
+        // all. pdf.js finds nothing there, and the coach was told to type the whole sheet in.
+        // If a PDF yields no weight, draw the page and read the picture instead.
+        if(data.weight==null){
+          this.setState({profileIbMsg:'No text in that PDF — reading it as a picture, this takes a few seconds'});
+          if(!window.Tesseract) await this._loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.0/tesseract.min.js', 20000);
+          if(window.Tesseract){
+            let ocr='';
+            const pages=Math.min(doc.numPages, 2);   // an InBody sheet is one page; two is generous
+            for(let i=1;i<=pages;i++){
+              const page=await doc.getPage(i);
+              // 2x: enough for the small print in Research Parameters without asking a phone
+              // to hold a needlessly large canvas.
+              const vp=page.getViewport({scale:2});
+              const cv=document.createElement('canvas'); cv.width=Math.round(vp.width); cv.height=Math.round(vp.height);
+              await page.render({canvasContext:cv.getContext('2d'), viewport:vp}).promise;
+              const out=await window.Tesseract.recognize(cv, 'eng');
+              ocr+=' '+((out&&out.data&&out.data.text)||'');
+              cv.width=cv.height=0;                  // let the phone have the memory back
+            }
+            data=this._extractInbodyFields(ocr)||{};
+            fromPhoto=true;                          // read from a picture — a person checks it
+          }
+        }
       }
     }catch(err){}
     const readCount=Object.keys(data).filter(k=>data[k]!=null).length;
@@ -7053,7 +7080,7 @@ class Component extends DCLogic {
         inbodyForm:{ weight: data.weight!=null?String(data.weight):'',
                      fat: data.pbf!=null?String(data.pbf):'',
                      muscle: data.smm!=null?String(data.smm):'' },
-        ibPending:{ fileUrl:fileUrl||null, fileName:file.name||'', extra:data },
+        ibPending:{ fileUrl:fileUrl||null, fileName:file.name||'', extra:data, testDate:data.testDate||null },
         profileIbBusy:false,
         profileIbMsg: !fileUrl ? 'The photo could not be uploaded \u2014 check your connection.'
           : readCount ? ('Read '+readCount+' value'+(readCount===1?'':'s')+' off the photo. Check them against the sheet, then Save \u2014 nothing is on the record yet.')
@@ -7062,9 +7089,12 @@ class Component extends DCLogic {
     }
 
     const m=this._swMeta(swId);
-    const rec={date:new Date().toISOString().slice(0,10), weight:data.weight||null, fat:data.pbf||null, muscle:data.smm||null,
+    const rec={date:data.testDate||new Date().toISOString().slice(0,10), weight:data.weight||null, fat:data.pbf||null, muscle:data.smm||null,
       bmr:data.bmr||null, visceralFat:data.visceralFat||null, whr:data.whr||null, protein:data.protein||null, minerals:data.minerals||null,
-      tbw:data.tbw||null, bmi:data.bmi||null, score:data.score||null, phaseAngle:data.phaseAngle||null, fileUrl:fileUrl||null, fileName:file.name||''};
+      tbw:data.tbw||null, bmi:data.bmi||null, score:data.score||null, phaseAngle:data.phaseAngle||null,
+      icw:data.icw||null, ecw:data.ecw||null, ecwRatio:data.ecwRatio||null, smi:data.smi||null, ffm:data.ffm||null,
+      boneMineral:data.boneMineral||null, bodyCellMass:data.bodyCellMass||null, obesityDegree:data.obesityDegree||null,
+      fileUrl:fileUrl||null, fileName:file.name||''};
     this._saveSwMeta(swId, {...m, inbody:[rec, ...(m.inbody||[])]});
     let msg;
     if(!fileUrl) msg='Saved, but the file upload failed \u2014 check your connection.';
@@ -7963,24 +7993,93 @@ class Component extends DCLogic {
       this.setState({inbodyPdfBusy:false, inbodyPdfMsg:'Scan read \u2713', inbodyDraft:data});
     }catch(err){ this.setState({inbodyPdfBusy:false, inbodyPdfMsg:(err&&err.message)||'Import failed'}); }
   }
+  // Read an InBody sheet, from a clean PDF text layer or from reading a photograph.
+  //
+  // The hard part is not finding the labels, it is that on an InBody sheet the measurement is
+  // not the first number after its label. Each row of the Muscle-Fat and Obesity sections
+  // prints the whole axis first — "Weight (kg) 55 70 85 100 ... 205 %  55.8" — so taking the
+  // first number gives you the start of a scale instead of the swimmer. Units carry digits
+  // too ("VFA(cm2)"), and OCR of a photo adds its own damage: spaces inside numbers ("55. 8"),
+  // O read as zero, l read as one.
   _extractInbodyFields(text){
-    const num=(re)=>{ const m=text.match(re); return m?parseFloat(m[1]):null; };
-    const clean={};
-    const raw={
-      weight: num(/weight[^\d\-]{0,10}(\d{1,3}(?:\.\d+)?)/i),
-      smm: num(/(?:skeletal muscle mass|smm)[^\d\-]{0,10}(\d{1,3}(?:\.\d+)?)/i),
-      bodyFatMass: num(/body fat mass[^\d\-]{0,10}(\d{1,3}(?:\.\d+)?)/i),
-      pbf: num(/(?:percent body fat|pbf|body fat[^m]{0,4}%)[^\d\-]{0,10}(\d{1,3}(?:\.\d+)?)/i),
-      bmr: num(/(?:bmr|basal metabolic rate)[^\d\-]{0,12}(\d{3,5})/i),
-      visceralFat: num(/(?:visceral fat(?: area| level)?|vfa)[^\d\-]{0,12}(\d{1,3}(?:\.\d+)?)/i),
-      whr: num(/(?:waist[\-\s]?hip ratio|whr)[^\d\-]{0,10}(\d(?:\.\d+)?)/i),
-      protein: num(/protein[^\d\-]{0,10}(\d{1,2}(?:\.\d+)?)/i),
-      minerals: num(/minerals?[^\d\-]{0,10}(\d(?:\.\d+)?)/i),
-      tbw: num(/total body water[^\d\-]{0,10}(\d{1,3}(?:\.\d+)?)/i),
-      bmi: num(/(?:bmi|body mass index)[^\d\-]{0,10}(\d{1,2}(?:\.\d+)?)/i),
-      score: num(/(?:inbody score)[^\d\-]{0,10}(\d{1,3})/i),
-      phaseAngle: num(/(?:phase angle)[^\d\-]{0,12}(\d(?:\.\d+)?)/i),
+    // Anything that looks like a number, with letters OCR confuses for digits, is normalised
+    // back to a number. Without this "55. 8" reads as 55 and a swimmer loses 800 grams.
+    let t=' '+String(text||'')
+      .replace(/[\r\n\t]+/g,' \n ')
+      .replace(/[,;|]/g,' ')
+      .replace(/(\d)\s*\.\s*(\d)/g,'$1.$2')
+      .replace(/[0-9OolI]+(?:\.[0-9OolI]+)?/g, tok =>
+        /\d/.test(tok) ? tok.replace(/[Oo]/g,'0').replace(/[lI]/g,'1') : tok)
+      .replace(/\b(?:kg\s*\/\s*m2|kg\s*\/\s*m²|cm2|cm²|kcal)\b/gi,' ')   // units that contain digits
+      .replace(/[ ]+/g,' ')+' ';
+
+    // Every label on the sheet. Scanning stops at the next one, so one row's numbers can
+    // never be read as the row beside it.
+    const LABELS = 'total body water|soft lean mass|fat free mass|body fat mass|skeletal muscle index'
+      + '|skeletal muscle mass|percent body fat|body mass index|visceral fat area|visceral fat level'
+      + '|intracellular water|extracellular water|basal metabolic rate|waist[- ]?hip ratio'
+      + '|bone mineral content|body cell mass|obesity degree|inbody score|target weight|weight control'
+      + '|fat control|muscle control|phase angle|ecw ratio|segmental|research parameters|body balance'
+      + '|right arm|left arm|right leg|left leg|trunk|protein|minerals|weight|height|gender|age'
+      + '|\\bsmm\\b|\\bpbf\\b|\\bbmi\\b|\\bbmr\\b|\\bvfa\\b|\\btbw\\b|\\bicw\\b|\\becw\\b|\\bsmi\\b|\\bffm\\b|\\bbfm\\b';
+
+    const read=(label, lo, hi)=>{
+      const re=new RegExp('(?:'+label+')','gi');
+      let m;
+      while((m=re.exec(t))){
+        let win=t.slice(m.index+m[0].length, m.index+m[0].length+170);
+        const stop=win.search(new RegExp('(?:'+LABELS+')','i'));
+        if(stop>0) win=win.slice(0,stop);
+        const seen=(win.match(/\d{1,4}(?:\.\d{1,3})?/g)||[]).map(parseFloat).filter(v=>!isNaN(v));
+        const nums=seen.filter(v=>v>=lo&&v<=hi);
+        if(!nums.length) continue;
+        // A long run of numbers is the printed axis, and the swimmer's own figure comes after
+        // it. A short run is a plain reading: the value first, then its normal range in
+        // brackets. Count what is actually on the row, not what survives the range check —
+        // most of a muscle-mass axis reads as impossible for a person, and filtering first
+        // made a twelve-number axis look like a four-number reading.
+        return seen.length>4 ? nums[nums.length-1] : nums[0];
+      }
+      return null;
     };
+
+    const raw={
+      weight:        read('\\bweight\\b', 15, 200),
+      smm:           read('skeletal muscle mass|\\bsmm\\b', 5, 90),
+      bodyFatMass:   read('body fat mass|\\bbfm\\b', 0.5, 90),
+      pbf:           read('percent body fat|\\bpbf\\b', 1, 70),
+      bmi:           read('body mass index|\\bbmi\\b', 8, 60),
+      bmr:           read('basal metabolic rate|\\bbmr\\b', 500, 5000),
+      visceralFat:   read('visceral fat area|visceral fat level|\\bvfa\\b', 1, 300),
+      whr:           read('waist[- ]?hip ratio|\\bwhr\\b', 0.4, 1.6),
+      protein:       read('\\bprotein\\b', 1, 30),
+      minerals:      read('\\bminerals?\\b', 0.5, 12),
+      tbw:           read('total body water|\\btbw\\b', 5, 90),
+      icw:           read('intracellular water|\\bicw\\b', 3, 60),
+      ecw:           read('extracellular water', 2, 40),
+      ecwRatio:      read('ecw ratio', 0.3, 0.5),
+      phaseAngle:    read('phase angle', 2, 12),
+      score:         read('inbody score', 20, 100),
+      smi:           read('skeletal muscle index|\\bsmi\\b', 3, 15),
+      ffm:           read('fat free mass|\\bffm\\b', 5, 120),
+      slm:           read('soft lean mass|\\bslm\\b', 5, 120),
+      boneMineral:   read('bone mineral content', 0.5, 8),
+      bodyCellMass:  read('body cell mass', 5, 90),
+      obesityDegree: read('obesity degree', 40, 250),
+      height:        read('\\bheight\\b', 90, 230),
+    };
+
+    // The date the test was taken, not the day somebody got round to scanning it. Without
+    // this a sheet from July lands on the chart as today and the progression is wrong.
+    const d=t.match(/\b(20\d{2})[.\-\/](\d{1,2})[.\-\/](\d{1,2})\b/);
+    if(d){
+      const y=+d[1], mo=+d[2], da=+d[3];
+      const chk=new Date(y, mo-1, da);
+      if(chk.getFullYear()===y && chk.getMonth()===mo-1 && chk.getDate()===da)
+        raw.testDate=y+'-'+String(mo).padStart(2,'0')+'-'+String(da).padStart(2,'0');
+    }
+
+    const clean={};
     Object.keys(raw).forEach(k=>{ if(raw[k]!=null) clean[k]=raw[k]; });
     return clean;
   }

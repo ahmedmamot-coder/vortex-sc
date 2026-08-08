@@ -948,6 +948,88 @@ describe("expired session", () => {
   });
 });
 
+/* ------------------------------------------------------------ InBody sheets
+   Read from a real InBody 580 result the club sent in — a CamScanner photograph,
+   so the text below carries the damage OCR actually does: spaces inside numbers,
+   O for 0, labels running together. A misread here puts a wrong body-fat figure on
+   a child's record looking exactly as authoritative as a correct one. */
+describe("InBody sheet", () => {
+  const parse = bind("_extractInbodyFields", {});
+
+  // The club's own sheet: InBody 580, 14 July 2026, 15-year-old boy, 167cm.
+  const sheet = `
+    InBody [InBody580]
+    ID 7189****5  Height 167cm  Age 15  Gender Male  Test Date / Time 2026.07.14 08:42
+    Body Composition Analysis
+    Total Body Water (L) 36. 3 (30.9~37.7)  Soft Lean Mass 46. 7  Fat Free Mass 49. 5  Weight 55. 8
+    Protein (kg) 9. 7 (8.3~10.1)
+    Minerals (kg) 3. 50 (2.86~3.50)
+    Body Fat Mass (kg) 6. 3 (6.6~13.2)
+    Muscle-Fat Analysis
+    Weight (kg) 55 70 85 100 115 130 145 160 175 190 205 % 55. 8
+    SMM Skeletal Muscle Mass (kg) 70 80 90 100 110 120 130 140 150 160 170 % 27. 4
+    Body Fat Mass (kg) 40 60 80 100 160 220 280 340 400 460 520 % 6. 3
+    Obesity Analysis
+    BMI Body Mass Index (kg/m2) 10.2 13.2 16.2 19.8 22.8 25.2 27.2 29.2 31.2 33.2 35.2 2O. O
+    PBF Percent Body Fat (%) 0.0 5.0 10.0 15.0 20.0 25.0 30.0 35.0 40.0 45.0 50.0 11. 4
+    ECW Ratio-Phase Angle  ECW Ratio 0. 379  Phase Angle 5. 7
+    InBody Score 83 /100 Points
+    Visceral Fat Area VFA(cm2) 25. 5
+    Weight Control  Target Weight 55. 8 kg  Weight Control 0. 0 kg  Fat Control 0. 0 kg  Muscle Control 0. 0 kg
+    Research Parameters
+    Intracellular Water 22. 5 L (19.2~23.4)
+    Extracellular Water 13. 8 L (11.7~14.3)
+    Basal Metabolic Rate 1438 kcal (1292~1490)
+    Waist-Hip Ratio 0. 78 (0.80~0.90)
+    Obesity Degree 102 % (90~110)
+    Bone Mineral Content 2. 85 kg (2.36~2.88)
+    Body Cell Mass 32. 2 kg (27.5~33.6)
+    SMI 7. 1 kg/m2
+  `;
+  const out = parse(sheet);
+
+  it("reads the weight", () => eq(out.weight, 55.8));
+  it("a space inside the number does not cost 800 grams", () =>
+    eq(out.weight, 55.8, "OCR writes '55. 8' — matching only '55' is silently wrong"));
+  it("reads skeletal muscle mass", () => eq(out.smm, 27.4));
+  it("reads percent body fat", () => eq(out.pbf, 11.4));
+  it("reads body fat mass", () => eq(out.bodyFatMass, 6.3));
+  it("reads BMI even when OCR wrote it as 2O.O", () => eq(out.bmi, 20));
+  it("reads basal metabolic rate", () => eq(out.bmr, 1438));
+  it("reads visceral fat area", () => eq(out.visceralFat, 25.5));
+  it("reads total body water", () => eq(out.tbw, 36.3));
+  it("reads protein", () => eq(out.protein, 9.7));
+  it("reads minerals", () => eq(out.minerals, 3.5));
+  it("reads the InBody score", () => eq(out.score, 83));
+  it("reads the phase angle", () => eq(out.phaseAngle, 5.7));
+  it("reads the ECW ratio", () => eq(out.ecwRatio, 0.379));
+  it("reads intracellular water", () => eq(out.icw, 22.5));
+  it("reads extracellular water", () => eq(out.ecw, 13.8));
+  it("reads the waist-hip ratio", () => eq(out.whr, 0.78));
+  it("reads bone mineral content", () => eq(out.boneMineral, 2.85));
+  it("reads body cell mass", () => eq(out.bodyCellMass, 32.2));
+  it("reads obesity degree", () => eq(out.obesityDegree, 102));
+  it("reads SMI", () => eq(out.smi, 7.1));
+  it("reads fat free mass", () => eq(out.ffm, 49.5));
+  it("reads height", () => eq(out.height, 167));
+
+  it("takes the swimmer's weight, not the target beside it", () =>
+    eq(out.weight !== 0, true, "Weight Control reads 0.0 kg on this sheet"));
+  it("dates the record from the test, not the day it was scanned", () =>
+    eq(out.testDate, "2026-07-14", "a July test must not land on the chart as today"));
+
+  it("an unreadable photo yields nothing rather than a guess", () => {
+    const junk = parse("~~~ blurry ~~~ 3 4 5 ~~~");
+    eq(junk.weight, undefined);
+    eq(junk.pbf, undefined);
+  });
+  it("a value outside anything a person could be is rejected", () => {
+    const silly = parse("Weight (kg) 4231.9  PBF 980");
+    eq(silly.weight, undefined);
+    eq(silly.pbf, undefined);
+  });
+});
+
 /* --------------------------------------------------- editing from the profile
    A manager fixing a swimmer's record must not lose the rest of it, and must not
    lose the swimmer either — an edit that moves them to another squad while you are
