@@ -7169,7 +7169,7 @@ class Component extends DCLogic {
     // the shared notifications blob every month for no extra information.
     try{ this._pushSend({swimmerIds:made.map(iv=>iv.swId)}, 'Fees for '+this._periodLabel(p),
       'Your invoice is ready in the app under Fees.', '/'); }catch(e){}
-    try{ this.notify('staff', 'credit-card', 'Invoices issued',
+    try{ this.notify('coach', 'credit-card', 'Invoices issued',
       made.length+' invoice'+(made.length===1?'':'s')+' for '+this._periodLabel(p)+' · '+
       (this.brandConfig.currency||'QAR')+' '+made.reduce((s,iv)=>s+iv.total,0).toLocaleString()); }catch(e){}
   }
@@ -7202,7 +7202,7 @@ class Component extends DCLogic {
     const hit=this._famResolve(iv.swId); const name=hit?hit.sw.name:'A swimmer';
     const cur=this.brandConfig.currency||'QAR';
     const body=name+' — '+cur+' '+iv.total.toLocaleString()+' for '+this._periodLabel(iv.period)+(ref?(' · ref '+ref):'');
-    try{ this.notify('staff', 'credit-card', 'Payment reported by a family', body); }catch(e){}
+    try{ this.notify('coach', 'credit-card', 'Payment reported by a family', body); }catch(e){}
     try{ this._pushSend({role:'staff'}, 'Payment reported', body, '/'); }catch(e){}
     this.setState({billRefDrafts:{...(this.state.billRefDrafts||{}), [id]:''}, billMsg:'Sent to the club to confirm ✓'});
   }
