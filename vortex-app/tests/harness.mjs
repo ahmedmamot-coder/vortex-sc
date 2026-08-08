@@ -59,21 +59,58 @@ export function bind(name, ctx = {}, deps = []) {
   return ctx[name];
 }
 
+/**
+ * Pull a contiguous run of the page's top-level script out of proto.html: everything from
+ * `start` up to (but not including) `end`. The sync/auth layer is a plain IIFE, not class
+ * methods, so `methodSource` cannot reach it — but it is still real shipped code, and it is
+ * the part that decides whether a coach's save is kept.
+ */
+export function sourceBetween(start, end) {
+  const a = SOURCE.indexOf(start);
+  if (a === -1) throw new Error(`start marker not found: ${start}`);
+  const b = SOURCE.indexOf(end, a);
+  if (b === -1) throw new Error(`end marker not found: ${end}`);
+  return SOURCE.slice(a, b);
+}
+
+/**
+ * Run a slice of that script against stubs. Everything it reaches for — the browser
+ * globals, the network, the clock — is passed in, so a test can put the app in a state
+ * (expired token, dead refresh token, queued writes) that is impossible to sit and wait for.
+ */
+export function runInSandbox(src, globals) {
+  const names = Object.keys(globals);
+  return new Function(...names, src)(...names.map((n) => globals[n]));
+}
+
 // ---- tiny assertion runner -------------------------------------------------
 let passed = 0;
 const failures = [];
 let group = "";
+
+const pending = [];
 
 export function describe(name, fn) { group = name; fn(); }
 export function it(what, fn) {
   try { fn(); passed++; }
   catch (e) { failures.push(`${group} → ${what}\n      ${e.message}`); }
 }
+/** Same, for a case that has to wait on a promise (a token refresh, a replayed write). */
+export function itAsync(what, fn) {
+  const where = group;
+  pending.push(
+    Promise.resolve()
+      .then(fn)
+      .then(() => { passed++; })
+      .catch((e) => { failures.push(`${where} → ${what}\n      ${e.message}`); }),
+  );
+}
 export function eq(actual, expected, note = "") {
   const a = JSON.stringify(actual), b = JSON.stringify(expected);
   if (a !== b) throw new Error(`expected ${b}, got ${a}${note ? ` (${note})` : ""}`);
 }
-export function report() {
+export async function report() {
+  await Promise.all(pending);
   console.log(`\n  ${passed} passed, ${failures.length} failed`);
   for (const f of failures) console.log(`\n  ✗ ${f}`);
   if (failures.length) process.exit(1);

@@ -1,7 +1,7 @@
 // Tests for the logic that has actually caused problems for the club.
 // Every case here is a real bug that reached coaches or parents.
 
-import { bind, describe, it, eq, report, SOURCE } from "./harness.mjs";
+import { bind, describe, it, itAsync, eq, report, SOURCE, sourceBetween, runInSandbox } from "./harness.mjs";
 
 /* ---------------------------------------------------------------- attendance
    A swimmer signed off (traveling / sick / inactive) must count as absent, and a
@@ -190,4 +190,155 @@ describe("tab bar", () => {
     eq(/prefers-reduced-motion:reduce\)\{ \.vx-wave\{animation:none\}/.test(SOURCE), true));
 });
 
-report();
+/* ------------------------------------------------------------ expired session
+   A coach leaves the app open on the poolside iPad, it sleeps for an hour, and the
+   Supabase token quietly expires. iOS suspends the refresh timer, so the app carried
+   on sending the anon key — every attendance mark came back 401. The marks were queued
+   but nothing replayed them, and the reads came back empty, so the squad looked blank.
+   These drive the real sync layer out of proto.html against a stubbed network. */
+describe("expired session", () => {
+  const SYNC_SRC = sourceBetween('var SB_URL = "https://', "window.__vxCount = function");
+
+  const res = (status, body) => ({
+    ok: status >= 200 && status < 300,
+    status,
+    json: () => Promise.resolve(body),
+    text: () => Promise.resolve(JSON.stringify(body ?? "")),
+  });
+  const flush = () => new Promise((r) => setTimeout(r, 1));
+  const NOW = 1_760_000_000_000;
+
+  /** Boot the shipped sync layer with a chosen stored session, write queue and network. */
+  function boot({ auth = null, failed = [], reply }) {
+    const store = {};
+    if (auth) store.vx_auth = JSON.stringify(auth);
+    if (failed.length) store.vx_failed_writes = JSON.stringify(failed);
+
+    const requests = [];
+    const upserted = [];
+    const domListeners = {};
+    const win = {
+      __vxUpsert: (table, payload) => { upserted.push({ table, payload }); return Promise.resolve(true); },
+      __vxFlushAuthQ: () => {},
+      addEventListener: (t, f) => { (domListeners[t] ||= []).push(f); },
+      dispatchEvent: () => true,
+    };
+    const doc = {
+      visibilityState: "visible",
+      addEventListener: (t, f) => { (domListeners[t] ||= []).push(f); },
+    };
+    runInSandbox(SYNC_SRC, {
+      window: win,
+      document: doc,
+      navigator: { onLine: true },
+      localStorage: {
+        getItem: (k) => (k in store ? store[k] : null),
+        setItem: (k, v) => { store[k] = String(v); },
+        removeItem: (k) => { delete store[k]; },
+      },
+      fetch: (url, opts) => {
+        requests.push({ url: String(url), opts });
+        return Promise.resolve(reply(String(url), requests.length));
+      },
+      // Only the "run this now" timers fire; the hour-away refresh timer and the 45s
+      // sweep are recorded and ignored, so a test never waits on the clock.
+      setTimeout: (fn, ms) => (ms ? 0 : setTimeout(fn, 0)),
+      clearTimeout: () => {},
+      setInterval: () => 0,
+      CustomEvent: function (type, init) { return { type, detail: init && init.detail }; },
+      console: { warn: () => {}, log: () => {} },
+      Date: { now: () => NOW },
+    });
+    const fire = (type) => (domListeners[type] || []).forEach((f) => f({}));
+    const refreshes = () => requests.filter((r) => r.url.includes("grant_type=refresh_token")).length;
+    return { win, store, requests, upserted, fire, refreshes };
+  }
+
+  const EXPIRED = { token: "old.jwt", refresh: "r1", exp: NOW - 60_000, uid: "u1", email: "coach@vortex.qa" };
+  const LIVE = { token: "live.jwt", refresh: "r1", exp: NOW + 3_600_000, uid: "u1", email: "coach@vortex.qa" };
+  const QUEUED = [{ id: "q1", op: "upsert", table: "attendance_marks", payload: [{ sw_id: "s1", status: "present" }], status: 401, ts: NOW }];
+  const GOOD_TOKEN = res(200, { access_token: "new.jwt", refresh_token: "r2", expires_in: 3600, user: { id: "u1" } });
+
+  itAsync("a token that expired while the app slept is refreshed on boot", async () => {
+    const t = boot({ auth: EXPIRED, reply: () => GOOD_TOKEN });
+    await flush();
+    eq(t.refreshes(), 1);
+    eq(t.win.__VX_AUTH.token, "new.jwt");
+  });
+
+  itAsync("the attendance mark that failed while the token was dead is replayed", async () => {
+    const t = boot({ auth: EXPIRED, failed: QUEUED, reply: () => GOOD_TOKEN });
+    await flush();
+    eq(t.upserted.length, 1);
+    eq(t.upserted[0].table, "attendance_marks");
+  });
+
+  itAsync("the unsaved-changes banner clears once the replay lands", async () => {
+    const t = boot({ auth: EXPIRED, failed: QUEUED, reply: () => GOOD_TOKEN });
+    await flush();
+    eq(t.win.__vxFailedCount(), 0);
+  });
+
+  itAsync("coming back to the app replays what failed while it was away", async () => {
+    const t = boot({ auth: LIVE, failed: QUEUED, reply: () => GOOD_TOKEN });
+    await flush();
+    eq(t.upserted.length, 0, "a live token needs no refresh, so nothing has replayed yet");
+    t.fire("visibilitychange");
+    await flush();
+    eq(t.upserted.length, 1);
+  });
+
+  itAsync("signing in again saves the waiting changes at once", async () => {
+    const t = boot({ failed: QUEUED, reply: () => GOOD_TOKEN });
+    await flush();
+    eq(t.upserted.length, 0, "signed out: nothing can be saved yet");
+    t.win.__vxSetAuth({ access_token: "fresh.jwt", refresh_token: "r9", expires_in: 3600, user: { id: "u1" } });
+    await flush();
+    eq(t.upserted.length, 1, "must not wait for the 45s sweep — the banner promises 'automatically'");
+  });
+
+  itAsync("a dead refresh token is reported, not retried forever", async () => {
+    const t = boot({ auth: EXPIRED, failed: QUEUED, reply: () => res(400, { error: "invalid_grant" }) });
+    await flush();
+    eq(t.win.__vxAuthDead, true, "the banner needs this to say 'sign in again'");
+    eq(t.win.__VX_AUTH, null);
+    eq("vx_auth" in t.store, false, "a dead session must not survive a reload");
+    eq(t.win.__vxFailedCount(), 1, "the coach's mark is kept until it can actually be saved");
+    eq(t.upserted.length, 0);
+  });
+
+  itAsync("many stale calls at once cause one refresh, not a stampede", async () => {
+    let release;
+    const held = new Promise((r) => { release = r; });
+    const t = boot({ auth: EXPIRED, reply: () => held });
+    t.win.__vxEnsureAuth();
+    t.win.__vxEnsureAuth();
+    t.win.__vxEnsureAuth();
+    await flush();
+    eq(t.refreshes(), 1);
+    release(GOOD_TOKEN);
+    await flush();
+  });
+
+  itAsync("a read rejected as 401 is asked again with a fresh token", async () => {
+    const rows = [{ sw_id: "s1", status: "present" }];
+    const t = boot({
+      auth: LIVE,
+      reply: (url) => (url.includes("grant_type=refresh_token") ? GOOD_TOKEN
+        : t.requests.filter((r) => r.url.includes("/attendance_marks")).length === 1 ? res(401, { message: "JWT expired" })
+        : res(200, rows)),
+    });
+    const got = await t.win.__vxSelect("attendance_marks", "select=*");
+    eq(got, rows, "an expired token must not look like an empty squad");
+    eq(t.refreshes(), 1);
+  });
+
+  itAsync("a read that is still refused after refreshing gives up quietly", async () => {
+    const t = boot({ auth: LIVE, reply: (url) => (url.includes("grant_type=refresh_token") ? GOOD_TOKEN : res(401, {})) });
+    const got = await t.win.__vxSelect("attendance_marks", "select=*");
+    eq(got, null);
+    eq(t.requests.filter((r) => r.url.includes("/attendance_marks")).length, 2, "one retry, never a loop");
+  });
+});
+
+await report();

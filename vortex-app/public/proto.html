@@ -65,7 +65,7 @@ if ('serviceWorker' in navigator) {
       _lastAuthFix = Date.now();
       setTimeout(function(){
         if(!window.__vxEnsureAuth) return;
-        window.__vxEnsureAuth().then(function(ok){ if(ok) window.__vxRetryFailed(); });
+        window.__vxEnsureAuth(true).then(function(ok){ if(ok) window.__vxRetryFailed(); });
       }, 0);
     }
     try{ window.dispatchEvent(new CustomEvent("vx-write-failed", {detail:{table:table, status:status}})); }catch(e){}
@@ -127,14 +127,21 @@ if ('serviceWorker' in navigator) {
   // iOS suspends timers while the app is backgrounded, so _scheduleRefresh alone is not
   // enough — the token quietly expires and _curTok() falls back to the anon key, which the
   // signed-in-only tables reject with 401. Anything that needs a live token calls this first.
-  window.__vxEnsureAuth = function(){
+  // Pass force=true when the SERVER has just rejected the token: our own expiry clock said
+  // it was still good, so trusting it would only send the same dead token again. _doRefresh
+  // de-duplicates, so a burst of rejections still costs one refresh.
+  window.__vxEnsureAuth = function(force){
     var a=window.__VX_AUTH;
     if(!a || !a.refresh) return Promise.resolve(false);
-    if(a.token && a.exp && Date.now() < (a.exp - 60000)) return Promise.resolve(true);
+    if(!force && a.token && a.exp && Date.now() < (a.exp - 60000)) return Promise.resolve(true);
     return _doRefresh();
   };
   window.__vxAuthDead = false;
-  window.__vxSetAuth = function(session){ if(!session || !session.access_token) return; window.__vxAuthDead=false; var exp=Date.now() + ((session.expires_in? session.expires_in*1000 : 3600000)); _saveAuth({ token:session.access_token, refresh:session.refresh_token||null, exp:exp, uid:(session.user&&session.user.id)||null, email:(session.user&&session.user.email)||null }); _scheduleRefresh(); try{ window.__vxFlushAuthQ(); }catch(e){} try{ if(window.__vxRT){ Object.keys(window.__vxRT).forEach(function(k){ try{ window.__vxRT[k].setToken(); }catch(e){} }); } }catch(e){} };
+  window.__vxSetAuth = function(session){ if(!session || !session.access_token) return; window.__vxAuthDead=false; var exp=Date.now() + ((session.expires_in? session.expires_in*1000 : 3600000)); _saveAuth({ token:session.access_token, refresh:session.refresh_token||null, exp:exp, uid:(session.user&&session.user.id)||null, email:(session.user&&session.user.email)||null }); _scheduleRefresh(); try{ window.__vxFlushAuthQ(); }catch(e){} try{ if(window.__vxRT){ Object.keys(window.__vxRT).forEach(function(k){ try{ window.__vxRT[k].setToken(); }catch(e){} }); } }catch(e){}
+    // The banner tells the coach "sign in again and these will save automatically", so it
+    // has to be immediate. Without this the queue sat there until the 45s sweep came round
+    // and the banner stayed up, looking like the sign-in had not helped.
+    try{ if(_failLoad().length) window.__vxRetryFailed(); }catch(e){} };
   window.__vxClearAuth = function(){ if(_refreshTimer) clearTimeout(_refreshTimer); _saveAuth(null); };
   window.__vxAuthUid = function(){ return window.__VX_AUTH ? window.__VX_AUTH.uid : null; };
   try{ var _ra=localStorage.getItem('vx_auth'); if(_ra){ var _pa=JSON.parse(_ra); if(_pa && _pa.token){ window.__VX_AUTH=_pa; if(_pa.exp && Date.now() > (_pa.exp - 60000)) _doRefresh(); else _scheduleRefresh(); } } }catch(e){}
@@ -168,7 +175,18 @@ if ('serviceWorker' in navigator) {
   // Generic table helpers — used by the Lounge chat, where each message is its own row
   // (append-only INSERT), so posts can never overwrite each other.
   window.__vxInsert = function(table, rows){ return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":"return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(!r.ok){ if(r.status===401||r.status===403){ _vxQueue(function(){ window.__vxInsert(table, rows); }); } r.text().then(function(t){ try{console.warn("vx insert "+table+" HTTP "+r.status+": "+t);}catch(e){} _failAdd("insert", table, rows, r.status, t); }); } return r.ok; }).catch(function(e){ _failAdd("insert", table, rows, 0, "network: "+(e&&e.message)); return false; }); };
-  window.__vxSelect = function(table, qs){ return fetch(SB_URL+"/rest/v1/"+table+(qs?("?"+qs):""), { headers: dyn() }).then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; }); };
+  // A read rejected with 401 means the token expired, not that the table is empty. Returning
+  // null there is why the roster and attendance came back blank after the app had been sitting
+  // in the background: nothing retried, nothing was reported. Refresh once, then ask again.
+  window.__vxSelect = function(table, qs, _retried){
+    return fetch(SB_URL+"/rest/v1/"+table+(qs?("?"+qs):""), { headers: dyn() }).then(function(r){
+      if(r.ok) return r.json();
+      if(r.status===401 && !_retried && window.__vxEnsureAuth){
+        return window.__vxEnsureAuth(true).then(function(ok){ return ok ? window.__vxSelect(table, qs, true) : null; });
+      }
+      return null;
+    }).catch(function(){ return null; });
+  };
   // Exact row count for a table (owner Data-Check panel). Uses PostgREST's Content-Range header
   // (Prefer: count=exact) so we never download the rows themselves. Returns a number, or -1 on error.
   window.__vxCount = function(table, qs){ return fetch(SB_URL+"/rest/v1/"+table+"?select=id"+(qs?("&"+qs):""), { method:"HEAD", headers: dyn({"Prefer":"count=exact","Range-Unit":"items","Range":"0-0"}) }).then(function(r){ var cr=r.headers.get("content-range")||""; var m=cr.split("/"); var n=m.length>1?parseInt(m[1],10):NaN; return isNaN(n)?(r.ok?0:-1):n; }).catch(function(){ return -1; }); };
