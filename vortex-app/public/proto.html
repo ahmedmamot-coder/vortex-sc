@@ -5090,14 +5090,32 @@ class Component extends DCLogic {
   }
   // Load attendance from the per-row table and overlay it onto the local log (per-row is
   // authoritative, so it can't be clobbered by another device's blob).
-  async _attendFetch(dayFilter){ if(!window.__vxSelect) return;
-    // One-time: push any existing local marks up to the table so nothing from before is lost.
-    // Only once we are genuinely signed in. It sends the whole history in 500-row batches,
-    // and running it anonymously just filled the retry queue with writes that could never
-    // succeed. Left unset, it simply runs on the next fetch after sign-in.
-    if(!this._attendMigrated && window.__VX_AUTH && window.__VX_AUTH.token){ this._attendMigrated=true; try{ this._attendMigrate(); }catch(e){} }
+  // Signing in used to pull the club's entire attendance history — every swimmer, every day,
+  // ever — before the register could be shown. On mobile data that is the slowest thing the
+  // app does. The recent window is what every screen actually reads, so it is fetched first
+  // and the rest follows in the background. Merging is additive, so the short fetch never
+  // drops the older days already held on the device.
+  _attendFetchStaged(){
+    const since=this.shiftDate(this.todayISO(), -120);
+    Promise.resolve(this._attendFetch(null, since)).then(()=>{
+      // The full history matters for the Year view and season percentages, just not in the
+      // second somebody signs in. One pending catch-up at a time — this runs on every shared
+      // re-pull too, and stacking a full-table read per pull is how you make it slow again.
+      if(!this._attendFullTimer){
+        this._attendFullTimer=setTimeout(()=>{ this._attendFullTimer=null; try{ this._attendFetch(); }catch(e){} }, 4000);
+      }
+      // Same for the one-time backfill of marks made before this table existed: it uploads
+      // the whole history in 500-row batches, which has no business being on the sign-in path.
+      if(!this._attendMigrated && window.__VX_AUTH && window.__VX_AUTH.token){
+        this._attendMigrated=true;
+        setTimeout(()=>{ try{ this._attendMigrate(); }catch(e){} }, 8000);
+      }
+    });
+  }
+  async _attendFetch(dayFilter, sinceISO){ if(!window.__vxSelect) return;
     // A day filter (used by the live poll) fetches just that date — small & fast.
-    const qs='select=squad_id,day,sw_id,status&limit=100000'+(dayFilter?('&day=eq.'+encodeURIComponent(dayFilter)):'');
+    const qs='select=squad_id,day,sw_id,status&limit=100000'+(dayFilter?('&day=eq.'+encodeURIComponent(dayFilter)):'')
+      +((!dayFilter && sinceISO)?('&day=gte.'+encodeURIComponent(sinceISO)):'');
     const rows=await window.__vxSelect('attendance_marks', qs); if(rows==null) return;
     const log=JSON.parse(JSON.stringify(this.attendLog||{}));
     rows.forEach(r=>{ if(!r.squad_id||!r.day||!r.sw_id) return; (log[r.squad_id]=log[r.squad_id]||{}); (log[r.squad_id][r.day]=log[r.squad_id][r.day]||{}); log[r.squad_id][r.day][r.sw_id]=r.status; });
@@ -7370,14 +7388,35 @@ class Component extends DCLogic {
   // After login: if the boot pull loaded no shared data (which only happens once anonymous reads
   // are blocked by row-level security), reload once so boot re-runs carrying the user's JWT and
   // loads everything. While policies are open, boot already has data, so this never fires.
-  _postLoginRefresh(){ try{ if(window.__vxBootEmpty && !this._authReloaded){ this._authReloaded=true; setTimeout(function(){ try{ location.reload(); }catch(e){} }, 400); } }catch(e){} }
+  // This used to reload the whole page 400ms after signing in, whenever the anonymous boot
+  // had come back empty — which, with row-level security on, is every single time. On mobile
+  // data that meant re-downloading the app and re-running every boot request, and it threw
+  // away the fetches _refetchAll had started a moment earlier. That was almost all of the
+  // wait between tapping Sign in and the app appearing.
+  //
+  // _refetchAll already re-pulls the shared club data with the new token; all that was
+  // missing was re-reading it into the running app, which _hydrateShared does in place.
+  async _postLoginRefresh(){
+    try{ await this._repullOnce(); }catch(e){}
+    try{ this._hydrateShared(); }catch(e){}
+  }
+  // _refetchAll and _postLoginRefresh are always called together, and both want the shared
+  // club blob. Share the one request instead of asking for it twice on every sign-in.
+  _repullOnce(){
+    if(!this._repullP){
+      this._repullP = Promise.resolve(window.__vxRepull ? window.__vxRepull() : false)
+        .catch(()=>false).then((r)=>{ this._repullP=null; return r; });
+    }
+    return this._repullP;
+  }
   // Re-pull everything now that we hold a real token. Essential once the RLS lockdown is on:
   // the per-row tables (plans, docs, health, messages…) are read at boot as ANON and come back
   // empty; this re-fetches them with the signed-in user's JWT so their data appears.
   _refetchAll(){
-    try{ if(window.__vxRepull) window.__vxRepull(); }catch(e){}
-    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_wearFetch','_wearStatusFetch','_hrSetsFetch','_wellnessFetch','_attendFetch','_planCustomFetch','_familyFetch']
+    try{ this._repullOnce(); }catch(e){}
+    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_wearFetch','_wearStatusFetch','_hrSetsFetch','_wellnessFetch','_planCustomFetch','_familyFetch']
       .forEach((f)=>{ try{ if(typeof this[f]==='function') this[f](); }catch(e){} });
+    try{ this._attendFetchStaged(); }catch(e){}
   }
   // Throttled "something changed on the server → refresh the whole app". Driven by realtime
   // (instant) and a slow fallback poll. Re-pulls the shared blob + all per-row tables.
@@ -7977,7 +8016,7 @@ class Component extends DCLogic {
     this._wearStatusFetch();
     this._hrSetsFetch();
     this._wellnessFetch();
-    this._attendFetch();
+    this._attendFetchStaged();
     this._planCustomFetch();
     // Also pull family accounts on open. This is what re-uploads ("self-heals") a
     // registration that never reached the table, so the admin can see that parent.
@@ -8038,7 +8077,7 @@ class Component extends DCLogic {
     this.family=g('vx_family', this.family);
     this.meetsCal=g('vx_meets_cal', this.meetsCal);
     this.savedPlans=g('vx_saved_plans', this.savedPlans);
-    this.attendLog=g('vx_attend_log', this.attendLog); try{ this._attendFetch(); }catch(e){}
+    this.attendLog=g('vx_attend_log', this.attendLog); try{ this._attendFetchStaged(); }catch(e){}
     this.swimmerGoals=g('vx_swimmer_goals', this.swimmerGoals);
     this.squadGoals=g('vx_squad_goals', this.squadGoals);
     this.swimmerMeta=this._sanitizeMeta(g('vx_sw_meta', this.swimmerMeta));
@@ -9417,8 +9456,12 @@ class Component extends DCLogic {
         this._authPost('/token?grant_type=password', {email:acct.email, password:(pEl?pEl.value:'')}).then(res=>{
           if(res && res.ok && res.j && res.j.access_token){
             if(window.__vxSetAuth){ try{ window.__vxSetAuth(res.j); }catch(e){} }
+            // Show the app first. The coach is signed in the moment the token lands; making
+            // them watch "Checking…" while a dozen background fetches finish is time spent
+            // for nothing, and the screens fill in as each one arrives anyway.
+            doLogin(acct);
             try{ this._refetchAll(); this._postLoginRefresh(); }catch(e){}
-            return doLogin(acct);
+            return;
           }
           const msg=(res && res.j && (res.j.error_description||res.j.msg||res.j.message))||'';
           this.setState({loginErr: /credential|password|grant/i.test(msg)

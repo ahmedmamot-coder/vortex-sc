@@ -37,8 +37,11 @@ export function methodSource(name) {
   if (depth !== 0) throw new Error(`could not brace-match ${name}()`);
   const sig = SOURCE.slice(m.index, open).trim().replace(/^async\s+/, "");
   const args = sig.slice(sig.indexOf("(") + 1, sig.lastIndexOf(")"));
-  return { args, body: SOURCE.slice(open + 1, i) };
+  return { args, body: SOURCE.slice(open + 1, i), isAsync: /^\s*async\s/.test(m[0]) };
 }
+
+// An async method's body contains `await`, which plain Function() refuses to compile.
+const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 
 /**
  * Build a callable from real app source, bound to `ctx` as `this`.
@@ -47,8 +50,9 @@ export function methodSource(name) {
 export function bind(name, ctx = {}, deps = []) {
   for (const d of [...deps, name]) {
     if (typeof ctx[d] === "function") continue;
-    const { args, body } = methodSource(d);
-    ctx[d] = new Function(...args.split(",").map((s) => s.trim()).filter(Boolean), body);
+    const { args, body, isAsync } = methodSource(d);
+    const Make = isAsync ? AsyncFunction : Function;
+    ctx[d] = new Make(...args.split(",").map((s) => s.trim()).filter(Boolean), body);
   }
   const out = {};
   for (const k of Object.keys(ctx)) {
@@ -95,15 +99,22 @@ export function it(what, fn) {
   try { fn(); passed++; }
   catch (e) { failures.push(`${group} → ${what}\n      ${e.message}`); }
 }
-/** Same, for a case that has to wait on a promise (a token refresh, a replayed write). */
+/**
+ * Same, for a case that has to wait on a promise (a token refresh, a replayed write).
+ * These run one after another, never interleaved: they drive real app code that reaches for
+ * globals like window and localStorage, and two of them in flight at once would read each
+ * other's stubs and fail for a reason that has nothing to do with the app.
+ */
+let chain = Promise.resolve();
 export function itAsync(what, fn) {
   const where = group;
-  pending.push(
+  chain = chain.then(() =>
     Promise.resolve()
       .then(fn)
       .then(() => { passed++; })
       .catch((e) => { failures.push(`${where} → ${what}\n      ${e.message}`); }),
   );
+  pending.push(chain);
 }
 export function eq(actual, expected, note = "") {
   const a = JSON.stringify(actual), b = JSON.stringify(expected);
