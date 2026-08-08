@@ -3014,7 +3014,7 @@ if ('serviceWorker' in navigator) {
                           <button onclick="{{ onFitCalNext }}" style="width:28px;height:28px;border-radius:8px;border:1px solid #E5E9F0;background:#fff;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="chevron-right" style="width:15px;height:15px"></i></button>
                         </div>
                         <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:5px">
-                          <span style="text-align:center;font-size:9.5px;font-weight:700;color:#9AA2B4">M</span><span style="text-align:center;font-size:9.5px;font-weight:700;color:#9AA2B4">T</span><span style="text-align:center;font-size:9.5px;font-weight:700;color:#9AA2B4">W</span><span style="text-align:center;font-size:9.5px;font-weight:700;color:#9AA2B4">T</span><span style="text-align:center;font-size:9.5px;font-weight:700;color:#9AA2B4">F</span><span style="text-align:center;font-size:9.5px;font-weight:700;color:#9AA2B4">S</span><span style="text-align:center;font-size:9.5px;font-weight:700;color:#9AA2B4">S</span>
+                          <sc-for list="{{ fitCalWeekdayLabels }}" as="fw" hint-placeholder-count="7"><span style="text-align:center;font-size:9.5px;font-weight:700;color:#9AA2B4">{{ fw }}</span></sc-for>
                         </div>
                         <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">
                           <sc-for list="{{ fitCalCells }}" as="d" hint-placeholder-count="35">
@@ -7497,10 +7497,22 @@ class Component extends DCLogic {
       try{ this.setState({plans:state}); }catch(e){} }
   }
   // ---- Season / periodization planner (per squad, own season_plans table) ----
-  _mondayISO(d){ d=d?new Date(d+'T00:00:00'):new Date(); const day=(d.getDay()+6)%7; d.setDate(d.getDate()-day); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  // ---- The club week ------------------------------------------------------------------
+  // The training week runs Saturday → Friday. Every calendar, every weekly total and the
+  // season planner read it from here, so the week is stated once instead of being re-derived
+  // as Monday-first in half a dozen separate places.
+  _weekStartDow(){ return 6; }                                        // JS getDay(): 0 Sun … 6 Sat
+  _dowIndex(d){ return (d.getDay() + 7 - this._weekStartDow()) % 7; }  // Sat=0 … Fri=6
+  _weekdayLabels(){ return ['Sa','Su','M','T','W','T','F']; }
+  // The Saturday on or before the given date (today when none), as YYYY-MM-DD.
+  _weekStartISO(d){
+    d = d ? new Date(d+'T00:00:00') : new Date();
+    d.setDate(d.getDate() - this._dowIndex(d));
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  }
   _fmtDMY(iso, withYear){ if(!iso) return ''; const d=new Date(iso+'T00:00:00'); if(isNaN(d)) return ''; return d.toLocaleDateString('en-GB', withYear?{day:'numeric',month:'short',year:'numeric'}:{day:'numeric',month:'short'}); }
   _addDaysISO(iso, n){ const d=new Date(iso+'T00:00:00'); d.setDate(d.getDate()+n); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
-  makeDefaultSeason(){ return { name:'2025 / 2026 Season', start:this._mondayISO(), phases:[
+  makeDefaultSeason(){ return { name:'2025 / 2026 Season', start:this._weekStartISO(), phases:[
     {id:this._uid('ph'), name:'Preparation', weeks:4, load:'medium'},
     {id:this._uid('ph'), name:'Base Build', weeks:6, load:'high'},
     {id:this._uid('ph'), name:'Competition', weeks:5, load:'peak'},
@@ -7512,14 +7524,14 @@ class Component extends DCLogic {
   async _seasonFetch(){ if(!window.__vxSelect) return; const rows=await window.__vxSelect('season_plans','select=id,season,ts,updated_at'); if(!rows||!Array.isArray(rows)) return; const all={...(this.seasonPlans||{})}; const edited=this._editedSeasons||{}; let changed=false; rows.forEach(r=>{ if(!r||!r.id||r.season==null) return; if(edited[r.id]) return; if(JSON.stringify(all[r.id])!==JSON.stringify(r.season)){ all[r.id]=r.season; changed=true; } }); if(changed){ this.seasonPlans=all; try{ (window.__vxsetlocal||localStorage.setItem.bind(localStorage))('vx_season', JSON.stringify(all)); }catch(e){} this.setState({}); } }
   setSeasonField(squadId, field, val){ this.mutateSeason(squadId, s=>{ s[field]=val; }); }
   // Pick a season year: sets the name and the start (first Monday on/after 1 Sep of that year).
-  seasonChoose(squadId, startY){ const sep=this._mondayISO(startY+'-09-01'); this.mutateSeason(squadId, s=>{ s.name=startY+' / '+(startY+1)+' Season'; s.start=sep; }); }
+  seasonChoose(squadId, startY){ const sep=this._weekStartISO(startY+'-09-01'); this.mutateSeason(squadId, s=>{ s.name=startY+' / '+(startY+1)+' Season'; s.start=sep; }); }
   // Jump from a season week straight to the Plans builder, pre-set to that week's start date.
   seasonAddSessionForWeek(startISO){ this.setState({tool:null, view:'squad', tab:'plans', planSessDate:startISO, planCalDay:startISO, seasonOpenWeek:null}); }
   seasonAddPhase(squadId){ this.mutateSeason(squadId, s=>{ s.phases.push({id:this._uid('ph'), name:'New phase', weeks:2, load:'medium'}); }); }
   seasonRemovePhase(squadId, pid){ this.mutateSeason(squadId, s=>{ s.phases=s.phases.filter(p=>p.id!==pid); if(!s.phases.length) s.phases=this.makeDefaultSeason().phases; }); }
   seasonPhaseField(squadId, pid, field, val){ this.mutateSeason(squadId, s=>{ const p=s.phases.find(x=>x.id===pid); if(p) p[field]=val; }); }
   seasonSetLoad(squadId, pid, ld){ this.mutateSeason(squadId, s=>{ const p=s.phases.find(x=>x.id===pid); if(p){ p.load=ld; p.loadLabel=''; } }); }
-  setSeasonEnd(squadId, endISO){ if(!endISO) return; this.mutateSeason(squadId, s=>{ const start=new Date((s.start||this._mondayISO())+'T00:00:00'); const end=new Date(endISO+'T00:00:00'); if(isNaN(end)||end<=start) return; const totalDays=Math.round((end-start)/86400000); const wantWeeks=Math.max(s.phases.length, Math.ceil((totalDays+1)/7)); const cur=s.phases.reduce((a,p)=>a+Math.max(1,parseInt(p.weeks,10)||1),0); const diff=wantWeeks-cur; if(diff!==0){ const last=s.phases[s.phases.length-1]; last.weeks=Math.max(1,(parseInt(last.weeks,10)||1)+diff); } }); }
+  setSeasonEnd(squadId, endISO){ if(!endISO) return; this.mutateSeason(squadId, s=>{ const start=new Date((s.start||this._weekStartISO())+'T00:00:00'); const end=new Date(endISO+'T00:00:00'); if(isNaN(end)||end<=start) return; const totalDays=Math.round((end-start)/86400000); const wantWeeks=Math.max(s.phases.length, Math.ceil((totalDays+1)/7)); const cur=s.phases.reduce((a,p)=>a+Math.max(1,parseInt(p.weeks,10)||1),0); const diff=wantWeeks-cur; if(diff!==0){ const last=s.phases[s.phases.length-1]; last.weeks=Math.max(1,(parseInt(last.weeks,10)||1)+diff); } }); }
   seasonPhaseWeeks(squadId, pid, delta){ this.mutateSeason(squadId, s=>{ const p=s.phases.find(x=>x.id===pid); if(p) p.weeks=Math.max(1, Math.min(30,(parseInt(p.weeks,10)||1)+delta)); }); }
   seasonMovePhase(squadId, pid, dir){ this.mutateSeason(squadId, s=>{ const i=s.phases.findIndex(x=>x.id===pid); if(i<0) return; const j=i+dir; if(j<0||j>=s.phases.length) return; const t=s.phases[i]; s.phases[i]=s.phases[j]; s.phases[j]=t; }); }
   seasonResetPhases(squadId){ if(!window.confirm('Reset phases to the default template?')) return; this.mutateSeason(squadId, s=>{ s.phases=this.makeDefaultSeason().phases; }); }
@@ -8257,9 +8269,29 @@ class Component extends DCLogic {
     const adminStats=[{value:String(this.allSwimmersFlat().length), label:'Swimmers'},{value:String(this.squads.length), label:'Squads'},{value:String(this.allMeets().length), label:'Meets'}];
     const maxCount=Math.max(...this.squads.map(s=>s.count));
     const squadBars=this.squads.map(s=>({count:s.count, h:Math.round(18+ (s.count/maxCount)*84), accent:s.accent, short:s.short}));
-    const attendRing={pct:'87%', dash:(0.87*326.7).toFixed(1)+' 326.7'};
-    const loadValsAdmin=[38,42,31,46,40,52,22]; const daysAdmin=['M','T','W','T','F','S','S']; const maxLoadAdmin=Math.max(...loadValsAdmin);
-    const loadBarsAdmin=loadValsAdmin.map((v,i)=>({h:Math.round(14+(v/maxLoadAdmin)*70), fill: i===5?'#067EEA':'#BBD4F5', label:daysAdmin[i]}));
+    // Both of these were invented: a hardcoded 87% ring and a fixed seven-number bar chart
+    // that never changed whatever the club did. They are measured now — from the register
+    // that coaches actually mark, and the sessions actually saved this week.
+    const attendRing=(()=>{
+      let seen=0, inPool=0; const _t=this.todayISO();
+      for(let k=0;k<14;k++){ const dISO=this.shiftDate(_t,-k);
+        this.squads.forEach(sq=>(this.roster[sq.id]||[]).forEach((sw,ix)=>{
+          const st=this.getAttendStatus(sq.id, dISO, sw.id, ix);
+          if(st==='unmarked') return; seen++; if(st==='present') inPool++;
+        })); }
+      const pct = seen ? Math.round((inPool/seen)*100) : 0;
+      return {pct:pct+'%', dash:((pct/100)*326.7).toFixed(1)+' 326.7'};
+    })();
+    const _wkStart=this._weekStartISO(), _wkEnd=this.shiftDate(_wkStart, 6);
+    const _dayTotAdmin=[0,0,0,0,0,0,0];
+    this.squads.forEach(sq=>(((this.savedPlans||{})[sq.id])||[]).forEach(r=>{
+      if(!r.date || r.date<_wkStart || r.date>_wkEnd) return;
+      _dayTotAdmin[this._dowIndex(new Date(r.date+'T00:00:00'))] += (r.totalM||0);
+    }));
+    const loadValsAdmin=_dayTotAdmin.map(m=>Math.round(m/100));
+    const daysAdmin=this._weekdayLabels(); const maxLoadAdmin=Math.max(1, ...loadValsAdmin);
+    const _todayCol=this._dowIndex(new Date());
+    const loadBarsAdmin=loadValsAdmin.map((v,i)=>({h:Math.round(14+(v/maxLoadAdmin)*70), fill: i===_todayCol?'#067EEA':'#BBD4F5', label:daysAdmin[i]}));
     const adminRows=[
       {id:'swimmers', icon:'users', title:'Swimmers', sub:'Roster · add / edit · squad data', divider:'#EEF1F5'},
       {id:'meets', icon:'medal', title:'Meets', sub:this.allMeets().length+' meets · Hy-Tek & PDF import', divider:'#EEF1F5'},
@@ -8442,9 +8474,9 @@ class Component extends DCLogic {
     const attendCalY = S.attendCalY!=null ? S.attendCalY : attendDateObj.getFullYear();
     const attendCalM = S.attendCalM!=null ? S.attendCalM : attendDateObj.getMonth();
     const attendMonthLabel = new Date(attendCalY, attendCalM, 1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
-    const attendWeekdayLabels=['M','T','W','T','F','S','S'];
+    const attendWeekdayLabels=this._weekdayLabels();
     const daysInMonth = new Date(attendCalY, attendCalM+1, 0).getDate();
-    const firstDow = (new Date(attendCalY, attendCalM, 1).getDay()+6)%7; // 0=Mon
+    const firstDow = this._dowIndex(new Date(attendCalY, attendCalM, 1)); // 0=Saturday
     const attendMonthCells=[];
     for(let i=0;i<firstDow;i++) attendMonthCells.push({day:'', pctLabel:'', bg:'transparent', fg:'transparent', opacity:'0', onClick:()=>{}});
     let monthPctSum=0, monthSessions=0;
@@ -8985,8 +9017,8 @@ class Component extends DCLogic {
       const sessIns=[];
       insIds.forEach(id=>(((this.savedPlans||{})[id])||[]).forEach(r=>{ if(r.date && r.date>=weekAgoIns && r.date<=todayIns) sessIns.push(r); }));
       sessionsCount = sessIns.length;
-      const dayTot=[0,0,0,0,0,0,0];   // Mon..Sun
-      sessIns.forEach(r=>{ const d=new Date(r.date+'T00:00:00'); const wd=(d.getDay()+6)%7; dayTot[wd]+=(r.totalM||0); });
+      const dayTot=[0,0,0,0,0,0,0];   // Sat..Fri
+      sessIns.forEach(r=>{ const d=new Date(r.date+'T00:00:00'); const wd=this._dowIndex(d); dayTot[wd]+=(r.totalM||0); });
       loadVals2 = dayTot.map(m=>Math.round(m/100));            // hundreds of metres
       avgKm = sessIns.length ? +((sessIns.reduce((a,x)=>a+(x.totalM||0),0)/sessIns.length)/1000).toFixed(1) : 0;
 
@@ -9013,7 +9045,7 @@ class Component extends DCLogic {
       }));
     }
     const energyZones=energyRaw.map(z=>({...z, w:z.pct+'%'}));
-    const daysIns=['M','T','W','T','F','S','S']; const maxLoad2=Math.max(1, ...loadVals2);   // never divide by zero on a week with no sessions
+    const daysIns=this._weekdayLabels(); const maxLoad2=Math.max(1, ...loadVals2);   // never divide by zero on a week with no sessions
     const loadBars=loadVals2.map((v,i)=>({h:Math.round(14+(v/maxLoad2)*70), fill: i===5?'#067EEA':'#BBD4F5', label:daysIns[i]}));
     const insightAttend={pct:attendPctNum+'%', dash:((attendPctNum/100)*276.5).toFixed(1)+' 276.5'};
     const insightStats=[{label:'Avg / swimmer', value:avgKm+' km', color:'#067EEA'},{label:'PBs this month', value:String(pbsMonth), color:'#0C7A4F'},{label:'Sessions', value:String(sessionsCount), color:'#2733D6'}];
@@ -9748,7 +9780,7 @@ class Component extends DCLogic {
       planSetGap:plan.setGap||'', onPlanSetGap:(e)=>this.setPlanMeta(S.squadId,'setGap',e.target.value),
       planTimeWindow:this._fmtClockAmPm(planClock.startSec)+' – '+this._fmtClockAmPm(planClock.endSec)+' · '+this._fmtDur(planClock.endSec-planClock.startSec),
       ...(()=>{ const sp=(this.savedPlans[S.squadId]||[]); const iso=(d)=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-        const now=new Date(); const weekIso=iso(new Date(now.getTime()-6*86400000)); const yIso=now.getFullYear()+'-01-01';
+        const now=new Date(); const weekIso=this._weekStartISO(); const yIso=now.getFullYear()+'-01-01';
         let weekM=0,seasonM=0,weekN=0,seasonN=0; sp.forEach(r=>{ if(r.date>=yIso){seasonM+=r.totalM;seasonN++;} if(r.date>=weekIso){weekM+=r.totalM;weekN++;} });
         const slotMeta=(x)=>x==='PM'?{label:'Evening',bg:'#EDE7FF',fg:'#6D28D9'}:{label:'Morning',bg:'#E3F0FF',fg:'#0C6CE0'};
         const daySel=S.planCalDay;
@@ -9760,7 +9792,7 @@ class Component extends DCLogic {
         const calObj = daySel? new Date(daySel+'T00:00:00') : (S.planSessDate? new Date(S.planSessDate+'T00:00:00') : now);
         const calY=S.planCalY!=null?S.planCalY:calObj.getFullYear(); const calM=S.planCalM!=null?S.planCalM:calObj.getMonth();
         const monthLabel=new Date(calY,calM,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
-        const dim=new Date(calY,calM+1,0).getDate(); const firstDow=(new Date(calY,calM,1).getDay()+6)%7;
+        const dim=new Date(calY,calM+1,0).getDate(); const firstDow=this._dowIndex(new Date(calY,calM,1));
         const byDay={}; sp.forEach(r=>{ if(!r.date) return; (byDay[r.date]=byDay[r.date]||{am:0,pm:0,m:0}); if(r.slot==='PM') byDay[r.date].pm++; else byDay[r.date].am++; byDay[r.date].m+=(r.totalM||0); });
         const cells=[]; for(let i=0;i<firstDow;i++) cells.push({day:'', blank:true, hasAm:false, hasPm:false, kmLabel:'', bg:'transparent', fg:'transparent', border:'transparent', onClick:()=>{}});
         for(let d=1; d<=dim; d++){ const dISO=calY+'-'+String(calM+1).padStart(2,'0')+'-'+String(d).padStart(2,'0'); const info=byDay[dISO]||{am:0,pm:0,m:0}; const sel=dISO===daySel; const isToday=dISO===this.todayISO();
@@ -9770,7 +9802,7 @@ class Component extends DCLogic {
         const daySelKm = daySel? (((byDay[daySel]&&byDay[daySel].m)||0)/1000).toFixed(1) : '0';
         return { savedPlanRows:rows, savedPlansHasAny:rows.length>0, savedPlansEmpty:rows.length===0,
           savedPlanWeekM:weekM.toLocaleString(), savedPlanWeekN:weekN, savedPlanSeasonM:seasonM.toLocaleString(), savedPlanSeasonN:seasonN,
-          planCalLabel:monthLabel, planCalCells:cells, planCalWeekdayLabels:['M','T','W','T','F','S','S'],
+          planCalLabel:monthLabel, planCalCells:cells, planCalWeekdayLabels:this._weekdayLabels(),
           onPlanCalPrev:()=>{ let m=calM-1,y=calY; if(m<0){m=11;y--;} this.setState({planCalM:m,planCalY:y}); },
           onPlanCalNext:()=>{ let m=calM+1,y=calY; if(m>11){m=0;y++;} this.setState({planCalM:m,planCalY:y}); },
           planCalDaySel:!!daySel, planCalSelLabel:selLabel, onPlanCalClearDay:()=>this.setState({planCalDay:null}),
@@ -10017,9 +10049,9 @@ class Component extends DCLogic {
         const famAttCalY = S.famAttCalY!=null ? S.famAttCalY : famAttDateObj.getFullYear();
         const famAttCalM = S.famAttCalM!=null ? S.famAttCalM : famAttDateObj.getMonth();
         const famAttMonthLabel = new Date(famAttCalY, famAttCalM, 1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
-        const famAttWeekdayLabels=['M','T','W','T','F','S','S'];
+        const famAttWeekdayLabels=this._weekdayLabels();
         const famDim = new Date(famAttCalY, famAttCalM+1, 0).getDate();
-        const famFirstDow = (new Date(famAttCalY, famAttCalM, 1).getDay()+6)%7;
+        const famFirstDow = this._dowIndex(new Date(famAttCalY, famAttCalM, 1));
         const famAttMonthCells=[];
         for(let i=0;i<famFirstDow;i++) famAttMonthCells.push({day:'', ltr:'', bg:'transparent', fg:'transparent', opacity:'0', onClick:()=>{}});
         let famPres=0, famLate=0, famAbs=0, famSess=0;
@@ -10461,7 +10493,7 @@ class Component extends DCLogic {
       seasonName:season.name, onSeasonName:(e)=>this.setSeasonField(S.squadId,'name',e.target.value),
       seasonChoices:(()=>{ const now=new Date(); const baseY=(now.getMonth()>=8)?now.getFullYear():now.getFullYear()-1; const yrs=[baseY-1,baseY,baseY+1,baseY+2];
         return yrs.map(y=>{ const label=y+'/'+(y+1); const on=(season.name||'').indexOf(String(y)+' / '+(y+1))===0; return {label, y, on, bg:on?'#fff':'rgba(255,255,255,.14)', fg:on?'#4B2D9E':'#fff', onSelect:()=>this.seasonChoose(S.squadId, y)}; }); })(),
-      seasonStart:season.start, onSeasonStart:(e)=>this.setSeasonField(S.squadId,'start', this._mondayISO(e.target.value)),
+      seasonStart:season.start, onSeasonStart:(e)=>this.setSeasonField(S.squadId,'start', this._weekStartISO(e.target.value)),
       seasonEndISO, onSeasonEnd:(e)=>this.setSeasonEnd(S.squadId, e.target.value),
       seasonStartLabel:this._fmtDMY(season.start, true), seasonEndLabel:this._fmtDMY(seasonEndISO, true),
       seasonTotalWeeks, seasonPhaseCount:season.phases.length, seasonWeeks, seasonPhaseRows, seasonTargetChips, seasonHasTargets:(season.targets||[]).length>0,
@@ -10490,7 +10522,7 @@ class Component extends DCLogic {
         const calObj = daySel? new Date(daySel+'T00:00:00') : (S.fitSessDate? new Date(S.fitSessDate+'T00:00:00') : new Date());
         const calY=S.fitCalY!=null?S.fitCalY:calObj.getFullYear(); const calM=S.fitCalM!=null?S.fitCalM:calObj.getMonth();
         const monthLabel=new Date(calY,calM,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
-        const dim=new Date(calY,calM+1,0).getDate(); const firstDow=(new Date(calY,calM,1).getDay()+6)%7;
+        const dim=new Date(calY,calM+1,0).getDate(); const firstDow=this._dowIndex(new Date(calY,calM,1));
         const byDay={}; fs.forEach(r=>{ if(!r.date) return; (byDay[r.date]=byDay[r.date]||{am:0,pm:0,ex:0}); if(r.slot==='PM') byDay[r.date].pm++; else byDay[r.date].am++; byDay[r.date].ex+=(r.totalEx||0); });
         const cells=[]; for(let i=0;i<firstDow;i++) cells.push({day:'', blank:true, hasAm:false, hasPm:false, kmLabel:'', bg:'transparent', fg:'transparent', border:'transparent', onClick:()=>{}});
         for(let d=1; d<=dim; d++){ const dISO=calY+'-'+String(calM+1).padStart(2,'0')+'-'+String(d).padStart(2,'0'); const info=byDay[dISO]||{am:0,pm:0,ex:0}; const sel=dISO===daySel; const isToday=dISO===this.todayISO();
@@ -10499,7 +10531,7 @@ class Component extends DCLogic {
         const daySessions = daySel? fs.filter(r=>r.date===daySel).slice().sort((a,b)=>(a.slot==='PM'?1:0)-(b.slot==='PM'?1:0)).map(r=>{ const sm=slotMeta(r.slot); return {id:r.id, title:r.title||'Dryland', slotLabel:sm.label+(r.time?(' · '+r.time):''), slotBg:sm.bg, slotFg:sm.fg, totalEx:(r.totalEx||0), onView:()=>this.viewFitSessionPdf(S.squadId,r.id), onEdit:()=>this.loadFitSession(S.squadId,r.id), onDelete:()=>this.deleteFitSession(S.squadId,r.id)}; }) : [];
         const daySelEx = daySel? ((byDay[daySel]&&byDay[daySel].ex)||0) : 0;
         return { fitSavedRows:rows, fitSavedEmpty:rows.length===0,
-          fitCalLabel:monthLabel, fitCalCells:cells,
+          fitCalLabel:monthLabel, fitCalCells:cells, fitCalWeekdayLabels:this._weekdayLabels(),
           onFitCalPrev:()=>{ let m=calM-1,y=calY; if(m<0){m=11;y--;} this.setState({fitCalM:m,fitCalY:y}); },
           onFitCalNext:()=>{ let m=calM+1,y=calY; if(m>11){m=0;y++;} this.setState({fitCalM:m,fitCalY:y}); },
           fitCalDaySel:!!daySel, fitCalSelLabel:selLabel, onFitCalClearDay:()=>this.setState({fitCalDay:null}),
