@@ -130,9 +130,12 @@ Whatever reads it, a photograph **fills the form in and waits to be checked**. A
 would put a wrong body-fat figure on a child's record looking exactly as authoritative as a
 correct one, so a person confirms it before it is saved. A text PDF still saves itself.
 
-The Settings screen has an "API key" field left over from an earlier design. It is stored on the
-device and used for nothing — the key for this lives on the server, which is the only safe place
-for it.
+**There is nowhere in the app to enter a key, deliberately.** Settings used to offer a box that
+kept an Anthropic key on the device; nothing ever read it, no page in this app calls Anthropic,
+and none should — a key in a browser can be read off the phone by whoever is holding it, and it
+bills the club. The box is gone, any copy an earlier build left behind is deleted on start-up,
+and Settings now shows **Check the AI reader**, which asks the server whether a key is set and
+reports its length without ever returning it.
 
 ## Bands (WHOOP & Fitbit) — switching them on
 

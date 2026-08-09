@@ -43,7 +43,8 @@ if ('serviceWorker' in navigator) {
   var SB_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFocnB3aWFrb2JnY3hmbWNveWZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4NTgyMzQsImV4cCI6MjA5OTQzNDIzNH0.NVmLPF99O9M6rj-Srp3tP-ZkuhzIea0jSN4r0asW1eI";
   var REST = SB_URL + "/rest/v1/club_state";
   var HEAD = { "apikey": SB_ANON, "Authorization": "Bearer " + SB_ANON, "Content-Type": "application/json" };
-  // Every shared data type the club edits. The only key kept per-device is vx_api_key.
+  // Every shared data type the club edits. No secret is kept per-device: the Anthropic key
+  // lives on the server, and any copy an earlier build left on a phone is deleted on start-up.
   var SYNC = ["vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_meet_events","vx_meet_cuts","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_sw_status","vx_memberships","vx_fee_plans","vx_billing","vx_race_splits","vx_bday_sent"];
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
@@ -4187,7 +4188,7 @@ if ('serviceWorker' in navigator) {
                           </sc-for>
                         </div>
                       </sc-if>
-                      <p style="margin:11px 4px 0;font-size:11px;color:#9AA2B4;line-height:1.4;display:flex;gap:6px"><i data-lucide="info" style="width:14px;height:14px;flex:none;margin-top:1px"></i><span>In production this calls Claude (Sonnet) via your Anthropic API key — set once in Settings. ~1¢ per generation.</span></p>
+                      <p style="margin:11px 4px 0;font-size:11px;color:#9AA2B4;line-height:1.4;display:flex;gap:6px"><i data-lucide="info" style="width:14px;height:14px;flex:none;margin-top:1px"></i><span>In production this calls Claude on the server, using the club's key held there. Nothing is entered on this device.</span></p>
                     </div>
                   </sc-if>
 
@@ -4641,11 +4642,10 @@ if ('serviceWorker' in navigator) {
                   <sc-if value="{{ adminSettings }}" hint-placeholder-val="{{ false }}">
                     <div style="display:flex;flex-direction:column;gap:14px">
                       <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:15px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
-                        <p style="margin:0 0 4px;font-size:13px;font-weight:700;color:#0C1116">Anthropic API key</p>
-                        <p style="margin:0 0 10px;font-size:11.5px;color:#7A8296;line-height:1.4">Powers the AI Assistants (Season Architect, Dryland, Nutrition, Workout Review). Stored only on this device.</p>
-                        <input value="{{ apiKeyDraft }}" oninput="{{ onApiKeyDraft }}" placeholder="sk-ant-…" type="password" style="width:100%;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:10px 12px;font-family:var(--font-mono);font-size:12.5px;color:#0C1116;outline:none;box-sizing:border-box">
-                        <button onclick="{{ onApiKeySave }}" style="margin-top:9px;width:100%;background:var(--vx-blue);color:#fff;border:none;border-radius:10px;padding:10px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer">Save key</button>
-                        <p style="margin:8px 2px 0;font-size:11px;color:{{ settingsMsgColor }};font-weight:600;height:14px">{{ settingsMsg }}</p>
+                        <p style="margin:0 0 4px;font-size:13px;font-weight:700;color:#0C1116">AI reader</p>
+                        <p style="margin:0 0 10px;font-size:11.5px;color:#7A8296;line-height:1.4">The key lives on the server, set once in Vercel as <span style="font-family:var(--font-mono)">ANTHROPIC_API_KEY</span>. There is nothing to enter here, and nothing to enter on any phone — a key kept on a device can be read off it.</p>
+                        <button onclick="{{ onApiKeyCheck }}" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--vx-blue);color:#fff;border:none;border-radius:10px;padding:11px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer"><i data-lucide="plug-zap" style="width:16px;height:16px"></i>Check the AI reader</button>
+                        <p style="margin:8px 2px 0;font-size:11.5px;color:{{ settingsMsgColor }};font-weight:600;line-height:1.45">{{ settingsMsg }}</p>
                       </div>
                       <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:15px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
                         <p style="margin:0 0 4px;font-size:13px;font-weight:700;color:#0C1116">Database sync</p>
@@ -4661,7 +4661,7 @@ if ('serviceWorker' in navigator) {
                       </div>
                       <div style="background:#FBE4E4;border:1px solid #F3B7B7;border-radius:16px;padding:15px">
                         <p style="margin:0 0 4px;font-size:13px;font-weight:700;color:#B42318">Reset local data</p>
-                        <p style="margin:0 0 10px;font-size:11.5px;color:#8A2E2E;line-height:1.4">Clears saved plans, family logins, roster edits and the API key on this device. Cannot be undone.</p>
+                        <p style="margin:0 0 10px;font-size:11.5px;color:#8A2E2E;line-height:1.4">Clears saved plans, family logins and roster edits on this device. Cannot be undone.</p>
                         <button onclick="{{ onSettingsReset }}" style="width:100%;background:#B42318;color:#fff;border:none;border-radius:10px;padding:10px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer">Reset this device</button>
                       </div>
                     </div>
@@ -5219,7 +5219,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-09k';
+const VX_BUILD='2026-08-09l';
 const VX_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 class Component extends DCLogic {
   constructor(props){
@@ -5441,7 +5441,7 @@ class Component extends DCLogic {
       compBuildOpen:false, compName:'', compLocation:'', compDate:'', compCourse:'LCM', compEvents:[], compErr:'',
       printPreviewOpen:false,
       staffEditId:null, staffForm:{name:'',pin:''}, staffAddOpen:false, staffAddForm:{name:'',user:'',pin:'',role:'Coach',phone:'',squadId:''}, meetsCalForm:{name:'',date:'',place:''},
-      apiKey:this._loadJSON('vx_api_key',''), apiKeyDraft:'', settingsMsg:'',
+      settingsMsg:'',
       pushOn:(function(){ try{ return localStorage.getItem('vx_push_on')==='1'; }catch(e){ return false; } })(),
       pushMsg:'', annMsg:'', annAudience:'all',
       tpaceQuery:'', tpaceSwId:null, tpaceType:'1000', tpaceTime:'', tpaceErr:'',
@@ -6873,7 +6873,20 @@ class Component extends DCLogic {
     this._openPrintDoc('Results — '+sw.name, body);
   }
   meetsCalDelete(id){ this.meetsCal=this.meetsCal.filter(function(m){return m.id!==id;}); this._saveJSON('vx_meets_cal', this.meetsCal); this.setState({}); }
-  settingsSaveKey(){ this._saveJSON('vx_api_key', this.state.apiKeyDraft); this.setState({apiKey:this.state.apiKeyDraft, settingsMsg:'API key saved ✓'}); }
+  // The Settings screen used to take an Anthropic key and keep it on the device. Nothing ever
+  // read it — no page in this app calls Anthropic, and none should: a key in a browser can be
+  // read out of it by anyone holding the phone, and it bills the club. The reading happens on
+  // the server, where the key is the deployment's and never leaves. So the box is gone, and
+  // anything a coach typed into it before is cleared off the device rather than left lying there.
+  _forgetDeviceApiKey(){ try{ localStorage.removeItem('vx_api_key'); }catch(e){} }
+  async settingsCheckKey(){
+    this.setState({settingsMsg:'Checking…'});
+    let j=null;
+    try{ const r=await fetch('/api/inbody/read', {method:'GET', cache:'no-store'}); j=await r.json(); }
+    catch(e){ this.setState({settingsMsg:'Could not reach the server from this device'+((e&&e.message)?(' ('+e.message+')'):'')+'.'}); return; }
+    if(!j || !j.configured){ this.setState({settingsMsg:'No key is set on the server. In Vercel → Settings → Environment Variables, add ANTHROPIC_API_KEY for Production, then redeploy. '+(((j&&j.notes)||[])[0]||'')}); return; }
+    this.setState({settingsMsg:'The reader is set up ✓ — key of '+j.keyLength+' characters, held on the server. If a sheet still will not read, it is the credit on that account, not the key.'});
+  }
   async dbSelfTest(){
     const sb=window.__VX_SB;
     if(!sb){ this.setState({dbTestMsg:'Sync layer not loaded — hard-refresh the app and try again.', dbTestColor:'#B42318'}); return; }
@@ -9739,6 +9752,10 @@ class Component extends DCLogic {
     this._familyFetch();
     try{ this.lang=localStorage.getItem('vx_lang')||'en'; }catch(e){ this.lang='en'; }
     this._applyLang(true);
+    // An earlier build offered to keep an Anthropic key on the device. Nothing ever read it, and
+    // a key sitting in a browser can be read off the phone by whoever is holding it — so any
+    // copy left behind is deleted here rather than waiting for someone to think to clear it.
+    this._forgetDeviceApiKey();
     // Watch for rejected saves so the banner appears the moment one happens.
     this._refreshFailState();
     this._onWriteFail=()=>this._refreshFailState();
@@ -9991,7 +10008,7 @@ class Component extends DCLogic {
       {id:'brand', icon:'palette', title:'Club Configuration', sub:'Brand · zone method · locale · currency', divider:'#EEF1F5'},
       {id:'staff', icon:'user-cog', title:'Staff', sub:'Coaches · names & PINs', divider:'#EEF1F5'},
       {id:'families', icon:'users-round', title:'Family accounts', sub:(this.family||[]).length+' parent / swimmer logins · linked children', divider:'#EEF1F5'},
-      {id:'settings', icon:'settings', title:'Settings', sub:'Anthropic API key · reset data', divider:'transparent'},
+      {id:'settings', icon:'settings', title:'Settings', sub:'AI reader · database · reset data', divider:'transparent'},
     ].map(r=>({...r, onClick:()=>{ if(r.id==='families'){ try{ this._familyFetch(); }catch(e){} } this.setState({adminSection:r.id, famAdminQuery:'', famAdminAddFor:null, famAdminSwQuery:'', famAdminMsg:''}); }}));
 
     // ---- move ----
@@ -11146,7 +11163,7 @@ class Component extends DCLogic {
 
     // ---- admin section overlay ----
     const adminTitleMap={swimmers:'Swimmers',meets:'Meets',staff:'Staff',families:'Family accounts',settings:'Settings',brand:'Club Configuration'};
-    const adminSubMap={swimmers:this.allSwimmersFlat().length+' swimmers · '+this.squads.length+' squads', meets:this.allMeets().length+' meets on record', staff:'Admins, coaches & staff · names, usernames & PINs', families:'Check and fix which children each login can see', settings:'API key · reset data', brand:'Brand · zone method · locale · currency'};
+    const adminSubMap={swimmers:this.allSwimmersFlat().length+' swimmers · '+this.squads.length+' squads', meets:this.allMeets().length+' meets on record', staff:'Admins, coaches & staff · names, usernames & PINs', families:'Check and fix which children each login can see', settings:'AI reader · database · reset data', brand:'Brand · zone method · locale · currency'};
     const onCloseAdmin=()=>this.setState({adminSection:null, swEditId:null, swAddOpen:false, staffEditId:null, meetImportOpen:false, meetImportPreview:null, meetExpanded:null});
 
     // -- swimmers admin --
@@ -12480,7 +12497,7 @@ class Component extends DCLogic {
       meetsCalEmpty: this.meetsCal.length===0,
       meetsHasCal: this.meetsCal.length>0,
       meetsCalRows: this.meetsCal.map((m)=>{ const d=m.date? new Date(m.date+'T00:00:00'):null; const mon=d?['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][d.getMonth()]:''; return {id:m.id, name:m.name, place:m.place||'', day:d?String(d.getDate()):'', mon:mon, hasPdf:!!m.pdf, onViewPdf:()=>this.meetsViewPdf(m.pdf, m.name), onDelete:()=>this.meetsCalDelete(m.id)}; }),
-      apiKeyDraft: S.apiKeyDraft || S.apiKey, onApiKeyDraft:(e)=>this.setState({apiKeyDraft:e.target.value}), onApiKeySave:()=>this.settingsSaveKey(),
+      onApiKeyCheck:()=>this.settingsCheckKey(),
       settingsMsg:S.settingsMsg, settingsMsgColor, settingsMsgShow:!!S.settingsMsg, swimmerTotal, meetTotal:this.allMeets().length, onSettingsReset:()=>this.settingsReset(),
       onForceSync:()=>this.forceSyncNow(), syncMsg:S.syncMsg||'', syncMsgShow:!!S.syncMsg, syncMsgColor:S.syncMsgColor||'#0C7A4F',
       onDbTest:()=>this.dbSelfTest(), dbTestMsg:S.dbTestMsg||'', dbTestShow:!!S.dbTestMsg, dbTestColor:S.dbTestColor||'#7A8296',

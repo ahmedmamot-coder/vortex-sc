@@ -1354,6 +1354,25 @@ describe("InBody sheet", () => {
   it("a failure with no message still says something usable", () =>
     eq(/the request was dropped rather than refused/.test(SOURCE), true,
       "one blank sentence for every possible cause is what made this take all afternoon"));
+  // Settings offered a box for an Anthropic key and kept it on the device. Nothing ever read
+  // it — no page in this app calls Anthropic, and none should: a key in a browser can be read
+  // off the phone by whoever is holding it, and it bills the club. The box was an invitation to
+  // paste a live secret somewhere it did nothing but leak.
+  describe("no key is ever asked for, or kept, on a device", () => {
+    it("there is no box to type one into", () => {
+      eq(/placeholder="sk-ant-…"/.test(SOURCE), false, "a box asking for a key is an instruction to put one there");
+      eq(/onApiKeySave|settingsSaveKey/.test(SOURCE), false, "and nothing may save one");
+    });
+    it("a key an earlier build stored is deleted on start-up", () => {
+      eq(/_forgetDeviceApiKey\(\)\{ try\{ localStorage\.removeItem\('vx_api_key'\)/.test(SOURCE), true);
+      eq(/this\._forgetDeviceApiKey\(\);/.test(SOURCE), true, "waiting for someone to clear it is not a plan");
+    });
+    it("the page still never calls Anthropic itself", () =>
+      eq(/api\.anthropic\.com/.test(SOURCE), false, "that request would carry the key out of the server"));
+    it("Settings says where the key actually lives", () =>
+      eq(/ANTHROPIC_API_KEY/.test(SOURCE) && /lives on the server/.test(SOURCE), true));
+  });
+
   it("the key never leaves the server", () => {
     const route = readFileSync(new URL("../src/app/api/inbody/read/route.ts", import.meta.url), "utf8");
     eq(/process\.env\.ANTHROPIC_API_KEY/.test(route), true);
