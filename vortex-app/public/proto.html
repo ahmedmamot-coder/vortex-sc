@@ -5148,6 +5148,13 @@ if ('serviceWorker' in navigator) {
   <sc-if value="{{ isStagingEnv }}" hint-placeholder-val="{{ false }}">
     <div style="position:fixed;top:0;left:0;right:0;z-index:130;background:#B4690E;color:#fff;text-align:center;padding:3px 8px;font-size:10.5px;font-weight:800;letter-spacing:.06em">STAGING · TEST COPY — NOT THE REAL CLUB APP</div>
   </sc-if>
+  <sc-if value="{{ updateReady }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;left:0;right:0;bottom:0;z-index:121;background:#0A0F1A;color:#fff;padding:10px 14px calc(10px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:10px;box-shadow:0 -6px 20px rgba(0,0,0,.25)">
+      <i data-lucide="rocket" style="width:18px;height:18px;flex:none;color:#22D7D7"></i>
+      <span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;font-weight:800">A newer version of the app is ready</span><span style="display:block;font-size:11px;color:rgba(255,255,255,.7);margin-top:1px">This device is still on {{ updateHave }}. The live one is {{ updateLatest }}.</span></span>
+      <button onclick="{{ onUpdateNow }}" style="flex:none;background:#22D7D7;color:#04262A;border:none;border-radius:9px;padding:7px 13px;font-family:inherit;font-weight:800;font-size:11.5px;cursor:pointer">Update</button>
+    </div>
+  </sc-if>
   <sc-if value="{{ saveFailShow }}" hint-placeholder-val="{{ false }}">
     <div style="position:fixed;left:0;right:0;bottom:0;z-index:120;background:#7F1D1D;color:#fff;padding:10px 14px calc(10px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:10px;box-shadow:0 -6px 20px rgba(0,0,0,.25)">
       <i data-lucide="cloud-off" style="width:18px;height:18px;flex:none"></i>
@@ -5233,7 +5240,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-09m';
+const VX_BUILD='2026-08-09n';
 const VX_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 class Component extends DCLogic {
   constructor(props){
@@ -5443,6 +5450,7 @@ class Component extends DCLogic {
       adminSection:null, famAdminQuery:'', famAdminAddFor:null, famAdminSwQuery:'', famAdminMsg:'', famAdminProblems:false,
       attDayISO:null, attDayStatus:'all', attDayOpenSquad:null,
       saveFailCount:0, saveFailLast:null, saveFailHidden:false, authDead:false,
+      updateReady:false, updateLatest:'',
       pwNew:'', pwNew2:'', pwMsg:'', pwOk:true, profileMsg:'', profileOk:true,
       staffPwDrafts:{}, staffPwMsg:'', staffPwOk:true,
       swQuery:'', swSquadFilter:'all', swDobFilter:false, swEditId:null, swAddOpen:false, swForm:{name:'',age:'',dob:'',gender:'Boys',squadId:'',pbs:[]},
@@ -6893,6 +6901,26 @@ class Component extends DCLogic {
   // read out of it by anyone holding the phone, and it bills the club. The reading happens on
   // the server, where the key is the deployment's and never leaves. So the box is gone, and
   // anything a coach typed into it before is cleared off the device rather than left lying there.
+  async _checkForUpdate(){
+    // Once every few minutes at most; resuming an app should not mean a request every time.
+    const now=Date.now(); if(this._lastUpdChk && now-this._lastUpdChk < 240000) return;
+    this._lastUpdChk=now;
+    try{
+      const r=await fetch('/api/version', {cache:'no-store'});
+      const j=await r.json();
+      // An empty build is "cannot tell" — no news, rather than a reload we cannot justify.
+      if(j && j.build && j.build!==VX_BUILD) this.setState({updateReady:true, updateLatest:j.build});
+    }catch(e){}
+  }
+  async _applyUpdate(){
+    // The service worker keeps a copy of the shell for offline use, and on a home-screen app
+    // that copy is what comes back on a plain reload. Clear it first or Update does nothing,
+    // which is the most annoying possible button.
+    try{ if(navigator.serviceWorker){ const regs=await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(rg=>rg.unregister())); } }catch(e){}
+    try{ if(window.caches){ const keys=await caches.keys(); await Promise.all(keys.map(k=>caches.delete(k))); } }catch(e){}
+    try{ location.replace(location.pathname+'?v='+Date.now()); }catch(e){ location.reload(); }
+  }
   _forgetDeviceApiKey(){ try{ localStorage.removeItem('vx_api_key'); }catch(e){} }
   async settingsCheckKey(){
     this.setState({settingsMsg:'Checking…'});
@@ -9771,6 +9799,14 @@ class Component extends DCLogic {
     // a key sitting in a browser can be read off the phone by whoever is holding it — so any
     // copy left behind is deleted here rather than waiting for someone to think to clear it.
     this._forgetDeviceApiKey();
+    // Installed to the home screen, this app suspends and resumes without ever reloading, so a
+    // coach can be working in a build from hours ago with nothing to say so — which is how a
+    // screen that had already been replaced kept being reported as broken. Ask on start-up and
+    // whenever the app is brought back to the front, and offer the reload rather than forcing
+    // it: a coach mid-register does not want the page pulled out from under them.
+    this._checkForUpdate();
+    this._onVisible=()=>{ if(!document.hidden) this._checkForUpdate(); };
+    try{ document.addEventListener('visibilitychange', this._onVisible); }catch(e){}
     // Watch for rejected saves so the banner appears the moment one happens.
     this._refreshFailState();
     this._onWriteFail=()=>this._refreshFailState();
@@ -12360,6 +12396,8 @@ class Component extends DCLogic {
       isStagingEnv: (()=>{ try{ const h=location.hostname; return !(h==='vortexswimmingclub.com' || h==='www.vortexswimmingclub.com' || h==='localhost' || h==='127.0.0.1'); }catch(e){ return false; } })(),
       // Shown when something is waiting to save OR when the database session has gone — the
       // second one has to appear before the coach marks a register that cannot be saved.
+      updateReady: !!S.updateReady, updateLatest: S.updateLatest||'', updateHave: VX_BUILD,
+      onUpdateNow: ()=>this._applyUpdate(),
       saveFailShow: (S.saveFailCount>0 || S.authDead) && !S.saveFailHidden,
       saveFailTitle: S.authDead
         ? (S.saveFailCount>0

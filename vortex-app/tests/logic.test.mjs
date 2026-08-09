@@ -263,6 +263,52 @@ describe("shipped source", () => {
       "dropping the markers must be the last resort, not the first move");
   });
 
+  // Installed to the home screen, this app suspends and resumes without ever reloading. A coach
+  // spent an afternoon reporting screens as broken that had already been replaced, and a build
+  // stamp only helps if something is looking at it.
+  describe("a device running an old build is told so", () => {
+    const newCtx = () => {
+      const ctx = { state: {}, setState(s) { Object.assign(ctx.state, s); } };
+      return ctx;
+    };
+    const check = async (serverBuild, ctx) => {
+      const restore = [globalThis.fetch, globalThis.VX_BUILD, globalThis.document];
+      globalThis.VX_BUILD = "2026-08-09m";
+      globalThis.document = { hidden: false, addEventListener() {} };
+      globalThis.fetch = async () => ({ json: async () => ({ build: serverBuild }) });
+      try { await bind("_checkForUpdate", ctx, [])(); }
+      finally { [globalThis.fetch, globalThis.VX_BUILD, globalThis.document] = restore; }
+      return ctx.state;
+    };
+    itAsync("a newer build on the server raises the prompt", async () => {
+      const st = await check("2026-08-09n", newCtx());
+      eq(st.updateReady, true);
+      eq(st.updateLatest, "2026-08-09n", "naming both builds is what makes it believable");
+    });
+    itAsync("the same build says nothing", async () =>
+      eq(!!(await check("2026-08-09m", newCtx())).updateReady, false));
+    itAsync("a server that cannot say is treated as no news", async () =>
+      eq(!!(await check("", newCtx())).updateReady, false, "a reload we cannot justify is worse than none"));
+    itAsync("resuming the app does not mean a request every time", async () => {
+      const ctx = newCtx();
+      await check("2026-08-09n", ctx);
+      ctx.state.updateReady = false;
+      await check("2026-08-09n", ctx);
+      eq(!!ctx.state.updateReady, false, "the second check inside the window must not run");
+    });
+  });
+  it("updating clears the offline copy, or the button does nothing", () => {
+    const fn = sourceBetween("async _applyUpdate(){", "_forgetDeviceApiKey(){");
+    eq(/getRegistrations\(\)/.test(fn) && /unregister\(\)/.test(fn), true,
+      "the service worker serves the shell it kept, so a plain reload returns the same old app");
+    eq(/caches\.delete/.test(fn), true);
+  });
+  it("the build the app reports comes from the file that goes stale", () => {
+    const v = readFileSync(new URL("../src/app/api/version/route.ts", import.meta.url), "utf8");
+    eq(/proto\.html/.test(v) && /VX_BUILD='\(\[\^'\]\+\)'/.test(v), true,
+      "a second copy of the stamp could disagree with the app it is meant to describe");
+  });
+
   it("the service worker never caches a failed response", () => {
     const sw = readFileSync(new URL("../public/sw.js", import.meta.url), "utf8");
     const puts = [...sw.matchAll(/caches\.open\((APP_SHELL|STATIC)\)/g)].length;
