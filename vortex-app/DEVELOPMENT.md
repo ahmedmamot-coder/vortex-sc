@@ -18,58 +18,22 @@ The safe way to change the app without risking the live site at vortexswimmingcl
 
 Rule of thumb: **schema/RLS/security changes → always test on a preview + staging DB first.**
 
-## Two-step sign-in (MFA) — currently OFF
+## Two-step sign-in (MFA) — removed
 
-**`VX_REQUIRE_MFA` is `false` in proto.html.** Nobody is asked for a code. Turned off the evening
-it shipped, at the club's request, after enrolment proved fiddlier on a phone than it is worth
-imposing on 300 families in one go.
+Built and then removed the same evening, at the club's request. The code is gone: no gate, no
+enrolment screen, no admin reset, no `/api/staff/mfa-reset`. Nobody is asked for a code and
+nothing consults a factor, so any TOTP factor left on an account in Supabase is simply never
+looked at. Remove them from Supabase → Authentication → Users if you want them gone entirely.
 
-It is off by a switch rather than by deletion: enrolment, verification, the admin reset and the
-single gate every sign-in path runs through are all still there and still tested. Set the switch
-to `true` to require it again. Anyone already enrolled is simply not asked; their factor sits
-harmlessly in Supabase until it is used or removed.
+**What went wrong was not the cryptography — it was where the enrolment sat.** It happened at the
+door, so somebody who got stuck could not get in to fix it, and the escape hatch needed a
+service-role key that was never set. The manager locked himself out of his own admin account
+inside ten minutes.
 
-Before turning it back on, the two things that made it painful the first time are worth fixing
-first: enrol from inside the app while already signed in (rather than at the door, where a person
-who gets stuck cannot get in to fix it), and set `SUPABASE_SERVICE_ROLE_KEY` so the reset button
-works.
-
-The rest of this section describes it as designed, for when it is switched on again.
-
-**Required of every account — staff and families.** Both already sign in through Supabase Auth,
-so this is Supabase's own TOTP rather than anything invented here: the phone holds the secret and
-generates the six digits, and the server stores nothing that would let it impersonate anybody.
-Any authenticator works (Google Authenticator, 1Password, Authy).
-
-**Switch it on first:** Supabase → Authentication → Multi-Factor → enable TOTP. Until then the
-app says so by name instead of failing obscurely.
-
-**Required does not mean locked out.** Somebody who has not set it up signs in with their
-password and is walked through enrolling there and then — QR code, or the key typed by hand.
-Locking 300 families out of their children's results on the morning this ships would be a worse
-failure than the one it guards against.
-
-Nothing opens until the second factor clears. The code screen is fixed over the whole app, the
-family portal opens through a single function whether or not a code was needed, and cancelling
-signs the session out rather than leaving a token that passed only the password step.
-
-### When somebody loses their phone
-
-They will. A TOTP secret lives only on that phone, so without a way back in every family is one
-broken screen away from losing access for good.
-
-**In the app:** Admin → Staff has a **2-step** button on each coach's row, and Admin → Families a
-**Reset two-step sign-in** button on each parent's. Both ask before doing anything, and report
-the server's own words rather than a generic success — "that account had no two-step sign-in set
-up" and "removed" are different answers and the difference matters.
-
-Underneath, `POST /api/staff/mfa-reset` with `{ email }`, called with an **admin's own** token, removes that
-account's factors so they enrol again next time. It is deliberately not self-service: *"I've lost
-my phone, let me in"* is exactly what an attacker says, so someone who already has full access
-has to do it, having recognised the person asking. Needs `SUPABASE_SERVICE_ROLE_KEY`.
-
-**If both managers lose their phones at once**, the way back is Supabase → Authentication →
-Users → the account → remove its factor. Worth knowing before it happens.
+If this is ever wanted again, the order that would work: enrol from **inside** the app while
+already signed in, set `SUPABASE_SERVICE_ROLE_KEY` so the reset works, prove the reset on two
+accounts, and only then make it required — staff first, families much later if at all. Requiring
+it of 300 families on day one was the wrong call and it was mine to get right.
 
 ## Signing in with Google or Apple
 

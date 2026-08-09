@@ -1672,150 +1672,13 @@ describe("InBody sheet", () => {
     itAsync("with no sync layer it claims only what it knows", async () =>
       eq(await run(undefined), "Saved on this device ✓"));
   });
-  // Every account here reaches children's data, so a password alone is one leaked note away
-  // from all of it. Requiring a second factor is only safe if two things hold: nothing opens
-  // before it is cleared, and somebody who loses their phone can still get back in.
-  describe("two-step sign-in", () => {
-    // The requirement is off in the app right now, so these set the switch to prove the gate
-    // still behaves when it is turned back on. The last test below is the one that checks it is
-    // actually off — that assertion is the record of the decision, not an accident.
-    const gate = async (ctx) => {
-      const was = globalThis.VX_REQUIRE_MFA;
-      globalThis.VX_REQUIRE_MFA = true;
-      try { return await bind("_mfaGate", ctx, [])("tok"); }
-      finally { globalThis.VX_REQUIRE_MFA = was; }
-    };
-    it("the requirement is currently switched OFF, deliberately", () => {
-      eq(/const VX_REQUIRE_MFA=false;/.test(SOURCE), true,
-        "turned off at Ahmed's request; the machinery is kept so it can be turned back on");
-      eq(/if\(!VX_REQUIRE_MFA\) return \{step:'ok'\};/.test(SOURCE), true,
-        "one switch, read by the one place that decides — not three sign-in paths edited separately");
-    });
-    itAsync("an account already enrolled is asked for its code", async () => {
-      const ctx = { _mfaState: async () => ({ enrolled: true, verified: [{ id: "f1" }], aal: "aal1" }) };
-      const out = await gate(ctx);
-      eq(out.step, "code");
-      eq(out.factorId, "f1");
-    });
-    itAsync("a session that already cleared it is let straight through", async () => {
-      const out = await gate({ _mfaState: async () => ({ enrolled: true, verified: [{ id: "f1" }], aal: "aal2" }) });
-      eq(out.step, "ok");
-    });
-    itAsync("somebody who has never set it up is enrolled, not turned away", async () => {
-      const ctx = {
-        _mfaState: async () => ({ enrolled: false, verified: [], aal: "aal1" }),
-        _mfaEnroll: async () => ({ factorId: "f2", qr: "<svg/>", secret: "ABC" }),
-      };
-      const out = await gate(ctx);
-      eq(out.step, "enroll", "locking 300 families out on the morning this ships is the worse failure");
-      eq(out.secret, "ABC");
-    });
-    itAsync("a factor that was started but never confirmed does not count as enrolled", async () => {
-      // status 'unverified' means a QR was generated and never scanned. Treating that as done
-      // would leave the account with no second factor and no prompt to finish setting one up.
-      const state = bind("_mfaState", {
-        _sbAuthUrl: () => "https://x", _sbAnon: () => "anon", _jwtAal: () => "aal1",
-      }, []);
-      const restore = globalThis.fetch;
-      globalThis.fetch = async () => ({ ok: true, json: async () => ({ factors: [
-        { id: "f1", factor_type: "totp", status: "unverified" }] }) });
-      try {
-        const st = await state("tok");
-        eq(st.enrolled, false);
-        eq(st.verified.length, 0);
-      } finally { globalThis.fetch = restore; }
-    });
-
-    // The screen title was "enroll, or else a code box", so a gate that failed to read the
-    // account rendered as a request for a code — and the reason went to the login screen behind
-    // the full-screen panel, where nobody could see it. Ahmed sat in front of a box no code
-    // could ever satisfy and went off removing a factor that was never the problem.
-    it("a step that is neither enrolling nor a code does not say 'Enter your code'", () => {
-      const title = sourceBetween("mfaTitle: (S.mfa", "mfaLead:");
-      eq(/step==='code'\) \? 'Enter your code'/.test(title), true, "the title must be chosen by name");
-      eq(/'Set up two-step sign-in'\s*:\s*'Enter your code'/.test(title), false, "'enroll or else' is the bug");
-    });
-    it("a gate that errors never opens the code panel", () => {
-      // Three ways in — password as a family, password as staff, and back from Google — and all
-      // three have to agree, because the one that does not is the one somebody gets stuck on.
-      const paths = [
-        sourceBetween("const gate=await this._mfaGate(res.j.access_token);", "this.famContinueAfterMfa"),
-        sourceBetween("this._mfaGate(res.j.access_token).then(gate=>{", "this.setState({loginErr:'',"),
-        sourceBetween("const gate=await this._mfaGate(token);", "await this._oauthFinish("),
-      ];
-      for (const p of paths) {
-        eq(/gate\.step==='error'/.test(p), true, "an error must be handled before the panel is opened");
-        eq(/mfa:null/.test(p), true, "and must leave the panel closed");
-      }
-    });
-    it("a failed read says which wall it hit", () => {
-      const fn = sourceBetween("async _mfaState(token){", "// Read the assurance level");
-      eq(/HTTP '\+r\.status/.test(fn), true,
-        "one sentence for an expired token, MFA switched off and a dropped network is how this went wrong");
-    });
-    it("the code screen covers the app rather than sitting inside it", () => {
-      const panel = sourceBetween('<sc-if value="{{ mfaShow }}"', "</sc-if>");
-      eq(/position:fixed;inset:0/.test(panel), true, "a half-authenticated session must not see the app behind it");
-      eq(/z-index:200/.test(panel), true);
-    });
-    it("cancelling signs out rather than leaving a half-authenticated session", () => {
-      const fn = sourceBetween("mfaCancel(){", "_doLoginAfterMfa(acct){");
-      eq(/__vxSetAuth\(null\)/.test(fn), true,
-        "the password step already produced a token — walking away must not leave it usable");
-    });
-    it("the family portal opens by one path, whether or not a code was needed", () => {
-      // Two ways in is how a step gets missed on one of them.
-      eq((SOURCE.match(/famContinueAfterMfa\(/g) || []).length >= 3, true);
-      eq(/familyUser:rec, familyActiveIdx:0, screen:'app'/.test(sourceBetween("async famContinueAfterMfa(", "// Forgot password")), true);
-    });
-    // A QR that will not draw showed as a blank white slab with the key underneath as an
-    // afterthought, which tells somebody nothing about what to do next.
-    describe("the QR code", () => {
-      const src = bind("_mfaQrSrc", {}, []);
-      it("a plain svg is carried as a data URI", () =>
-        eq(/^data:image\/svg\+xml;utf8,%3Csvg/.test(src('<svg viewBox="0 0 9 9"></svg>')), true));
-      it("an XML prolog in front of it is not a reason to give up", () => {
-        const out = src('<?xml version="1.0"?>\n<svg viewBox="0 0 9 9"></svg>');
-        eq(out.startsWith("data:image/svg+xml"), true, "a prolog is normal and common");
-        eq(decodeURIComponent(out).includes("<?xml"), false, "and is dropped rather than carried");
-      });
-      it("an svg with only a viewBox is given a size, or it collapses to nothing", () =>
-        eq(/width="240"/.test(decodeURIComponent(src('<svg viewBox="0 0 9 9"></svg>'))), true));
-      it("a size it already has is left alone", () =>
-        eq(/width="90"/.test(decodeURIComponent(src('<svg width="90" height="90"></svg>'))), true));
-      it("something already a data URI is passed through", () =>
-        eq(src("data:image/svg+xml;utf8,%3Csvg%3E"), "data:image/svg+xml;utf8,%3Csvg%3E"));
-      it("something that is not an svg at all yields nothing", () => {
-        eq(src("not an svg"), "");
-        eq(src(""), "");
-        eq(src(null), "");
-      });
-      it("with no QR the key becomes the instruction, not the afterthought", () => {
-        const lead = sourceBetween("mfaKeyLead:", "updateReady:");
-        eq(/Enter a setup key/.test(lead), true, "a blank white box says nothing about what to do next");
-        eq(/mfaQrShow/.test(SOURCE), true, "and the empty image is not drawn at all");
-      });
-    });
-    it("the QR is shown as an image, never injected as raw HTML", () => {
-      eq(/\{\{\{ /.test(SOURCE), false, "raw-HTML injection has no other use in this app to check it against");
-      eq(/data:image\/svg\+xml;utf8,'\+encodeURIComponent/.test(SOURCE), true);
-      const fn = sourceBetween("_mfaQrSrc(svg){", "async _mfaCall(");
-      eq(/if\(i<0\) return '';/.test(fn), true, "anything that is not an svg is shown as nothing, not as junk");
-    });
-    it("a wrong code is explained, not just refused", () => {
-      const fn = sourceBetween("_mfaWhy(res){", "// Called the moment a password is accepted");
-      eq(/changes every 30 seconds/.test(fn), true, "the commonest cause is a phone clock, and nobody guesses that");
-      eq(/Supabase → Authentication → Multi-Factor/.test(fn), true, "including it not being switched on at all");
-    });
-  });
   // Signing in with Google or Apple must be a different door into the same building, not a
   // side entrance. If it skipped the second factor it would be the strongest-looking button on
   // the screen and the weakest way in.
   describe("signing in with Google or Apple", () => {
-    const runReturn = async (hash, gateStep) => {
+    const runReturn = async (hash) => {
       const ctx = { state: {}, setState(o) { Object.assign(ctx.state, o); },
         _sbAuthUrl: () => "https://x/auth/v1", _sbAnon: () => "anon",
-        _mfaGate: async () => ({ step: gateStep, factorId: "f1" }),
         _oauthEmail: async () => "parent@example.com",
         _oauthFinish: async (t, after) => { ctx.finished = { t, after }; } };
       const restore = [globalThis.location, globalThis.history, globalThis.sessionStorage, globalThis.window];
@@ -1828,27 +1691,21 @@ describe("InBody sheet", () => {
       return ctx;
     };
 
-    itAsync("coming back from Google still has to clear the second factor", async () => {
-      const ctx = await runReturn("#access_token=abc&refresh_token=r&expires_in=3600", "code");
-      eq(!!ctx.state.mfa, true, "otherwise the Google button is a way around MFA entirely");
-      eq(ctx.finished, undefined, "and nothing opens until it is cleared");
-    });
-    itAsync("a session that has cleared it carries on into the app", async () => {
-      const ctx = await runReturn("#access_token=abc&refresh_token=r&expires_in=3600", "ok");
+    itAsync("a valid return opens the app", async () => {
+      const ctx = await runReturn("#access_token=abc&refresh_token=r&expires_in=3600");
       eq(ctx.finished.after, "family");
-      eq(!ctx.state.mfa, true);
     });
     itAsync("the token is taken out of the address bar immediately", async () => {
-      const ctx = await runReturn("#access_token=abc&refresh_token=r", "ok");
+      const ctx = await runReturn("#access_token=abc&refresh_token=r");
       eq(ctx.urlCleaned, true, "a token left in a URL gets bookmarked, screenshotted and pasted into chats");
       eq(ctx.authSet.access_token, "abc");
     });
     itAsync("a password-reset link is left alone", async () => {
-      const ctx = await runReturn("#access_token=abc&type=recovery", "ok");
+      const ctx = await runReturn("#access_token=abc&type=recovery");
       eq(ctx.authSet, undefined, "recovery has its own handler and must not be swallowed here");
     });
     itAsync("a return with no token does nothing at all", async () => {
-      const ctx = await runReturn("#hello", "ok");
+      const ctx = await runReturn("#hello");
       eq(ctx.authSet, undefined);
       eq(ctx.finished, undefined);
     });
@@ -1871,62 +1728,6 @@ describe("InBody sheet", () => {
         "the service worker serves /assets/ cache-first — a missing icon there stays missing");
       eq(/data:image\/svg\+xml;utf8,%3Csvg/.test(SOURCE), true);
     });
-  });
-
-  // The reset existed as an API call, which is no use to somebody standing at the poolside
-  // holding their own phone while a parent explains they have a new one.
-  describe("resetting somebody's two-step sign-in from the app", () => {
-    const run = async (who, confirmed, reply) => {
-      const ctx = { state: {}, setState(o) { Object.assign(ctx.state, o); } };
-      const restore = [globalThis.window, globalThis.confirm, globalThis.fetch];
-      let sent = null;
-      globalThis.window = { __VX_AUTH: { token: "admin-tok" } };
-      globalThis.confirm = () => confirmed;
-      globalThis.fetch = async (url, opt) => { sent = { url, opt }; return { ok: reply.ok, status: reply.status || 200, json: async () => reply.body || {} }; };
-      try { await bind("mfaReset", ctx, [])(who); }
-      finally { [globalThis.window, globalThis.confirm, globalThis.fetch] = restore; }
-      return { state: ctx.state, sent };
-    };
-    const PARENT = { name: "A Parent", email: "Parent@Example.com " };
-
-    itAsync("it asks before removing anything", async () => {
-      const out = await run(PARENT, false, { ok: true });
-      eq(out.sent, null, "clearing the wrong row silently drops a factor from an account that had one");
-    });
-    itAsync("the email is sent normalised, and to the reset route", async () => {
-      const out = await run(PARENT, true, { ok: true, body: { message: "Two-step sign-in removed." } });
-      eq(out.sent.url, "/api/staff/mfa-reset");
-      eq(JSON.parse(out.sent.opt.body).email, "parent@example.com");
-      eq(/Bearer admin-tok/.test(out.sent.opt.headers.Authorization), true, "the caller's own token is the authorisation");
-    });
-    itAsync("the server's own words are shown, not a generic success", async () => {
-      const out = await run(PARENT, true, { ok: true, body: { message: "That account had no two-step sign-in set up." } });
-      eq(/had no two-step sign-in set up/.test(out.state.mfaResetMsg), true);
-      eq(out.state.mfaResetOk, true);
-    });
-    itAsync("a refusal is shown as a refusal", async () => {
-      const out = await run(PARENT, true, { ok: false, status: 403, body: { error: "only an admin can reset two-step sign-in" } });
-      eq(/only an admin/.test(out.state.mfaResetMsg), true);
-      eq(out.state.mfaResetOk, false);
-    });
-    itAsync("an account with no email is refused before anything is sent", async () => {
-      const out = await run({ name: "No Email" }, true, { ok: true });
-      eq(out.sent, null);
-      eq(out.state.mfaResetOk, false);
-    });
-    it("the button is on both a staff row and a family row", () => {
-      eq(/\{\{ s\.onMfaReset \}\}/.test(SOURCE), true, "a coach loses a phone as easily as a parent");
-      eq(/\{\{ fa\.onMfaReset \}\}/.test(SOURCE), true);
-      eq((SOURCE.match(/onMfaReset:\(\)=>this\.mfaReset\(/g) || []).length, 2);
-    });
-  });
-
-  it("an admin can restore access to somebody who lost their phone", () => {
-    const r = readFileSync(new URL("../src/app/api/staff/mfa-reset/route.ts", import.meta.url), "utf8");
-    eq(/callerIsAdmin/.test(r), true, "self-service reset is exactly what an attacker would use");
-    eq(/ADMIN_EMAILS\.includes/.test(r), true);
-    eq(/admin\/users\/\$\{userId\}\/factors\/\$\{f\.id\}/.test(r), true);
-    eq(/method: "DELETE"/.test(r), true);
   });
 
   // The plan review counted a session's volume by summing the distances alone, so 8x100 counted
