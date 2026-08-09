@@ -165,6 +165,24 @@ describe("shipped source", () => {
     eq(/no-store/.test(header), false, "no-store re-downloaded 1.2MB on every single open");
     eq(/no-cache, must-revalidate/.test(cfg), true, "deploys must still show immediately");
   });
+  // These two pages exist to answer "is it set up right, now?" — they are the instrument you
+  // reach for when something is misconfigured. A browser that serves one from its cache hands
+  // back the previous answer looking exactly like a fresh one, so you keep reading the state
+  // you were trying to change and conclude the change did nothing. Whatever they say has to be
+  // measured at the moment it is asked, and checkedAt is there so a stale copy is visible
+  // rather than merely wrong.
+  for (const [name, path] of [["inbody", "inbody/read"], ["wearable", "wearable/status"]])
+    it("the " + name + " status page cannot be served from a cache", () => {
+      const src = readFileSync(new URL("../src/app/api/" + path + "/route.ts", import.meta.url), "utf8");
+      eq(/["']cache-control["']\s*:\s*["']no-store["']/i.test(src), true,
+        "a cached status page reports the problem you already fixed");
+    });
+  it("the inbody status page says when it was measured", () => {
+    const src = readFileSync(new URL("../src/app/api/inbody/read/route.ts", import.meta.url), "utf8");
+    eq(/checkedAt:\s*new Date\(\)\.toISOString\(\)/.test(src), true,
+      "without a timestamp there is no way to tell a fresh answer from a kept one");
+  });
+
   it("iOS gets an apple-touch-icon at a size it actually is", () =>
     eq(/apple-touch-icon" sizes="192x192" href="\/assets\/icon-192\.png"/.test(SOURCE), true));
   it("the icon paths do not depend on the page's URL", () =>

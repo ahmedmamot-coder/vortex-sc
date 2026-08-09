@@ -74,12 +74,16 @@ export async function GET() {
     else if (key.length < 60) notes.push("The key looks short — a real one is about 100 characters. Check the whole thing was copied.");
   }
   // Shape only. The key itself is never returned.
+  //
+  // checkedAt is here to be looked at: if it does not change when you reload, you are reading
+  // a cached copy and nothing else on this page can be trusted either.
   return Response.json({
     configured: !!key,
     keyPrefix: key ? key.slice(0, 11) + "..." : null,
     keyLength: key ? key.length : 0,
+    checkedAt: new Date().toISOString(),
     notes: notes.length ? notes : ["ready"],
-  });
+  }, { headers: { "cache-control": "no-store" } });
 }
 
 export async function POST(request: Request) {

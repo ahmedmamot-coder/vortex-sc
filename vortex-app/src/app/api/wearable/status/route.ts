@@ -20,10 +20,10 @@ export async function GET() {
   if (!service) {
     // Without the service key the connections table cannot be read at all, so there is
     // nothing truthful to say about who is linked.
-    return Response.json({ connected: [], config: { service, whoop, fitbit }, missing });
+    return Response.json({ connected: [], config: { service, whoop, fitbit }, missing }, { headers: { "cache-control": "no-store" } });
   }
 
   const conns = await getConnections();
   const connected = conns.map((c) => ({ sw_id: c.sw_id, provider: c.provider, updated_at: c.updated_at || null }));
-  return Response.json({ connected, config: { service, whoop, fitbit }, missing });
+  return Response.json({ connected, config: { service, whoop, fitbit }, missing }, { headers: { "cache-control": "no-store" } });
 }

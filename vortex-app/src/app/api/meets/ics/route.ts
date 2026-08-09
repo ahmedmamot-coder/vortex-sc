@@ -1,5 +1,8 @@
 // Public calendar feed of club meets. Families subscribe to this URL in Google/Apple
 // Calendar and meets show up automatically:  https://vortexswimmingclub.com/api/meets/ics
+//
+// The hour of Cache-Control below is deliberate: calendar clients poll often, and an hour at
+// the CDN is the right courtesy. Fresh at the origin, cheap at the edge.
 const SB_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://qhrpwiakobgcxfmcoyfg.supabase.co";
 const SB_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFocnB3aWFrb2JnY3hmbWNveWZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4NTgyMzQsImV4cCI6MjA5OTQzNDIzNH0.NVmLPF99O9M6rj-Srp3tP-ZkuhzIea0jSN4r0asW1eI";
