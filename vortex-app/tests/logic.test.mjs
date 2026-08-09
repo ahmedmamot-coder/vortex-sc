@@ -1739,6 +1739,71 @@ describe("InBody sheet", () => {
       eq(/Supabase → Authentication → Multi-Factor/.test(fn), true, "including it not being switched on at all");
     });
   });
+  // Signing in with Google or Apple must be a different door into the same building, not a
+  // side entrance. If it skipped the second factor it would be the strongest-looking button on
+  // the screen and the weakest way in.
+  describe("signing in with Google or Apple", () => {
+    const runReturn = async (hash, gateStep) => {
+      const ctx = { state: {}, setState(o) { Object.assign(ctx.state, o); },
+        _sbAuthUrl: () => "https://x/auth/v1", _sbAnon: () => "anon",
+        _mfaGate: async () => ({ step: gateStep, factorId: "f1" }),
+        _oauthEmail: async () => "parent@example.com",
+        _oauthFinish: async (t, after) => { ctx.finished = { t, after }; } };
+      const restore = [globalThis.location, globalThis.history, globalThis.sessionStorage, globalThis.window];
+      globalThis.location = { hash, pathname: "/", search: "", origin: "https://c" };
+      globalThis.history = { replaceState() { ctx.urlCleaned = true; } };
+      globalThis.sessionStorage = { getItem: () => "family", removeItem() {}, setItem() {} };
+      globalThis.window = { __vxSetAuth: (sess) => { ctx.authSet = sess; } };
+      try { await bind("_checkOAuthHash", ctx, [])(); }
+      finally { [globalThis.location, globalThis.history, globalThis.sessionStorage, globalThis.window] = restore; }
+      return ctx;
+    };
+
+    itAsync("coming back from Google still has to clear the second factor", async () => {
+      const ctx = await runReturn("#access_token=abc&refresh_token=r&expires_in=3600", "code");
+      eq(!!ctx.state.mfa, true, "otherwise the Google button is a way around MFA entirely");
+      eq(ctx.finished, undefined, "and nothing opens until it is cleared");
+    });
+    itAsync("a session that has cleared it carries on into the app", async () => {
+      const ctx = await runReturn("#access_token=abc&refresh_token=r&expires_in=3600", "ok");
+      eq(ctx.finished.after, "family");
+      eq(!ctx.state.mfa, true);
+    });
+    itAsync("the token is taken out of the address bar immediately", async () => {
+      const ctx = await runReturn("#access_token=abc&refresh_token=r", "ok");
+      eq(ctx.urlCleaned, true, "a token left in a URL gets bookmarked, screenshotted and pasted into chats");
+      eq(ctx.authSet.access_token, "abc");
+    });
+    itAsync("a password-reset link is left alone", async () => {
+      const ctx = await runReturn("#access_token=abc&type=recovery", "ok");
+      eq(ctx.authSet, undefined, "recovery has its own handler and must not be swallowed here");
+    });
+    itAsync("a return with no token does nothing at all", async () => {
+      const ctx = await runReturn("#hello", "ok");
+      eq(ctx.authSet, undefined);
+      eq(ctx.finished, undefined);
+    });
+
+    it("a coach can only arrive as an account an admin already recorded", () => {
+      const fn = sourceBetween("async _oauthFinish(token, after){", "// Forgot password");
+      eq(/No staff account here uses /.test(fn), true,
+        "otherwise any Google account could walk into the staff side");
+      eq(/\(a\.email\|\|''\)\)\.trim\(\)\.toLowerCase\(\)===email/.test(fn), true);
+    });
+    it("the buttons are offered in Arabic too, like the rest of the family side", () => {
+      for (const k of ["continueGoogle", "continueApple", "oauthNote", "orWord"]) {
+        const m = SOURCE.match(new RegExp(k + ":\\['([^']*)','([^']*)'\\]"));
+        eq(!!m, true, k + " has no entry");
+        eq(m[2].length > 0 && m[2] !== m[1], true, k + " is not actually translated");
+      }
+    });
+    it("the Google mark is inlined, not fetched from a path that does not exist", () => {
+      eq(/assets\/google\.svg/.test(SOURCE), false,
+        "the service worker serves /assets/ cache-first — a missing icon there stays missing");
+      eq(/data:image\/svg\+xml;utf8,%3Csvg/.test(SOURCE), true);
+    });
+  });
+
   it("an admin can restore access to somebody who lost their phone", () => {
     const r = readFileSync(new URL("../src/app/api/staff/mfa-reset/route.ts", import.meta.url), "utf8");
     eq(/callerIsAdmin/.test(r), true, "self-service reset is exactly what an attacker would use");

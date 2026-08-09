@@ -777,6 +777,12 @@ if ('serviceWorker' in navigator) {
                   <sc-if value="{{ famErrShow }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:12px;color:#FF8A8D;font-weight:600">{{ famErr }}</p></sc-if>
 
                   <button onclick="{{ onFamSubmit }}" style="background:var(--vx-blue);color:#fff;border:none;border-radius:13px;padding:13px;font-family:inherit;font-weight:700;font-size:14px;cursor:pointer">{{ famSubmitLabel }}</button>
+                  <sc-if value="{{ oauthShow }}" hint-placeholder-val="{{ true }}">
+                    <div style="display:flex;align-items:center;gap:9px;margin:2px 0"><span style="flex:1;height:1px;background:rgba(255,255,255,.16)"></span><span style="font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.4)">{{ tx.orWord }}</span><span style="flex:1;height:1px;background:rgba(255,255,255,.16)"></span></div>
+                    <button onclick="{{ onGoogleSignIn }}" style="display:flex;align-items:center;justify-content:center;gap:9px;background:#fff;color:#1F1F1F;border:none;border-radius:13px;padding:12px;font-family:inherit;font-weight:700;font-size:13.5px;cursor:pointer"><img src="data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2048%2048%22%3E%3Cpath%20fill%3D%22%23EA4335%22%20d%3D%22M24%209.5c3.54%200%206.71%201.22%209.21%203.6l6.85-6.85C35.9%202.38%2030.47%200%2024%200%2014.62%200%206.51%205.38%202.56%2013.22l7.98%206.19C12.43%2013.72%2017.74%209.5%2024%209.5z%22%2F%3E%3Cpath%20fill%3D%22%234285F4%22%20d%3D%22M46.98%2024.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58%202.96-2.26%205.48-4.78%207.18l7.73%206c4.51-4.18%207.09-10.36%207.09-17.65z%22%2F%3E%3Cpath%20fill%3D%22%23FBBC05%22%20d%3D%22M10.53%2028.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92%2016.46%200%2020.12%200%2024c0%203.88.92%207.54%202.56%2010.78l7.97-6.19z%22%2F%3E%3Cpath%20fill%3D%22%2334A853%22%20d%3D%22M24%2048c6.48%200%2011.93-2.13%2015.89-5.81l-7.73-6c-2.15%201.45-4.92%202.3-8.16%202.3-6.26%200-11.57-4.22-13.47-9.91l-7.98%206.19C6.51%2042.62%2014.62%2048%2024%2048z%22%2F%3E%3C%2Fsvg%3E" alt="" style="width:17px;height:17px;flex:none">{{ tx.continueGoogle }}</button>
+                    <button onclick="{{ onAppleSignIn }}" style="display:flex;align-items:center;justify-content:center;gap:8px;background:#000;color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:13px;padding:12px;font-family:inherit;font-weight:700;font-size:13.5px;cursor:pointer"><span style="font-size:16px;line-height:1;margin-top:-2px">&#63743;</span>{{ tx.continueApple }}</button>
+                    <p style="margin:0;font-size:11px;color:rgba(255,255,255,.4);line-height:1.5">{{ tx.oauthNote }}</p>
+                  </sc-if>
                   <p style="margin:0;font-size:11px;color:rgba(255,255,255,.4);line-height:1.5">{{ tx.readOnlyNote }}</p>
                   <p style="margin:2px 0 0;font-size:11px;color:rgba(255,255,255,.4);line-height:1.6">{{ tx.consentPrefix }} <a href="/privacy" target="_blank" style="color:#7FC4FF;font-weight:600;text-decoration:none">{{ tx.privacyPolicy }}</a> {{ tx.andWord }} <a href="/consent" target="_blank" style="color:#7FC4FF;font-weight:600;text-decoration:none">{{ tx.parentalConsent }}</a>.</p>
                 </div>
@@ -5275,7 +5281,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-09s';
+const VX_BUILD='2026-08-09t';
 const VX_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 class Component extends DCLogic {
   constructor(props){
@@ -6042,6 +6048,73 @@ class Component extends DCLogic {
     this._famRecordLogin(rec);
     return this.setState({familyUser:rec, familyActiveIdx:0, screen:'app', view:'family', famErr:'', famBusy:false});
   }
+  // ---- Signing in with Google or Apple -----------------------------------------------------
+  // A parent who already has a Google or Apple account should not have to invent and remember
+  // another password for the club — a password they invent for one small app is the one most
+  // likely to be reused, written down, or forgotten and reset over and over.
+  //
+  // Supabase runs the exchange; the club never sees the Google or Apple password, and no token
+  // from either lands anywhere but this device.
+  _oauthStart(provider){
+    try{
+      // Come back to the page we are on, so the family portal reopens where they left it.
+      const back=location.origin+location.pathname;
+      const url=this._sbAuthUrl()+'/authorize?provider='+encodeURIComponent(provider)
+        +'&redirect_to='+encodeURIComponent(back);
+      // Remember which side of the app asked, because the return lands on a bare URL with no
+      // memory of whether a parent or a coach started it.
+      try{ sessionStorage.setItem('vx_oauth_after', this.state.loginStage==='family' ? 'family' : 'staff'); }catch(e){}
+      location.href=url;
+    }catch(e){ this.setState({famErr:'Could not open the sign-in page.'}); }
+  }
+  // Supabase sends the browser back to #access_token=…&refresh_token=…  Recovery links use the
+  // same shape with type=recovery, which is handled separately and must not be swallowed here.
+  async _checkOAuthHash(){
+    let h='';
+    try{ h=location.hash||''; }catch(e){ return; }
+    if(!/access_token=/.test(h) || /type=recovery/.test(h)) return;
+    const grab=(k)=>{ const m=h.match(new RegExp(k+'=([^&]+)')); return m?decodeURIComponent(m[1]):''; };
+    const token=grab('access_token'); if(!token) return;
+    const session={access_token:token, refresh_token:grab('refresh_token'), expires_in:+grab('expires_in')||3600};
+    // Take it out of the address bar before anything else: a token sitting in a URL gets
+    // bookmarked, screenshotted and pasted into chats.
+    try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){}
+    if(window.__vxSetAuth){ try{ window.__vxSetAuth(session); }catch(e){} }
+    let after='family'; try{ after=sessionStorage.getItem('vx_oauth_after')||'family'; sessionStorage.removeItem('vx_oauth_after'); }catch(e){}
+    // The same gate as a password sign-in. Coming in through Google must not be a way around
+    // the second factor — that would make the strongest-looking button the weakest way in.
+    const gate=await this._mfaGate(token);
+    if(gate.step!=='ok'){
+      this.setState({screen:'login', loginStage: after==='staff'?'pin':'family',
+        mfa:{...gate, token:token, code:'', busy:false, err:'', after:after, email:await this._oauthEmail(token)}});
+      return;
+    }
+    await this._oauthFinish(token, after);
+  }
+  async _oauthEmail(token){
+    try{
+      const r=await fetch(this._sbAuthUrl()+'/user', {headers:{'apikey':this._sbAnon(), 'Authorization':'Bearer '+token}, cache:'no-store'});
+      if(!r.ok) return '';
+      const u=await r.json(); return String((u&&u.email)||'').toLowerCase();
+    }catch(e){ return ''; }
+  }
+  async _oauthFinish(token, after){
+    const email=await this._oauthEmail(token);
+    if(!email){ this.setState({screen:'login', famErr:'That sign-in did not return an email address.'}); return; }
+    if(after==='staff'){
+      // A coach's account is matched by the email an admin recorded. Google will not invent one.
+      const acct=(this.accounts||[]).find(a=>(''+(a.email||'')).trim().toLowerCase()===email);
+      if(!acct){ this.setState({screen:'login', loginStage:'pin',
+        loginErr:'No staff account here uses '+email+'. Ask an admin to add that address to your account, or sign in with your password.'}); return; }
+      try{ this._afterMfaLogin ? this._afterMfaLogin(acct) : null; }catch(e){}
+      // The staff path's doLogin only exists inside the sign-in handler; if this is a fresh page
+      // load there is none, so drive it the same way the password path does.
+      if(!this._afterMfaLogin){ this.setState({screen:'app', pickedId:acct.id, view:'squad'}); }
+      try{ this._refetchAll(); this._postLoginRefresh(); }catch(e){}
+      return;
+    }
+    await this.famContinueAfterMfa(email, {email});
+  }
   // Forgot password: ask Supabase to email a reset link (opens the app on #type=recovery).
   async famResetPassword(){ const S=this.state; const email=(S.famEmail||'').trim().toLowerCase();
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return this.setState({famErr:'Enter the email you registered with.'});
@@ -6202,6 +6275,10 @@ class Component extends DCLogic {
       confirmWord:['Confirm','تأكيد'],
       confirmLink:['Confirm & link','تأكيد والربط'],
       cancel:['Cancel','إلغاء'],
+      orWord:['or','أو'],
+      continueGoogle:['Continue with Google','المتابعة باستخدام Google'],
+      continueApple:['Continue with Apple','المتابعة باستخدام Apple'],
+      oauthNote:['We never see your Google or Apple password. If you already have an account here with the same email, they become the same account.','لا نطّلع أبداً على كلمة مرور Google أو Apple. وإذا كان لديك حساب هنا بالبريد نفسه فسيصبحان حساباً واحداً.'],
       readOnlyNote:['Read-only access to your swimmer’s PBs, attendance, results and upcoming meets. No plans, no other squads.','اطّلاع فقط على أفضل أزمنة سبّاحك وحضوره ونتائجه وبطولاته القادمة. لا خطط تدريب ولا مجموعات أخرى.'],
       consentPrefix:['By creating an account you agree to our','بإنشاء حساب فإنك توافق على'],
       privacyPolicy:['Privacy Policy','سياسة الخصوصية'],
@@ -10056,6 +10133,7 @@ class Component extends DCLogic {
     window.addEventListener('beforeprint', this._onBeforePrint); window.addEventListener('afterprint', this._onAfterPrint);
     if(location.hash==='#print-preview') this.setState({screen:'app', pickedId:'ahmed', view:'squad', squadId:'seniora', tab:'plans', printPreviewOpen:true});
     this._checkRecoveryHash();
+    this._checkOAuthHash();
     this._tickStatusBar();
     this._statusInt=setInterval(()=>this._tickStatusBar(), 15000);
     this._onStatusEvt=()=>this._tickStatusBar();
@@ -11828,6 +11906,10 @@ class Component extends DCLogic {
       onGoFamily:()=>this.setState({loginStage:'family', famMode:'login', famErr:''}),
       onBackAccounts:()=>this.setState({loginStage:'accounts', famErr:''}),
       loginFamily: S.loginStage==='family',
+      // Shown on sign-in and registration, not on the reset-password steps where they would
+      // only be confusing.
+      oauthShow: (S.famMode==='login' || S.famMode==='register'),
+      onGoogleSignIn: ()=>this._oauthStart('google'), onAppleSignIn: ()=>this._oauthStart('apple'),
       famIsLogin: S.famMode==='login', famIsRegister: S.famMode==='register',
       famTabLoginBg: S.famMode==='login'?'var(--vx-blue)':'transparent', famTabLoginFg: S.famMode==='login'?'#fff':'rgba(255,255,255,.6)',
       famTabRegBg: S.famMode==='register'?'var(--vx-blue)':'transparent', famTabRegFg: S.famMode==='register'?'#fff':'rgba(255,255,255,.6)',

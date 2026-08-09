@@ -50,6 +50,34 @@ has to do it, having recognised the person asking. Needs `SUPABASE_SERVICE_ROLE_
 **If both managers lose their phones at once**, the way back is Supabase → Authentication →
 Users → the account → remove its factor. Worth knowing before it happens.
 
+## Signing in with Google or Apple
+
+Offered on the family sign-in and registration screens, in English and Arabic. A parent who
+already has a Google or Apple account should not have to invent another password for the club —
+a password invented for one small app is the one most likely to be reused or written down.
+
+**Enable each provider in Supabase → Authentication → Providers**, and add the site URL to the
+redirect allow-list. Until a provider is enabled its button leads to a Supabase error page; the
+buttons are shown regardless because hiding them would need a config read from the browser.
+
+| Provider | What it needs |
+|---|---|
+| Google | A Google Cloud OAuth client (free). Client ID + secret into Supabase. |
+| Apple | An **Apple Developer Program membership — about $99/year**, plus a Services ID and a signing key. There is no free path; if that is not worth it, enable Google only and drop the Apple button. |
+
+**It is a different door into the same building, not a side entrance.** The return from Google or
+Apple runs the same MFA gate as a password sign-in — if it did not, the strongest-looking button
+on the screen would be the weakest way in. The token is stripped out of the address bar before
+anything else happens, since a token left in a URL gets bookmarked, screenshotted and pasted into
+chats.
+
+**On the staff side** an account is matched by the email an admin already recorded against it. A
+Google account nobody has recorded is refused by name rather than let in as a new coach.
+
+Supabase links a social sign-in to an existing account with the same email address, so a parent
+who registered with a password and later taps *Continue with Google* keeps the same account and
+the same children.
+
 ## Who can see what (row-level security)
 
 Until Stage 4, every policy read `to authenticated using (true)`. `authenticated` means *any*
