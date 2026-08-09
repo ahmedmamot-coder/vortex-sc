@@ -1672,6 +1672,67 @@ describe("InBody sheet", () => {
     itAsync("with no sync layer it claims only what it knows", async () =>
       eq(await run(undefined), "Saved on this device ✓"));
   });
+  // Marking one family paid used to rewrite the club's entire billing history, which is the
+  // shape that lost the InBody scans twice. It is worse here: a lost scan gets retyped from a
+  // printout, a lost payment is a family told they still owe money they have already handed over.
+  describe("an invoice is a row, not a rewrite of the whole ledger", () => {
+    const run = (before, after) => {
+      const sent = [], deleted = [];
+      const ctx = {
+        billing: { invoices: before, migrated: true }, forceUpdate() {}, _saveJSON() {},
+        _invToRow: bind("_invToRow", {}, []),
+      };
+      const restore = globalThis.window;
+      globalThis.window = {
+        __vxUpsert: async (t, rows) => { sent.push([t, rows]); return true; },
+        __vxDelete: async (t, qs) => { deleted.push([t, qs]); return true; },
+      };
+      try { bind("_billingSave", ctx, ["_invToRow"])(after); }
+      finally { globalThis.window = restore; }
+      return { sent, deleted, ctx };
+    };
+    const A = { id: "i1", swId: "s1", period: "2026-07", total: 650, status: "unpaid", items: [] };
+    const B = { id: "i2", swId: "s2", period: "2026-07", total: 650, status: "unpaid", items: [] };
+
+    it("marking one paid writes that one, not the other", () => {
+      const { sent } = run([A, B], [{ ...A, status: "paid" }, B]);
+      const rows = sent.flatMap(([, r]) => r);
+      eq(rows.length, 1, "the untouched invoice must not be rewritten");
+      eq(rows[0].id, "i1");
+      eq(rows[0].status, "paid");
+    });
+    it("issuing a new one writes only the new one", () => {
+      const rows = run([A], [A, B]).sent.flatMap(([, r]) => r);
+      eq(rows.length, 1);
+      eq(rows[0].id, "i2");
+    });
+    it("nothing changed writes nothing at all", () =>
+      eq(run([A, B], [A, B]).sent.length, 0));
+    it("a deleted invoice is removed from the table, or it comes back on the next read", () => {
+      const { deleted } = run([A, B], [A]);
+      eq(deleted.length, 1);
+      eq(/id=in\.\(i2\)/.test(deleted[0][1]), true);
+    });
+    it("the money is a column, so the database can add it up", () => {
+      const rows = run([], [A]).sent.flatMap(([, r]) => r);
+      eq(rows[0].total, 650);
+      eq(rows[0].sw_id, "s1");
+      eq(Array.isArray(rows[0].items), true, "line items vary per invoice and are only read whole");
+    });
+    it("a blank date is stored as nothing, not as an empty string", () => {
+      const rows = run([], [{ ...A, issued: "", due: "2026-07-07" }]).sent.flatMap(([, r]) => r);
+      eq(rows[0].issued, null, "a date column will refuse an empty string and lose the whole write");
+      eq(rows[0].due, "2026-07-07");
+    });
+  });
+  it("a round trip through the table changes nothing about an invoice", () => {
+    const toRow = bind("_invToRow", {}, []), fromRow = bind("_invFromRow", {}, []);
+    const iv = { id: "i1", swId: "s1", sqId: "sq1", period: "2026-07", issued: "2026-07-01",
+      due: "2026-07-07", total: 650, status: "paid", items: [{ label: "Monthly", amount: 650 }],
+      paid: { date: "2026-07-03", method: "cash", ref: "", by: "" }, note: "" };
+    eq(JSON.stringify(fromRow(toRow(iv))), JSON.stringify(iv));
+  });
+
   // Moving these into their own table must not lose a scan recorded before the table existed,
   // and must not show one twice while both copies are around.
   describe("scans recorded before the table existed", () => {

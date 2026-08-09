@@ -5242,7 +5242,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-09o';
+const VX_BUILD='2026-08-09p';
 const VX_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 class Component extends DCLogic {
   constructor(props){
@@ -7937,6 +7937,9 @@ class Component extends DCLogic {
   // Status runs unpaid → sent (the family says they have paid) → paid (the club confirms it).
   // A mistake is voided rather than deleted, so the month's totals still reconcile.
   _billing(){
+    // The table, once it has answered. Until then the blob, so a device that has not run
+    // invoices.sql yet behaves exactly as it did before.
+    if(this.invoiceRows) return {invoices:this.invoiceRows, migrated:true};
     const b=(this.billing && typeof this.billing==='object') ? this.billing : {};
     if(Array.isArray(b.invoices) && b.migrated) return b;
     const out={ invoices: Array.isArray(b.invoices) ? b.invoices.slice() : [], migrated:true };
@@ -7958,7 +7961,68 @@ class Component extends DCLogic {
     this.billing=out; this._saveJSON('vx_billing', out);
     return out;
   }
-  _billingSave(invoices){ const out={invoices, migrated:true}; this.billing=out; this._saveJSON('vx_billing', out); this.forceUpdate(); }
+  // Every change to an invoice comes through here, so this is the one place that has to write
+  // rows rather than rewrite the club's whole billing history. Marking one family paid used to
+  // push the entire document back up; the newest copy was then whichever device pushed last, and
+  // a phone with no room to cache it could undo payments already recorded. A lost scan gets
+  // retyped from a printout — a lost payment is a family told they still owe money they have
+  // already handed over.
+  _billingSave(invoices){
+    const before={}; ((this.billing&&this.billing.invoices)||[]).forEach(iv=>{ if(iv&&iv.id) before[iv.id]=iv; });
+    const out={invoices, migrated:true}; this.billing=out;
+    this.invoiceRows=invoices.slice();
+    // The blob is still written so a device that has not run invoices.sql yet keeps working
+    // exactly as before. It is no longer where the truth lives.
+    this._saveJSON('vx_billing', out); this.forceUpdate();
+    if(!window.__vxUpsert) return;
+    const changed=[], seen={};
+    invoices.forEach(iv=>{ if(!iv||!iv.id) return; seen[iv.id]=true;
+      const was=before[iv.id];
+      if(!was || JSON.stringify(was)!==JSON.stringify(iv)) changed.push(this._invToRow(iv)); });
+    const gone=Object.keys(before).filter(id=>!seen[id]);
+    (async()=>{
+      try{ for(let i=0;i<changed.length;i+=200) await window.__vxUpsert('invoices', changed.slice(i,i+200)); }catch(e){}
+      // A deleted invoice must go from the table too, or the next read brings it back.
+      try{ if(gone.length && window.__vxDelete) await window.__vxDelete('invoices', 'id=in.('+gone.map(encodeURIComponent).join(',')+')'); }catch(e){}
+    })();
+  }
+  _invToRow(iv){
+    const d=(v)=>/^\d{4}-\d{2}-\d{2}$/.test(String(v||'')) ? v : null;
+    return { id:iv.id, sw_id:iv.swId||'', sq_id:iv.sqId||'', period:iv.period||'',
+      issued:d(iv.issued), due:d(iv.due), total:+iv.total||0, status:iv.status||'unpaid',
+      items:iv.items||[], paid:iv.paid||null, note:iv.note||'', updated_at:new Date().toISOString() };
+  }
+  _invFromRow(r){
+    return { id:r.id, swId:r.sw_id||'', sqId:r.sq_id||'', period:r.period||'',
+      issued:r.issued||'', due:r.due||'', total:+r.total||0, status:r.status||'unpaid',
+      items:Array.isArray(r.items)?r.items:[], paid:r.paid||null, note:r.note||'' };
+  }
+  async _invoicesFetch(){
+    if(!window.__vxSelect) return;
+    const rows=await window.__vxSelect('invoices', 'select=*&order=period.desc&limit=20000');
+    // null is a failed read, not an empty ledger. Treating those the same is how a roster once
+    // came back blank and got saved that way.
+    if(rows==null) return;
+    this.invoiceRows=rows.map(r=>this._invFromRow(r));
+    this.billing={invoices:this.invoiceRows.slice(), migrated:true};
+    try{ this._saveLocalOnly('vx_billing', this.billing); }catch(e){}
+    this.forceUpdate();
+    this._invoicesMigrateOnce();
+  }
+  // Invoices raised before the table existed are copied up once, so no month of collections is
+  // lost. The blob is left as it is: if this goes wrong it has to be repeatable.
+  async _invoicesMigrateOnce(){
+    if(this._invMigrated || !window.__vxUpsert) return; this._invMigrated=true;
+    const have={}; (this.invoiceRows||[]).forEach(iv=>{ have[iv.id]=true; });
+    let legacy=[];
+    try{ const raw=this._loadJSON('vx_billing', null); legacy=(raw&&Array.isArray(raw.invoices))?raw.invoices:[]; }catch(e){}
+    const rows=legacy.filter(iv=>iv&&iv.id&&!have[iv.id]).map(iv=>this._invToRow(iv));
+    if(!rows.length) return;
+    for(let i=0;i<rows.length;i+=200){
+      try{ await window.__vxUpsert('invoices', rows.slice(i,i+200)); }catch(e){ return; }
+    }
+    try{ await this._invoicesFetch(); }catch(e){}
+  }
   // What a swimmer owes for a month: their membership package if one is set, otherwise the
   // squad's academy fee. Owing nothing means they are skipped when invoices are issued.
   _feeFor(swId, sqId){
@@ -9086,7 +9150,7 @@ class Component extends DCLogic {
   // empty; this re-fetches them with the signed-in user's JWT so their data appears.
   _refetchAll(){
     try{ this._repullOnce(); }catch(e){}
-    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_wearFetch','_wearStatusFetch','_hrSetsFetch','_wellnessFetch','_inbodyFetch','_planCustomFetch','_familyFetch']
+    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_wearFetch','_wearStatusFetch','_hrSetsFetch','_wellnessFetch','_inbodyFetch','_invoicesFetch','_planCustomFetch','_familyFetch']
       .forEach((f)=>{ try{ if(typeof this[f]==='function') this[f](); }catch(e){} });
     try{ this._attendFetchStaged(); }catch(e){}
   }
@@ -9097,7 +9161,7 @@ class Component extends DCLogic {
     if(this._liveLast && now-this._liveLast<1500){ if(!this._liveTimer){ this._liveTimer=setTimeout(()=>{ this._liveTimer=null; this._liveRefresh(); }, 1600); } return; }
     this._liveLast=now;
     try{ if(window.__vxRepull) window.__vxRepull(); }catch(e){}
-    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_wellnessFetch','_inbodyFetch','_hrSetsFetch','_wearFetch','_planCustomFetch']
+    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_wellnessFetch','_inbodyFetch','_invoicesFetch','_hrSetsFetch','_wearFetch','_planCustomFetch']
       .forEach((f)=>{ try{ if(typeof this[f]==='function') this[f](); }catch(e){} });
   }
   // Stage B: give a signed-in staff member a real Supabase Auth session (JWT) in the background,
@@ -9790,6 +9854,7 @@ class Component extends DCLogic {
     this._hrSetsFetch();
     this._wellnessFetch();
     this._inbodyFetch();
+    this._invoicesFetch();
     this._attendFetchStaged();
     this._planCustomFetch();
     // Also pull family accounts on open. This is what re-uploads ("self-heals") a

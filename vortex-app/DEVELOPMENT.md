@@ -70,6 +70,25 @@ A write the database refuses now shows in the app as *"refused — this account 
 make that change"* and is **not** retried, so a policy that is too tight shows up as a clear
 message rather than a red banner that never clears.
 
+## Invoices live in the database, one row each
+
+**Run `supabase/invoices.sql` in the Supabase SQL editor.** Until it exists the app keeps working
+exactly as before, off the old blob — but a payment is only as safe as the whole document it sits in.
+
+Invoices lived inside `vx_billing`, one JSON document holding every invoice the club has issued,
+cached in the browser and written back whole. Marking one family paid rewrote the entire billing
+history. That is the shape that lost the InBody scans twice, and it is worse here: a lost scan is
+retyped from a printout, a lost payment is a family told they still owe money they have already
+handed over, with no printout to retype it from.
+
+`_billingSave` is the one place every change goes through, so it now diffs against what it had
+and writes **only the invoices that actually changed** — marking one paid touches one row, and a
+deleted invoice is deleted rather than left to reappear on the next read. Amounts, status and
+period are real columns so the database can total and chase them; line items and the payment
+record are jsonb, since they vary per invoice and are only ever read back whole.
+
+Invoices raised before the table existed are copied up once, automatically.
+
 ## InBody scans live in the database, one row per scan
 
 **Run `supabase/inbody_readings.sql` in the Supabase SQL editor.** Until it exists, saving a scan

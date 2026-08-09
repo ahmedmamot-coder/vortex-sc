@@ -12,6 +12,13 @@ import { dirname, join } from "node:path";
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const SOURCE = readFileSync(join(HERE, "..", "public", "proto.html"), "utf8");
 
+// The app always runs in a browser, so `window` always exists — what is optional is the sync
+// helpers hung on it, which the app checks for one at a time. Without this every method that
+// has grown a `window.__vxUpsert` check throws here for a reason that could never happen in
+// the app, and the test has to be rewritten to say something it was not about. Tests that care
+// about a helper stub that helper.
+if (typeof globalThis.window === "undefined") globalThis.window = {};
+
 /** Pull one class method's source out of proto.html by brace-matching from its signature. */
 export function methodSource(name) {
   const re = new RegExp(`^  (?:async )?${name}\\s*\\(`, "m");
