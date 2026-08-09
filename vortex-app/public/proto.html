@@ -5161,7 +5161,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-09c';
+const VX_BUILD='2026-08-09d';
 class Component extends DCLogic {
   constructor(props){
     super(props);
@@ -7141,8 +7141,13 @@ class Component extends DCLogic {
   async _readSheetOnce(dataUrl){
     // A stalled upload used to hang until the browser gave up on its own, with the screen
     // saying "Reading the sheet…" the whole time and no way to tell waiting from broken.
+    //
+    // This deadline is deliberately shorter than the time the server is allowed to run. If it
+    // were longer, the platform would kill the request first, and a killed request is dropped
+    // rather than answered — no status, no message, nothing to act on. Giving up first is what
+    // makes the difference between "it timed out" and a blank failure.
     const ctl=(typeof AbortController!=='undefined') ? new AbortController() : null;
-    const timer=setTimeout(()=>{ try{ ctl && ctl.abort(); }catch(e){} }, 75000);
+    const timer=setTimeout(()=>{ try{ ctl && ctl.abort(); }catch(e){} }, 55000);
     try{
       const r=await fetch('/api/inbody/read', {method:'POST', headers:{'Content-Type':'application/json'},
         body:JSON.stringify({image:dataUrl, mime:'image/jpeg'}), signal: ctl ? ctl.signal : undefined});
@@ -7171,9 +7176,13 @@ class Component extends DCLogic {
       // failed" from a phone on one bar and a request that ran out of time are different
       // things, and the sentence a coach reads should say which happened.
       const aborted=e && (e.name==='AbortError' || /abort/i.test(e.message||''));
+      // Some failures carry no message at all — a connection dropped without a reply is the
+      // usual one. The kind of error is then the only thing left to go on, so print that too
+      // rather than showing the same blank sentence for every possible cause.
+      const said=(e && (e.message || e.name)) ? (' (' + (e.message || e.name) + ')') : ' (no reply at all — the request was dropped rather than refused)';
       return {failed:true, retryable:true, why: aborted
         ? 'sending the sheet timed out — the signal here may be too weak'
-        : ('could not reach the reader' + ((e&&e.message) ? ' (' + e.message + ')' : ''))};
+        : ('could not reach the reader' + said)};
     }finally{ clearTimeout(timer); }
   }
   // In-browser OCR, kept as the fallback. It has to fetch a worker, a WASM core and a large

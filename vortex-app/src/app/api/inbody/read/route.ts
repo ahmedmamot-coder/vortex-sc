@@ -100,10 +100,19 @@ export async function POST(request: Request) {
   // is a mistake rather than a sheet.
   if (image.length > 6_000_000) return Response.json({ error: "image too large" }, { status: 413 });
 
+  // The call out to the reader must be given less time than this function is allowed to live.
+  //
+  // Without a deadline of its own it can hang until the platform kills the whole invocation,
+  // and a killed invocation does not get to answer — the connection is simply dropped. In the
+  // browser that surfaces as a failed request carrying no status and no message, which reads
+  // exactly like "the phone has no signal" and sends you to check the network, the key, the
+  // size of the upload: everything except the one thing that happened. Timing out here means
+  // there is always a real reply saying what went wrong.
   let r: Response;
   try {
     r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
+      signal: AbortSignal.timeout(40_000),
       headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
         model: "claude-sonnet-5",
@@ -117,8 +126,14 @@ export async function POST(request: Request) {
         }],
       }),
     });
-  } catch {
-    return Response.json({ error: "could not reach the reader" }, { status: 502 });
+  } catch (e) {
+    const timedOut = (e as Error)?.name === "TimeoutError" || (e as Error)?.name === "AbortError";
+    return Response.json({
+      error: timedOut
+        ? "the reader did not answer in time"
+        : "this deployment could not reach the reader — its own outbound connection failed",
+      said: (e as Error)?.message?.slice(0, 200) || "",
+    }, { status: 504 });
   }
 
   if (!r.ok) {

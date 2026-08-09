@@ -1150,6 +1150,34 @@ describe("InBody sheet", () => {
     eq(/new AbortController\(\)/.test(SOURCE), true);
     eq(/sending the sheet timed out/.test(SOURCE), true, "waiting and broken must not read the same");
   });
+
+  // The failure that cost an afternoon: the call out to the reader had no deadline of its own,
+  // so it could hang until the platform killed the whole invocation — and a killed invocation
+  // never answers. The browser saw a request die with no status and no message, which reads
+  // exactly like a phone with no signal, and sent us checking the network, the key and the
+  // size of the upload: everything except what actually happened.
+  it("the call out to the reader gives up before the platform kills it", () => {
+    const route = readFileSync(new URL("../src/app/api/inbody/read/route.ts", import.meta.url), "utf8");
+    const outbound = +((route.match(/AbortSignal\.timeout\((\d+)_?(\d*)\)/) || []).slice(1).join("") || 0);
+    const maxRun = +((route.match(/maxDuration\s*=\s*(\d+)/) || [])[1] || 0) * 1000;
+    eq(outbound > 0, true, "without a deadline a hang becomes a dropped connection");
+    eq(outbound < maxRun, true, "a deadline longer than the function's life never gets to fire");
+  });
+  it("a reader that never answers still produces a reply, not a dropped connection", () => {
+    const route = readFileSync(new URL("../src/app/api/inbody/read/route.ts", import.meta.url), "utf8");
+    eq(/did not answer in time/.test(route), true);
+    eq(/TimeoutError/.test(route), true, "a hang and a refused connection are different problems");
+  });
+  it("the app gives up before the server is killed, so there is something to report", () => {
+    const client = +((SOURCE.match(/ctl && ctl\.abort\(\); \}catch\(e\)\{\} \}, (\d+)\)/) || [])[1] || 0);
+    const route = readFileSync(new URL("../src/app/api/inbody/read/route.ts", import.meta.url), "utf8");
+    const maxRun = +((route.match(/maxDuration\s*=\s*(\d+)/) || [])[1] || 0) * 1000;
+    eq(client > 0 && maxRun > 0, true);
+    eq(client < maxRun, true, "wait longer than the platform does and the platform wins, silently");
+  });
+  it("a failure with no message still says something usable", () =>
+    eq(/the request was dropped rather than refused/.test(SOURCE), true,
+      "one blank sentence for every possible cause is what made this take all afternoon"));
   it("the key never leaves the server", () => {
     const route = readFileSync(new URL("../src/app/api/inbody/read/route.ts", import.meta.url), "utf8");
     eq(/process\.env\.ANTHROPIC_API_KEY/.test(route), true);
