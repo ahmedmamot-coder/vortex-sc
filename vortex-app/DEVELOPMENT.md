@@ -18,6 +18,38 @@ The safe way to change the app without risking the live site at vortexswimmingcl
 
 Rule of thumb: **schema/RLS/security changes → always test on a preview + staging DB first.**
 
+## Two-step sign-in (MFA)
+
+**Required of every account — staff and families.** Both already sign in through Supabase Auth,
+so this is Supabase's own TOTP rather than anything invented here: the phone holds the secret and
+generates the six digits, and the server stores nothing that would let it impersonate anybody.
+Any authenticator works (Google Authenticator, 1Password, Authy).
+
+**Switch it on first:** Supabase → Authentication → Multi-Factor → enable TOTP. Until then the
+app says so by name instead of failing obscurely.
+
+**Required does not mean locked out.** Somebody who has not set it up signs in with their
+password and is walked through enrolling there and then — QR code, or the key typed by hand.
+Locking 300 families out of their children's results on the morning this ships would be a worse
+failure than the one it guards against.
+
+Nothing opens until the second factor clears. The code screen is fixed over the whole app, the
+family portal opens through a single function whether or not a code was needed, and cancelling
+signs the session out rather than leaving a token that passed only the password step.
+
+### When somebody loses their phone
+
+They will. A TOTP secret lives only on that phone, so without a way back in every family is one
+broken screen away from losing access for good.
+
+`POST /api/staff/mfa-reset` with `{ email }`, called with an **admin's own** token, removes that
+account's factors so they enrol again next time. It is deliberately not self-service: *"I've lost
+my phone, let me in"* is exactly what an attacker says, so someone who already has full access
+has to do it, having recognised the person asking. Needs `SUPABASE_SERVICE_ROLE_KEY`.
+
+**If both managers lose their phones at once**, the way back is Supabase → Authentication →
+Users → the account → remove its factor. Worth knowing before it happens.
+
 ## Who can see what (row-level security)
 
 Until Stage 4, every policy read `to authenticated using (true)`. `authenticated` means *any*

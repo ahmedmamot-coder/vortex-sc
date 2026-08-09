@@ -5160,6 +5160,29 @@ if ('serviceWorker' in navigator) {
   <sc-if value="{{ isStagingEnv }}" hint-placeholder-val="{{ false }}">
     <div style="position:fixed;top:0;left:0;right:0;z-index:130;background:#B4690E;color:#fff;text-align:center;padding:3px 8px;font-size:10.5px;font-weight:800;letter-spacing:.06em">STAGING · TEST COPY — NOT THE REAL CLUB APP</div>
   </sc-if>
+  <sc-if value="{{ mfaShow }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;z-index:200;background:#0A0F1A;color:#fff;overflow:auto;display:flex;align-items:flex-start;justify-content:center;padding:calc(24px + env(safe-area-inset-top)) 16px 24px">
+      <div style="width:100%;max-width:400px">
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:6px"><i data-lucide="shield-check" style="width:20px;height:20px;color:#22D7D7"></i><h2 style="margin:0;font-size:19px;font-weight:800">{{ mfaTitle }}</h2></div>
+        <p style="margin:0 0 16px;font-size:12.5px;color:rgba(255,255,255,.65);line-height:1.55">{{ mfaLead }}</p>
+
+        <sc-if value="{{ mfaIsEnroll }}" hint-placeholder-val="{{ false }}">
+          <div style="background:#fff;border-radius:14px;padding:14px;text-align:center;margin-bottom:12px">
+            <img src="{{ mfaQr }}" alt="" style="display:block;width:100%;max-width:210px;height:auto;margin:0 auto">
+          </div>
+          <p style="margin:0 0 5px;font-size:11px;color:rgba(255,255,255,.55);line-height:1.5">Can't scan it? Type this key into the app instead:</p>
+          <p style="margin:0 0 16px;font-family:var(--font-mono);font-size:12.5px;color:#22D7D7;word-break:break-all;line-height:1.5">{{ mfaSecret }}</p>
+        </sc-if>
+
+        <span style="display:block;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.5);margin-bottom:5px">6-digit code</span>
+        <input value="{{ mfaCode }}" oninput="{{ onMfaCode }}" type="tel" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:11px;padding:13px;font-family:var(--font-mono);font-size:22px;letter-spacing:.28em;text-align:center;color:#fff;outline:none">
+        <sc-if value="{{ mfaErrShow }}" hint-placeholder-val="{{ false }}"><p style="margin:9px 2px 0;font-size:12px;font-weight:600;color:#FF9A8B;line-height:1.45">{{ mfaErr }}</p></sc-if>
+        <button onclick="{{ onMfaSubmit }}" style="width:100%;margin-top:13px;background:#22D7D7;color:#04262A;border:none;border-radius:12px;padding:14px;font-family:inherit;font-weight:800;font-size:14.5px;cursor:pointer">{{ mfaBtnLabel }}</button>
+        <button onclick="{{ onMfaCancel }}" style="width:100%;margin-top:9px;background:none;color:rgba(255,255,255,.6);border:none;padding:9px;font-family:inherit;font-weight:600;font-size:12px;cursor:pointer;text-decoration:underline">Cancel and sign out</button>
+        <p style="margin:16px 2px 0;font-size:11px;color:rgba(255,255,255,.42);line-height:1.55">{{ mfaFoot }}</p>
+      </div>
+    </div>
+  </sc-if>
   <sc-if value="{{ updateReady }}" hint-placeholder-val="{{ false }}">
     <div style="position:fixed;left:0;right:0;bottom:0;z-index:121;background:#0A0F1A;color:#fff;padding:10px 14px calc(10px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:10px;box-shadow:0 -6px 20px rgba(0,0,0,.25)">
       <i data-lucide="rocket" style="width:18px;height:18px;flex:none;color:#22D7D7"></i>
@@ -5252,7 +5275,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-09r';
+const VX_BUILD='2026-08-09s';
 const VX_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 class Component extends DCLogic {
   constructor(props){
@@ -5515,6 +5538,7 @@ class Component extends DCLogic {
       ],
       aiKind:'season', aiPrompt:'', aiOut:null, aiLoading:false, aiErr:'',
       reviewAiOut:null, reviewAiLoading:false, reviewAiErr:'',
+      mfa:null,
       swAiOut:null, swAiLoading:false, swAiErr:'',
       loungeEditId:null, loungeEditText:'', commentDrafts:{}, reqOpen:false, reqTo:'', reqText:'', reqMsg:'',
       fmBody:'', fmSet:'', fmVideo:'',
@@ -5883,6 +5907,141 @@ class Component extends DCLogic {
   _sbAuthUrl(){ const sb=window.__VX_SB||{}; return (sb.url||'')+'/auth/v1'; }
   _sbAnon(){ const sb=window.__VX_SB||{}; return sb.anon||''; }
   async _authPost(path, body){ try{ const r=await fetch(this._sbAuthUrl()+path, {method:'POST', headers:{'apikey':this._sbAnon(),'Authorization':'Bearer '+this._sbAnon(),'Content-Type':'application/json'}, body:JSON.stringify(body||{})}); let j={}; try{ j=await r.json(); }catch(e){} return {ok:r.ok, status:r.status, j}; }catch(e){ return {ok:false, status:0, j:{}, netfail:true}; } }
+  // ---- Multi-factor sign-in ----------------------------------------------------------------
+  // Every account here reaches children's data: a coach sees all 304, a parent sees their own.
+  // A password alone is one leaked note or one reused password away from all of it, so a second
+  // factor is required of everyone.
+  //
+  // This is Supabase's own TOTP, not something invented here. The phone holds the secret and
+  // generates the six digits; the server stores nothing that lets it impersonate anybody. Any
+  // authenticator works — Google Authenticator, 1Password, Authy.
+  //
+  // "Required" deliberately does not mean "turned away". Somebody who has not set it up yet
+  // signs in with their password and is then walked through enrolling, there and then. Locking
+  // 300 families out of their children's results on the morning this ships would be a worse
+  // failure than the one it is guarding against.
+  _mfaQrSrc(svg){
+    const t=String(svg||'').trim();
+    if(!t) return '';
+    if(/^data:/i.test(t)) return t;              // already a data URI
+    if(!/^<svg[\s>]/i.test(t)) return '';        // not what we expected — show nothing, not junk
+    return 'data:image/svg+xml;utf8,'+encodeURIComponent(t);
+  }
+  async _mfaCall(path, body, token){
+    try{
+      const r=await fetch(this._sbAuthUrl()+path, {method:'POST',
+        headers:{'apikey':this._sbAnon(), 'Authorization':'Bearer '+token, 'Content-Type':'application/json'},
+        body:JSON.stringify(body||{})});
+      let j={}; try{ j=await r.json(); }catch(e){}
+      return {ok:r.ok, status:r.status, j};
+    }catch(e){ return {ok:false, status:0, j:{}, netfail:true}; }
+  }
+  // What the token says about the account: which factors exist, and whether this session has
+  // already cleared the second one. aal2 means it has.
+  async _mfaState(token){
+    try{
+      const r=await fetch(this._sbAuthUrl()+'/user', {headers:{'apikey':this._sbAnon(), 'Authorization':'Bearer '+token}, cache:'no-store'});
+      if(!r.ok) return {error:'could not read the account'};
+      const u=await r.json();
+      const factors=(u.factors||[]).filter(f=>f && f.factor_type==='totp');
+      const verified=factors.filter(f=>f.status==='verified');
+      return {factors, verified, enrolled:verified.length>0, aal:this._jwtAal(token)};
+    }catch(e){ return {error:'could not reach the sign-in service'}; }
+  }
+  // Read the assurance level out of the token rather than asking again. A JWT is three
+  // base64url parts; only the middle one is needed and nothing here trusts it for authority —
+  // the database enforces that. This is just to know which screen to show.
+  _jwtAal(token){
+    try{
+      const part=String(token||'').split('.')[1]; if(!part) return '';
+      const json=atob(part.replace(/-/g,'+').replace(/_/g,'/')+'==='.slice((part.length+3)%4));
+      return (JSON.parse(json)||{}).aal||'';
+    }catch(e){ return ''; }
+  }
+  // Start enrolment: Supabase generates the secret and hands back a QR code to scan.
+  async _mfaEnroll(token){
+    const res=await this._mfaCall('/factors', {factor_type:'totp', friendly_name:'Vortex '+new Date().toISOString().slice(0,10)}, token);
+    if(!res.ok) return {error:this._mfaWhy(res)};
+    const t=(res.j&&res.j.totp)||{};
+    return {factorId:res.j.id, qr:t.qr_code||'', secret:t.secret||'', uri:t.uri||''};
+  }
+  // Check the six digits. On success Supabase returns a fresh token at aal2, and that token —
+  // not the one from the password step — is the session from here on.
+  async _mfaVerify(factorId, code, token){
+    const ch=await this._mfaCall('/factors/'+encodeURIComponent(factorId)+'/challenge', {}, token);
+    if(!ch.ok) return {error:this._mfaWhy(ch)};
+    const vr=await this._mfaCall('/factors/'+encodeURIComponent(factorId)+'/verify',
+      {challenge_id:ch.j.id, code:String(code||'').replace(/\D/g,'')}, token);
+    if(!vr.ok) return {error:this._mfaWhy(vr)};
+    if(vr.j && vr.j.access_token && window.__vxSetAuth){ try{ window.__vxSetAuth(vr.j); }catch(e){} }
+    return {ok:true, session:vr.j};
+  }
+  _mfaWhy(res){
+    const m=(res && res.j && (res.j.error_description||res.j.msg||res.j.message))||'';
+    if(/invalid.*code|invalid_?totp|not valid/i.test(m)) return 'That code was not right. It changes every 30 seconds — check the clock on your phone and try the current one.';
+    if(/rate|too many/i.test(m)) return 'Too many attempts. Wait a minute and try again.';
+    if(/mfa.*disabled|not enabled/i.test(m)) return 'Two-step sign-in is not switched on for this project yet (Supabase → Authentication → Multi-Factor).';
+    if(res && res.netfail) return 'Could not reach the sign-in service.';
+    return m || 'That did not work — try again.';
+  }
+  // Called the moment a password is accepted, for staff and families alike. Returns 'ok' when
+  // the session is good to use, or the step still to do.
+  async _mfaGate(token){
+    const st=await this._mfaState(token);
+    if(st.error) return {step:'error', error:st.error};
+    if(st.enrolled) return (st.aal==='aal2') ? {step:'ok'} : {step:'code', factorId:st.verified[0].id};
+    // Nobody is turned away for not having set it up yet — they set it up now.
+    const en=await this._mfaEnroll(token);
+    if(en.error) return {step:'error', error:en.error};
+    return {step:'enroll', ...en};
+  }
+  // The two things the screen can do: check the code, and start again if the QR was never
+  // scanned. Both keep the person where they are rather than dropping them back to a password
+  // box, because being bounced to the start is how somebody gives up and rings the club.
+  async mfaSubmit(){
+    const m=this.state.mfa; if(!m || m.busy) return;
+    const code=String(m.code||'').replace(/\D/g,'');
+    if(code.length!==6) return this.setState({mfa:{...m, err:'Type the six digits your authenticator app is showing.'}});
+    this.setState({mfa:{...m, busy:true, err:''}});
+    const res=await this._mfaVerify(m.factorId, code, m.token);
+    if(res.error) return this.setState({mfa:{...this.state.mfa, busy:false, err:res.error}});
+    // Cleared. Carry on into whichever sign-in was interrupted.
+    const done={...this.state.mfa};
+    this.setState({mfa:null});
+    if(done.after==='staff'){
+      try{ this._doLoginAfterMfa(done.acct); }catch(e){}
+    } else {
+      try{ await this.famContinueAfterMfa(done.email); }catch(e){}
+    }
+  }
+  mfaCancel(){
+    // Signing out entirely, rather than leaving a half-authenticated session lying around with
+    // a token that passed the password step.
+    try{ if(window.__vxSetAuth) window.__vxSetAuth(null); }catch(e){}
+    this.setState({mfa:null, famBusy:false, famErr:'', loginErr:''});
+  }
+  _doLoginAfterMfa(acct){
+    const doLogin=this._afterMfaLogin;
+    if(typeof doLogin==='function'){ doLogin(acct); }
+    try{ this._refetchAll(); this._postLoginRefresh(); }catch(e){}
+  }
+  // Everything that happens once a family sign-in is fully authenticated. Extracted so it runs
+  // identically whether the second factor was cleared just now or the session already carried
+  // it — one path in, so the portal cannot open by one route with a step missed on the other.
+  async famContinueAfterMfa(email, authUser){
+    this._refetchAll();
+    this._postLoginRefresh();
+    try{ await this._familyFetch(); }catch(e){}
+    let rec=(this.family||[]).find(f=>(f.email||'').trim().toLowerCase()===email);
+    if(!rec){ const u=authUser||{}; const md=u.user_metadata||{}; rec={id:u.id||this._uid('fam'), name:md.name||email.split('@')[0], email, phone:md.phone||'', role:md.role||'parent', swimmerIds:md.swimmer_ids||[]};
+      if(window.__vxInsert) try{ window.__vxInsert('family_accounts', [{id:rec.id, name:rec.name, email:rec.email, phone:rec.phone, pass:'', role:rec.role, swimmer_ids:rec.swimmerIds, ts:Date.now()}]); }catch(e){}
+      this._saveFamily([...(this.family||[]), rec]); }
+    try{ localStorage.setItem('vx_session', JSON.stringify({type:'family', email:rec.email})); }catch(e){}
+    // Every sign-in is recorded: guarantee the account row exists (now that we ARE signed in,
+    // so it can never be refused), and tell the admin who signed in and when.
+    this._famRecordLogin(rec);
+    return this.setState({familyUser:rec, familyActiveIdx:0, screen:'app', view:'family', famErr:'', famBusy:false});
+  }
   // Forgot password: ask Supabase to email a reset link (opens the app on #type=recovery).
   async famResetPassword(){ const S=this.state; const email=(S.famEmail||'').trim().toLowerCase();
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return this.setState({famErr:'Enter the email you registered with.'});
@@ -9187,18 +9346,15 @@ class Component extends DCLogic {
     const res=await this._authPost('/token?grant_type=password', {email, password:pass});
     if(res.ok && res.j && res.j.access_token){
       if(window.__vxSetAuth){ try{ window.__vxSetAuth(res.j); }catch(e){} }
-      this._refetchAll();
-      this._postLoginRefresh();
-      try{ await this._familyFetch(); }catch(e){}
-      let rec=(this.family||[]).find(f=>(f.email||'').trim().toLowerCase()===email);
-      if(!rec){ const u=res.j.user||{}; const md=u.user_metadata||{}; rec={id:u.id||this._uid('fam'), name:md.name||email.split('@')[0], email, phone:md.phone||'', role:md.role||'parent', swimmerIds:md.swimmer_ids||[]};
-        if(window.__vxInsert) try{ window.__vxInsert('family_accounts', [{id:rec.id, name:rec.name, email:rec.email, phone:rec.phone, pass:'', role:rec.role, swimmer_ids:rec.swimmerIds, ts:Date.now()}]); }catch(e){}
-        this._saveFamily([...(this.family||[]), rec]); }
-      try{ localStorage.setItem('vx_session', JSON.stringify({type:'family', email:rec.email})); }catch(e){}
-      // Every sign-in is recorded: guarantee the account row exists (now that we ARE signed in,
-      // so it can never be refused), and tell the admin who signed in and when.
-      this._famRecordLogin(rec);
-      return this.setState({familyUser:rec, familyActiveIdx:0, screen:'app', view:'family', famErr:'', famBusy:false});
+      // The password is only the first half. Nothing is fetched and no screen is opened until
+      // the second one is cleared — a session that stopped here must not be able to read a
+      // child's record just because the portal happened to render.
+      const gate=await this._mfaGate(res.j.access_token);
+      if(gate.step!=='ok'){
+        return this.setState({famBusy:false, famErr: gate.step==='error' ? gate.error : '',
+          mfa:{...gate, token:res.j.access_token, code:'', busy:false, err:'', after:'family', email:email}});
+      }
+      return this.famContinueAfterMfa(email, res.j.user||{});
     }
     const emsg=(res.j&&(res.j.error_description||res.j.msg||res.j.message))||'';
     if(/confirm/i.test(emsg)) return this.setState({famBusy:false, famErr:'Please confirm your email first - open the link we sent to '+email+'.'});
@@ -11644,11 +11800,18 @@ class Component extends DCLogic {
         this._authPost('/token?grant_type=password', {email:acct.email, password:(pEl?pEl.value:'')}).then(res=>{
           if(res && res.ok && res.j && res.j.access_token){
             if(window.__vxSetAuth){ try{ window.__vxSetAuth(res.j); }catch(e){} }
-            // Show the app first. The coach is signed in the moment the token lands; making
-            // them watch "Checking…" while a dozen background fetches finish is time spent
-            // for nothing, and the screens fill in as each one arrives anyway.
-            doLogin(acct);
-            try{ this._refetchAll(); this._postLoginRefresh(); }catch(e){}
+            // A coach account reaches all 304 children, so the second factor is not optional
+            // here either. doLogin is not called until it is cleared.
+            this._afterMfaLogin=doLogin;
+            this._mfaGate(res.j.access_token).then(gate=>{
+              if(gate.step==='ok'){
+                doLogin(acct);
+                try{ this._refetchAll(); this._postLoginRefresh(); }catch(e){}
+                return;
+              }
+              this.setState({loginErr: gate.step==='error' ? gate.error : '',
+                mfa:{...gate, token:res.j.access_token, code:'', busy:false, err:'', after:'staff', acct:acct}});
+            });
             return;
           }
           const msg=(res && res.j && (res.j.error_description||res.j.msg||res.j.message))||'';
@@ -12581,6 +12744,22 @@ class Component extends DCLogic {
       isStagingEnv: (()=>{ try{ const h=location.hostname; return !(h==='vortexswimmingclub.com' || h==='www.vortexswimmingclub.com' || h==='localhost' || h==='127.0.0.1'); }catch(e){ return false; } })(),
       // Shown when something is waiting to save OR when the database session has gone — the
       // second one has to appear before the coach marks a register that cannot be saved.
+      mfaShow: !!S.mfa, mfaIsEnroll: !!(S.mfa && S.mfa.step==='enroll'),
+      mfaTitle: (S.mfa && S.mfa.step==='enroll') ? 'Set up two-step sign-in' : 'Enter your code',
+      mfaLead: (S.mfa && S.mfa.step==='enroll')
+        ? 'This account can see children\u2019s records, so it needs more than a password. Scan this with an authenticator app \u2014 Google Authenticator, 1Password or Authy \u2014 then type the six digits it shows.'
+        : 'Open your authenticator app and type the six digits it is showing for Vortex.',
+      // Supabase hands back the QR as an SVG document. Carried as a data URI on an <img>
+      // rather than injected as raw HTML: an <img> cannot run script, and the app has no other
+      // raw-HTML binding whose behaviour this could be checked against.
+      mfaQr: this._mfaQrSrc(S.mfa && S.mfa.qr),
+      mfaSecret: (S.mfa && S.mfa.secret) || '',
+      mfaCode: (S.mfa && S.mfa.code) || '',
+      onMfaCode: (e)=>{ const v=String(e.target.value||'').replace(/\D/g,'').slice(0,6); this.setState({mfa:{...this.state.mfa, code:v, err:''}}); },
+      onMfaSubmit: ()=>this.mfaSubmit(), onMfaCancel: ()=>this.mfaCancel(),
+      mfaBtnLabel: (S.mfa && S.mfa.busy) ? 'Checking\u2026' : ((S.mfa && S.mfa.step==='enroll') ? 'Confirm and finish' : 'Continue'),
+      mfaErr: (S.mfa && S.mfa.err) || '', mfaErrShow: !!(S.mfa && S.mfa.err),
+      mfaFoot: 'If you lose the phone with your authenticator on it, ask the club to reset this for you \u2014 nobody, including us, can read the code off it.',
       updateReady: !!S.updateReady, updateLatest: S.updateLatest||'', updateHave: VX_BUILD,
       // On the screen most likely to end up in a screenshot. Half of today went on arguing about
       // which build a phone was running; a screenshot should answer that on its own.

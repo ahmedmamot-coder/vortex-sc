@@ -1672,6 +1672,81 @@ describe("InBody sheet", () => {
     itAsync("with no sync layer it claims only what it knows", async () =>
       eq(await run(undefined), "Saved on this device ✓"));
   });
+  // Every account here reaches children's data, so a password alone is one leaked note away
+  // from all of it. Requiring a second factor is only safe if two things hold: nothing opens
+  // before it is cleared, and somebody who loses their phone can still get back in.
+  describe("two-step sign-in", () => {
+    const gate = (ctx) => bind("_mfaGate", ctx, [])("tok");
+    itAsync("an account already enrolled is asked for its code", async () => {
+      const ctx = { _mfaState: async () => ({ enrolled: true, verified: [{ id: "f1" }], aal: "aal1" }) };
+      const out = await gate(ctx);
+      eq(out.step, "code");
+      eq(out.factorId, "f1");
+    });
+    itAsync("a session that already cleared it is let straight through", async () => {
+      const out = await gate({ _mfaState: async () => ({ enrolled: true, verified: [{ id: "f1" }], aal: "aal2" }) });
+      eq(out.step, "ok");
+    });
+    itAsync("somebody who has never set it up is enrolled, not turned away", async () => {
+      const ctx = {
+        _mfaState: async () => ({ enrolled: false, verified: [], aal: "aal1" }),
+        _mfaEnroll: async () => ({ factorId: "f2", qr: "<svg/>", secret: "ABC" }),
+      };
+      const out = await gate(ctx);
+      eq(out.step, "enroll", "locking 300 families out on the morning this ships is the worse failure");
+      eq(out.secret, "ABC");
+    });
+    itAsync("a factor that was started but never confirmed does not count as enrolled", async () => {
+      // status 'unverified' means a QR was generated and never scanned. Treating that as done
+      // would leave the account with no second factor and no prompt to finish setting one up.
+      const state = bind("_mfaState", {
+        _sbAuthUrl: () => "https://x", _sbAnon: () => "anon", _jwtAal: () => "aal1",
+      }, []);
+      const restore = globalThis.fetch;
+      globalThis.fetch = async () => ({ ok: true, json: async () => ({ factors: [
+        { id: "f1", factor_type: "totp", status: "unverified" }] }) });
+      try {
+        const st = await state("tok");
+        eq(st.enrolled, false);
+        eq(st.verified.length, 0);
+      } finally { globalThis.fetch = restore; }
+    });
+
+    it("the code screen covers the app rather than sitting inside it", () => {
+      const panel = sourceBetween('<sc-if value="{{ mfaShow }}"', "</sc-if>");
+      eq(/position:fixed;inset:0/.test(panel), true, "a half-authenticated session must not see the app behind it");
+      eq(/z-index:200/.test(panel), true);
+    });
+    it("cancelling signs out rather than leaving a half-authenticated session", () => {
+      const fn = sourceBetween("mfaCancel(){", "_doLoginAfterMfa(acct){");
+      eq(/__vxSetAuth\(null\)/.test(fn), true,
+        "the password step already produced a token — walking away must not leave it usable");
+    });
+    it("the family portal opens by one path, whether or not a code was needed", () => {
+      // Two ways in is how a step gets missed on one of them.
+      eq((SOURCE.match(/famContinueAfterMfa\(/g) || []).length >= 3, true);
+      eq(/familyUser:rec, familyActiveIdx:0, screen:'app'/.test(sourceBetween("async famContinueAfterMfa(", "// Forgot password")), true);
+    });
+    it("the QR is shown as an image, never injected as raw HTML", () => {
+      eq(/\{\{\{ /.test(SOURCE), false, "raw-HTML injection has no other use in this app to check it against");
+      eq(/data:image\/svg\+xml;utf8,'\+encodeURIComponent/.test(SOURCE), true);
+      const fn = sourceBetween("_mfaQrSrc(svg){", "async _mfaCall(");
+      eq(/\^<svg\[/.test(fn), true, "anything that is not an svg is shown as nothing, not as junk");
+    });
+    it("a wrong code is explained, not just refused", () => {
+      const fn = sourceBetween("_mfaWhy(res){", "// Called the moment a password is accepted");
+      eq(/changes every 30 seconds/.test(fn), true, "the commonest cause is a phone clock, and nobody guesses that");
+      eq(/Supabase → Authentication → Multi-Factor/.test(fn), true, "including it not being switched on at all");
+    });
+  });
+  it("an admin can restore access to somebody who lost their phone", () => {
+    const r = readFileSync(new URL("../src/app/api/staff/mfa-reset/route.ts", import.meta.url), "utf8");
+    eq(/callerIsAdmin/.test(r), true, "self-service reset is exactly what an attacker would use");
+    eq(/ADMIN_EMAILS\.includes/.test(r), true);
+    eq(/admin\/users\/\$\{userId\}\/factors\/\$\{f\.id\}/.test(r), true);
+    eq(/method: "DELETE"/.test(r), true);
+  });
+
   // The plan review counted a session's volume by summing the distances alone, so 8x100 counted
   // as 100. A real 6,700 m session was reviewed as 4,150 m against a 6,000 m guide — so it
   // passed a check that exists to stop a squad of children being over-trained, and the sessions
@@ -2236,9 +2311,12 @@ describe("sign-in speed", () => {
     const login = SOURCE.slice(SOURCE.indexOf("_postLoginRefresh()"), SOURCE.indexOf("_refetchAll()"));
     eq(/location\.reload/.test(login), false, "re-downloading 1.1MB on mobile data was the wait");
   });
+  // The order is the point — the screen switches the moment the session is good, and the dozen
+  // background fetches fill it in afterwards. Pinning the indentation as well meant this broke
+  // the first time the code moved, saying nothing about whether the order had changed.
   it("the app is shown before the background fetches, not after", () => {
-    const i = SOURCE.indexOf("doLogin(acct);\n            try{ this._refetchAll()");
-    eq(i > -1, true, "doLogin must run first so the screen switches immediately");
+    const hits = [...SOURCE.matchAll(/doLogin\(acct\);\s*\}?\s*\n\s*try\{ this\._refetchAll\(\); this\._postLoginRefresh\(\);/g)];
+    eq(hits.length > 0, true, "doLogin must run first so the screen switches immediately");
   });
   it("the shared club data is pulled once per sign-in, not twice", () =>
     eq(/_repullOnce\(\)/.test(SOURCE) && !/if\(window\.__vxRepull\) window\.__vxRepull\(\);\s*\}catch\(e\)\{\}\s*\['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_wearFetch'/.test(SOURCE), true));
