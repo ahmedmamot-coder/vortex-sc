@@ -4508,11 +4508,15 @@ if ('serviceWorker' in navigator) {
                       <sc-if value="{{ staffPwMsgShow }}" hint-placeholder-val="{{ false }}">
                         <p style="margin:0;font-size:11.5px;font-weight:700;color:{{ staffPwMsgColor }}">{{ staffPwMsg }}</p>
                       </sc-if>
+                      <sc-if value="{{ mfaResetMsgShow }}" hint-placeholder-val="{{ false }}">
+                        <p style="margin:0;font-size:11.5px;font-weight:700;color:{{ mfaResetMsgColor }}">{{ mfaResetMsg }}</p>
+                      </sc-if>
                       <sc-for list="{{ staffAllRows }}" as="s" hint-placeholder-count="11">
                         <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:12px 13px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
                           <div style="display:flex;gap:7px;margin-bottom:9px">
                             <input value="{{ s.pwDraft }}" oninput="{{ s.onPwDraft }}" type="text" autocomplete="off" placeholder="New password (min 8)" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:var(--font-mono);font-size:12px;color:#0C1116;outline:none">
                             <button onclick="{{ s.onSetPw }}" style="flex:none;background:#0C1116;color:#fff;border:none;border-radius:9px;padding:8px 12px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Set password</button>
+                            <button onclick="{{ s.onMfaReset }}" title="Remove two-step sign-in so they can set it up on a new phone" style="flex:none;background:#FCEFD6;color:#B4690E;border:1px solid #F5D9A0;border-radius:9px;padding:8px 10px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer;display:flex;align-items:center;gap:5px"><i data-lucide="smartphone" style="width:13px;height:13px"></i>2-step</button>
                           </div>
                           <div style="display:flex;align-items:center;gap:11px">
                             {{ s.avatar }}
@@ -4586,6 +4590,9 @@ if ('serviceWorker' in navigator) {
                       <sc-if value="{{ famAdminEmpty }}" hint-placeholder-val="{{ false }}">
                         <p style="margin:0;padding:14px;text-align:center;font-size:12.5px;color:#9AA2B4">No family accounts match.</p>
                       </sc-if>
+                      <sc-if value="{{ mfaResetMsgShow }}" hint-placeholder-val="{{ false }}">
+                        <p style="margin:0;font-size:11.5px;font-weight:700;color:{{ mfaResetMsgColor }}">{{ mfaResetMsg }}</p>
+                      </sc-if>
                       <sc-for list="{{ famAdminRows }}" as="fa" hint-placeholder-count="6">
                         <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:12px 13px;box-shadow:0 1px 4px rgba(11,20,40,.04);display:flex;flex-direction:column;gap:9px">
                           <div style="display:flex;align-items:flex-start;gap:9px">
@@ -4596,6 +4603,7 @@ if ('serviceWorker' in navigator) {
                             </div>
                             <span style="flex:none;background:{{ fa.roleBg }};color:{{ fa.roleFg }};border-radius:999px;padding:3px 9px;font-size:10.5px;font-weight:800">{{ fa.roleLabel }}</span>
                           </div>
+                          <button onclick="{{ fa.onMfaReset }}" style="width:100%;background:#FCEFD6;color:#B4690E;border:1px solid #F5D9A0;border-radius:9px;padding:8px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><i data-lucide="smartphone" style="width:13px;height:13px"></i>Reset two-step sign-in</button>
                           <sc-for list="{{ fa.kids }}" as="fk" hint-placeholder-count="2">
                             <div style="display:flex;align-items:center;gap:8px;background:{{ fk.bg }};border:1px solid #EEF1F5;border-radius:10px;padding:8px 10px">
                               <span style="width:8px;height:8px;border-radius:50%;background:{{ fk.dot }};flex:none"></span>
@@ -5281,7 +5289,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-09t';
+const VX_BUILD='2026-08-09u';
 const VX_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 class Component extends DCLogic {
   constructor(props){
@@ -5494,6 +5502,7 @@ class Component extends DCLogic {
       updateReady:false, updateLatest:'',
       pwNew:'', pwNew2:'', pwMsg:'', pwOk:true, profileMsg:'', profileOk:true,
       staffPwDrafts:{}, staffPwMsg:'', staffPwOk:true,
+      mfaResetMsg:'', mfaResetOk:true,
       swQuery:'', swSquadFilter:'all', swDobFilter:false, swEditId:null, swAddOpen:false, swForm:{name:'',age:'',dob:'',gender:'Boys',squadId:'',pbs:[]},
       swPbEventSel:'50 Free', swPbTimeDraft:'', swPbCourse:'LCM', swPbMeet:'', swPbMeetDate:'',
       swEditPbs:[], swEditPbEventSel:'50 Free', swEditPbTimeDraft:'', swEditPbCourse:'LCM', swEditPbMeet:'', swEditPbMeetDate:'',
@@ -5852,6 +5861,35 @@ class Component extends DCLogic {
       if(!r.ok){ const m=(j&&(j.msg||j.error_description||j.message))||('HTTP '+r.status); return this.setState({pwMsg:'Could not change it: '+m, pwOk:false}); }
       this.setState({pwMsg:'Password changed \u2713 Use it next time you sign in.', pwOk:true, pwNew:'', pwNew2:''});
     }catch(e){ this.setState({pwMsg:'Could not reach the sign-in service.', pwOk:false}); }
+  }
+  // Clear somebody's two-step sign-in so they can set it up on a new phone.
+  //
+  // Two-step is required of everyone, and a TOTP secret lives only on the phone that generated
+  // it. Phones are lost, wiped, upgraded and dropped in the pool, so without this a parent is
+  // one broken screen away from never seeing their child's results again. It was an API call
+  // until now, which is no use to somebody standing at the poolside holding their own phone.
+  //
+  // It asks first. Clearing the wrong row would silently drop a second factor from an account
+  // that still has one, and "I lost my phone" is exactly what somebody would say to get you to
+  // do it — so the name and the email are both in the question.
+  async mfaReset(who){
+    const email=(''+((who&&who.email)||'')).trim().toLowerCase();
+    const label=(who&&(who.label||who.name))||email;
+    if(!email) return this.setState({mfaResetMsg:'That account has no email address, so there is nothing to reset.', mfaResetOk:false});
+    let ok=true;
+    try{ ok=confirm('Remove two-step sign-in for '+label+' ('+email+')?\n\nThey will be asked to set it up again the next time they sign in. Only do this if you are sure who you are talking to.'); }catch(e){}
+    if(!ok) return;
+    const tok=(window.__VX_AUTH && window.__VX_AUTH.token)||'';
+    if(!tok) return this.setState({mfaResetMsg:'You are not signed in to the database — sign out and back in, then try again.', mfaResetOk:false});
+    this.setState({mfaResetMsg:'Resetting '+label+'…', mfaResetOk:true});
+    try{
+      const r=await fetch('/api/staff/mfa-reset', {method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok},
+        body:JSON.stringify({email})});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok) return this.setState({mfaResetMsg:(j&&j.error)||('Failed (HTTP '+r.status+')'), mfaResetOk:false});
+      this.setState({mfaResetMsg:label+' — '+((j&&j.message)||'done')+' \u2713', mfaResetOk:true});
+    }catch(e){ this.setState({mfaResetMsg:'Could not reach the server.', mfaResetOk:false}); }
   }
   async staffSetPassword(acct, pw){
     if(!acct) return;
@@ -11788,6 +11826,7 @@ class Component extends DCLogic {
       const sub = primary + (sq?(' · '+sq.name):'') + ' · @' + (a.user||'') + (contactBits?(' · '+contactBits):'');
       const d=S.staffAccDraft||{}; const draftPhoto = editing? (d.photo ?? a.photo ?? '') : (a.photo||'');
       return { id:a.id, name:a.label||'', sub:sub, isCustom, isAdminAcc, editing, pwDraft, onPwDraft, onSetPw,
+        onMfaReset:()=>this.mfaReset(a),
         avatar:this.av(a.photo||null, badge, 38, 11, accent, '#fff', 12),
         editPhotoAvatar:this.av(draftPhoto||null, badge, 56, 14, accent, '#fff', 18), hasEditPhoto:!!draftPhoto,
         photoInputId:'vx-staff-photo-'+a.id,
@@ -12826,6 +12865,8 @@ class Component extends DCLogic {
       isStagingEnv: (()=>{ try{ const h=location.hostname; return !(h==='vortexswimmingclub.com' || h==='www.vortexswimmingclub.com' || h==='localhost' || h==='127.0.0.1'); }catch(e){ return false; } })(),
       // Shown when something is waiting to save OR when the database session has gone — the
       // second one has to appear before the coach marks a register that cannot be saved.
+      mfaResetMsg: S.mfaResetMsg||'', mfaResetMsgShow: !!S.mfaResetMsg,
+      mfaResetMsgColor: S.mfaResetOk ? '#0C7A4F' : '#B42318',
       mfaShow: !!S.mfa, mfaIsEnroll: !!(S.mfa && S.mfa.step==='enroll'),
       mfaTitle: (S.mfa && S.mfa.step==='enroll') ? 'Set up two-step sign-in' : 'Enter your code',
       mfaLead: (S.mfa && S.mfa.step==='enroll')
@@ -12941,6 +12982,7 @@ class Component extends DCLogic {
             const addOpen=S.famAdminAddFor===f.id;
             return {
               id:f.id, name:f.name||'—', email:f.email||'', phone:f.phone||'—',
+              onMfaReset:()=>this.mfaReset(f),
               roleLabel:(f.role==='swimmer'?'Swimmer login':'Parent login'),
               roleBg:(f.role==='swimmer'?'#EDE7FF':'#E3F0FF'), roleFg:(f.role==='swimmer'?'#6D28D9':'#0C6CE0'),
               kidCount:ids.length+(ids.length===1?' child':' children'),

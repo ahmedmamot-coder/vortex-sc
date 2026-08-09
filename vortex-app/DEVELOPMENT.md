@@ -42,7 +42,12 @@ signs the session out rather than leaving a token that passed only the password 
 They will. A TOTP secret lives only on that phone, so without a way back in every family is one
 broken screen away from losing access for good.
 
-`POST /api/staff/mfa-reset` with `{ email }`, called with an **admin's own** token, removes that
+**In the app:** Admin → Staff has a **2-step** button on each coach's row, and Admin → Families a
+**Reset two-step sign-in** button on each parent's. Both ask before doing anything, and report
+the server's own words rather than a generic success — "that account had no two-step sign-in set
+up" and "removed" are different answers and the difference matters.
+
+Underneath, `POST /api/staff/mfa-reset` with `{ email }`, called with an **admin's own** token, removes that
 account's factors so they enrol again next time. It is deliberately not self-service: *"I've lost
 my phone, let me in"* is exactly what an attacker says, so someone who already has full access
 has to do it, having recognised the person asking. Needs `SUPABASE_SERVICE_ROLE_KEY`.

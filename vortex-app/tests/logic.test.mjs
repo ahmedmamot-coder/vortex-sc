@@ -1804,6 +1804,54 @@ describe("InBody sheet", () => {
     });
   });
 
+  // The reset existed as an API call, which is no use to somebody standing at the poolside
+  // holding their own phone while a parent explains they have a new one.
+  describe("resetting somebody's two-step sign-in from the app", () => {
+    const run = async (who, confirmed, reply) => {
+      const ctx = { state: {}, setState(o) { Object.assign(ctx.state, o); } };
+      const restore = [globalThis.window, globalThis.confirm, globalThis.fetch];
+      let sent = null;
+      globalThis.window = { __VX_AUTH: { token: "admin-tok" } };
+      globalThis.confirm = () => confirmed;
+      globalThis.fetch = async (url, opt) => { sent = { url, opt }; return { ok: reply.ok, status: reply.status || 200, json: async () => reply.body || {} }; };
+      try { await bind("mfaReset", ctx, [])(who); }
+      finally { [globalThis.window, globalThis.confirm, globalThis.fetch] = restore; }
+      return { state: ctx.state, sent };
+    };
+    const PARENT = { name: "A Parent", email: "Parent@Example.com " };
+
+    itAsync("it asks before removing anything", async () => {
+      const out = await run(PARENT, false, { ok: true });
+      eq(out.sent, null, "clearing the wrong row silently drops a factor from an account that had one");
+    });
+    itAsync("the email is sent normalised, and to the reset route", async () => {
+      const out = await run(PARENT, true, { ok: true, body: { message: "Two-step sign-in removed." } });
+      eq(out.sent.url, "/api/staff/mfa-reset");
+      eq(JSON.parse(out.sent.opt.body).email, "parent@example.com");
+      eq(/Bearer admin-tok/.test(out.sent.opt.headers.Authorization), true, "the caller's own token is the authorisation");
+    });
+    itAsync("the server's own words are shown, not a generic success", async () => {
+      const out = await run(PARENT, true, { ok: true, body: { message: "That account had no two-step sign-in set up." } });
+      eq(/had no two-step sign-in set up/.test(out.state.mfaResetMsg), true);
+      eq(out.state.mfaResetOk, true);
+    });
+    itAsync("a refusal is shown as a refusal", async () => {
+      const out = await run(PARENT, true, { ok: false, status: 403, body: { error: "only an admin can reset two-step sign-in" } });
+      eq(/only an admin/.test(out.state.mfaResetMsg), true);
+      eq(out.state.mfaResetOk, false);
+    });
+    itAsync("an account with no email is refused before anything is sent", async () => {
+      const out = await run({ name: "No Email" }, true, { ok: true });
+      eq(out.sent, null);
+      eq(out.state.mfaResetOk, false);
+    });
+    it("the button is on both a staff row and a family row", () => {
+      eq(/\{\{ s\.onMfaReset \}\}/.test(SOURCE), true, "a coach loses a phone as easily as a parent");
+      eq(/\{\{ fa\.onMfaReset \}\}/.test(SOURCE), true);
+      eq((SOURCE.match(/onMfaReset:\(\)=>this\.mfaReset\(/g) || []).length, 2);
+    });
+  });
+
   it("an admin can restore access to somebody who lost their phone", () => {
     const r = readFileSync(new URL("../src/app/api/staff/mfa-reset/route.ts", import.meta.url), "utf8");
     eq(/callerIsAdmin/.test(r), true, "self-service reset is exactly what an attacker would use");
