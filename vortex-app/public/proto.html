@@ -330,12 +330,27 @@ if ('serviceWorker' in navigator) {
       // Only take the server copy when it is newer than the last local write — otherwise a page
       // refresh would wipe edits made locally that had not finished uploading yet.
       var localVal=localStorage.getItem(r.key);
-      var localTs=parseInt(localStorage.getItem('__vxts_'+r.key)||'0',10)||0;
+      var diskTs=parseInt(localStorage.getItem('__vxts_'+r.key)||'0',10)||0;
+      // The marker on disk is only written when the write to disk succeeded, and vx_sw_meta
+      // holds every swimmer, so on a full browser storage that write fails and no marker is
+      // left behind. The value is still the newest one this device has produced — it is in
+      // memory and it has been sent to the database — but with no marker the next pull judged
+      // it older than everything and handed back the server's copy, which the app then saved
+      // and pushed up, destroying the newer record for good. What "newest here" means cannot
+      // depend on whether the browser had room to keep a copy.
+      var pushedTs=0; try{ pushedTs=(window.__vxWriteTs && window.__vxWriteTs[r.key])||0; }catch(e){}
+      var localTs=Math.max(diskTs, pushedTs);
+      // In memory beats on disk for the same reason: after a failed disk write the string on
+      // disk is the old one, and pushing that up is exactly the destructive step above.
+      var mirrored=null, haveMirror=false;
+      try{ if(Object.prototype.hasOwnProperty.call(window.__VX_PULLED, r.key) && pushedTs>diskTs){ mirrored=window.__VX_PULLED[r.key]; haveMirror=(mirrored!=null); } }catch(e){}
       var remoteTs=r.updated_at? Date.parse(r.updated_at) : 0;
-      var takeRemote = (localVal==null || !localTs || remoteTs>=localTs);
+      var takeRemote = ((localVal==null && !haveMirror) || !localTs || remoteTs>=localTs);
       if(takeRemote){
         window.__VX_PULLED[r.key]=r.value;      // DB copy → in-memory mirror
         origSet(r.key, JSON.stringify(r.value));
+      } else if(haveMirror){
+        pushKey(r.key, JSON.stringify(mirrored));   // the newest copy, straight back up
       } else {
         // Local is newer, so it has to win in the mirror as well — and this is the part that
         // was missing. The mirror was being set to the server's copy before this decision was
@@ -2449,7 +2464,7 @@ if ('serviceWorker' in navigator) {
                             <input value="{{ inbodyWeight }}" oninput="{{ onInbodyWeight }}" placeholder="Weight kg" type="number" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-size:11.5px;color:#0C1116;outline:none">
                             <input value="{{ inbodyFat }}" oninput="{{ onInbodyFat }}" placeholder="% fat" type="number" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-size:11.5px;color:#0C1116;outline:none">
                             <input value="{{ inbodyMuscle }}" oninput="{{ onInbodyMuscle }}" placeholder="Muscle kg" type="number" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-size:11.5px;color:#0C1116;outline:none">
-                            <button onclick="{{ onInbodyAdd }}" style="flex:none;width:36px;background:var(--vx-blue);color:#fff;border:none;border-radius:9px;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="plus" style="width:16px;height:16px"></i></button>
+                            <button onclick="{{ onInbodyAdd }}" style="flex:none;padding:0 13px;background:var(--vx-blue);color:#fff;border:none;border-radius:9px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;font-family:inherit;font-weight:800;font-size:11.5px"><i data-lucide="check" style="width:14px;height:14px"></i> Save</button>
                           </div>
                           <button onclick="{{ onIbFullToggle }}" style="width:100%;margin-top:6px;background:none;border:none;color:var(--vx-blue);font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer;text-align:left;padding:3px">{{ ibFullLabel }}</button>
                           <sc-if value="{{ ibFullOpen }}" hint-placeholder-val="{{ false }}">
@@ -5199,7 +5214,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-09i';
+const VX_BUILD='2026-08-09j';
 const VX_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 class Component extends DCLogic {
   constructor(props){

@@ -204,6 +204,52 @@ describe("shipped source", () => {
       const out = applyPull([{ key: "vx_sw_meta", value: SHEET, updated_at: "2026-08-09T14:00:00Z" }], {}, {});
       eq(JSON.stringify(out.mirror.vx_sw_meta), JSON.stringify(SHEET));
     });
+
+    // The marker on disk is only written when the write to disk succeeded, and vx_sw_meta holds
+    // every swimmer in the club. On a full browser storage that write fails, no marker is left,
+    // and the value — which is in memory and has already been sent to the database — was judged
+    // older than everything. The server's copy came back, the app saved it and pushed it up,
+    // and the newer record was destroyed for good. This is the loop that ate the sheet twice.
+    const applyPullFull = (rows, diskVal, diskTs, mirror, pushedTs) => {
+      const store = diskVal == null ? {} : { vx_sw_meta: diskVal };
+      if (diskTs) store["__vxts_vx_sw_meta"] = String(diskTs);
+      const pushed = [];
+      const env = {
+        localStorage: {
+          getItem: (k) => (k in store ? store[k] : null),
+          setItem: (k, v) => { store[k] = v; },
+          get length() { return Object.keys(store).length; },
+          key: (i) => Object.keys(store)[i],
+        },
+        window: { __VX_PULLED: { ...mirror }, __vxWriteTs: { vx_sw_meta: pushedTs } },
+        origSet: (k, v) => { store[k] = v; },
+        pushKey: (k, v) => pushed.push([k, v]),
+        SYNC: [],
+      };
+      const src = sourceBetween("function applyPull(rows, seed){", "\n  // Re-pull the shared club");
+      runInSandbox(src + "\napplyPull(rows, false);", { ...env, rows });
+      return { mirror: env.window.__VX_PULLED, disk: store, pushed };
+    };
+
+    it("a sheet the browser had no room to store is still the newest copy", () => {
+      const out = applyPullFull(
+        [{ key: "vx_sw_meta", value: EMPTY, updated_at: "2026-08-09T12:00:00Z" }],
+        JSON.stringify(EMPTY),                       // disk still holds the old value: the write failed
+        0,                                           // and left no marker behind
+        { vx_sw_meta: SHEET },                        // but it is in memory
+        Date.parse("2026-08-09T13:00:00Z"));          // and it has been sent to the database
+      eq(JSON.stringify(out.mirror.vx_sw_meta), JSON.stringify(SHEET),
+        "the server's empty copy came back and the sheet vanished from the screen");
+      eq(out.pushed.length, 1, "and the newest copy must go back up");
+      eq(JSON.parse(out.pushed[0][1]).s1.inbody.length, 1,
+        "pushing the stale copy from disk is what destroyed the record on the server");
+    });
+    it("the stale copy on disk is never the thing that gets pushed up", () => {
+      const out = applyPullFull(
+        [{ key: "vx_sw_meta", value: EMPTY, updated_at: "2026-08-09T12:00:00Z" }],
+        JSON.stringify(EMPTY), 0, { vx_sw_meta: SHEET }, Date.parse("2026-08-09T13:00:00Z"));
+      for (const [, v] of out.pushed) eq(JSON.stringify(JSON.parse(v)), JSON.stringify(SHEET));
+    });
   });
   // These markers are the record of which copy is newer. They were the first thing thrown away
   // when storage filled up, described as cheap to lose; without them every unsynced local edit
