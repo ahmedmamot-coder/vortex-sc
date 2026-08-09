@@ -1676,7 +1676,21 @@ describe("InBody sheet", () => {
   // from all of it. Requiring a second factor is only safe if two things hold: nothing opens
   // before it is cleared, and somebody who loses their phone can still get back in.
   describe("two-step sign-in", () => {
-    const gate = (ctx) => bind("_mfaGate", ctx, [])("tok");
+    // The requirement is off in the app right now, so these set the switch to prove the gate
+    // still behaves when it is turned back on. The last test below is the one that checks it is
+    // actually off — that assertion is the record of the decision, not an accident.
+    const gate = async (ctx) => {
+      const was = globalThis.VX_REQUIRE_MFA;
+      globalThis.VX_REQUIRE_MFA = true;
+      try { return await bind("_mfaGate", ctx, [])("tok"); }
+      finally { globalThis.VX_REQUIRE_MFA = was; }
+    };
+    it("the requirement is currently switched OFF, deliberately", () => {
+      eq(/const VX_REQUIRE_MFA=false;/.test(SOURCE), true,
+        "turned off at Ahmed's request; the machinery is kept so it can be turned back on");
+      eq(/if\(!VX_REQUIRE_MFA\) return \{step:'ok'\};/.test(SOURCE), true,
+        "one switch, read by the one place that decides — not three sign-in paths edited separately");
+    });
     itAsync("an account already enrolled is asked for its code", async () => {
       const ctx = { _mfaState: async () => ({ enrolled: true, verified: [{ id: "f1" }], aal: "aal1" }) };
       const out = await gate(ctx);

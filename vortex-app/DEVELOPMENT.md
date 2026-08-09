@@ -18,7 +18,23 @@ The safe way to change the app without risking the live site at vortexswimmingcl
 
 Rule of thumb: **schema/RLS/security changes → always test on a preview + staging DB first.**
 
-## Two-step sign-in (MFA)
+## Two-step sign-in (MFA) — currently OFF
+
+**`VX_REQUIRE_MFA` is `false` in proto.html.** Nobody is asked for a code. Turned off the evening
+it shipped, at the club's request, after enrolment proved fiddlier on a phone than it is worth
+imposing on 300 families in one go.
+
+It is off by a switch rather than by deletion: enrolment, verification, the admin reset and the
+single gate every sign-in path runs through are all still there and still tested. Set the switch
+to `true` to require it again. Anyone already enrolled is simply not asked; their factor sits
+harmlessly in Supabase until it is used or removed.
+
+Before turning it back on, the two things that made it painful the first time are worth fixing
+first: enrol from inside the app while already signed in (rather than at the door, where a person
+who gets stuck cannot get in to fix it), and set `SUPABASE_SERVICE_ROLE_KEY` so the reset button
+works.
+
+The rest of this section describes it as designed, for when it is switched on again.
 
 **Required of every account — staff and families.** Both already sign in through Supabase Auth,
 so this is Supabase's own TOTP rather than anything invented here: the phone holds the secret and

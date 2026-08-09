@@ -5291,7 +5291,17 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-09w';
+const VX_BUILD='2026-08-09x';
+// Two-step sign-in is OFF. Turned off at Ahmed's request on the evening it shipped.
+//
+// Off by a switch rather than by deleting the machinery: enrolment, verification and the admin
+// reset all still work, and every sign-in path still runs through one gate. Ripping that out of
+// three sign-in paths in a hurry is how a club loses the ability to sign in at all — which is a
+// worse outage than the risk it was guarding against.
+//
+// Set this to true to require it again. Anyone already enrolled simply is not asked; their
+// factor sits harmlessly in Supabase until it is used or removed.
+const VX_REQUIRE_MFA=false;
 const VX_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 class Component extends DCLogic {
   constructor(props){
@@ -6047,6 +6057,7 @@ class Component extends DCLogic {
   // Called the moment a password is accepted, for staff and families alike. Returns 'ok' when
   // the session is good to use, or the step still to do.
   async _mfaGate(token){
+    if(!VX_REQUIRE_MFA) return {step:'ok'};
     const st=await this._mfaState(token);
     if(st.error) return {step:'error', error:st.error};
     if(st.enrolled) return (st.aal==='aal2') ? {step:'ok'} : {step:'code', factorId:st.verified[0].id};
