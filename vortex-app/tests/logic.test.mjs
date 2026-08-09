@@ -297,6 +297,18 @@ describe("shipped source", () => {
       eq(!!ctx.state.updateReady, false, "the second check inside the window must not run");
     });
   });
+  // Half a day went on arguing about which build a phone was running, from screenshots that
+  // could not say. Settings is the screen most likely to be photographed.
+  it("Settings shows the build, so a screenshot dates itself", () => {
+    eq(/App build \{\{ appBuild \}\} on this device/.test(SOURCE), true);
+    eq(/appBuild: VX_BUILD/.test(SOURCE), true, "it must be the running build, not one written out by hand");
+  });
+  it("the Settings screen no longer describes itself as an API key box", () => {
+    const subs = [...SOURCE.matchAll(/settings:'([^']*)'|sub:'([^']*reset data[^']*)'/g)].map((m) => m[1] || m[2]);
+    eq(subs.length > 0, true, "the subtitles must still be found by this test");
+    for (const s of subs) eq(/API key/.test(s), false, "the box it names was deleted: " + s);
+  });
+
   it("updating clears the offline copy, or the button does nothing", () => {
     const fn = sourceBetween("async _applyUpdate(){", "_forgetDeviceApiKey(){");
     eq(/getRegistrations\(\)/.test(fn) && /unregister\(\)/.test(fn), true,

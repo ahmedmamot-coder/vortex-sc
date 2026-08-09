@@ -4672,6 +4672,8 @@ if ('serviceWorker' in navigator) {
                       <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:15px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
                         <p style="margin:0 0 4px;font-size:13px;font-weight:700;color:#0C1116">About this club</p>
                         <p style="margin:0;font-size:12px;color:#3A4152;line-height:1.7">Vortex SC · 9 squads · {{ swimmerTotal }} swimmers · {{ meetTotal }} meets on record</p>
+                        <p style="margin:7px 0 0;font-size:11px;color:#9AA2B4;line-height:1.5;font-family:var(--font-mono)">App build {{ appBuild }} on this device</p>
+                        <p style="margin:2px 0 0;font-size:11px;color:{{ appBuildColor }};line-height:1.5">{{ appBuildNote }}</p>
                       </div>
                       <div style="background:#FBE4E4;border:1px solid #F3B7B7;border-radius:16px;padding:15px">
                         <p style="margin:0 0 4px;font-size:13px;font-weight:700;color:#B42318">Reset local data</p>
@@ -5240,7 +5242,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-09n';
+const VX_BUILD='2026-08-09o';
 const VX_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 class Component extends DCLogic {
   constructor(props){
@@ -12397,6 +12399,11 @@ class Component extends DCLogic {
       // Shown when something is waiting to save OR when the database session has gone — the
       // second one has to appear before the coach marks a register that cannot be saved.
       updateReady: !!S.updateReady, updateLatest: S.updateLatest||'', updateHave: VX_BUILD,
+      // On the screen most likely to end up in a screenshot. Half of today went on arguing about
+      // which build a phone was running; a screenshot should answer that on its own.
+      appBuild: VX_BUILD,
+      appBuildNote: S.updateReady ? ('A newer build is live ('+(S.updateLatest||'')+') — use the Update bar at the bottom.') : 'This is the current build.',
+      appBuildColor: S.updateReady ? '#B4690E' : '#0C7A4F',
       onUpdateNow: ()=>this._applyUpdate(),
       saveFailShow: (S.saveFailCount>0 || S.authDead) && !S.saveFailHidden,
       saveFailTitle: S.authDead
