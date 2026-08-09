@@ -70,7 +70,14 @@ signed-in user, and parents sign in through the same Supabase Auth as coaches �
 treated a parent and the head coach identically. The screens never offered a parent another
 family's messages or the club's billing; but screens are not a security boundary, RLS is.
 
-`supabase/security_4_roles.sql` tells them apart. Undo with `security_4_rollback.sql`.
+`supabase/security_4_roles.sql` tells them apart. Undo with `security_4_rollback.sql`. Both exist
+now — this document referred to them for a while before they were written.
+
+**It cannot be verified against this repo.** Most of the schema was created directly in Supabase
+and its DDL was never committed, so the script checks every table and every column before it
+touches anything, skips what it does not recognise, and **names the skipped tables in the
+output**. Anything listed there still has no Stage 4 policy and is still open to any signed-in
+user. Read that list — it is the difference between "applied" and "applied to everything".
 
 **Before running it**, open it and put the managers' sign-in emails in the marked block —
 Ahmed and Sameh are built into the app rather than the `staff_accounts` table, so they are not
