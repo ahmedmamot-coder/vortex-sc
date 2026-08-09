@@ -3148,7 +3148,17 @@ if ('serviceWorker' in navigator) {
                             </div>
                           </sc-for>
                         </div>
-                        <p style="margin:2px 4px;font-size:11px;color:#9AA2B4;line-height:1.5">Deterministic rules check the plan against the club's zone ruleset for this squad. The AI writes the explanations — it never overrides a rule verdict.</p>
+                        <button onclick="{{ onReviewAi }}" style="width:100%;margin-top:2px;display:flex;align-items:center;justify-content:center;gap:7px;background:#0A0F1A;color:#fff;border:none;border-radius:11px;padding:11px;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px"><i data-lucide="{{ reviewAiIcon }}" style="width:15px;height:15px" class="{{ reviewAiSpin }}"></i>{{ reviewAiLabel }}</button>
+                        <sc-if value="{{ reviewAiErrShow }}" hint-placeholder-val="{{ false }}"><p style="margin:2px 4px;font-size:11.5px;font-weight:600;color:#B42318;line-height:1.45">{{ reviewAiErr }}</p></sc-if>
+                        <sc-if value="{{ reviewAiHasOut }}" hint-placeholder-val="{{ false }}">
+                          <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:13px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
+                            <p style="margin:0 0 9px;font-size:13px;font-weight:700;color:#0C1116">{{ reviewAiOut.title }}</p>
+                            <sc-for list="{{ reviewAiOut.blocks }}" as="rb" hint-placeholder-count="3">
+                              <div style="margin-bottom:9px"><p style="margin:0 0 4px;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:{{ rb.color }}">{{ rb.label }}</p><sc-for list="{{ rb.lines }}" as="rl" hint-placeholder-count="3"><p style="margin:0 0 3px;font-size:12px;color:#3A4152;line-height:1.45">{{ rl }}</p></sc-for></div>
+                            </sc-for>
+                          </div>
+                        </sc-if>
+                        <p style="margin:2px 4px;font-size:11px;color:#9AA2B4;line-height:1.5">The checks above are the club's own rules for this squad — worked out on this device, always the same for the same plan. Asking Claude adds an explanation underneath; it is never allowed to change a verdict.</p>
                       </sc-if>
                       <sc-if value="{{ reviewIsGuide }}" hint-placeholder-val="{{ false }}">
                         <div style="display:flex;flex-direction:column;gap:9px">
@@ -5242,7 +5252,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-09q';
+const VX_BUILD='2026-08-09r';
 const VX_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 class Component extends DCLogic {
   constructor(props){
@@ -5504,6 +5514,7 @@ class Component extends DCLogic {
         {id:'f3', author:'Ahmed Mamo', role:'Technical Director', initials:'AM', photo:'assets/director-ahmed.jpg', tag:'Notice', text:'Entry deadline for the Nautilus Invitational is Thursday. Coaches, confirm your squad lists in Meets.', image:'', likes:38, comments:9, time:'1d', liked:false},
       ],
       aiKind:'season', aiPrompt:'', aiOut:null, aiLoading:false, aiErr:'',
+      reviewAiOut:null, reviewAiLoading:false, reviewAiErr:'',
       swAiOut:null, swAiLoading:false, swAiErr:'',
       loungeEditId:null, loungeEditText:'', commentDrafts:{}, reqOpen:false, reqTo:'', reqText:'', reqMsg:'',
       fmBody:'', fmSet:'', fmVideo:'',
@@ -10127,6 +10138,29 @@ class Component extends DCLogic {
   }
   // One caller for every assistant, so the failure wording is the same everywhere and there is
   // one place that knows what a usable answer looks like.
+  // The rules decide; Claude only puts them into words. It is given the verdicts as already
+  // settled and told not to argue with them, and the panel it writes appears underneath rather
+  // than in place of them — so a model having an off day can make the wording worse and can
+  // never turn a failed volume check into a pass.
+  async reviewAiExplain(plan, checks, squad, total, cap){
+    if(this.state.reviewAiLoading) return;
+    this.setState({reviewAiLoading:true, reviewAiOut:null, reviewAiErr:''});
+    const lines=[];
+    (plan.sections||[]).forEach(sec=>{
+      const r=Math.max(1,Number(sec.rounds)||1);
+      lines.push((sec.title||'Section')+(r>1?(' x'+r):'')+':');
+      (sec.sets||[]).forEach(st=>{ lines.push('  '+(Number(st.reps)||1)+' x '+(Number(st.dist)||0)+'m '
+        +[st.stroke,st.type,st.zone,st.rest?('r'+st.rest):''].filter(Boolean).join(' ')); });
+    });
+    const verdicts=checks.map(c=>c.label+': '+c.status.toUpperCase()+' — '+c.msg).join('\n');
+    const text='Session: '+(plan.title||'Session')+' ('+total+'m total, the squad guide is '+cap+'m).\n'
+      +lines.join('\n')+'\n\nThe club rules have already judged it, and these verdicts are settled — '
+      +'explain them to the coach and say what to change. Do not re-judge them:\n'+verdicts;
+    const out=await this._aiAsk('review', text, this._aiSquadContext());
+    if(out.error){ this.setState({reviewAiLoading:false, reviewAiErr:out.error}); return; }
+    this.setState({reviewAiLoading:false, reviewAiOut:{title:out.title, blocks:out.blocks}});
+    this._icons();
+  }
   async _aiAsk(task, text, context){
     const ctl=(typeof AbortController!=='undefined') ? new AbortController() : null;
     const timer=setTimeout(()=>{ try{ ctl && ctl.abort(); }catch(e){} }, 55000);
@@ -10809,7 +10843,12 @@ class Component extends DCLogic {
     const zIdx={EN1:0,EN2:1,EN3:2,SP1:3,SP2:4,SP3:5}[rvPlan.zone]; const zi=(zIdx==null?1:zIdx);
     const zName=zoneHeads[zi];
     const perm=(ZP[S.squadId]||[2,2,2,2,2,2])[zi];
-    let rvTotal=0; (rvPlan.sections||[]).forEach(sec=>(sec.sets||[]).forEach(st=>rvTotal+=(+st.dist||0)));
+    // planMetres is the one calculation in the app: distance x reps x circuit, times the
+    // section's rounds. This summed the distances alone, so 8x100 counted as 100 — a 6,700 m
+    // session was reviewed as 4,150 m. The volume rule exists to stop a squad of children being
+    // over-trained, and it was comparing the cap against a number a third too low, so the
+    // sessions it most needed to flag were the ones it passed.
+    const rvTotal=this.planMetres(rvPlan);
     const VCAP={preteam:1500, advb:2200, adva:2600, junior:3500, seniorb:4500, seniora:5000, vortexb:6000, vortexa:6500, legend:7000};
     const rvCap=VCAP[S.squadId]||5000;
     const rvSecs=rvPlan.sections||[];
@@ -13001,6 +13040,11 @@ class Component extends DCLogic {
       goalsHasSwimmer, goalsSwLabel, goalsSquadName: squad.name, goalsSwQuery:S.goalsSwQuery||'', onGoalsSwQuery:(e)=>this.setState({goalsSwQuery:e.target.value}),
       goalsSwResults, onGoalsClear:()=>this.clearGoalsSwimmer(), goalMsg, goalMsgShow:!!goalMsg,
       onAiSuggestAll: goalsSwObj ? ()=>this.aiSuggestAllGoals(S.goalsSwId, goalsSwObj.pbs||[], goalsSwObj.age) : null,
+      onReviewAi: ()=>this.reviewAiExplain(rvPlan, rvChecks, squad, rvTotal, rvCap),
+      reviewAiLabel: S.reviewAiLoading ? 'Reading the session…' : (S.reviewAiOut ? 'Ask again' : 'Explain these with Claude'),
+      reviewAiIcon: S.reviewAiLoading ? 'loader-2' : 'sparkles', reviewAiSpin: S.reviewAiLoading ? 'vx-spin' : '',
+      reviewAiHasOut: !!S.reviewAiOut, reviewAiOut: S.reviewAiOut||{title:'',blocks:[]},
+      reviewAiErr: S.reviewAiErr||'', reviewAiErrShow: !!S.reviewAiErr,
       aiKinds, aiPrompt:S.aiPrompt, onAiPrompt:(e)=>this.setState({aiPrompt:e.target.value}), aiPlaceholder:aiPlaceMap[S.aiKind],
       aiErr:S.aiErr||'', aiErrShow:!!S.aiErr,
       onGenerate:()=>this.aiGenerate(), aiBtnLabel:S.aiLoading?'Generating…':'Generate with AI', aiBtnIcon:S.aiLoading?'loader-2':'sparkles', aiSpin:S.aiLoading?'vx-spin':'',

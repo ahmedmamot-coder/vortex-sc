@@ -1672,6 +1672,45 @@ describe("InBody sheet", () => {
     itAsync("with no sync layer it claims only what it knows", async () =>
       eq(await run(undefined), "Saved on this device ✓"));
   });
+  // The plan review counted a session's volume by summing the distances alone, so 8x100 counted
+  // as 100. A real 6,700 m session was reviewed as 4,150 m against a 6,000 m guide — so it
+  // passed a check that exists to stop a squad of children being over-trained, and the sessions
+  // it most needed to flag were exactly the ones it waved through.
+  describe("the plan review measures the session the coach actually wrote", () => {
+    const metres = bind("planMetres", {}, []);
+    const plan = {
+      sections: [
+        { title: "Warm-up", sets: [{ dist: 400, reps: 1 }] },
+        { title: "Main set", rounds: 3, sets: [{ dist: 100, reps: 8 }, { dist: 50, reps: 4, circuit: 2 }] },
+        { title: "Cool-down", sets: [{ dist: 300, reps: 1 }] },
+      ],
+    };
+    it("reps are counted, not just the distance", () => {
+      eq(metres({ sections: [{ sets: [{ dist: 100, reps: 8 }] }] }), 800);
+    });
+    it("a section's rounds multiply everything in it", () =>
+      eq(metres({ sections: [{ rounds: 3, sets: [{ dist: 100, reps: 8 }] }] }), 2400));
+    it("a circuit counts too", () =>
+      eq(metres({ sections: [{ sets: [{ dist: 50, reps: 4, circuit: 2 }] }] }), 400));
+    it("the whole session adds up the way the plan screen shows it", () =>
+      eq(metres(plan), 400 + 3 * (800 + 400) + 300));
+    it("the review uses that one calculation and not its own", () => {
+      const src = sourceBetween("// ---- AI Plan Review", "const rvChecks=[");
+      eq(/const rvTotal=this\.planMetres\(rvPlan\)/.test(src), true);
+      eq(/rvTotal\+=\(\+st\.dist/.test(src), false, "summing distances ignores reps and under-counts every session");
+    });
+  });
+  // The screen promised "the AI writes the explanations" while printing hardcoded strings.
+  it("Claude explains the verdicts and is never allowed to change one", () => {
+    const fn = sourceBetween("async reviewAiExplain(plan, checks, squad, total, cap){", "async _aiAsk(");
+    eq(/these verdicts are settled/.test(fn) && /Do not re-judge them/.test(fn), true,
+      "the rules decide; the model only puts them into words");
+    eq(/reviewAiOut/.test(fn), true);
+    // The panel it writes must be additional, not a replacement for the rule list.
+    eq(/reviewChecksV/.test(SOURCE) && /reviewAiHasOut/.test(SOURCE), true,
+      "the verdicts must still be on screen alongside whatever the model says");
+  });
+
   // Changing one swimmer's package used to rewrite all 304 of them. A membership is what a
   // family is charged, so a stale copy winning does not announce itself — it quietly bills the
   // wrong amount next month.
