@@ -1754,11 +1754,39 @@ describe("InBody sheet", () => {
       eq((SOURCE.match(/famContinueAfterMfa\(/g) || []).length >= 3, true);
       eq(/familyUser:rec, familyActiveIdx:0, screen:'app'/.test(sourceBetween("async famContinueAfterMfa(", "// Forgot password")), true);
     });
+    // A QR that will not draw showed as a blank white slab with the key underneath as an
+    // afterthought, which tells somebody nothing about what to do next.
+    describe("the QR code", () => {
+      const src = bind("_mfaQrSrc", {}, []);
+      it("a plain svg is carried as a data URI", () =>
+        eq(/^data:image\/svg\+xml;utf8,%3Csvg/.test(src('<svg viewBox="0 0 9 9"></svg>')), true));
+      it("an XML prolog in front of it is not a reason to give up", () => {
+        const out = src('<?xml version="1.0"?>\n<svg viewBox="0 0 9 9"></svg>');
+        eq(out.startsWith("data:image/svg+xml"), true, "a prolog is normal and common");
+        eq(decodeURIComponent(out).includes("<?xml"), false, "and is dropped rather than carried");
+      });
+      it("an svg with only a viewBox is given a size, or it collapses to nothing", () =>
+        eq(/width="240"/.test(decodeURIComponent(src('<svg viewBox="0 0 9 9"></svg>'))), true));
+      it("a size it already has is left alone", () =>
+        eq(/width="90"/.test(decodeURIComponent(src('<svg width="90" height="90"></svg>'))), true));
+      it("something already a data URI is passed through", () =>
+        eq(src("data:image/svg+xml;utf8,%3Csvg%3E"), "data:image/svg+xml;utf8,%3Csvg%3E"));
+      it("something that is not an svg at all yields nothing", () => {
+        eq(src("not an svg"), "");
+        eq(src(""), "");
+        eq(src(null), "");
+      });
+      it("with no QR the key becomes the instruction, not the afterthought", () => {
+        const lead = sourceBetween("mfaKeyLead:", "updateReady:");
+        eq(/Enter a setup key/.test(lead), true, "a blank white box says nothing about what to do next");
+        eq(/mfaQrShow/.test(SOURCE), true, "and the empty image is not drawn at all");
+      });
+    });
     it("the QR is shown as an image, never injected as raw HTML", () => {
       eq(/\{\{\{ /.test(SOURCE), false, "raw-HTML injection has no other use in this app to check it against");
       eq(/data:image\/svg\+xml;utf8,'\+encodeURIComponent/.test(SOURCE), true);
       const fn = sourceBetween("_mfaQrSrc(svg){", "async _mfaCall(");
-      eq(/\^<svg\[/.test(fn), true, "anything that is not an svg is shown as nothing, not as junk");
+      eq(/if\(i<0\) return '';/.test(fn), true, "anything that is not an svg is shown as nothing, not as junk");
     });
     it("a wrong code is explained, not just refused", () => {
       const fn = sourceBetween("_mfaWhy(res){", "// Called the moment a password is accepted");

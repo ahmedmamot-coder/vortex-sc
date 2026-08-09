@@ -5181,10 +5181,12 @@ if ('serviceWorker' in navigator) {
         <p style="margin:0 0 16px;font-size:12.5px;color:rgba(255,255,255,.65);line-height:1.55">{{ mfaLead }}</p>
 
         <sc-if value="{{ mfaIsEnroll }}" hint-placeholder-val="{{ false }}">
-          <div style="background:#fff;border-radius:14px;padding:14px;text-align:center;margin-bottom:12px">
-            <img src="{{ mfaQr }}" alt="" style="display:block;width:100%;max-width:210px;height:auto;margin:0 auto">
-          </div>
-          <p style="margin:0 0 5px;font-size:11px;color:rgba(255,255,255,.55);line-height:1.5">Can't scan it? Type this key into the app instead:</p>
+          <sc-if value="{{ mfaQrShow }}" hint-placeholder-val="{{ true }}">
+            <div style="background:#fff;border-radius:14px;padding:14px;text-align:center;margin-bottom:12px">
+              <img src="{{ mfaQr }}" alt="" style="display:block;width:210px;max-width:100%;height:auto;margin:0 auto">
+            </div>
+          </sc-if>
+          <p style="margin:0 0 5px;font-size:11px;color:rgba(255,255,255,.55);line-height:1.5">{{ mfaKeyLead }}</p>
           <p style="margin:0 0 16px;font-family:var(--font-mono);font-size:12.5px;color:#22D7D7;word-break:break-all;line-height:1.5">{{ mfaSecret }}</p>
         </sc-if>
 
@@ -5289,7 +5291,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-09v';
+const VX_BUILD='2026-08-09w';
 const VX_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 class Component extends DCLogic {
   constructor(props){
@@ -5965,10 +5967,18 @@ class Component extends DCLogic {
   // 300 families out of their children's results on the morning this ships would be a worse
   // failure than the one it is guarding against.
   _mfaQrSrc(svg){
-    const t=String(svg||'').trim();
+    let t=String(svg||'').trim();
     if(!t) return '';
     if(/^data:/i.test(t)) return t;              // already a data URI
-    if(!/^<svg[\s>]/i.test(t)) return '';        // not what we expected — show nothing, not junk
+    // Insisting the string START with <svg was too strict: an XML prolog, a doctype or a
+    // comment ahead of it is normal and common, and rejecting those left a blank white box
+    // with no way to tell it apart from a QR that simply had not loaded.
+    const i=t.search(/<svg[\s>]/i);
+    if(i<0) return '';                           // genuinely not an SVG — show nothing, not junk
+    t=t.slice(i);
+    // An <svg> carrying only a viewBox has no intrinsic size, and inside a flexible box that
+    // collapses to nothing at all. Give it one if it does not have one.
+    if(!/<svg[^>]*\swidth=/i.test(t)) t=t.replace(/<svg/i, '<svg width="240" height="240"');
     return 'data:image/svg+xml;utf8,'+encodeURIComponent(t);
   }
   async _mfaCall(path, body, token){
@@ -12903,6 +12913,12 @@ class Component extends DCLogic {
       // rather than injected as raw HTML: an <img> cannot run script, and the app has no other
       // raw-HTML binding whose behaviour this could be checked against.
       mfaQr: this._mfaQrSrc(S.mfa && S.mfa.qr),
+      mfaQrShow: !!this._mfaQrSrc(S.mfa && S.mfa.qr),
+      // When there is no QR to draw, say so and make typing the key the instruction rather than
+      // the afterthought. A blank white box tells somebody nothing about what to do next.
+      mfaKeyLead: this._mfaQrSrc(S.mfa && S.mfa.qr)
+        ? "Can't scan it? Type this key into the app instead:"
+        : 'Add this key to your authenticator app by hand — choose "Enter a setup key" and paste it:',
       mfaSecret: (S.mfa && S.mfa.secret) || '',
       mfaCode: (S.mfa && S.mfa.code) || '',
       onMfaCode: (e)=>{ const v=String(e.target.value||'').replace(/\D/g,'').slice(0,6); this.setState({mfa:{...this.state.mfa, code:v, err:''}}); },
