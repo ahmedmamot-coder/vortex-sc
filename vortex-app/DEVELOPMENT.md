@@ -92,6 +92,31 @@ automatically, and shown only once while both copies exist. Nothing is ever writ
 blob. `0001_init.sql` declares an older `inbody_scans` table keyed on `swimmers(id)` as a uuid;
 the app identifies swimmers by the roster's text ids and never used it — it is left alone.
 
+## The coaching assistants
+
+Workout Review, the swimmer-profile suggestion, Season Architect, Dryland and Nutrition all call
+`/api/ai/coach`, which uses the same server-side `ANTHROPIC_API_KEY`. Until today they returned a
+hardcoded paragraph after a 1.3-second delay dressed up as thinking — worse than no assistant,
+because a coach reads "rest on the 8x100 may be too generous" as a remark about the set they just
+wrote.
+
+**No child is identifiable in a request.** The route accepts a fixed list of numbers
+(`age`, `attendancePct`, `acuteChronic`, `wellness`, best times as event + seconds …) and a few
+short labels, and **drops everything else** — names, dates of birth, swimmer ids, meets, free
+text about a person. It is a whitelist, so a later change to the app cannot start leaking names
+by accident; a squad label with a sentence smuggled into it is refused too. Tests import the real
+filter from the route, not a copy, because what it drops *is* the safeguard.
+
+**The model advises the coach, it does not prescribe to the child.** The system prompt rules out
+calorie and weight targets, diet plans, supplements, fasting, anything medical, and heavy lifting
+for pre-pubertal swimmers, and tells it to defer to a professional. The reply is re-shaped
+server-side into `{title, blocks[]}` — colours are the app's, lengths are capped, and an answer
+that arrives malformed becomes an error rather than a half-rendered panel.
+
+The rule-based suggestion on the swimmer profile stays exactly as it was: it works offline, costs
+nothing, and is what the screen shows by default. **Ask Claude about this swimmer** sits under it
+as a second opinion.
+
 ## Reading an InBody sheet from a photograph
 
 A PDF with a real text layer is read directly, in the browser, with no setup.

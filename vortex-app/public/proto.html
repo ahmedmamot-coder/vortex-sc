@@ -2691,6 +2691,19 @@ if ('serviceWorker' in navigator) {
                             <p style="margin:0;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">Nutrition</p>
                             <p style="margin:3px 0 0;font-size:11.5px;color:rgba(255,255,255,.75);line-height:1.4">{{ aiSugg.nutritionTip }}</p>
                           </div>
+                          <div style="border-top:1px solid rgba(255,255,255,.12);padding-top:11px">
+                            <button onclick="{{ onSwAiAsk }}" style="width:100%;display:flex;align-items:center;justify-content:center;gap:7px;background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.22);border-radius:11px;padding:10px;cursor:pointer;font-family:inherit;font-weight:700;font-size:12px"><i data-lucide="{{ swAiBtnIcon }}" style="width:15px;height:15px" class="{{ swAiSpin }}"></i>{{ swAiBtnLabel }}</button>
+                            <p style="margin:7px 2px 0;font-size:10.5px;color:rgba(255,255,255,.45);line-height:1.4">Everything above is worked out on this device from their own times, load and attendance. This asks Claude to read the same numbers — no name or date of birth is sent.</p>
+                            <sc-if value="{{ swAiErrShow }}" hint-placeholder-val="{{ false }}"><p style="margin:8px 2px 0;font-size:11.5px;font-weight:600;color:#FF9A8B;line-height:1.45">{{ swAiErr }}</p></sc-if>
+                            <sc-if value="{{ swAiHasOut }}" hint-placeholder-val="{{ false }}">
+                              <div style="margin-top:11px;background:rgba(255,255,255,.06);border-radius:12px;padding:12px">
+                                <p style="margin:0 0 9px;font-size:12.5px;font-weight:700;color:#22D7D7">{{ swAiOut.title }}</p>
+                                <sc-for list="{{ swAiOut.blocks }}" as="sb" hint-placeholder-count="3">
+                                  <div style="margin-bottom:9px"><p style="margin:0 0 4px;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:rgba(255,255,255,.5)">{{ sb.label }}</p><sc-for list="{{ sb.lines }}" as="sl" hint-placeholder-count="3"><p style="margin:0 0 3px;font-size:11.5px;color:rgba(255,255,255,.82);line-height:1.45">{{ sl }}</p></sc-for></div>
+                                </sc-for>
+                              </div>
+                            </sc-if>
+                          </div>
                         </div>
                       </sc-if>
                       <sc-if value="{{ aiSugg.hasData }}" hint-placeholder-val="{{ true }}">
@@ -4180,6 +4193,7 @@ if ('serviceWorker' in navigator) {
                         <textarea value="{{ aiPrompt }}" oninput="{{ onAiPrompt }}" placeholder="{{ aiPlaceholder }}" style="width:100%;border:none;outline:none;resize:none;font-family:inherit;font-size:13.5px;color:#0C1116;background:none;min-height:52px;line-height:1.4"></textarea>
                         <button onclick="{{ onGenerate }}" style="width:100%;margin-top:8px;height:44px;border-radius:12px;background:var(--vx-ink);color:#fff;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap"><i data-lucide="{{ aiBtnIcon }}" style="width:17px;height:17px" class="{{ aiSpin }}"></i>{{ aiBtnLabel }}</button>
                       </div>
+                      <sc-if value="{{ aiErrShow }}" hint-placeholder-val="{{ false }}"><p style="margin:9px 3px 0;font-size:11.5px;font-weight:600;color:#B42318;line-height:1.45">{{ aiErr }}</p></sc-if>
                       <sc-if value="{{ aiHasOut }}" hint-placeholder-val="{{ false }}">
                         <div class="vx-screen" style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:15px;box-shadow:0 2px 7px rgba(11,20,40,.05);margin-top:11px">
                           <div style="display:flex;align-items:center;gap:8px;margin-bottom:11px"><span style="width:26px;height:26px;border-radius:8px;background:var(--vx-blue-tint);color:var(--vx-blue);display:flex;align-items:center;justify-content:center"><i data-lucide="sparkles" style="width:15px;height:15px"></i></span><h3 style="margin:0;font-size:14.5px;font-weight:700;color:#0C1116">{{ aiOut.title }}</h3></div>
@@ -4188,7 +4202,7 @@ if ('serviceWorker' in navigator) {
                           </sc-for>
                         </div>
                       </sc-if>
-                      <p style="margin:11px 4px 0;font-size:11px;color:#9AA2B4;line-height:1.4;display:flex;gap:6px"><i data-lucide="info" style="width:14px;height:14px;flex:none;margin-top:1px"></i><span>In production this calls Claude on the server, using the club's key held there. Nothing is entered on this device.</span></p>
+                      <p style="margin:11px 4px 0;font-size:11px;color:#9AA2B4;line-height:1.4;display:flex;gap:6px"><i data-lucide="info" style="width:14px;height:14px;flex:none;margin-top:1px"></i><span>Answered by Claude on the server, using the club's key held there. Squad sizes and ages are sent; no swimmer's name or date of birth ever is. Treat it as a second opinion, not an instruction.</span></p>
                     </div>
                   </sc-if>
 
@@ -5219,7 +5233,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-09l';
+const VX_BUILD='2026-08-09m';
 const VX_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 class Component extends DCLogic {
   constructor(props){
@@ -5479,7 +5493,8 @@ class Component extends DCLogic {
         {id:'f2', author:'Coach Mahmoud', role:'Vortex A', initials:'CM', photo:'assets/coach-mahmoud.jpg', tag:'Set', text:'Tonight: 3×(8×50 @ :45) descend 1-4, 5-8. EN2 → SP1. Bring your fast legs.', image:'', likes:11, comments:3, time:'5h', liked:false},
         {id:'f3', author:'Ahmed Mamo', role:'Technical Director', initials:'AM', photo:'assets/director-ahmed.jpg', tag:'Notice', text:'Entry deadline for the Nautilus Invitational is Thursday. Coaches, confirm your squad lists in Meets.', image:'', likes:38, comments:9, time:'1d', liked:false},
       ],
-      aiKind:'season', aiPrompt:'', aiOut:null, aiLoading:false,
+      aiKind:'season', aiPrompt:'', aiOut:null, aiLoading:false, aiErr:'',
+      swAiOut:null, swAiLoading:false, swAiErr:'',
       loungeEditId:null, loungeEditText:'', commentDrafts:{}, reqOpen:false, reqTo:'', reqText:'', reqMsg:'',
       fmBody:'', fmSet:'', fmVideo:'',
       theme:'light', settingsOpen:false, famProfileDraft:null, waLabel:'', waNumber:'', waLink:'', shareOpen:false, shareMsg:'',
@@ -9914,37 +9929,76 @@ class Component extends DCLogic {
 
   medal(place){ if(place==1) return ['linear-gradient(140deg,#F6C544,#C6890B)','#fff']; if(place==2) return ['linear-gradient(140deg,#DFE3ED,#A9B2C4)','#3A4152']; if(place==3) return ['linear-gradient(140deg,#DBA672,#A5652E)','#fff']; return ['#EEF1F5','#7A8296']; }
 
-  aiGenerate(){
+  // The assistants call the model now. They used to return a paragraph written months ago
+  // after a 1.3-second delay dressed up as thinking, which is worse than having no assistant:
+  // a coach reads "rest on the 8x100 may be too generous" as a remark about the set they just
+  // wrote. Nothing identifying a child is sent — see src/app/api/ai/coach/route.ts.
+  async aiGenerate(){
     if(this.state.aiLoading) return;
-    this.setState({aiLoading:true, aiOut:null});
-    const kind=this.state.aiKind;
-    clearTimeout(this._ai);
-    this._ai=setTimeout(()=>{
-      const outs={
-        season:{title:'16-week season → Vortex Int. Champs', blocks:[
-          {label:'Macro', color:'#067EEA', lines:['Wks 1–6 · General prep — aerobic base, technique, EN1/EN2 volume 70%.','Wks 7–11 · Specific prep — race-pace SP1/SP2, threshold sets.','Wks 12–14 · Competition — sharpening, starts & turns.','Wks 15–16 · Taper — 45% volume, high rest, race rehearsal.']},
-          {label:'Weekly rhythm', color:'#2733D6', lines:['9 pool + 2 dryland sessions. Mon/Wed/Fri AM aerobic; Tue/Thu quality; Sat long.']},
-          {label:'Test sets', color:'#8A22D5', lines:['Fortnightly 7×200 step test + 4×50 max velocity.']},
-        ]},
-        dryland:{title:'Dryland block · 40 min', blocks:[
-          {label:'Activation', color:'#067EEA', lines:['Band pull-aparts 2×15 · Scap push-ups 2×12 · World-greatest stretch.']},
-          {label:'Strength', color:'#2733D6', lines:['Goblet squat 4×8 · Chin-ups 4×6 · Single-leg RDL 3×8/side · Pallof press 3×10.']},
-          {label:'Core & recover', color:'#8A22D5', lines:['Hollow hold 3×30s · Side plank 3×30s · 5 min mobility flow.']},
-        ]},
-        nutrition:{title:'Fuelling · Doha training day', blocks:[
-          {label:'Pre-AM', color:'#067EEA', lines:['Banana + dates + water 45 min before. Light, quick carbs.']},
-          {label:'Recovery', color:'#2733D6', lines:['Within 30 min: 20g protein + carbs — laban + oats, or chicken wrap.']},
-          {label:'Hydration (heat-aware)', color:'#8A22D5', lines:['500ml/hr in the heat, add electrolytes. Monitor urine colour pre-session.']},
-        ]},
-        review:{title:'Workout review', blocks:[
-          {label:'Read', color:'#067EEA', lines:['Set is ~68% EN2 with a short SP1 finisher — solid aerobic emphasis.']},
-          {label:'Watch', color:'#F5A623', lines:['Rest on the 8×100 may be too generous for threshold intent — tighten 5–10s.']},
-          {label:'Improved version', color:'#1CB87A', lines:['8×100 @ 1:25 (was 1:30) · add 4×50 fast @ 1:00 to lift SP1 load.']},
-        ]},
-      };
-      this.setState({aiLoading:false, aiOut:outs[kind]});
-      this._icons();
-    }, 1300);
+    const kind=this.state.aiKind, text=(this.state.aiPrompt||'').trim();
+    if(kind==='review' && !text){ this.setState({aiErr:'Paste the set you want reviewed into the box first.'}); return; }
+    this.setState({aiLoading:true, aiOut:null, aiErr:''});
+    const out=await this._aiAsk(kind, text, this._aiSquadContext());
+    if(out.error){ this.setState({aiLoading:false, aiErr:out.error}); return; }
+    this.setState({aiLoading:false, aiOut:{title:out.title, blocks:out.blocks}});
+    this._icons();
+  }
+  // One caller for every assistant, so the failure wording is the same everywhere and there is
+  // one place that knows what a usable answer looks like.
+  async _aiAsk(task, text, context){
+    const ctl=(typeof AbortController!=='undefined') ? new AbortController() : null;
+    const timer=setTimeout(()=>{ try{ ctl && ctl.abort(); }catch(e){} }, 55000);
+    try{
+      const r=await fetch('/api/ai/coach', {method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({task, text, context}), signal: ctl?ctl.signal:undefined});
+      const j=await r.json().catch(()=>null);
+      if(!r.ok || !j || j.error) return {error:((j&&j.error)||('The assistant returned HTTP '+r.status))+((j&&j.said)?(' '+j.said):'')};
+      if(!j.blocks || !j.blocks.length) return {error:'The assistant did not return anything usable. Try again.'};
+      return j;
+    }catch(e){
+      const aborted=e && (e.name==='AbortError' || /abort/i.test(e.message||''));
+      return {error: aborted ? 'The assistant took too long to answer.' : ('Could not reach the assistant'+((e&&e.message)?(' ('+e.message+')'):'')+'.')};
+    }finally{ clearTimeout(timer); }
+  }
+  // Numbers about the squad on screen: ages, size, how often it trains. No names go near this.
+  _aiSquadContext(){
+    const sq=this.squadById[this.state.squadId]; const list=(this.roster[this.state.squadId]||[]);
+    const ages=list.map(s=>s.age).filter(a=>typeof a==='number' && a>0);
+    const ctx={ swimmers:list.length, poolLength:50 };
+    if(ages.length){ ctx.ageMin=Math.min.apply(null,ages); ctx.ageMax=Math.max.apply(null,ages);
+      ctx.age=Math.round(ages.reduce((a,b)=>a+b,0)/ages.length); }
+    if(sq && sq.name) ctx.squadLevel=String(sq.name).slice(0,40);
+    return ctx;
+  }
+  // A swimmer, as measurements. Deliberately no name, no date of birth, no id: age is what
+  // changes the advice, and on its own it identifies nobody.
+  _aiSwimmerContext(swObj){
+    const ctx={};
+    if(typeof swObj.age==='number' && swObj.age>0) ctx.age=swObj.age;
+    const sq=this.squadById[swObj.squadId||this.state.squadId]; if(sq && sq.name) ctx.squadLevel=String(sq.name).slice(0,40);
+    const bests=(swObj.pbs||[]).slice(0,20).map(p=>{
+      const drop=parseFloat(String(p.drop||'').replace(/[^\d.]/g,''));
+      const b={event:p.event, seconds:Math.round((p.sec||0)*100)/100};
+      if(isFinite(drop) && drop) b.dropSeconds=drop; return b; }).filter(b=>b.seconds>0);
+    if(bests.length) ctx.bests=bests;
+    // Load, readiness and attendance come from the same reading the risk board uses, so the
+    // assistant is looking at the numbers the coach already trusts rather than its own version.
+    const sqId=swObj.squadId||this.state.squadId;
+    const idx=(this.roster[sqId]||[]).findIndex(x=>x.id===swObj.id);
+    try{ const r=this._riskFor(sqId, swObj, idx<0?0:idx);
+      if(r){ if(r.acute!=null) ctx.acuteLoad=Math.round(r.acute); if(r.chronic!=null) ctx.chronicLoad=r.chronic;
+        if(r.acwr!=null) ctx.acuteChronic=r.acwr; if(r.readiness!=null) ctx.wellness=r.readiness; } }catch(e){}
+    try{ const a=this._attendPct(sqId, swObj.id, idx<0?0:idx, 27, -1); if(a!=null) ctx.attendancePct=a; }catch(e){}
+    try{ const ib=this._swInbody(swObj.id)[0]; if(ib){ if(ib.weight!=null) ctx.weightKg=ib.weight; if(ib.fat!=null) ctx.bodyFatPct=ib.fat; } }catch(e){}
+    return ctx;
+  }
+  async swimmerAiAsk(swObj){
+    if(this.state.swAiLoading) return;
+    this.setState({swAiLoading:true, swAiOut:null, swAiErr:''});
+    const out=await this._aiAsk('swimmer', '', this._aiSwimmerContext(swObj));
+    if(out.error){ this.setState({swAiLoading:false, swAiErr:out.error}); return; }
+    this.setState({swAiLoading:false, swAiOut:{title:out.title, blocks:out.blocks}});
+    this._icons();
   }
 
   renderVals(){
@@ -12028,6 +12082,11 @@ class Component extends DCLogic {
           onFitAdd:()=>this.addFitTest(swObj.id),
           aiSugg: (()=>{ const a=this.swimmerAiSuggestion(swObj); return {...a, hasWeak: !!(a.hasData && a.weakStroke)}; })(),
           aiEditOpen:!!S.aiEditOpen, aiEditLabel: S.aiEditOpen?'Close':'Edit',
+          onSwAiAsk:()=>this.swimmerAiAsk(swObj),
+          swAiBtnLabel: S.swAiLoading ? 'Reading their numbers…' : (S.swAiOut ? 'Ask again' : 'Ask Claude about this swimmer'),
+          swAiBtnIcon: S.swAiLoading ? 'loader-2' : 'sparkles', swAiSpin: S.swAiLoading ? 'vx-spin' : '',
+          swAiHasOut: !!S.swAiOut, swAiOut: S.swAiOut||{title:'',blocks:[]},
+          swAiErr: S.swAiErr||'', swAiErrShow: !!S.swAiErr,
           onAiEditToggle:()=>{ if(S.aiEditOpen){ this.setState({aiEditOpen:false}); } else { const a=this.swimmerAiSuggestion(swObj); this.setState({aiEditOpen:true, aiDraft:{focusReason:a.focusReason||'', weakReason:a.weakReason||'', secondaryReason:a.secondaryReason||'', fitnessInsight:a.fitnessInsight||'', nutritionTip:a.nutritionTip||''}}); } },
           aiDraftFocusReason:(S.aiDraft||{}).focusReason||'', onAiDraftFocusReason:(e)=>this.setState({aiDraft:{...S.aiDraft, focusReason:e.target.value}}),
           aiDraftWeakReason:(S.aiDraft||{}).weakReason||'', onAiDraftWeakReason:(e)=>this.setState({aiDraft:{...S.aiDraft, weakReason:e.target.value}}),
@@ -12754,6 +12813,7 @@ class Component extends DCLogic {
       goalsSwResults, onGoalsClear:()=>this.clearGoalsSwimmer(), goalMsg, goalMsgShow:!!goalMsg,
       onAiSuggestAll: goalsSwObj ? ()=>this.aiSuggestAllGoals(S.goalsSwId, goalsSwObj.pbs||[], goalsSwObj.age) : null,
       aiKinds, aiPrompt:S.aiPrompt, onAiPrompt:(e)=>this.setState({aiPrompt:e.target.value}), aiPlaceholder:aiPlaceMap[S.aiKind],
+      aiErr:S.aiErr||'', aiErrShow:!!S.aiErr,
       onGenerate:()=>this.aiGenerate(), aiBtnLabel:S.aiLoading?'Generating…':'Generate with AI', aiBtnIcon:S.aiLoading?'loader-2':'sparkles', aiSpin:S.aiLoading?'vx-spin':'',
       aiHasOut: !!S.aiOut, aiOut:S.aiOut||{title:'',blocks:[]},
     };

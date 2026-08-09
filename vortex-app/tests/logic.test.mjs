@@ -3,6 +3,9 @@
 
 import { readFileSync } from "node:fs";
 import { bind, describe, it, itAsync, eq, report, SOURCE, sourceBetween, runInSandbox } from "./harness.mjs";
+// The real route module. Node strips the types, so these tests run the filter that ships
+// rather than a regex-mangled copy of it.
+const AI_ROUTE = await import("../src/app/api/ai/coach/route.ts");
 
 /* ---------------------------------------------------------------- attendance
    A swimmer signed off (traveling / sick / inactive) must count as absent, and a
@@ -1371,6 +1374,57 @@ describe("InBody sheet", () => {
       eq(/api\.anthropic\.com/.test(SOURCE), false, "that request would carry the key out of the server"));
     it("Settings says where the key actually lives", () =>
       eq(/ANTHROPIC_API_KEY/.test(SOURCE) && /lives on the server/.test(SOURCE), true));
+  });
+
+  // The assistants used to return a paragraph written months earlier after a delay dressed up
+  // as thinking. Now they call a model — which means a club of children's data is one careless
+  // field away from an external service, so the route accepts a fixed list and drops the rest.
+  describe("nothing that identifies a child reaches the assistant", () => {
+    const clean = AI_ROUTE.cleanContext;
+
+    it("a name is dropped even when the app sends one", () => {
+      const out = clean({ name: "Tamara Aly", firstName: "Tamara", age: 9 });
+      eq("name" in out || "firstName" in out, false, "a later change to the app must not be able to start leaking names");
+      eq(out.age, 9, "age changes the advice and identifies nobody on its own");
+    });
+    it("a date of birth is dropped, and so is a swimmer id", () =>
+      eq(Object.keys(clean({ dob: "2017-04-17", swId: "tamara-aly", id: "abc" })).length, 0));
+    it("a squad label is kept but a sentence smuggled into it is not", () => {
+      eq(clean({ squadLevel: "Senior A" }).squadLevel, "Senior A");
+      eq("squadLevel" in clean({ squadLevel: "Senior A, coached by Sameh, swimmer Tamara Aly" }), false);
+    });
+    it("best times keep the event and the seconds, and nothing else", () => {
+      const out = clean({ bests: [{ event: "100 Free", seconds: 57.5, meet: "Doha Open", date: "2026-06-05", swimmer: "Tamara" }] });
+      eq(JSON.stringify(out.bests), JSON.stringify([{ event: "100 Free", seconds: 57.5 }]),
+        "a meet and a date and an age band together name a child");
+    });
+    it("something shaped like a name in an event field is refused", () =>
+      eq("bests" in clean({ bests: [{ event: "Tamara Aly", seconds: 57.5 }] }), false));
+    it("a number arriving as text is still a number, not free text", () =>
+      eq(clean({ attendancePct: "84" }).attendancePct, 84));
+  });
+  it("the assistant is told these are children, and what it may not say", () => {
+    const AI = readFileSync(new URL("../src/app/api/ai/coach/route.ts", import.meta.url), "utf8");
+    for (const rule of ["calorie", "supplement", "medical", "minors"])
+      eq(new RegExp(rule, "i").test(AI), true, "the prompt must rule out " + rule);
+  });
+  it("a malformed answer never reaches the screen half-rendered", () => {
+    const AI = readFileSync(new URL("../src/app/api/ai/coach/route.ts", import.meta.url), "utf8");
+    eq(/if \(!blocks\.length\) return Response\.json\(\{ error/.test(AI), true);
+    eq(/color: COLORS\[i % COLORS\.length\]/.test(AI), true, "colours are ours, not the model's");
+  });
+  it("the assistants no longer answer from a script", () => {
+    const gen = sourceBetween("async aiGenerate(){", "async _aiAsk(");
+    eq(/setTimeout/.test(gen), false, "a canned paragraph behind a fake delay is worse than no assistant");
+    eq(/_aiAsk\('?\w*'?/.test(gen) || /this\._aiAsk\(/.test(gen), true);
+  });
+  it("the assistant call gives up before the server is killed", () => {
+    const client = +((SOURCE.match(/ctl && ctl\.abort\(\); \}catch\(e\)\{\} \}, (\d+)\);\s*try\{\s*const r=await fetch\('\/api\/ai\/coach'/) || [])[1] || 0);
+    const AI = readFileSync(new URL("../src/app/api/ai/coach/route.ts", import.meta.url), "utf8");
+    const outbound = +((AI.match(/AbortSignal\.timeout\((\d+)_?(\d*)\)/) || []).slice(1).join("") || 0);
+    const maxRun = +((AI.match(/maxDuration = (\d+)/) || [])[1] || 0) * 1000;
+    eq(outbound > 0 && outbound < maxRun, true, "a deadline longer than the function's life never fires");
+    eq(client > 0 && client < maxRun, true, "and waiting longer than the platform does loses the explanation");
   });
 
   it("the key never leaves the server", () => {
