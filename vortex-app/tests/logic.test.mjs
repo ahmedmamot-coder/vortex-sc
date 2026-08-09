@@ -1326,9 +1326,60 @@ describe("InBody sheet", () => {
   it("a typed test date puts the scan on the right day", () =>
     eq(/const typedDate=\/\^\\d\{4\}-\\d\{2\}-\\d\{2\}\$\/\.test/.test(SOURCE), true));
 
+  // An InBody sheet dated 14 July was labelled " 7". The stored date is ISO, and every caller
+  // was reversing it into dd/mm/yyyy before handing it to a reader that takes the month first —
+  // so 14 became a month that does not exist, leaving the month blank and printing 07 as the
+  // day. Where the day was 12 or less it was far worse: 2026-01-05 read back as "May 1", a real
+  // date, the wrong one, with nothing at all to hint at it. Same swap as the birthdays.
+  describe("dates the app stores are read, not reshaped", () => {
+    // VX_MONTHS is a module-level constant in the app, not a field on the component, so it has
+    // to exist as a global here rather than on the context object.
+    globalThis.VX_MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const label = bind("shortDateISO", {}, ["_dobParts"]);
+    it("the sheet dated 14 July says July", () => eq(label("2026-07-14"), "Jul 14"));
+    it("a day of 12 or less is not silently swapped with its month", () => {
+      eq(label("2026-01-05"), "Jan 5");
+      eq(label("2026-07-04"), "Jul 4");
+    });
+    it("the last day of the year survives", () => eq(label("2026-12-31"), "Dec 31"));
+    it("a stored timestamp keeps its date and drops the time", () =>
+      eq(label("2026-08-09T11:56:19.371Z"), "Aug 9"));
+    it("nothing in, nothing out — never a made-up day", () => {
+      eq(label(""), "");
+      eq(label(null), "");
+      eq(label("2026-02-31"), "", "a date that is not on the calendar is refused, not rolled");
+    });
+  });
+  it("no caller reshapes an ISO date to suit the month-first reader", () =>
+    eq(/reverse\(\)\.join\('\/'\)/.test(SOURCE), false,
+      "that reshaping is the bug itself — shortDateISO reads ISO directly"));
+
   it("height is kept, not read and thrown away", () => {
     eq(/height:data\.height\|\|null/.test(SOURCE), true);
-    eq(/\['height','Height',' cm'\]/.test(SOURCE), true);
+    eq(/\['height','Height',' cm','[^']+'\]/.test(SOURCE), true);
+  });
+
+  // Twenty-three tiles of small grey capitals all look alike, and a coach at the poolside is
+  // hunting for one of them. The icon is how it is found, so every row needs one and the two
+  // views must agree — the sheet you type into and the sheet you read back are the same sheet.
+  it("every reading carries an icon, in both the typed sheet and the saved one", () => {
+    const rows = (list) => [...(SOURCE.match(new RegExp(list + "\\s*[:=]\\s*\\[[\\s\\S]*?\\n\\s*\\]"))[0]
+      .matchAll(/\['(\w+)','[^']*','[^']*'(?:,'([^']*)')?\]/g))].map((m) => [m[1], m[2]]);
+    const shown = rows("IB_FIELDS"), typed = rows("ibFullFields");
+    eq(shown.length, 23, "every reading the sheet gives must still be listed");
+    eq(typed.length, 20);
+    for (const [k, icon] of shown.concat(typed)) eq(!!icon, true, k + " has no icon to find it by");
+    // The same reading must not be a barbell in one view and a bone in the other.
+    const byKey = Object.fromEntries(shown);
+    for (const [k, icon] of typed) if (byKey[k]) eq(icon, byKey[k], k + " is a different picture in each view");
+  });
+  it("a sheet can be saved from the panel it was typed into", () =>
+    eq(/onclick="\{\{ onInbodyAdd \}\}"[^>]*>[\s\S]{0,200}?Save this sheet/.test(SOURCE), true,
+      "the only way to save was a small + button above the panel, far from the last field typed"));
+  it("a save that is refused says why instead of doing nothing", () => {
+    const fn = sourceBetween("addInbody(swId){", "_saveSwMeta");
+    eq(/if\(!w\)\{ this\.setState\(\{profileIbMsg:/.test(fn), true,
+      "twenty figures typed, Save pressed, nothing happens and nothing to read");
   });
 
   it("an unreadable photo yields nothing rather than a guess", () => {

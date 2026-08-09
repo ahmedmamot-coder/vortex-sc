@@ -2398,7 +2398,7 @@ if ('serviceWorker' in navigator) {
                                     <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:5px;margin:4px 0 8px">
                                       <sc-for list="{{ ib.detail }}" as="ibd" hint-placeholder-count="8">
                                         <div style="background:#fff;border:1px solid #EEF1F5;border-radius:9px;padding:7px 9px">
-                                          <span style="display:block;font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#9AA2B4">{{ ibd.label }}</span>
+                                          <span style="display:block;font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#9AA2B4"><span aria-hidden="true">{{ ibd.icon }}</span> {{ ibd.label }}</span>
                                           <span style="display:block;font-family:var(--font-mono);font-size:12.5px;font-weight:700;color:#0C1116;margin-top:1px">{{ ibd.value }}</span>
                                         </div>
                                       </sc-for>
@@ -2425,11 +2425,12 @@ if ('serviceWorker' in navigator) {
                               <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:7px">
                                 <sc-for list="{{ ibFullFields }}" as="ibf" hint-placeholder-count="20">
                                   <span>
-                                    <span style="display:block;font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#9AA2B4;margin-bottom:2px">{{ ibf.label }} {{ ibf.unit }}</span>
+                                    <span style="display:block;font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#9AA2B4;margin-bottom:2px"><span aria-hidden="true">{{ ibf.icon }}</span> {{ ibf.label }} {{ ibf.unit }}</span>
                                     <input value="{{ ibf.value }}" oninput="{{ ibf.onInput }}" type="number" inputmode="decimal" style="width:100%;box-sizing:border-box;background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:8px 9px;font-family:var(--font-mono);font-size:12.5px;color:#0C1116;outline:none">
                                   </span>
                                 </sc-for>
                               </div>
+                              <button onclick="{{ onInbodyAdd }}" style="margin-top:11px;width:100%;display:flex;align-items:center;justify-content:center;gap:7px;background:var(--vx-blue);color:#fff;border:none;border-radius:9px;padding:11px;cursor:pointer;font-family:inherit;font-weight:800;font-size:12.5px"><i data-lucide="check" style="width:15px;height:15px"></i> Save this sheet</button>
                             </div>
                           </sc-if>
                           <input id="{{ profileIbInputId }}" type="file" accept="application/pdf,image/*" onchange="{{ onProfileIbPdf }}" style="display:none">
@@ -5161,7 +5162,8 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-09f';
+const VX_BUILD='2026-08-09g';
+const VX_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 class Component extends DCLogic {
   constructor(props){
     super(props);
@@ -5446,7 +5448,24 @@ class Component extends DCLogic {
   }
   rng(seed){ let t = seed>>>0; return ()=>{ t += 0x6D2B79F5; let r = Math.imul(t ^ (t>>>15), 1|t); r ^= r + Math.imul(r ^ (r>>>7), 61|r); return ((r ^ (r>>>14))>>>0)/4294967296; }; }
   fmt(sec){ if(sec<60) return sec.toFixed(2); const m=Math.floor(sec/60); const s=(sec-m*60); return m+':' + (s<10?'0':'') + s.toFixed(2); }
-  shortDate(d){ if(!d) return ''; const p=d.split('/'); const mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; const mi=parseInt(p[0],10)-1; return (mo[mi]||'')+' '+parseInt(p[1],10); }
+  shortDate(d){ if(!d) return ''; const p=d.split('/'); const mi=parseInt(p[0],10)-1; return (VX_MONTHS[mi]||'')+' '+parseInt(p[1],10); }
+  // Label a date the app has stored, which is always ISO.
+  //
+  // shortDate above reads month first, and every ISO date was being fed to it by reversing the
+  // string into dd/mm/yyyy - the one shape it cannot read. So an InBody sheet from 14 July came
+  // out as " 7": month 14 does not exist, leaving the month blank, and the 07 was printed as
+  // the day. Where the day was 12 or less nothing looked wrong at all - 2026-07-04 read back as
+  // "Apr 7", a real date, the wrong one, on meets, plans, tests and sign-ups alike. This is the
+  // same day-month swap that had a nine-year-old showing as eight, and it survived because a
+  // date was being reshaped in the caller to suit the reader instead of being read properly.
+  //
+  // _dobParts is the one date reader in the app: it takes ISO natively and refuses anything
+  // that is not a real calendar date. A stored timestamp keeps its date half and drops the time.
+  shortDateISO(v){
+    const t=String(v==null?'':v).trim();
+    const p=this._dobParts(/^\d{4}-\d{2}-\d{2}T/.test(t) ? t.slice(0,10) : t);
+    return p ? (VX_MONTHS[p.mo-1]+' '+p.d) : '';
+  }
   _timeAgo(iso){ if(!iso) return ''; const diff=Date.now()-new Date(iso).getTime(); const m=Math.floor(diff/60000); if(m<1) return 'just now'; if(m<60) return m+'m ago'; const h=Math.floor(m/60); if(h<24) return h+'h ago'; const d=Math.floor(h/24); return d+'d ago'; }
   dobFromAge(age){ const yr=new Date().getFullYear()-(parseInt(age,10)||0); return '01/01/'+yr; }
   // Compute age from a date of birth (accepts mm/dd/yyyy or yyyy-mm-dd). Returns null if unparseable.
@@ -6389,7 +6408,7 @@ class Component extends DCLogic {
     if(window.__vxUpsert){ window.__vxUpsert('staff_accounts', [this._staffRow(id, o, isCustom)]).then(ok=>{ if(ok) this._staffFetch(); }); }
   }
   meetsCalAdd(){ const f=this.state.meetsCalForm||{}; const name=(f.name||'').trim(); const date=(f.date||'').trim(); if(!name||!date) return; this.meetsCal.push({id:'mc_'+Date.now(), name:name, date:date, place:(f.place||'').trim(), pdf:f.pdf||'', pdfName:f.pdfName||''}); this.meetsCal.sort(function(a,b){return (a.date||'').localeCompare(b.date||'');}); this._saveJSON('vx_meets_cal', this.meetsCal); this.setState({meetsCalForm:{name:'',date:'',place:'',pdf:'',pdfName:''}});
-    this._pushSend({all:true}, 'New meet: '+name, this.shortDate(date.split('-').reverse().join('/'))+((f.place||'').trim()?(' · '+(f.place||'').trim()):''), '/'); }
+    this._pushSend({all:true}, 'New meet: '+name, this.shortDateISO(date)+((f.place||'').trim()?(' · '+(f.place||'').trim()):''), '/'); }
   meetsViewPdf(pdf, title){ if(!pdf) return; this._openDataUrl(pdf); }
   _esc(s){ return (''+(s==null?'':s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   // Open generated HTML / a stored file reliably on every platform. Android Chrome does NOT
@@ -6998,7 +7017,11 @@ class Component extends DCLogic {
     this.forceUpdate();
   }
   addInbody(swId){ const f=this.state.inbodyForm; const w=parseFloat(f.weight), fat=parseFloat(f.fat), mus=parseFloat(f.muscle);
-    if(!w) return;
+    // Weight is what every other reading is checked against, so a record without one cannot be
+    // reconciled and is not worth keeping. But refusing in silence is its own bug: someone can
+    // copy out twenty figures, press Save, and watch nothing happen with nothing to read. There
+    // is now a prominent Save button that is far easier to reach, so it has to say why.
+    if(!w){ this.setState({profileIbMsg:'Add the weight before saving \u2014 every other reading on the sheet is checked against it. Nothing else you have typed is lost.'}); return; }
     const m=this._swMeta(swId);
     // Carry the imported sheet onto the record being saved. Without this an imported photo
     // left its file on one entry and the numbers on another.
@@ -9179,7 +9202,7 @@ class Component extends DCLogic {
     const row={ id, squad_id:squadId, title:rec.title, zone:rec.zone, total_m:rec.totalM, plan:planCopy, sday:date, ts:Date.now() };
     try{ if(window.__vxInsert){ const ok=await window.__vxInsert('plan_sessions', [row]); if(ok) await this._plansFetch(); else this.setState({savedPlanMsg:'Saved on this device, but the database rejected it — run the plan_sessions SQL.'}); } }catch(e){}
     const sqName=(this.squadById[squadId]&&this.squadById[squadId].name)||'';
-    this._pushSend({swimmerIds:(this.roster[squadId]||[]).map(s=>s.id)}, 'New training plan'+(sqName?(' · '+sqName):''), (rec.title||'Session')+' · '+this.shortDate(date.split('-').reverse().join('/')), '/'); }
+    this._pushSend({swimmerIds:(this.roster[squadId]||[]).map(s=>s.id)}, 'New training plan'+(sqName?(' · '+sqName):''), (rec.title||'Session')+' · '+this.shortDateISO(date), '/'); }
   loadPlanSnapshot(squadId, id){ const rec=((this.savedPlans&&this.savedPlans[squadId])||[]).find(r=>r.id===id); if(!rec) return; this.mutatePlan(squadId, p=>{ p.title=rec.plan.title; p.zone=rec.plan.zone; p.sections=JSON.parse(JSON.stringify(rec.plan.sections)); }); this.setState({savedPlanMsg:'Loaded into the editor — change date/time and Save again to reschedule.', planSessDate:rec.date||this.todayISO(), planSessSlot:rec.slot||'AM', planSessTime:rec.time||''}); }
   async deletePlanSnapshot(squadId, id){ const list=((this.savedPlans&&this.savedPlans[squadId])||[]).filter(r=>r.id!==id); this.savedPlans={...(this.savedPlans||{}), [squadId]:list}; this.setState({});
     try{ if(window.__vxDelete){ await window.__vxDelete('plan_sessions', 'id=eq.'+encodeURIComponent(id)); await this._plansFetch(); } }catch(e){} }
@@ -10418,7 +10441,7 @@ class Component extends DCLogic {
     });
     const tpSel = tpRoster.find(sw=>sw.id===S.tpaceSwId) || null;
     const tpSelTests=(tpSel ? (this.tpaceTests[tpSel.id]||[]) : []).map((t,i)=>({
-      dateLabel:this.shortDate(t.date.split('-').reverse().join('/')), typeLabel:t.type==='1000'?'1000m':'400m', time:this.fmt(t.sec), tpace:this.fmt(t.tpace100),
+      dateLabel:this.shortDateISO(t.date), typeLabel:t.type==='1000'?'1000m':'400m', time:this.fmt(t.sec), tpace:this.fmt(t.tpace100),
       onDelete: tpSel?()=>this.tpaceDelete(tpSel.id, i):null }));
     const tpHasSel = !!tpSel;
     const tpType1000On = S.tpaceType==='1000', tpType400On = S.tpaceType==='400';
@@ -10634,7 +10657,7 @@ class Component extends DCLogic {
       onRemind:()=>this.notifyRenewal(d.sw.id, d.sw.name, d.daysLeft, d.m.note) }));
     const acadFees=[];
     const acadTrialRows = this.academyTrials.slice(0,10).map(t=>({ id:t.id, childName:t.childName, age:t.age, parentName:t.parentName, phone:t.phone,
-      squadHintName: this.squadById[t.squadHint]?this.squadById[t.squadHint].name:'—', submittedAt:this.shortDate(t.submittedAt.split('-').reverse().join('/')),
+      squadHintName: this.squadById[t.squadHint]?this.squadById[t.squadHint].name:'—', submittedAt:this.shortDateISO(t.submittedAt),
       onDismiss:()=>this.trialDismiss(t.id) }));
     const acadTrialForm = S.trialForm;
 
@@ -11614,26 +11637,30 @@ class Component extends DCLogic {
         // The sheet as the coach reads it on paper: the headline figures first, then the
         // composition, then the research parameters. Anything the sheet did not give us is
         // simply absent — a blank is more honest than a dash pretending to be a reading.
+        // The icon is there to be found by, not decorated with: twenty-three tiles of small grey
+        // capitals all look alike, and a coach at the poolside is hunting for one of them.
+        // Nothing here comments on the reading - these are children's records, and a body-fat
+        // row does not get a picture of food.
         const IB_FIELDS=[
-          ['weight','Weight',' kg'], ['smm','SMM',' kg'], ['bodyFatMass','Body fat mass',' kg'],
-          ['fat','PBF',' %'], ['bmi','BMI',''], ['score','InBody score','/100'],
-          ['height','Height',' cm'], ['visceralFat','Visceral fat area',''],
-          ['tbw','Total body water',' L'], ['icw','Intracellular water',' L'],
-          ['ecw','Extracellular water',' L'], ['ecwRatio','ECW ratio',''],
-          ['protein','Protein',' kg'], ['minerals','Minerals',' kg'],
-          ['ffm','Fat free mass',' kg'], ['slm','Soft lean mass',' kg'],
-          ['boneMineral','Bone mineral',' kg'], ['bodyCellMass','Body cell mass',' kg'],
-          ['bmr','BMR',' kcal'], ['whr','Waist-hip ratio',''],
-          ['obesityDegree','Obesity degree',' %'], ['smi','SMI',' kg/m²'],
-          ['phaseAngle','Phase angle','°'],
+          ['weight','Weight',' kg','⚖️'], ['smm','SMM',' kg','💪'], ['bodyFatMass','Body fat mass',' kg','🟠'],
+          ['fat','PBF',' %','📊'], ['bmi','BMI','','📐'], ['score','InBody score','/100','⭐'],
+          ['height','Height',' cm','📏'], ['visceralFat','Visceral fat area','','🎯'],
+          ['tbw','Total body water',' L','💧'], ['icw','Intracellular water',' L','💦'],
+          ['ecw','Extracellular water',' L','🌊'], ['ecwRatio','ECW ratio','','⚗️'],
+          ['protein','Protein',' kg','🥚'], ['minerals','Minerals',' kg','🧂'],
+          ['ffm','Fat free mass',' kg','🧍'], ['slm','Soft lean mass',' kg','🧬'],
+          ['boneMineral','Bone mineral',' kg','🦴'], ['bodyCellMass','Body cell mass',' kg','🔬'],
+          ['bmr','BMR',' kcal','🔥'], ['whr','Waist-hip ratio','','⭕'],
+          ['obesityDegree','Obesity degree',' %','📈'], ['smi','SMI',' kg/m²','🏋️'],
+          ['phaseAngle','Phase angle','°','⚡'],
         ];
         const inbodyRows=(meta.inbody||[]).slice(0,6).map((r,i)=>{
           // 'muscle' is what the form has always called SMM, and 'fat' what it calls PBF.
           const val=(k)=> k==='smm' ? (r.smm!=null?r.smm:r.muscle) : r[k];
-          const detail=IB_FIELDS.filter(f=>val(f[0])!=null).map(f=>({label:f[1], value:String(val(f[0]))+f[2]}));
+          const detail=IB_FIELDS.filter(f=>val(f[0])!=null).map(f=>({icon:f[3], label:f[1], value:String(val(f[0]))+f[2]}));
           const open=S.ibOpen===(swObj.id+'::'+i);
           return {
-            dateLabel:this.shortDate(r.date.split('-').reverse().join('/')),
+            dateLabel:this.shortDateISO(r.date),
             weight: r.weight!=null?(r.weight+' kg'):'—', fat: r.fat!=null?(r.fat+'% fat'):'—', muscle: r.muscle!=null?(r.muscle+' kg muscle'):'—',
             detail, hasDetail:detail.length>0, open,
             moreLabel: open ? 'Hide the full sheet' : ('Show the full sheet — '+detail.length+' reading'+(detail.length===1?'':'s')),
@@ -11721,18 +11748,20 @@ class Component extends DCLogic {
           ibFullOpen: !!S.ibFullOpen,
           onIbFullToggle:()=>this.setState({ibFullOpen: !S.ibFullOpen}),
           ibFullLabel: S.ibFullOpen ? 'Hide the rest of the sheet' : 'Type the rest of the sheet',
+          // The same icons as the saved sheet above, so a coach copying off the printout is
+          // looking for the picture they will see again once it is saved.
           ibFullFields: [
-            ['height','Height','cm'], ['bodyFatMass','Body fat mass','kg'], ['bmi','BMI',''],
-            ['score','InBody score','/100'], ['visceralFat','Visceral fat area',''],
-            ['tbw','Total body water','L'], ['icw','Intracellular water','L'],
-            ['ecw','Extracellular water','L'], ['ecwRatio','ECW ratio',''],
-            ['protein','Protein','kg'], ['minerals','Minerals','kg'],
-            ['ffm','Fat free mass','kg'], ['slm','Soft lean mass','kg'],
-            ['boneMineral','Bone mineral','kg'], ['bodyCellMass','Body cell mass','kg'],
-            ['bmr','BMR','kcal'], ['whr','Waist-hip ratio',''],
-            ['obesityDegree','Obesity degree','%'], ['smi','SMI','kg/m²'],
-            ['phaseAngle','Phase angle','°'],
-          ].map(f=>({ label:f[1], unit:f[2],
+            ['height','Height','cm','📏'], ['bodyFatMass','Body fat mass','kg','🟠'], ['bmi','BMI','','📐'],
+            ['score','InBody score','/100','⭐'], ['visceralFat','Visceral fat area','','🎯'],
+            ['tbw','Total body water','L','💧'], ['icw','Intracellular water','L','💦'],
+            ['ecw','Extracellular water','L','🌊'], ['ecwRatio','ECW ratio','','⚗️'],
+            ['protein','Protein','kg','🥚'], ['minerals','Minerals','kg','🧂'],
+            ['ffm','Fat free mass','kg','🧍'], ['slm','Soft lean mass','kg','🧬'],
+            ['boneMineral','Bone mineral','kg','🦴'], ['bodyCellMass','Body cell mass','kg','🔬'],
+            ['bmr','BMR','kcal','🔥'], ['whr','Waist-hip ratio','','⭕'],
+            ['obesityDegree','Obesity degree','%','📈'], ['smi','SMI','kg/m²','🏋️'],
+            ['phaseAngle','Phase angle','°','⚡'],
+          ].map(f=>({ label:f[1], unit:f[2], icon:f[3],
             value:(S2.inbodyForm[f[0]]!=null?S2.inbodyForm[f[0]]:''),
             onInput:(e)=>this.setState({inbodyForm:{...this.state.inbodyForm, [f[0]]:e.target.value}}) })),
           // A sheet from July should sit on the chart in July, whoever typed it in.
@@ -11792,7 +11821,7 @@ class Component extends DCLogic {
                   onHrAdd:()=>{ this.saveHrSet(swObj.id, S2.hrSetForm); this.setState({hrSetForm:{date:'',label:'',avg:'',max:''}}); } }; })(),
             }; })(),
           fitRows:this._fitTests(swObj.id).slice(0,6).map((r,i)=>({
-            dateLabel:this.shortDate(r.date.split('-').reverse().join('/')),
+            dateLabel:this.shortDateISO(r.date),
             summary:[r.pushups!=null?(r.pushups+' push-ups'):null, r.plankSec!=null?(r.plankSec+'s plank'):null, r.vjump!=null?(r.vjump+'cm jump'):null, r.sitreach!=null?(r.sitreach+'cm reach'):null].filter(Boolean).join(' · '),
             onDelete:()=>this.deleteFitTest(swObj.id, i) })),
           fitHasRows:this._fitTests(swObj.id).length>0,
@@ -11921,7 +11950,7 @@ class Component extends DCLogic {
         const meta=this._swMeta(sw.id);
         const famKpis=[{value:(sw.pbs||[]).length, label:'PB events'},{value:(sw.meetCount||0), label:'Meets'},{value:'#'+(swRank>=0?swRank+1:1), label:'Squad rank'}];
         const famFitRows=this._fitTests(sw.id).slice(0,6).map(r=>({
-          dateLabel:this.shortDate(r.date.split('-').reverse().join('/')),
+          dateLabel:this.shortDateISO(r.date),
           summary:[r.pushups!=null?(r.pushups+' push-ups'):null, r.plankSec!=null?(r.plankSec+'s plank'):null, r.vjump!=null?(r.vjump+'cm jump'):null, r.sitreach!=null?(r.sitreach+'cm reach'):null].filter(Boolean).join(' · ') }));
         const _fwl=this._wearLatest(sw.id);
         return {famSwName:sw.name, famSwMeta:sq.name+' · Age '+sw.age+' · '+sq.coach, famSwInit:sw.initials, famGenIcon:gm.icon, famGenBg:gm.bg, famAccent:sq.accent, famPbs, famResults, famMeetsUpcoming:upcoming, famHasPbs:famPbs.length>0, famHasResults:famResults.length>0, famNoResults:famResults.length===0,
@@ -11980,7 +12009,7 @@ class Component extends DCLogic {
           famAiSugg: (()=>{ const a=this.swimmerAiSuggestion(sw); return {...a, hasWeak: !!(a.hasData && a.weakStroke)}; })(),
           famKpis, famFitRows, famHasFit:famFitRows.length>0,
           famInbodyRows: (meta.inbody||[]).slice(0,4).map(r=>({
-            dateLabel:this.shortDate(r.date.split('-').reverse().join('/')),
+            dateLabel:this.shortDateISO(r.date),
             summary:[r.weight!=null?(r.weight+'kg'):null, r.muscle!=null?(r.muscle+'kg muscle'):null, r.fat!=null?(r.fat+'% fat'):null].filter(Boolean).join(' · ')||'Scan on file'
           })),
           famHasInbody: (meta.inbody||[]).length>0,
