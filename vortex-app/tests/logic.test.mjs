@@ -1050,6 +1050,54 @@ describe("InBody sheet", () => {
   });
   it("the photo is shrunk before it is sent, not posted at 12 megapixels", () =>
     eq(/const max=1600/.test(SOURCE), true));
+  // A scanner app's PDF goes down the other path, which rendered at a flat scale of 2 — that is
+  // whatever the page happened to be, doubled. A large scan became a picture of several
+  // megabytes, and the thing carrying it is a phone at the poolside on one bar.
+  it("a scanned PDF is rendered to a fixed size too, not just doubled", () =>
+    eq(/1600\/Math\.max\(base\.width\|\|1, base\.height\|\|1\)/.test(SOURCE), true,
+      "scale:2 of an already-large page is how the upload got big enough to drop"));
+
+  // Sending the sheet is most of a megabyte up from a phone on a weak signal, and a request
+  // dropped in flight is the ordinary way that fails — not a sign anything is misconfigured.
+  // Reported as a dead end, it sent the coach back to typing over a lost packet.
+  describe("a dropped upload is retried, a settled refusal is not", () => {
+    const newCtx = () => {
+      const ctx = { tries: [], _readSheetOnce: null };
+      ctx._readSheetOnServer = bind("_readSheetOnServer", ctx, []);
+      return ctx;
+    };
+    itAsync("a network drop is tried again", async () => {
+      const ctx = newCtx();
+      let n = 0;
+      ctx._readSheetOnce = async () => {
+        n++;
+        return n === 1 ? { failed: true, retryable: true, why: "load failed" } : { values: { weight: 55.8 } };
+      };
+      const out = await ctx._readSheetOnServer("data:image/jpeg;base64,x");
+      eq(n, 2, "one lost packet must not end the attempt");
+      eq(out.values.weight, 55.8);
+    });
+    itAsync("a rejected key is not asked twice", async () => {
+      const ctx = newCtx();
+      let n = 0;
+      ctx._readSheetOnce = async () => { n++; return { failed: true, retryable: false, why: "the key was rejected" }; };
+      const out = await ctx._readSheetOnServer("data:image/jpeg;base64,x");
+      eq(n, 1, "asking again cannot fix a wrong key, it only makes the coach wait");
+      eq(out.why, "the key was rejected", "and the reason must survive to the screen");
+    });
+    itAsync("it gives up after the second try rather than looping", async () => {
+      const ctx = newCtx();
+      let n = 0;
+      ctx._readSheetOnce = async () => { n++; return { failed: true, retryable: true, why: "load failed" }; };
+      const out = await ctx._readSheetOnServer("data:image/jpeg;base64,x");
+      eq(n, 2);
+      eq(out.failed, true, "and it must still fall back to typing, not hang");
+    });
+  });
+  it("a stalled upload is cut off rather than left hanging", () => {
+    eq(/new AbortController\(\)/.test(SOURCE), true);
+    eq(/sending the sheet timed out/.test(SOURCE), true, "waiting and broken must not read the same");
+  });
   it("the key never leaves the server", () => {
     const route = readFileSync(new URL("../src/app/api/inbody/read/route.ts", import.meta.url), "utf8");
     eq(/process\.env\.ANTHROPIC_API_KEY/.test(route), true);

@@ -7070,9 +7070,28 @@ class Component extends DCLogic {
   // Ask the server to read the sheet. Returns null when it is not set up, so the caller can
   // fall back rather than stall.
   async _readSheetOnServer(dataUrl){
+    // Two attempts. Sending the sheet means pushing most of a megabyte up from a phone that may
+    // be on one bar at the side of a pool, and a request dropped mid-flight is the ordinary way
+    // that fails — not a sign anything is misconfigured. Retrying once costs a few seconds and
+    // turns the commonest failure into a success; without it the coach was sent all the way
+    // back to typing because a packet went missing.
+    let last={failed:true, why:'could not reach the reader'};
+    for(let attempt=0; attempt<2; attempt++){
+      if(attempt) await new Promise(r=>setTimeout(r, 1500));
+      const out=await this._readSheetOnce(dataUrl);
+      if(!out.failed || !out.retryable) return out;
+      last=out;
+    }
+    return last;
+  }
+  async _readSheetOnce(dataUrl){
+    // A stalled upload used to hang until the browser gave up on its own, with the screen
+    // saying "Reading the sheet…" the whole time and no way to tell waiting from broken.
+    const ctl=(typeof AbortController!=='undefined') ? new AbortController() : null;
+    const timer=setTimeout(()=>{ try{ ctl && ctl.abort(); }catch(e){} }, 75000);
     try{
       const r=await fetch('/api/inbody/read', {method:'POST', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({image:dataUrl, mime:'image/jpeg'})});
+        body:JSON.stringify({image:dataUrl, mime:'image/jpeg'}), signal: ctl ? ctl.signal : undefined});
       let j=null; try{ j=await r.json(); }catch(e){}
       if(!r.ok || (j && j.error)){
         // Say which wall we hit. A rejected key and a missing key are different problems and
@@ -7086,12 +7105,22 @@ class Component extends DCLogic {
           : st===429 ? 'the reader is rate-limited — try again in a moment'
           : st===413 ? 'that image is too large to send'
           : ((j&&j.error)||('the reader returned HTTP '+r.status));
-        return {failed:true, why:why};
+        // A rejected key is settled and asking again only wastes the coach's time; being rate
+        // limited, or a wobble at the far end, is worth one more go.
+        return {failed:true, why:why, retryable: st===429 || st>=500};
       }
-      if(!j) return {failed:true, why:'the reader sent nothing back'};
+      if(!j) return {failed:true, why:'the reader sent nothing back', retryable:true};
       if(j.notConfigured) return {notConfigured:true};
       return {values:(j.values||{})};
-    }catch(e){ return {failed:true, why:'could not reach the reader'}; }
+    }catch(e){
+      // Name the wall rather than reporting every network problem with one sentence. "Load
+      // failed" from a phone on one bar and a request that ran out of time are different
+      // things, and the sentence a coach reads should say which happened.
+      const aborted=e && (e.name==='AbortError' || /abort/i.test(e.message||''));
+      return {failed:true, retryable:true, why: aborted
+        ? 'sending the sheet timed out — the signal here may be too weak'
+        : ('could not reach the reader' + ((e&&e.message) ? ' (' + e.message + ')' : ''))};
+    }finally{ clearTimeout(timer); }
   }
   // In-browser OCR, kept as the fallback. It has to fetch a worker, a WASM core and a large
   // language model before it can read anything, so it gets a deadline: without one the app
@@ -7174,7 +7203,13 @@ class Component extends DCLogic {
         data=this._extractInbodyFields(text)||{};
         if(data.weight==null){
           const page=await doc.getPage(1);
-          const vp=page.getViewport({scale:2});
+          // Render big enough to read printed digits and no bigger. A flat scale of 2 was
+          // whatever the page happened to be times two, so a large scan produced a picture of a
+          // few megabytes — and the thing that has to carry it is a phone at the poolside on one
+          // bar. Pin the long edge instead, so the upload is the same modest size every time.
+          const base=page.getViewport({scale:1});
+          const scale=Math.min(2, 1600/Math.max(base.width||1, base.height||1));
+          const vp=page.getViewport({scale:scale});
           const cv=document.createElement('canvas'); cv.width=Math.round(vp.width); cv.height=Math.round(vp.height);
           await page.render({canvasContext:cv.getContext('2d'), viewport:vp}).promise;
           picture=cv.toDataURL('image/jpeg', 0.85); cv.width=cv.height=0;
