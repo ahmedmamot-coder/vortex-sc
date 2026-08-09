@@ -80,7 +80,24 @@ needs one environment variable in Vercel:
 
 | Variable | Where it comes from |
 |---|---|
-| `ANTHROPIC_API_KEY` | console.anthropic.com → API keys. Server-side only; it never reaches a phone. |
+| `ANTHROPIC_API_KEY` | platform.claude.com → API keys. Server-side only; it never reaches a phone. |
+
+The account also needs **credit**. Evaluation access is free but has no balance to spend, and a
+key on it is valid, is accepted, and is then refused with *"your credit balance is too low"* —
+which looks nothing like a billing problem from the poolside. Plans & Billing → add a card.
+Reading a sheet costs a fraction of a fils.
+
+**Paste the key straight from the console into Vercel.** Parking it in a phone's notes app in
+between is what broke this the first time: a notes app wraps a hundred-character line, the
+wrapping is copied along with it, and the key is stored with spaces in the middle. It looks
+perfect in the settings box and fails only when a request header is built from it. Whitespace is
+now stripped wherever it lands, and `/api/inbody/read` reports it, but the cleanest paste is the
+one that never goes through a phone.
+
+Open `/api/inbody/read` in a browser to see whether a key has reached the running deployment —
+it reports the key's length and shape but never the key, and `checkedAt` shows it is answering
+now rather than from a cache. In the app, **Check the reader** under the InBody import runs the
+same path in stages and names the one that broke.
 
 Without it the route reports `notConfigured` and the app falls back to in-browser OCR, which
 works but is slow on a phone — it has to fetch a worker, a WASM core and a large language model

@@ -1132,6 +1132,24 @@ describe("InBody sheet", () => {
       eq(/no key is set/.test(msg), true);
       eq(/it is not set/.test(msg), true, "the server's own note must reach the screen");
     });
+    // "So it is the connection out of this device" printed directly underneath the reader's own
+    // words — "your credit balance is too low" — sends somebody to check their signal while the
+    // real answer is already on the screen in front of them.
+    itAsync("a reader that answered is not blamed on the phone's connection", async () => {
+      const ctx = { msgs: [] };
+      ctx.setState = (s) => { if (s.profileIbMsg != null) ctx.msgs.push(s.profileIbMsg); };
+      ctx._readSheetOnce = async () => ({ failed: true, answered: true, why: "your credit balance is too low" });
+      const restore = [globalThis.fetch, globalThis.document, globalThis.VX_BUILD];
+      globalThis.fetch = async () => ({ json: async () => ({ configured: true, keyLength: 108 }) });
+      globalThis.VX_BUILD = "test-build";
+      globalThis.document = { createElement: () => ({
+        getContext: () => ({ fillRect() {}, fillText() {} }), toDataURL: () => "data:image/jpeg;base64,x" }) };
+      try { await bind("profileInbodyCheck", ctx, [])(); }
+      finally { [globalThis.fetch, globalThis.document, globalThis.VX_BUILD] = restore; }
+      const msg = ctx.msgs[ctx.msgs.length - 1];
+      eq(/credit balance is too low/.test(msg), true, "the reader's own words are the answer");
+      eq(/connection out of this device/.test(msg), false, "and must not be contradicted in the same sentence");
+    });
     itAsync("everything working says so, with the key's length as proof", async () => {
       const msg = await run(async () => ({ json: async () => ({ configured: true, keyLength: 108 }) }));
       eq(/all working/.test(msg), true);

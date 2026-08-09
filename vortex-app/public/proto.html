@@ -5161,7 +5161,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-09e';
+const VX_BUILD='2026-08-09f';
 class Component extends DCLogic {
   constructor(props){
     super(props);
@@ -7107,8 +7107,13 @@ class Component extends DCLogic {
     const tiny=cv.toDataURL('image/jpeg', 0.8); cv.width=cv.height=0;
     const out=await this._readSheetOnce(tiny);
     if(out && out.failed){
-      this.setState({profileIbMsg:stamp+' — key is set, but even a tiny upload failed: '+out.why
-        +'. So it is the connection out of this device, not the sheet being too large.'});
+      // Saying "so it is the connection out of this device" after the reader has just answered
+      // is worse than saying nothing: it sends somebody to check their signal when the screen
+      // is already showing them the real reason, in the reader's own words.
+      this.setState({profileIbMsg: out.answered
+        ? (stamp+' — the app and the key are both fine. The reader itself refused: '+out.why)
+        : (stamp+' — key is set, but even a tiny upload failed: '+out.why
+           +'. So it is the connection out of this device, not the sheet being too large.')});
       return;
     }
     this.setState({profileIbMsg:stamp+' — all working: server reachable, key set ('+j.keyLength
@@ -7166,9 +7171,12 @@ class Component extends DCLogic {
           : ((j&&j.error)||('the reader returned HTTP '+r.status));
         // A rejected key is settled and asking again only wastes the coach's time; being rate
         // limited, or a wobble at the far end, is worth one more go.
-        return {failed:true, why:why, retryable: st===429 || st>=500};
+        // answered: the request got all the way there and came back with a reason. That is a
+        // different kind of failure from one that never arrived, and the two must not be
+        // reported with the same conclusion — one is about this phone, the other never is.
+        return {failed:true, why:why, answered:true, retryable: st===429 || st>=500};
       }
-      if(!j) return {failed:true, why:'the reader sent nothing back', retryable:true};
+      if(!j) return {failed:true, why:'the reader sent nothing back', answered:true, retryable:true};
       if(j.notConfigured) return {notConfigured:true};
       return {values:(j.values||{})};
     }catch(e){
