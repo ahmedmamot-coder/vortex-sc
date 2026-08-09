@@ -70,6 +70,28 @@ A write the database refuses now shows in the app as *"refused — this account 
 make that change"* and is **not** retried, so a policy that is too tight shows up as a clear
 message rather than a red banner that never clears.
 
+## InBody scans live in the database, one row per scan
+
+**Run `supabase/inbody_readings.sql` in the Supabase SQL editor.** Until it exists, saving a scan
+says so plainly and names the file to run.
+
+Scans used to sit inside `vx_sw_meta` — a single JSON document holding every swimmer in the club,
+cached in the browser and written back whole. That shape loses data, and did, twice. Saving one
+scan meant rewriting the entire club's record, so the newest copy was whichever device last
+pushed the whole blob; a phone whose storage was full pushed back a stale copy and **destroyed
+scans that were already safely on the server**.
+
+`inbody_readings` is one row per scan, keyed `<swimmerId>::<date>`. Two coaches saving two
+swimmers at once touch different rows, a device with no room to cache anything still writes, and
+nothing rewrites a record it was not asked to. Weight, PBF and SMM are columns because they are
+charted and compared; the rest of the sheet rides along as `vals` jsonb, so a newer InBody model
+printing a new field does not need a migration first.
+
+Anything recorded before the table existed is still read from the old blob, copied up once
+automatically, and shown only once while both copies exist. Nothing is ever written back to the
+blob. `0001_init.sql` declares an older `inbody_scans` table keyed on `swimmers(id)` as a uuid;
+the app identifies swimmers by the roster's text ids and never used it — it is left alone.
+
 ## Reading an InBody sheet from a photograph
 
 A PDF with a real text layer is read directly, in the browser, with no setup.

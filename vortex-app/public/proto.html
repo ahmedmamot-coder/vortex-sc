@@ -241,7 +241,12 @@ if ('serviceWorker' in navigator) {
   // (Prefer: count=exact) so we never download the rows themselves. Returns a number, or -1 on error.
   window.__vxCount = function(table, qs){ return fetch(SB_URL+"/rest/v1/"+table+"?select=id"+(qs?("&"+qs):""), { method:"HEAD", headers: dyn({"Prefer":"count=exact","Range-Unit":"items","Range":"0-0"}) }).then(function(r){ var cr=r.headers.get("content-range")||""; var m=cr.split("/"); var n=m.length>1?parseInt(m[1],10):NaN; return isNaN(n)?(r.ok?0:-1):n; }).catch(function(){ return -1; }); };
   window.__vxDelete = function(table, qs){ return fetch(SB_URL+"/rest/v1/"+table+"?"+qs, { method:"DELETE", headers: dyn() }).then(function(r){ if(!r.ok && (r.status===401||r.status===403)){ _vxQueue(function(){ window.__vxDelete(table, qs); }); } return r.ok; }).catch(function(){ return false; }); };
-  window.__vxUpsert = function(table, rows){ return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":"resolution=merge-duplicates,return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(!r.ok){ if(r.status===401||r.status===403){ _vxQueue(function(){ window.__vxUpsert(table, rows); }); } r.text().then(function(t){ try{console.warn("vx upsert "+table+" HTTP "+r.status+": "+t);}catch(e){} _failAdd("upsert", table, rows, r.status, t); }); } return r.ok; }).catch(function(e){ _failAdd("upsert", table, rows, 0, "network: "+(e&&e.message)); return false; }); };
+  // The reason a write was refused, kept for whoever asks next. Callers get a plain true/false
+  // because that is all most of them can act on, but "the table does not exist" and "you are not
+  // allowed" send a person to completely different places, and that was being written to a
+  // console nobody has open on a phone at the poolside.
+  window.__vxLastWriteErr = null;
+  window.__vxUpsert = function(table, rows){ return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":"resolution=merge-duplicates,return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(r.ok){ window.__vxLastWriteErr=null; return true; } if(r.status===401||r.status===403){ _vxQueue(function(){ window.__vxUpsert(table, rows); }); } return r.text().then(function(t){ try{console.warn("vx upsert "+table+" HTTP "+r.status+": "+t);}catch(e){} _failAdd("upsert", table, rows, r.status, t); var said=""; try{ said=(JSON.parse(t)||{}).message||""; }catch(e){} window.__vxLastWriteErr={table:table, status:r.status, said:said||String(t||"").slice(0,200)}; return false; }); }).catch(function(e){ _failAdd("upsert", table, rows, 0, "network: "+(e&&e.message)); window.__vxLastWriteErr={table:table, status:0, said:"it could not be sent from this device"+((e&&e.message)?(" ("+e.message+")"):"")}; return false; }); };
   // Supabase Realtime (websocket) — best-effort live updates. On any change to `table`, calls
   // onChange(). Auto-reconnects, heartbeats, and re-auths on token refresh. If realtime isn't
   // enabled/available it simply never fires and the app's polling fallback keeps things in sync.
@@ -5214,7 +5219,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-09j';
+const VX_BUILD='2026-08-09k';
 const VX_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 class Component extends DCLogic {
   constructor(props){
@@ -5631,7 +5636,7 @@ class Component extends DCLogic {
   // navigation
   go(patch){ this.setState(patch); }
   openSquad(id){ this.setState({view:'squad', squadId:id, tab:'group', swimmerId:null, showSwitcher:false, tool:null}); try{ this._plansFetch(); }catch(e){} try{ this._squadPlansFetch(); }catch(e){} try{ this._attendFetch(); }catch(e){} }
-  openSwimmer(id){ this.setState({view:'profile', swimmerId:id, profileEvent:null}); try{ this._famMsgFetch(); }catch(e){} try{ this._docsFetch(); }catch(e){} try{ this._wearFetch(); }catch(e){} }
+  openSwimmer(id){ this.setState({view:'profile', swimmerId:id, profileEvent:null}); try{ this._famMsgFetch(); }catch(e){} try{ this._docsFetch(); }catch(e){} try{ this._inbodyFetch(); }catch(e){} try{ this._wearFetch(); }catch(e){} }
   _fitnessLocked(){ const a=(this.accounts||[]).find(x=>x.id===this.state.pickedId)||{};
     // Locked to the Fitness Plan tool if their role mentions "fitness" OR the account is Coach Nedhal.
     if(a.id==='ahmed'||a.id==='sameh') return false; // club admins always have full access
@@ -7110,7 +7115,10 @@ class Component extends DCLogic {
       bodyCellMass:extra.bodyCellMass||null, obesityDegree:extra.obesityDegree||null,
       height:extra.height||null, bodyFatMass:extra.bodyFatMass||null, slm:extra.slm||null,
       fileUrl:(pend&&pend.fileUrl)||null, fileName:(pend&&pend.fileName)||''};
-    this._saveSwMeta(swId, {...m, inbody:[rec, ...(m.inbody||[])]});
+    // Straight into its own row in the database. Nothing is written to the club-wide blob any
+    // more: rewriting every swimmer's record to record one scan is what lost these twice.
+    const cur=((this.inbodyRows||{})[swId]||[]).filter(r=>r.date!==rec.date);
+    this.inbodyRows={...(this.inbodyRows||{}), [swId]:[rec, ...cur].sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')))};
     this.setState({inbodyForm:{weight:'',fat:'',muscle:''}, ibPending:null, ibFullOpen:false,
       profileIbMsg:'Saving\u2026'});
     // Say where it went, not merely that a button was pressed.
@@ -7123,16 +7131,91 @@ class Component extends DCLogic {
     this._ibConfirmSave(swId, rec);
   }
   async _ibConfirmSave(swId, rec){
-    let out=null;
-    try{ out=await (window.__vxLastPush && window.__vxLastPush['vx_sw_meta']); }catch(e){}
-    // No sync layer at all (opened as a plain file, say) \u2014 the record is on the device and that
-    // is the whole truth available, so do not claim more than that.
-    if(!out){ this.setState({profileIbMsg:'Saved on this device \u2713'}); return; }
-    if(out.ok){ this.setState({profileIbMsg:'Saved to the club database \u2713 \u00b7 '+this._fmtDMY(rec.date)}); return; }
-    this.setState({profileIbMsg:'Kept on this device, but NOT yet in the club database \u2014 '
-      +(out.why||'it did not go up')+'. It will be sent again by itself; do not type it in again, and do not clear this browser until it has.'});
+    if(!window.__vxUpsert){ this.setState({profileIbMsg:'Saved on this device \u2713'}); return; }
+    let ok=false, why='';
+    try{ ok=await window.__vxUpsert('inbody_readings', [this._ibToRow(swId, rec)]); }
+    catch(e){ ok=false; why=(e&&e.message)||''; }
+    if(!ok && !why){ const le=window.__vxLastWriteErr; if(le && le.table==='inbody_readings') why=le.said||('the database answered HTTP '+le.status); }
+    if(ok){ this.setState({profileIbMsg:'Saved to the club database \u2713 \u00b7 '+this._fmtDMY(rec.date)});
+      // Read it back, so what is on screen is what the database actually holds.
+      try{ await this._inbodyFetch(); }catch(e){}
+      return; }
+    // A refused write is already recorded and retried by the sync layer, so the scan is not
+    // lost \u2014 but the person holding the printout has to be told it is not there yet, or they
+    // will close the page believing it is.
+    const missing=/relation .*inbody_readings.* does not exist|could not find the table/i.test(why||'')
+      ? ' The inbody_readings table has not been created yet \u2014 run supabase/inbody_readings.sql.' : '';
+    this.setState({profileIbMsg:'NOT saved to the club database yet'+(why?(' \u2014 '+why):'')+'.'+missing
+      +' It is kept here and will be sent again by itself; do not type it in again.'});
   }
-  deleteInbody(swId, idx){ const m=this._swMeta(swId); const list=(m.inbody||[]).slice(); list.splice(idx,1); this._saveSwMeta(swId, {...m, inbody:list}); }
+  // ---- InBody scans live in their own table ------------------------------------------------
+  // They used to sit inside vx_sw_meta, one JSON document holding every swimmer in the club,
+  // cached in the browser and written back whole. Saving one scan meant rewriting the entire
+  // club's record, so the newest copy was whichever device last pushed the whole blob — and a
+  // phone with no room to cache it would push back a stale copy and destroy scans already safe
+  // on the server. One row per scan cannot do that.
+  //
+  // The blob is still read, so nothing recorded before this is lost, and anything found there
+  // is copied into the table once. Nothing is ever written back to it.
+  _swInbody(swId){
+    const rows=(this.inbodyRows||{})[swId];
+    const legacy=(this._swMeta(swId).inbody)||[];
+    if(!rows) return legacy;
+    // A scan carried over from the blob keeps its identity, so it appears once, not twice.
+    const seen={}; rows.forEach(r=>{ seen[r.date]=true; });
+    return rows.concat(legacy.filter(r=>!seen[r.date]))
+      .sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+  }
+  _ibRowId(swId, date){ return swId+'::'+date; }
+  // A row as the table holds it, and as the app reads it. IB_FIELDS keys stay exactly as they
+  // are everywhere else in the app; only weight/fat/muscle are lifted out into columns.
+  _ibToRow(swId, rec){
+    const vals={}; Object.keys(rec||{}).forEach(k=>{
+      if(['date','weight','fat','muscle','fileUrl','fileName'].indexOf(k)>=0) return;
+      if(rec[k]!=null) vals[k]=rec[k]; });
+    return { id:this._ibRowId(swId, rec.date), sw_id:swId, date:rec.date,
+      weight:rec.weight==null?null:rec.weight, fat:rec.fat==null?null:rec.fat, muscle:rec.muscle==null?null:rec.muscle,
+      vals, file_url:rec.fileUrl||null, file_name:rec.fileName||'', updated_at:new Date().toISOString() };
+  }
+  _ibFromRow(r){ return { ...(r.vals||{}), date:r.date, weight:r.weight, fat:r.fat, muscle:r.muscle,
+    fileUrl:r.file_url||null, fileName:r.file_name||'' }; }
+  async _inbodyFetch(){
+    if(!window.__vxSelect) return;
+    const rows=await window.__vxSelect('inbody_readings', 'select=*&order=date.desc&limit=6000');
+    // null means the read itself failed (an expired token, say) — not that there are no scans.
+    // Treating those the same is how a roster once came back empty and got saved that way.
+    if(rows==null) return;
+    const map={}; rows.forEach(r=>{ if(!r || !r.sw_id) return; (map[r.sw_id]=map[r.sw_id]||[]).push(this._ibFromRow(r)); });
+    Object.keys(map).forEach(k=>map[k].sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))));
+    this.inbodyRows=map; this.forceUpdate();
+    this._inbodyMigrateOnce();
+  }
+  // Anything recorded before the table existed is copied up once, so a coach never has to type
+  // an old sheet again. The blob is left untouched: if this goes wrong it must be repeatable.
+  async _inbodyMigrateOnce(){
+    if(this._ibMigrated || !window.__vxUpsert) return; this._ibMigrated=true;
+    const rows=[];
+    Object.keys(this.swimmerMeta||{}).forEach(swId=>{
+      const have={}; ((this.inbodyRows||{})[swId]||[]).forEach(r=>{ have[r.date]=true; });
+      ((this.swimmerMeta[swId]||{}).inbody||[]).forEach(rec=>{
+        if(!rec || !rec.date || have[rec.date]) return;
+        rows.push(this._ibToRow(swId, rec)); });
+    });
+    if(!rows.length) return;
+    for(let i=0;i<rows.length;i+=200){
+      try{ await window.__vxUpsert('inbody_readings', rows.slice(i,i+200)); }catch(e){ return; }
+    }
+    try{ await this._inbodyFetch(); }catch(e){}
+  }
+  async deleteInbody(swId, idx){
+    const list=this._swInbody(swId); const rec=list[idx]; if(!rec) return;
+    this.inbodyRows={...(this.inbodyRows||{}), [swId]:(((this.inbodyRows||{})[swId])||[]).filter(r=>r.date!==rec.date)};
+    // Remove it from the old blob too, or it would reappear the moment the two are merged.
+    const m=this._swMeta(swId); const legacy=(m.inbody||[]).filter(r=>r.date!==rec.date);
+    if(legacy.length!==(m.inbody||[]).length) this._saveSwMeta(swId, {...m, inbody:legacy});
+    this.forceUpdate();
+    if(window.__vxDelete){ try{ await window.__vxDelete('inbody_readings', 'id=eq.'+encodeURIComponent(this._ibRowId(swId, rec.date))); }catch(e){} }
+  }
   // Only small http(s) URLs are kept in vx_sw_photos now (the actual image lives in Storage), so
   // this key can never overflow the localStorage quota the way base64 photos did.
   _sanitizePhotos(map){ const out={}; Object.keys(map||{}).forEach(k=>{ const v=map[k]; if(typeof v==='string' && /^https?:\/\//.test(v)) out[k]=v; }); return out; }
@@ -8945,7 +9028,7 @@ class Component extends DCLogic {
   // empty; this re-fetches them with the signed-in user's JWT so their data appears.
   _refetchAll(){
     try{ this._repullOnce(); }catch(e){}
-    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_wearFetch','_wearStatusFetch','_hrSetsFetch','_wellnessFetch','_planCustomFetch','_familyFetch']
+    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_wearFetch','_wearStatusFetch','_hrSetsFetch','_wellnessFetch','_inbodyFetch','_planCustomFetch','_familyFetch']
       .forEach((f)=>{ try{ if(typeof this[f]==='function') this[f](); }catch(e){} });
     try{ this._attendFetchStaged(); }catch(e){}
   }
@@ -8956,7 +9039,7 @@ class Component extends DCLogic {
     if(this._liveLast && now-this._liveLast<1500){ if(!this._liveTimer){ this._liveTimer=setTimeout(()=>{ this._liveTimer=null; this._liveRefresh(); }, 1600); } return; }
     this._liveLast=now;
     try{ if(window.__vxRepull) window.__vxRepull(); }catch(e){}
-    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_wellnessFetch','_hrSetsFetch','_wearFetch','_planCustomFetch']
+    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_wellnessFetch','_inbodyFetch','_hrSetsFetch','_wearFetch','_planCustomFetch']
       .forEach((f)=>{ try{ if(typeof this[f]==='function') this[f](); }catch(e){} });
   }
   // Stage B: give a signed-in staff member a real Supabase Auth session (JWT) in the background,
@@ -9648,6 +9731,7 @@ class Component extends DCLogic {
     this._wearStatusFetch();
     this._hrSetsFetch();
     this._wellnessFetch();
+    this._inbodyFetch();
     this._attendFetchStaged();
     this._planCustomFetch();
     // Also pull family accounts on open. This is what re-uploads ("self-heals") a
@@ -10918,7 +11002,7 @@ class Component extends DCLogic {
     const ibModeIsPdf = (S.inbodyMode||'pdf')==='pdf', ibModeIsQr = S.inbodyMode==='qr';
     const ibAnalysis = (()=>{
       if(!ibSel) return null;
-      const meta=this._swMeta(ibSel.id); const scans=(meta.inbody||[]).filter(r=>r.weight!=null);
+      const scans=this._swInbody(ibSel.id).filter(r=>r.weight!=null);
       if(!scans.length) return {hasScans:false};
       const latest=scans[0]; const prev=scans[1];
       const heightM = 1.55 + Math.min(0.35, (ibSel.age-8)*0.02);
@@ -11741,7 +11825,7 @@ class Component extends DCLogic {
           ['obesityDegree','Obesity degree',' %','📈'], ['smi','SMI',' kg/m²','🏋️'],
           ['phaseAngle','Phase angle','°','⚡'],
         ];
-        const inbodyRows=(meta.inbody||[]).slice(0,6).map((r,i)=>{
+        const inbodyRows=this._swInbody(swObj.id).slice(0,6).map((r,i)=>{
           // 'muscle' is what the form has always called SMM, and 'fat' what it calls PBF.
           const val=(k)=> k==='smm' ? (r.smm!=null?r.smm:r.muscle) : r[k];
           const detail=IB_FIELDS.filter(f=>val(f[0])!=null).map(f=>({icon:f[3], label:f[1], value:String(val(f[0]))+f[2]}));
@@ -12102,11 +12186,11 @@ class Component extends DCLogic {
             : { hasData:scmSeries.hasData, noData:!scmSeries.hasData, best:scmSeries.best||'—', linePts:scmSeries.linePts, lineArea:scmSeries.lineArea, dots:scmSeries.dots, caption:scmSeries.caption||'', drop:scmSeries.drop||'', swims:scmSeries.swims||[] },
           famAiSugg: (()=>{ const a=this.swimmerAiSuggestion(sw); return {...a, hasWeak: !!(a.hasData && a.weakStroke)}; })(),
           famKpis, famFitRows, famHasFit:famFitRows.length>0,
-          famInbodyRows: (meta.inbody||[]).slice(0,4).map(r=>({
+          famInbodyRows: this._swInbody(sw.id).slice(0,4).map(r=>({
             dateLabel:this.shortDateISO(r.date),
             summary:[r.weight!=null?(r.weight+'kg'):null, r.muscle!=null?(r.muscle+'kg muscle'):null, r.fat!=null?(r.fat+'% fat'):null].filter(Boolean).join(' · ')||'Scan on file'
           })),
-          famHasInbody: (meta.inbody||[]).length>0,
+          famHasInbody: this._swInbody(sw.id).length>0,
           famDocsRows: [
             {label:'Birth certificate', doc: meta.docs.birth, kind:'birth', icon:'file-badge'},
             {label:'ID / passport copy', doc: meta.docs.id, kind:'id', icon:'contact'},

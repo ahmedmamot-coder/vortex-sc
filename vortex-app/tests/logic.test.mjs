@@ -1500,28 +1500,77 @@ describe("InBody sheet", () => {
   // it — so a record the database refused looked exactly like one that worked, until a refresh,
   // when it was gone. A sheet is twenty-three readings copied off a printout by hand.
   describe("a saved sheet says where it went", () => {
-    const run = async (push) => {
-      const ctx = { msgs: [], _fmtDMY: () => "14 Jul" };
+    // What was written, so the test proves the scan reaches its own row rather than the
+    // club-wide blob that lost it twice.
+    let sent = null;
+    const run = async (accepted, lastErr) => {
+      const ctx = { msgs: [], _fmtDMY: () => "14 Jul", _inbodyFetch: async () => {} };
       ctx.setState = (s) => { if (s.profileIbMsg != null) ctx.msgs.push(s.profileIbMsg); };
       const restore = globalThis.window;
-      globalThis.window = push === undefined ? {} : { __vxLastPush: { vx_sw_meta: Promise.resolve(push) } };
-      try { await bind("_ibConfirmSave", ctx, [])("s1", { date: "2026-07-14" }); }
+      sent = null;
+      globalThis.window = accepted === undefined ? {} : {
+        __vxUpsert: async (table, rows) => { sent = { table, rows }; return accepted; },
+        __vxLastWriteErr: lastErr || null,
+      };
+      try { await bind("_ibConfirmSave", ctx, ["_ibToRow", "_ibRowId"])("s1", { date: "2026-07-14", weight: 55.8, fat: 11.4, muscle: 27.4, bmi: 20, phaseAngle: 5.7 }); }
       finally { globalThis.window = restore; }
       return ctx.msgs[ctx.msgs.length - 1];
     };
+    itAsync("the scan goes to its own row, not the club-wide blob", async () => {
+      await run(true);
+      eq(sent.table, "inbody_readings", "one row per scan is the whole point");
+      eq(sent.rows[0].id, "s1::2026-07-14");
+      eq(sent.rows[0].weight, 55.8);
+      eq(sent.rows[0].vals.phaseAngle, 5.7, "the rest of the sheet travels with it");
+      eq("bmi" in sent.rows[0].vals && !("weight" in sent.rows[0].vals), true, "the charted figures are columns, the rest is not duplicated");
+    });
     itAsync("a save that reached the database says so", async () =>
-      eq(/Saved to the club database ✓/.test(await run({ ok: true })), true));
+      eq(/Saved to the club database ✓/.test(await run(true)), true));
     itAsync("a refused save is not dressed up as a success", async () => {
-      const msg = await run({ ok: false, why: "the database refused it" });
-      eq(/NOT yet in the club database/.test(msg), true);
-      eq(/the database refused it/.test(msg), true, "the reason has to reach the person holding the printout");
+      const msg = await run(false, { table: "inbody_readings", status: 403, said: "permission denied" });
+      eq(/NOT saved to the club database/.test(msg), true);
+      eq(/permission denied/.test(msg), true, "the reason has to reach the person holding the printout");
       eq(/✓/.test(msg), false, "a tick here is a lie, and it is also what turns the line green");
     });
+    itAsync("a table that was never created says so by name", async () => {
+      const msg = await run(false, { table: "inbody_readings", status: 404, said: 'relation "public.inbody_readings" does not exist' });
+      eq(/run supabase\/inbody_readings\.sql/.test(msg), true, "otherwise this looks like a permissions problem for ever");
+    });
     itAsync("it says not to type the sheet out a second time", async () =>
-      eq(/do not type it in again/.test(await run({ ok: false, why: "x" })), true));
+      eq(/do not type it in again/.test(await run(false, { table: "inbody_readings", said: "x" })), true));
     itAsync("with no sync layer it claims only what it knows", async () =>
       eq(await run(undefined), "Saved on this device ✓"));
   });
+  // Moving these into their own table must not lose a scan recorded before the table existed,
+  // and must not show one twice while both copies are around.
+  describe("scans recorded before the table existed", () => {
+    const read = (rows, legacy) => {
+      const ctx = { inbodyRows: rows, swimmerMeta: { s1: { inbody: legacy } } };
+      return bind("_swInbody", ctx, ["_swMeta"])("s1");
+    };
+    it("with no table yet, the old records are still shown", () => {
+      const out = read(undefined, [{ date: "2026-07-14", weight: 55.8 }]);
+      eq(out.length, 1);
+      eq(out[0].weight, 55.8, "nothing recorded before today may disappear");
+    });
+    it("a scan in both places appears once, from the table", () => {
+      const out = read({ s1: [{ date: "2026-07-14", weight: 55.8, muscle: 27.4 }] }, [{ date: "2026-07-14", weight: 55.8 }]);
+      eq(out.length, 1, "the same sheet listed twice is its own kind of wrong");
+      eq(out[0].muscle, 27.4, "and the table's copy is the fuller one");
+    });
+    it("an old scan the table has not got is kept alongside", () => {
+      const out = read({ s1: [{ date: "2026-07-14" }] }, [{ date: "2026-01-05" }]);
+      eq(out.map((r) => r.date).join(","), "2026-07-14,2026-01-05", "newest first");
+    });
+    it("a swimmer with nothing anywhere has nothing", () => eq(read({ s1: [] }, []).length, 0));
+  });
+  it("the club-wide blob is never written to when a scan is saved", () => {
+    const fn = sourceBetween("addInbody(swId){", "async _ibConfirmSave");
+    eq(/_saveSwMeta/.test(fn), false,
+      "rewriting every swimmer's record to save one scan is what lost these twice");
+    eq(/inbodyRows/.test(fn), true);
+  });
+
   // Any new warning had to remember to contain the word "fail" or "error" to come out red, so
   // "Kept on this device, but NOT yet in the club database" was shown in success green.
   it("good news earns the green rather than bad news asking for the red", () => {
