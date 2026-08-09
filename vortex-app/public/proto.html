@@ -5289,7 +5289,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-09u';
+const VX_BUILD='2026-08-09v';
 const VX_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 class Component extends DCLogic {
   constructor(props){
@@ -5985,7 +5985,13 @@ class Component extends DCLogic {
   async _mfaState(token){
     try{
       const r=await fetch(this._sbAuthUrl()+'/user', {headers:{'apikey':this._sbAnon(), 'Authorization':'Bearer '+token}, cache:'no-store'});
-      if(!r.ok) return {error:'could not read the account'};
+      // Say which wall. "Could not read the account" sent somebody to remove a factor that was
+      // never the problem, and the same sentence would have covered an expired token, a project
+      // with MFA switched off, and a network that dropped.
+      if(!r.ok){
+        let said=''; try{ const e=await r.json(); said=(e&&(e.msg||e.message||e.error_description))||''; }catch(x){}
+        return {error:'could not read the account (HTTP '+r.status+(said?(': '+said):'')+')'};
+      }
       const u=await r.json();
       const factors=(u.factors||[]).filter(f=>f && f.factor_type==='totp');
       const verified=factors.filter(f=>f.status==='verified');
@@ -6122,6 +6128,12 @@ class Component extends DCLogic {
     // The same gate as a password sign-in. Coming in through Google must not be a way around
     // the second factor — that would make the strongest-looking button the weakest way in.
     const gate=await this._mfaGate(token);
+    if(gate.step==='error'){
+      try{ if(window.__vxSetAuth) window.__vxSetAuth(null); }catch(e){}
+      this.setState({screen:'login', loginStage: after==='staff'?'pin':'family', mfa:null,
+        famErr:gate.error+' — try again in a moment.', loginErr:gate.error+' — try again in a moment.'});
+      return;
+    }
     if(gate.step!=='ok'){
       this.setState({screen:'login', loginStage: after==='staff'?'pin':'family',
         mfa:{...gate, token:token, code:'', busy:false, err:'', after:after, email:await this._oauthEmail(token)}});
@@ -9465,8 +9477,15 @@ class Component extends DCLogic {
       // the second one is cleared — a session that stopped here must not be able to read a
       // child's record just because the portal happened to render.
       const gate=await this._mfaGate(res.j.access_token);
+      // An error here means we could not find out whether this account has a second factor —
+      // not that it has one. Opening the code panel on that reading strands somebody in front
+      // of a box no code will ever satisfy, with the reason hidden on the screen behind it.
+      if(gate.step==='error'){
+        try{ if(window.__vxSetAuth) window.__vxSetAuth(null); }catch(e){}
+        return this.setState({famBusy:false, mfa:null, famErr:gate.error+' — try again in a moment.'});
+      }
       if(gate.step!=='ok'){
-        return this.setState({famBusy:false, famErr: gate.step==='error' ? gate.error : '',
+        return this.setState({famBusy:false, famErr:'',
           mfa:{...gate, token:res.j.access_token, code:'', busy:false, err:'', after:'family', email:email}});
       }
       return this.famContinueAfterMfa(email, res.j.user||{});
@@ -11926,7 +11945,12 @@ class Component extends DCLogic {
                 try{ this._refetchAll(); this._postLoginRefresh(); }catch(e){}
                 return;
               }
-              this.setState({loginErr: gate.step==='error' ? gate.error : '',
+              if(gate.step==='error'){
+                try{ if(window.__vxSetAuth) window.__vxSetAuth(null); }catch(e){}
+                this.setState({mfa:null, loginErr:gate.error+' — try again in a moment.'});
+                return;
+              }
+              this.setState({loginErr:'',
                 mfa:{...gate, token:res.j.access_token, code:'', busy:false, err:'', after:'staff', acct:acct}});
             });
             return;
@@ -12868,7 +12892,10 @@ class Component extends DCLogic {
       mfaResetMsg: S.mfaResetMsg||'', mfaResetMsgShow: !!S.mfaResetMsg,
       mfaResetMsgColor: S.mfaResetOk ? '#0C7A4F' : '#B42318',
       mfaShow: !!S.mfa, mfaIsEnroll: !!(S.mfa && S.mfa.step==='enroll'),
-      mfaTitle: (S.mfa && S.mfa.step==='enroll') ? 'Set up two-step sign-in' : 'Enter your code',
+      // Derived from the step by name. As "enroll or else", any step that was neither drew a
+      // code box — so a failure to read the account looked exactly like a request for a code.
+      mfaTitle: (S.mfa && S.mfa.step==='enroll') ? 'Set up two-step sign-in'
+        : (S.mfa && S.mfa.step==='code') ? 'Enter your code' : 'Two-step sign-in',
       mfaLead: (S.mfa && S.mfa.step==='enroll')
         ? 'This account can see children\u2019s records, so it needs more than a password. Scan this with an authenticator app \u2014 Google Authenticator, 1Password or Authy \u2014 then type the six digits it shows.'
         : 'Open your authenticator app and type the six digits it is showing for Vortex.',

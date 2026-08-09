@@ -1712,6 +1712,33 @@ describe("InBody sheet", () => {
       } finally { globalThis.fetch = restore; }
     });
 
+    // The screen title was "enroll, or else a code box", so a gate that failed to read the
+    // account rendered as a request for a code — and the reason went to the login screen behind
+    // the full-screen panel, where nobody could see it. Ahmed sat in front of a box no code
+    // could ever satisfy and went off removing a factor that was never the problem.
+    it("a step that is neither enrolling nor a code does not say 'Enter your code'", () => {
+      const title = sourceBetween("mfaTitle: (S.mfa", "mfaLead:");
+      eq(/step==='code'\) \? 'Enter your code'/.test(title), true, "the title must be chosen by name");
+      eq(/'Set up two-step sign-in'\s*:\s*'Enter your code'/.test(title), false, "'enroll or else' is the bug");
+    });
+    it("a gate that errors never opens the code panel", () => {
+      // Three ways in — password as a family, password as staff, and back from Google — and all
+      // three have to agree, because the one that does not is the one somebody gets stuck on.
+      const paths = [
+        sourceBetween("const gate=await this._mfaGate(res.j.access_token);", "this.famContinueAfterMfa"),
+        sourceBetween("this._mfaGate(res.j.access_token).then(gate=>{", "this.setState({loginErr:'',"),
+        sourceBetween("const gate=await this._mfaGate(token);", "await this._oauthFinish("),
+      ];
+      for (const p of paths) {
+        eq(/gate\.step==='error'/.test(p), true, "an error must be handled before the panel is opened");
+        eq(/mfa:null/.test(p), true, "and must leave the panel closed");
+      }
+    });
+    it("a failed read says which wall it hit", () => {
+      const fn = sourceBetween("async _mfaState(token){", "// Read the assurance level");
+      eq(/HTTP '\+r\.status/.test(fn), true,
+        "one sentence for an expired token, MFA switched off and a dropped network is how this went wrong");
+    });
     it("the code screen covers the app rather than sitting inside it", () => {
       const panel = sourceBetween('<sc-if value="{{ mfaShow }}"', "</sc-if>");
       eq(/position:fixed;inset:0/.test(panel), true, "a half-authenticated session must not see the app behind it");
