@@ -284,10 +284,17 @@ if ('serviceWorker' in navigator) {
   localStorage.setItem = function(k,v){
     var okLocal=false;
     try{ origSet(k,v); okLocal=true; }catch(e){}
-    if(!okLocal){ // quota — drop timestamp markers (cheap to lose), reclaim base64, retry once
-      try{ var rm=[]; for(var i=0;i<localStorage.length;i++){ var kk=localStorage.key(i); if(kk && kk.indexOf('__vxts_')===0) rm.push(kk); } rm.forEach(function(x){ try{ origRemove(x); }catch(_){} }); }catch(_){}
+    if(!okLocal){ // quota — reclaim leftover base64 first, which is where the space actually is
       vxReclaim();
       try{ origSet(k,v); okLocal=true; }catch(e2){}
+      // Only if that was not enough, give up the timestamp markers. They were being dropped
+      // first as "cheap to lose", and they are the opposite: they are the record of which copy
+      // is newer, and without them every unsynced local edit loses to whatever the server last
+      // heard. One full-storage moment would quietly hand back stale data across the whole app.
+      if(!okLocal){
+        try{ var rm=[]; for(var i=0;i<localStorage.length;i++){ var kk=localStorage.key(i); if(kk && kk.indexOf('__vxts_')===0) rm.push(kk); } rm.forEach(function(x){ try{ origRemove(x); }catch(_){} }); }catch(_){}
+        try{ origSet(k,v); okLocal=true; }catch(e3){}
+      }
     }
     if(okLocal && SYNC.indexOf(k)>=0){ try{ origSet('__vxts_'+k, String(Date.now())); }catch(e){} }
     pushKey(k,v);   // always sync to the database, even if the local write failed
@@ -303,15 +310,28 @@ if ('serviceWorker' in navigator) {
   function applyPull(rows, seed){
     var have = {};
     try { (rows||[]).forEach(function(r){ have[r.key]=true; if(r.value==null) return;
-      window.__VX_PULLED[r.key]=r.value; // DB copy → in-memory mirror
-      // Only overwrite local with the server copy when the server is newer than the
-      // last local write — otherwise a page refresh would wipe edits that were made
-      // locally but hadn't finished uploading yet.
+      // Only take the server copy when it is newer than the last local write — otherwise a page
+      // refresh would wipe edits made locally that had not finished uploading yet.
       var localVal=localStorage.getItem(r.key);
       var localTs=parseInt(localStorage.getItem('__vxts_'+r.key)||'0',10)||0;
       var remoteTs=r.updated_at? Date.parse(r.updated_at) : 0;
-      if(localVal==null || !localTs || remoteTs>=localTs){ origSet(r.key, JSON.stringify(r.value)); }
-      else { pushKey(r.key, localVal); } // local is newer — push it up so the server catches up
+      var takeRemote = (localVal==null || !localTs || remoteTs>=localTs);
+      if(takeRemote){
+        window.__VX_PULLED[r.key]=r.value;      // DB copy → in-memory mirror
+        origSet(r.key, JSON.stringify(r.value));
+      } else {
+        // Local is newer, so it has to win in the mirror as well — and this is the part that
+        // was missing. The mirror was being set to the server's copy before this decision was
+        // even taken, and the app reads the mirror first, in preference to localStorage. So the
+        // guard protected the copy on disk and the screen still showed the stale one: an InBody
+        // sheet typed in, saved, and then simply absent after a refresh, with the real record
+        // sitting in localStorage the whole time, invisible. Silent loss of a coach's work is
+        // the worst thing this file can do, so the two must never disagree again.
+        var parsed=null, ok=false;
+        try{ parsed=JSON.parse(localVal); ok=true; }catch(e){}
+        window.__VX_PULLED[r.key]= ok ? parsed : r.value;
+        pushKey(r.key, localVal);   // and push it up so the server catches up
+      }
     }); } catch(e){}
     if(seed){ try { SYNC.forEach(function(k){ if(have[k]) return; var lv=localStorage.getItem(k); if(lv!=null) pushKey(k, lv); }); } catch(e){} }
   }
@@ -5162,7 +5182,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-09g';
+const VX_BUILD='2026-08-09h';
 const VX_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 class Component extends DCLogic {
   constructor(props){
@@ -5448,7 +5468,24 @@ class Component extends DCLogic {
   }
   rng(seed){ let t = seed>>>0; return ()=>{ t += 0x6D2B79F5; let r = Math.imul(t ^ (t>>>15), 1|t); r ^= r + Math.imul(r ^ (r>>>7), 61|r); return ((r ^ (r>>>14))>>>0)/4294967296; }; }
   fmt(sec){ if(sec<60) return sec.toFixed(2); const m=Math.floor(sec/60); const s=(sec-m*60); return m+':' + (s<10?'0':'') + s.toFixed(2); }
-  shortDate(d){ if(!d) return ''; const p=d.split('/'); const mi=parseInt(p[0],10)-1; return (VX_MONTHS[mi]||'')+' '+parseInt(p[1],10); }
+  // Results carry a month-first slashed date — "6/5/2026" is 5 June — because that is the shape
+  // Hy-Tek and SwimCloud export. Dates of birth are the opposite way round, and dates the app
+  // itself stores are ISO; those have their own readers and must not come through here.
+  //
+  // What does arrive here is a results date that did not come from an import: a swim entered by
+  // hand is stored already formatted ("14 Jul"), and splitting that on "/" gave one piece, so
+  // the month came out empty and the day as NaN. A swimmer added by hand had " NaN" against
+  // every swim in the family portal. A label that is already a label is simply shown.
+  shortDate(d){
+    if(!d) return '';
+    const t=String(d).trim();
+    if(/^\d{4}-\d{2}-\d{2}/.test(t)) return this.shortDateISO(t);
+    const p=t.split('/');
+    if(p.length!==3) return t;
+    const mi=parseInt(p[0],10)-1, day=parseInt(p[1],10);
+    if(!VX_MONTHS[mi] || isNaN(day)) return t;
+    return VX_MONTHS[mi]+' '+day;
+  }
   // Label a date the app has stored, which is always ISO.
   //
   // shortDate above reads month first, and every ISO date was being fed to it by reversing the

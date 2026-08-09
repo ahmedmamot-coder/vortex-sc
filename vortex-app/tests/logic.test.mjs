@@ -153,6 +153,67 @@ describe("shipped source", () => {
   // so it has to be checked against the shipped source.
   // The home-screen icon and the app shell are both served by the service worker's
   // cache-first path, which is never revalidated. A failure stored there is stored for good.
+  // A coach typed an InBody sheet in, saved it, saw it on the record, refreshed, and it was
+  // gone. It had not failed to save: it was in localStorage the whole time. The pull sets an
+  // in-memory mirror of the database and the app reads that mirror in preference to disk, and
+  // the mirror was being assigned the server's copy before the newer-than check was even made.
+  // So the check protected the copy on disk while the screen showed the stale one. Losing a
+  // coach's work in silence is the worst thing this file can do.
+  describe("a pull never shows an older copy than the one on disk", () => {
+    const applyPull = (rows, disk, ts) => {
+      const store = { ...disk };
+      Object.keys(ts).forEach((k) => { store["__vxts_" + k] = String(ts[k]); });
+      const pushed = [];
+      const env = {
+        localStorage: {
+          getItem: (k) => (k in store ? store[k] : null),
+          setItem: (k, v) => { store[k] = v; },
+          get length() { return Object.keys(store).length; },
+          key: (i) => Object.keys(store)[i],
+        },
+        window: { __VX_PULLED: {} },
+        origSet: (k, v) => { store[k] = v; },
+        pushKey: (k, v) => pushed.push([k, v]),
+        SYNC: [],
+      };
+      const src = sourceBetween("function applyPull(rows, seed){", "\n  // Re-pull the shared club");
+      runInSandbox(src + "\napplyPull(rows, false);", { ...env, rows });
+      return { mirror: env.window.__VX_PULLED, disk: store, pushed };
+    };
+    const SHEET = { s1: { inbody: [{ date: "2026-07-14", weight: 55.8 }] } };
+    const EMPTY = { s1: { inbody: [] } };
+
+    it("the newer local sheet is what the app reads, not the stale server one", () => {
+      const out = applyPull(
+        [{ key: "vx_sw_meta", value: EMPTY, updated_at: "2026-08-09T12:00:00Z" }],
+        { vx_sw_meta: JSON.stringify(SHEET) },
+        { vx_sw_meta: Date.parse("2026-08-09T13:00:00Z") });
+      eq(JSON.stringify(out.mirror.vx_sw_meta), JSON.stringify(SHEET), "the mirror handed back the empty server copy — this is the bug");
+      eq(JSON.parse(out.disk.vx_sw_meta).s1.inbody.length, 1, "and disk must keep it too");
+      eq(out.pushed.length, 1, "the newer copy is pushed up so the server catches up");
+    });
+    it("a genuinely newer server copy is still taken", () => {
+      const out = applyPull(
+        [{ key: "vx_sw_meta", value: SHEET, updated_at: "2026-08-09T14:00:00Z" }],
+        { vx_sw_meta: JSON.stringify(EMPTY) },
+        { vx_sw_meta: Date.parse("2026-08-09T13:00:00Z") });
+      eq(JSON.stringify(out.mirror.vx_sw_meta), JSON.stringify(SHEET));
+      eq(out.pushed.length, 0);
+    });
+    it("with nothing on this device the server copy is taken", () => {
+      const out = applyPull([{ key: "vx_sw_meta", value: SHEET, updated_at: "2026-08-09T14:00:00Z" }], {}, {});
+      eq(JSON.stringify(out.mirror.vx_sw_meta), JSON.stringify(SHEET));
+    });
+  });
+  // These markers are the record of which copy is newer. They were the first thing thrown away
+  // when storage filled up, described as cheap to lose; without them every unsynced local edit
+  // loses to whatever the server last heard, across the whole app, from one full-storage moment.
+  it("a full storage reclaims space before giving up the newer-than markers", () => {
+    const set = sourceBetween("localStorage.setItem = function(k,v){", "var booted = false;");
+    eq(set.indexOf("vxReclaim()") < set.indexOf("__vxts_"), true,
+      "dropping the markers must be the last resort, not the first move");
+  });
+
   it("the service worker never caches a failed response", () => {
     const sw = readFileSync(new URL("../public/sw.js", import.meta.url), "utf8");
     const puts = [...sw.matchAll(/caches\.open\((APP_SHELL|STATIC)\)/g)].length;
@@ -1350,6 +1411,19 @@ describe("InBody sheet", () => {
       eq(label("2026-02-31"), "", "a date that is not on the calendar is refused, not rolled");
     });
   });
+  // Results come in month-first from Hy-Tek and SwimCloud, but a swim entered by hand is stored
+  // already formatted — and splitting "14 Jul" on "/" gave one piece, so the month came out
+  // empty and the day as NaN. Every swim of a hand-added swimmer read " NaN" in the family app.
+  describe("a results date, whatever shape it arrived in", () => {
+    globalThis.VX_MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const label = bind("shortDate", {}, ["shortDateISO", "_dobParts"]);
+    it("an imported date stays month-first: 6/5/2026 is 5 June", () => eq(label("6/5/2026"), "Jun 5"));
+    it("and 4/30/2026 is 30 April, not the 4th", () => eq(label("4/30/2026"), "Apr 30"));
+    it("a label that is already a label is left alone", () => eq(label("14 Jul"), "14 Jul"));
+    it("an ISO date is read as ISO, not as month-first", () => eq(label("2026-07-14"), "Jul 14"));
+    it("nothing in, nothing out", () => eq(label(""), ""));
+  });
+
   it("no caller reshapes an ISO date to suit the month-first reader", () =>
     eq(/reverse\(\)\.join\('\/'\)/.test(SOURCE), false,
       "that reshaping is the bug itself — shortDateISO reads ISO directly"));
