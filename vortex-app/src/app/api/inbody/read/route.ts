@@ -56,7 +56,23 @@ function apiKey() {
     .trim()
     .replace(/^["']|["']$/g, "")
     .replace(/^Bearer\s+/i, "")
-    .trim();
+    // Whitespace *inside* the key, not just around it. Copying a hundred-character key out of
+    // a notes app on a phone brings the line wrapping with it, so the value arrives with spaces
+    // or newlines in the middle. trim() removes neither, the settings box shows nothing amiss,
+    // and the key then fails at the last possible moment — when a header is built from it — with
+    // an error about header values that reads like a bug in the app. A key never legitimately
+    // contains a space, so there is nothing to lose by removing them all.
+    .replace(/\s+/g, "");
+}
+
+// Nothing derived from an exception may be returned without passing through here.
+//
+// This is not hypothetical caution: an error message from the header builder quoted the whole
+// key back, that message was handed to the browser to help with debugging, and the key was
+// printed on a coach's screen and into a screenshot. Anything that can carry a key to a client
+// eventually does, so the scrubbing belongs at the boundary rather than at each call site.
+function scrub(text: string) {
+  return (text || "").replace(/sk-ant-[A-Za-z0-9_\-\s]{8,}/g, "[the key]");
 }
 
 export async function GET() {
@@ -65,7 +81,11 @@ export async function GET() {
   const notes: string[] = [];
   if (!key) notes.push("ANTHROPIC_API_KEY is not set on this deployment. Set it in Vercel for Production, then redeploy — a new variable does not reach a build that is already running.");
   else {
-    if (rawKey !== key) notes.push("The stored value had quotes, spaces or a 'Bearer' prefix around it. Those are being stripped, but it is worth pasting it in clean.");
+    // Say which, because they are fixed the same way but they fail very differently. Spaces in
+    // the middle are the nasty one: the key looks perfect in the settings box and fails only
+    // when a header is built from it, with an error that reads like a fault in the app.
+    if (/\S\s+\S/.test(rawKey.trim())) notes.push("The stored value had spaces or line breaks inside it — copying a long key out of a notes app on a phone brings the line wrapping with it. They are being removed here, but paste it again as one unbroken line when you get the chance.");
+    else if (rawKey !== key) notes.push("The stored value had quotes, spaces or a 'Bearer' prefix around it. Those are being stripped, but it is worth pasting it in clean.");
     // The example from the instructions, pasted in as though it were the key. Easily done,
     // and it fails looking exactly like a wrong key rather than a missing one.
     if (/\.\.\.|…|xxx|your[-_ ]?key/i.test(key) || key === "sk-ant-")
@@ -132,7 +152,7 @@ export async function POST(request: Request) {
       error: timedOut
         ? "the reader did not answer in time"
         : "this deployment could not reach the reader — its own outbound connection failed",
-      said: (e as Error)?.message?.slice(0, 200) || "",
+      said: scrub((e as Error)?.message || "").slice(0, 200),
     }, { status: 504 });
   }
 
@@ -146,7 +166,9 @@ export async function POST(request: Request) {
     return Response.json({
       error: "reader refused the request",
       status: r.status,
-      said: (said || body).slice(0, 200),
+      // A refusal quotes back what it was given — "invalid x-api-key: sk-ant-…" is a normal
+      // shape for one — so this needs scrubbing every bit as much as an exception does.
+      said: scrub(said || body).slice(0, 200),
     }, { status: 502 });
   }
 

@@ -1175,6 +1175,57 @@ describe("InBody sheet", () => {
     eq(client > 0 && maxRun > 0, true);
     eq(client < maxRun, true, "wait longer than the platform does and the platform wins, silently");
   });
+  // The whole afternoon's fault, and it was never the network, the plan or the variable name:
+  // the key had been pasted out of a notes app on a phone, which brought the line wrapping with
+  // it, so it arrived with spaces in the middle. trim() removes whitespace at the ends and
+  // nothing in between, the settings box shows a key that looks perfect, and it fails only at
+  // the last possible moment — when a header is built from it.
+  // Pull the real function out of the route and run it, rather than restating what it should
+  // do. A test that reimplements the thing it is testing agrees with itself for ever.
+  const ROUTE_SRC = readFileSync(new URL("../src/app/api/inbody/read/route.ts", import.meta.url), "utf8");
+  const routeFn = (name) => {
+    const from = ROUTE_SRC.indexOf("function " + name + "(");
+    if (from < 0) throw new Error("no function " + name + " in the route");
+    let depth = 0, i = ROUTE_SRC.indexOf("{", from);
+    for (; i < ROUTE_SRC.length; i++) {
+      if (ROUTE_SRC[i] === "{") depth++;
+      else if (ROUTE_SRC[i] === "}" && !--depth) break;
+    }
+    // The route is TypeScript; a parameter's type annotation is not valid JavaScript.
+    return ROUTE_SRC.slice(from, i + 1).replace(/(\(\s*\w+)\s*:\s*[\w<>[\]|]+/g, "$1");
+  };
+
+  describe("a key pasted from a phone", () => {
+    const clean = (raw) => runInSandbox(routeFn("apiKey") + "\nreturn apiKey();", { process: { env: { ANTHROPIC_API_KEY: raw } } });
+    it("survives the line wrapping a notes app adds", () =>
+      eq(clean("sk-ant-api03-2X60Pf44_z18 PyMzpnd_NEJ2df7VB\nggbf80K09Z4"), "sk-ant-api03-2X60Pf44_z18PyMzpnd_NEJ2df7VBggbf80K09Z4"));
+    it("still loses quotes, a Bearer prefix and the spaces around it", () =>
+      eq(clean('  "Bearer sk-ant-api03-abc"  '), "sk-ant-api03-abc"));
+    it("a key with nothing wrong with it is left exactly alone", () =>
+      eq(clean("sk-ant-api03-abcDEF123_-xyz"), "sk-ant-api03-abcDEF123_-xyz"));
+  });
+
+  // An error message from the header builder quoted the whole key back, that message was handed
+  // to the browser to help with debugging, and the key was printed on a coach's screen and into
+  // a screenshot. A secret that can reach a client eventually does.
+  describe("nothing sent to the browser may carry the key", () => {
+    const scrub = (t) => runInSandbox(routeFn("scrub") + "\nreturn scrub(t);", { t });
+    it("the exact message that leaked it is scrubbed", () =>
+      eq(/sk-ant/.test(scrub('Headers.append: "sk-ant-api03-2X60Pf44_z18PyMzpnd_NEJ2df7VB ggbf80K09Z4" is an invalid header value.')), false));
+    it("a key broken across spaces is caught too, not just an unbroken one", () =>
+      eq(/2X60Pf44/.test(scrub("bad key: sk-ant-api03-2X60Pf44 z18PyMzpnd NEJ2df7VB")), false));
+    it("a refusal quoting the key back is scrubbed the same way", () =>
+      eq(/sk-ant/.test(scrub("invalid x-api-key: sk-ant-api03-abcdefghijklmnop")), false));
+    it("and the rest of the message survives, or there is nothing to act on", () =>
+      eq(/invalid header value/.test(scrub('Headers.append: "sk-ant-api03-abcdefghij" is an invalid header value.')), true));
+  });
+  it("every path that returns an exception or a refusal scrubs it first", () => {
+    const route = readFileSync(new URL("../src/app/api/inbody/read/route.ts", import.meta.url), "utf8");
+    const saids = [...route.matchAll(/said:\s*([^\n]+)/g)].map((m) => m[1]);
+    eq(saids.length > 0, true, "the field that leaked must still be found by this test");
+    for (const s of saids) eq(/scrub\(/.test(s), true, "an unscrubbed said: is how the key reached a screen: " + s);
+  });
+
   it("a failure with no message still says something usable", () =>
     eq(/the request was dropped rather than refused/.test(SOURCE), true,
       "one blank sentence for every possible cause is what made this take all afternoon"));
