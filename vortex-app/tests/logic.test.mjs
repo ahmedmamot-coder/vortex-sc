@@ -1049,7 +1049,11 @@ describe("InBody sheet", () => {
     eq(/the key was rejected/.test(SOURCE), true);
   });
   it("the photo is shrunk before it is sent, not posted at 12 megapixels", () =>
-    eq(/const max=1600/.test(SOURCE), true));
+    eq(/const max=longEdge\|\|1600/.test(SOURCE), true));
+  // The second attempt used to send the identical picture down the identical pipe, which is
+  // not much of a second attempt when the first one was too big to leave the phone.
+  it("the retry sends a smaller picture, not the same one again", () =>
+    eq(/_sheetToJpeg\(dataUrl, 1100, 0\.7\)/.test(SOURCE), true));
   // A scanner app's PDF goes down the other path, which rendered at a flat scale of 2 — that is
   // whatever the page happened to be, doubled. A large scan became a picture of several
   // megabytes, and the thing carrying it is a phone at the poolside on one bar.
@@ -1093,6 +1097,54 @@ describe("InBody sheet", () => {
       eq(n, 2);
       eq(out.failed, true, "and it must still fall back to typing, not hang");
     });
+  });
+  // A coach holding a phone had no way to tell "the app cannot reach the server", "no key is
+  // set" and "the sheet was too big to send" apart — all three arrived as one sentence, and
+  // each one sends you somewhere completely different to fix it.
+  describe("the reader can be checked from the app, and says which stage broke", () => {
+    const run = async (fetchImpl) => {
+      const ctx = { msgs: [] };
+      ctx.setState = (s) => { if (s.profileIbMsg != null) ctx.msgs.push(s.profileIbMsg); };
+      ctx._readSheetOnce = async () => ({ values: {} });
+      const restore = [globalThis.fetch, globalThis.document, globalThis.VX_BUILD];
+      globalThis.fetch = fetchImpl;
+      globalThis.VX_BUILD = "test-build";
+      globalThis.document = { createElement: () => ({
+        getContext: () => ({ fillRect() {}, fillText() {} }),
+        toDataURL: () => "data:image/jpeg;base64,x",
+      }) };
+      try {
+        await bind("profileInbodyCheck", ctx, [])();
+      } finally {
+        [globalThis.fetch, globalThis.document, globalThis.VX_BUILD] = restore;
+      }
+      return ctx.msgs[ctx.msgs.length - 1];
+    };
+
+    itAsync("an unreachable server is not blamed on the key", async () => {
+      const msg = await run(async () => { throw new Error("Load failed"); });
+      eq(/cannot reach the server/.test(msg), true);
+      eq(/Load failed/.test(msg), true, "the browser's own words save the next hour of guessing");
+      eq(/not the key/.test(msg), true);
+    });
+    itAsync("a missing key is named as a missing key", async () => {
+      const msg = await run(async () => ({ json: async () => ({ configured: false, notes: ["it is not set"] }) }));
+      eq(/no key is set/.test(msg), true);
+      eq(/it is not set/.test(msg), true, "the server's own note must reach the screen");
+    });
+    itAsync("everything working says so, with the key's length as proof", async () => {
+      const msg = await run(async () => ({ json: async () => ({ configured: true, keyLength: 108 }) }));
+      eq(/all working/.test(msg), true);
+      eq(/108/.test(msg), true);
+    });
+    itAsync("every answer names the build, so a stale app is caught first", async () => {
+      const msg = await run(async () => ({ json: async () => ({ configured: true, keyLength: 108 }) }));
+      eq(/test-build/.test(msg), true, "otherwise a cached app makes a shipped fix look broken");
+    });
+  });
+  it("the build stamp is bumped when this file changes", () => {
+    const stamp = (SOURCE.match(/const VX_BUILD='([^']+)'/) || [])[1] || "";
+    eq(/^\d{4}-\d{2}-\d{2}/.test(stamp), true, "a stamp nobody can date tells nobody anything");
   });
   it("a stalled upload is cut off rather than left hanging", () => {
     eq(/new AbortController\(\)/.test(SOURCE), true);
