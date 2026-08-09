@@ -1450,6 +1450,40 @@ describe("InBody sheet", () => {
   it("a sheet can be saved from the panel it was typed into", () =>
     eq(/onclick="\{\{ onInbodyAdd \}\}"[^>]*>[\s\S]{0,200}?Save this sheet/.test(SOURCE), true,
       "the only way to save was a small + button above the panel, far from the last field typed"));
+  // "Saved" used to appear the moment the value reached the phone, whether or not it ever left
+  // it — so a record the database refused looked exactly like one that worked, until a refresh,
+  // when it was gone. A sheet is twenty-three readings copied off a printout by hand.
+  describe("a saved sheet says where it went", () => {
+    const run = async (push) => {
+      const ctx = { msgs: [], _fmtDMY: () => "14 Jul" };
+      ctx.setState = (s) => { if (s.profileIbMsg != null) ctx.msgs.push(s.profileIbMsg); };
+      const restore = globalThis.window;
+      globalThis.window = push === undefined ? {} : { __vxLastPush: { vx_sw_meta: Promise.resolve(push) } };
+      try { await bind("_ibConfirmSave", ctx, [])("s1", { date: "2026-07-14" }); }
+      finally { globalThis.window = restore; }
+      return ctx.msgs[ctx.msgs.length - 1];
+    };
+    itAsync("a save that reached the database says so", async () =>
+      eq(/Saved to the club database ✓/.test(await run({ ok: true })), true));
+    itAsync("a refused save is not dressed up as a success", async () => {
+      const msg = await run({ ok: false, why: "the database refused it" });
+      eq(/NOT yet in the club database/.test(msg), true);
+      eq(/the database refused it/.test(msg), true, "the reason has to reach the person holding the printout");
+      eq(/✓/.test(msg), false, "a tick here is a lie, and it is also what turns the line green");
+    });
+    itAsync("it says not to type the sheet out a second time", async () =>
+      eq(/do not type it in again/.test(await run({ ok: false, why: "x" })), true));
+    itAsync("with no sync layer it claims only what it knows", async () =>
+      eq(await run(undefined), "Saved on this device ✓"));
+  });
+  // Any new warning had to remember to contain the word "fail" or "error" to come out red, so
+  // "Kept on this device, but NOT yet in the club database" was shown in success green.
+  it("good news earns the green rather than bad news asking for the red", () => {
+    const rule = sourceBetween("profileIbMsgColor: /", "'#B42318'");
+    eq(/✓/.test(rule), true, "a tick is the only thing that means finished");
+    eq(/fail\|couldn\|error/.test(rule), false, "matching on words means the next warning is green again");
+  });
+
   it("a save that is refused says why instead of doing nothing", () => {
     const fn = sourceBetween("addInbody(swId){", "_saveSwMeta");
     eq(/if\(!w\)\{ this\.setState\(\{profileIbMsg:/.test(fn), true,

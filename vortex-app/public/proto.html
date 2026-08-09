@@ -187,16 +187,33 @@ if ('serviceWorker' in navigator) {
   document.addEventListener("visibilitychange", _vxWake);
   window.addEventListener("focus", _vxWake);
   window.addEventListener("pageshow", _vxWake);
+  // Whether the last write of a given key actually reached the database, as a promise the app
+  // can wait on. Saving used to be entirely mute: the screen said "saved" the instant the value
+  // was put in localStorage, whether or not it ever left the phone, so a save that was refused
+  // or dropped looked exactly like one that worked — right up until a refresh, when the record
+  // was simply not there. Something that says it saved must be able to say where.
+  window.__vxLastPush = window.__vxLastPush || {};
   function pushKey(k, v){
-    if (SYNC.indexOf(k) === -1) return;
-    var val; try { val = JSON.parse(v); } catch(e){ return; }
+    if (SYNC.indexOf(k) === -1) return Promise.resolve({ok:false, why:"this is not a synced key"});
+    var val; try { val = JSON.parse(v); } catch(e){ return Promise.resolve({ok:false, why:"could not be read back"}); }
     window.__vxWriteTs[k] = Date.now();
+    var p;
     try {
-      fetch(REST, { method:"POST", headers: dyn({"Prefer":"resolution=merge-duplicates,return=minimal"}),
+      p = fetch(REST, { method:"POST", headers: dyn({"Prefer":"resolution=merge-duplicates,return=minimal"}),
         body: JSON.stringify([{ key:k, value:val, updated_at:new Date().toISOString() }]) })
-      .then(function(r){ window.__vxSyncOk = r.ok; if(!r.ok){ if(r.status===401||r.status===403){ _vxQueue(function(){ pushKey(k, v); }); } r.text().then(function(t){ try{ console.warn("vx sync HTTP "+r.status+" on "+k+": "+t); }catch(e){} }); } })
-      .catch(function(e){ window.__vxSyncOk=false; try{ console.warn("vx sync network error on "+k, e); }catch(x){} });
-    } catch(e){}
+      .then(function(r){ window.__vxSyncOk = r.ok;
+        if(r.ok) return {ok:true};
+        if(r.status===401||r.status===403){ _vxQueue(function(){ pushKey(k, v); }); }
+        return r.text().then(function(t){ try{ console.warn("vx sync HTTP "+r.status+" on "+k+": "+t); }catch(e){}
+          return {ok:false, status:r.status, why:(r.status===401||r.status===403)
+            ? "the database refused it — this account may not be allowed to make that change"
+            : ("the database answered HTTP "+r.status)}; });
+      })
+      .catch(function(e){ window.__vxSyncOk=false; try{ console.warn("vx sync network error on "+k, e); }catch(x){}
+        return {ok:false, why:"it could not be sent from this device"+((e&&e.message)?(" ("+e.message+")"):"")}; });
+    } catch(e){ p = Promise.resolve({ok:false, why:"it could not be sent from this device"}); }
+    window.__vxLastPush[k] = p;
+    return p;
   }
   function pull(keys){
     var url = REST + "?select=key,value,updated_at&key=in.(" + keys.join(",") + ")";
@@ -5182,7 +5199,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-09h';
+const VX_BUILD='2026-08-09i';
 const VX_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 class Component extends DCLogic {
   constructor(props){
@@ -7080,7 +7097,25 @@ class Component extends DCLogic {
       fileUrl:(pend&&pend.fileUrl)||null, fileName:(pend&&pend.fileName)||''};
     this._saveSwMeta(swId, {...m, inbody:[rec, ...(m.inbody||[])]});
     this.setState({inbodyForm:{weight:'',fat:'',muscle:''}, ibPending:null, ibFullOpen:false,
-      profileIbMsg: pend ? 'Saved with the sheet attached \u2713' : ''});
+      profileIbMsg:'Saving\u2026'});
+    // Say where it went, not merely that a button was pressed.
+    //
+    // "Saved" used to appear the moment the value reached this phone, whether or not it ever
+    // left it. A record refused by the database looked exactly like one that worked, until a
+    // refresh, when it was simply gone \u2014 and the only person who could tell the difference was
+    // whoever happened to have the console open. A sheet is twenty-three readings copied off a
+    // printout; nobody should have to type it twice to find out.
+    this._ibConfirmSave(swId, rec);
+  }
+  async _ibConfirmSave(swId, rec){
+    let out=null;
+    try{ out=await (window.__vxLastPush && window.__vxLastPush['vx_sw_meta']); }catch(e){}
+    // No sync layer at all (opened as a plain file, say) \u2014 the record is on the device and that
+    // is the whole truth available, so do not claim more than that.
+    if(!out){ this.setState({profileIbMsg:'Saved on this device \u2713'}); return; }
+    if(out.ok){ this.setState({profileIbMsg:'Saved to the club database \u2713 \u00b7 '+this._fmtDMY(rec.date)}); return; }
+    this.setState({profileIbMsg:'Kept on this device, but NOT yet in the club database \u2014 '
+      +(out.why||'it did not go up')+'. It will be sent again by itself; do not type it in again, and do not clear this browser until it has.'});
   }
   deleteInbody(swId, idx){ const m=this._swMeta(swId); const list=(m.inbody||[]).slice(); list.splice(idx,1); this._saveSwMeta(swId, {...m, inbody:list}); }
   // Only small http(s) URLs are kept in vx_sw_photos now (the actual image lives in Storage), so
@@ -11813,7 +11848,14 @@ class Component extends DCLogic {
           onProfileIbPdfClick:()=>{ const el=document.getElementById('vx-ib-pdf-'+swObj.id); if(el) el.click(); },
           onProfileIbPdf:(e)=>this.profileInbodyPdf(e, swObj.id),
           onProfileIbCheck:()=>this.profileInbodyCheck(),
-          profileIbMsg:S2.profileIbMsg, profileIbMsgShow:!!S2.profileIbMsg, profileIbMsgColor: /fail|couldn|error/i.test(S2.profileIbMsg||'')?'#B42318':'#0C7A4F',
+          // Green only for something that actually finished, grey while it is still going, red
+          // for everything else. Matching on the words "fail" or "error" meant any new warning
+          // had to remember to contain one: "Kept on this device, but NOT yet in the club
+          // database" came out in the same green as a completed save. Good news has to earn the
+          // green, rather than bad news having to remember to ask for the red.
+          profileIbMsg:S2.profileIbMsg, profileIbMsgShow:!!S2.profileIbMsg,
+          profileIbMsgColor: /✓/.test(S2.profileIbMsg||'') ? '#0C7A4F'
+            : /…$/.test(S2.profileIbMsg||'') ? '#6B7484' : '#B42318',
           ...(()=>{ const wl=this._wearLatest(swObj.id); const recSeries=this._wearSeries(swObj.id,'recovery',7);
             const wearBars=recSeries.map(p=>({ h: p.v!=null?Math.max(6,Math.round(p.v/100*44)):4, color:this._wearRecoveryColor(p.v), day:(p.date||'').slice(8), val: p.v!=null?(p.v+'%'):'—' }));
             const wearRows=this._wearList(swObj.id).slice(0,8).map(r=>({ dateLabel:this._fmtDMY(r.date),
