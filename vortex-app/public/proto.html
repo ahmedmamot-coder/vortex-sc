@@ -5242,7 +5242,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-09p';
+const VX_BUILD='2026-08-09q';
 const VX_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 class Component extends DCLogic {
   constructor(props){
@@ -5977,8 +5977,7 @@ class Component extends DCLogic {
         chunk.forEach((e,ci)=>{ e.heat=hi+1; e.lane=laneOrder[ci]||(ci+1); });
       });
     });
-    this.meetEntries={...this.meetEntries, [meetName]:list};
-    this._saveJSON('vx_meet_entries', this.meetEntries);
+    this._entriesSave(meetName, list);
     this.setState({shareNote:'Auto-seeded '+list.length+' entries by PB \u2713'});
   }
   // ---- Language ---------------------------------------------------------------------------
@@ -7724,17 +7723,63 @@ class Component extends DCLogic {
     swIds.forEach(id=>{ const sw=flat.find(x=>x.id===id); if(!sw) return;
       events.forEach(ev=>{ if(existing.some(e=>e.swId===id&&e.event===ev) || recs.some(e=>e.swId===id&&e.event===ev)) return; recs.push({swId:id, name:sw.name, event:ev, heat:1, lane:1}); }); });
     const list=[...existing, ...recs];
-    this.meetEntries={...this.meetEntries, [meetName]:list};
-    this._saveJSON('vx_meet_entries', this.meetEntries);
+    this._entriesSave(meetName, list);
     this.setState({entriesHeat:'', entriesLane:'', entriesEventsSel:[], entriesSwSel:[]});
     this.autoSeedMeet(meetName);   // heats & lanes assigned automatically by PB
   }
-  entryRemove(meetName, idx){ const list=(this.meetEntries[meetName]||[]).slice(); list.splice(idx,1); this.meetEntries={...this.meetEntries, [meetName]:list}; this._saveJSON('vx_meet_entries', this.meetEntries); this.forceUpdate(); }
+  // One place every change to a meet's declared entries goes through, so it can write rows
+  // instead of rewriting the club's entire meet declarations. An entry has a closing date: one
+  // that disappears after the deadline is a child who does not swim, and nobody finds out until
+  // the heat sheets go up. Seeding a meet touches every entry in that meet and nothing else.
+  _entriesSave(meetName, list){
+    const before={}; ((this.meetEntries||{})[meetName]||[]).forEach(e=>{ const id=this._entryId(meetName,e); if(id) before[id]=e; });
+    this.meetEntries={...this.meetEntries, [meetName]:list};
+    // Still written, so a device that has not run the SQL yet behaves exactly as before.
+    this._saveJSON('vx_meet_entries', this.meetEntries); this.forceUpdate();
+    if(!window.__vxUpsert) return;
+    const changed=[], seen={};
+    list.forEach(e=>{ const id=this._entryId(meetName,e); if(!id) return; seen[id]=true;
+      const was=before[id];
+      if(!was || JSON.stringify(was)!==JSON.stringify(e)) changed.push(this._entryToRow(meetName, e)); });
+    const gone=Object.keys(before).filter(id=>!seen[id]);
+    (async()=>{
+      try{ for(let i=0;i<changed.length;i+=200) await window.__vxUpsert('meet_declarations', changed.slice(i,i+200)); }catch(e){}
+      try{ if(gone.length && window.__vxDelete) await window.__vxDelete('meet_declarations', 'id=in.('+gone.map(encodeURIComponent).join(',')+')'); }catch(e){}
+    })();
+  }
+  // A swimmer swims an event once at a meet, so that is the identity — re-seeding the same
+  // entry corrects its heat and lane rather than adding a second one.
+  _entryId(meetName, e){ return (e && e.swId && e.event) ? (meetName+'::'+e.swId+'::'+e.event) : ''; }
+  _entryToRow(meetName, e){ return { id:this._entryId(meetName,e), meet:meetName, sw_id:e.swId,
+    sw_name:e.name||'', event:e.event, heat:e.heat==null?null:+e.heat, lane:e.lane==null?null:+e.lane,
+    updated_at:new Date().toISOString() }; }
+  async _entriesFetch(){
+    if(!window.__vxSelect) return;
+    const rows=await window.__vxSelect('meet_declarations', 'select=*&limit=40000');
+    if(rows==null) return;   // a failed read, not a meet with nobody entered
+    const map={}; rows.forEach(r=>{ if(!r || !r.meet) return;
+      (map[r.meet]=map[r.meet]||[]).push({swId:r.sw_id, name:r.sw_name||'', event:r.event,
+        heat:r.heat==null?1:r.heat, lane:r.lane==null?1:r.lane}); });
+    this.meetEntries=map; try{ this._saveLocalOnly('vx_meet_entries', map); }catch(e){}
+    this.forceUpdate();
+    this._entriesMigrateOnce();
+  }
+  async _entriesMigrateOnce(){
+    if(this._entMigrated || !window.__vxUpsert) return; this._entMigrated=true;
+    let legacy={}; try{ legacy=this._loadJSON('vx_meet_entries', {})||{}; }catch(e){}
+    const have={}; Object.keys(this.meetEntries||{}).forEach(m=>(this.meetEntries[m]||[]).forEach(e=>{ have[this._entryId(m,e)]=true; }));
+    const rows=[];
+    Object.keys(legacy).forEach(m=>(legacy[m]||[]).forEach(e=>{ const id=this._entryId(m,e); if(id && !have[id]) rows.push(this._entryToRow(m,e)); }));
+    if(!rows.length) return;
+    for(let i=0;i<rows.length;i+=200){ try{ await window.__vxUpsert('meet_declarations', rows.slice(i,i+200)); }catch(e){ return; } }
+    try{ await this._entriesFetch(); }catch(e){}
+  }
+  entryRemove(meetName, idx){ const list=(this.meetEntries[meetName]||[]).slice(); list.splice(idx,1); this._entriesSave(meetName, list); this.forceUpdate(); }
   // Add one (swimmer × event) to a meet's declared entries if not already there, then re-seed.
   entryAddOne(meetName, swId, event){ const flat=this.allSwimmersFlat(); const sw=flat.find(x=>x.id===swId); if(!sw) return;
     const existing=(this.meetEntries[meetName]||[]); if(existing.some(e=>e.swId===swId&&e.event===event)) return;
     const list=[...existing, {swId, name:sw.name, event, heat:1, lane:1}];
-    this.meetEntries={...this.meetEntries, [meetName]:list}; this._saveJSON('vx_meet_entries', this.meetEntries);
+    this._entriesSave(meetName, list);
     try{ this.autoSeedMeet(meetName); }catch(e){} }
   // Export a meet's declared entries as CSV (Last, First, Gender, Age, Event, Seed time) — a
   // clean list any meet host / Hy-Tek Team Manager can import.
@@ -7893,11 +7938,43 @@ class Component extends DCLogic {
   // ---- Membership (academy packages) ----
   _membership(swId){ const m=(this.memberships||{})[swId]||{};
     return { pkg:m.pkg||'', fitness:!!m.fitness, paid:!!m.paid, start:m.start||'', end:m.end||'', note:m.note||'' }; }
+  // Changing one swimmer's package used to rewrite all 304 of them, because they lived in one
+  // JSON document written back whole. A membership is what a family is charged, so a stale copy
+  // winning does not announce itself — it quietly bills the wrong amount next month.
   setMembership(swId, patch){
     const cur=this._membership(swId); const next={...cur, ...patch};
     const map={...(this.memberships||{})};
-    if(!next.pkg && !next.fitness) delete map[swId]; else map[swId]=next;
+    const dropped=(!next.pkg && !next.fitness);
+    if(dropped) delete map[swId]; else map[swId]=next;
+    // The blob is still written so a device that has not run the SQL yet behaves as before.
     this.memberships=map; this._saveJSON('vx_memberships', map); this.forceUpdate();
+    if(dropped){ if(window.__vxDelete){ try{ window.__vxDelete('memberships', 'sw_id=eq.'+encodeURIComponent(swId)); }catch(e){} } return; }
+    if(window.__vxUpsert){ try{ window.__vxUpsert('memberships', [this._memToRow(swId, next)]); }catch(e){} }
+  }
+  _memToRow(swId, m){
+    const d=(v)=>/^\d{4}-\d{2}-\d{2}$/.test(String(v||'')) ? v : null;
+    return { sw_id:swId, pkg:m.pkg||'', fitness:!!m.fitness, paid:!!m.paid,
+      start_date:d(m.start), end_date:d(m.end), note:m.note||'', updated_at:new Date().toISOString() };
+  }
+  _memFromRow(r){ return { pkg:r.pkg||'', fitness:!!r.fitness, paid:!!r.paid,
+    start:r.start_date||'', end:r.end_date||'', note:r.note||'' }; }
+  async _membershipsFetch(){
+    if(!window.__vxSelect) return;
+    const rows=await window.__vxSelect('memberships', 'select=*&limit=20000');
+    if(rows==null) return;   // a failed read, not an empty club
+    const map={}; rows.forEach(r=>{ if(r && r.sw_id) map[r.sw_id]=this._memFromRow(r); });
+    this.memberships=map; try{ this._saveLocalOnly('vx_memberships', map); }catch(e){}
+    this.forceUpdate();
+    this._membershipsMigrateOnce();
+  }
+  async _membershipsMigrateOnce(){
+    if(this._memMigrated || !window.__vxUpsert) return; this._memMigrated=true;
+    let legacy={}; try{ legacy=this._loadJSON('vx_memberships', {})||{}; }catch(e){}
+    const rows=Object.keys(legacy).filter(id=>!(this.memberships||{})[id])
+      .map(id=>this._memToRow(id, {pkg:'',fitness:false,paid:false,start:'',end:'',note:'', ...legacy[id]}));
+    if(!rows.length) return;
+    for(let i=0;i<rows.length;i+=200){ try{ await window.__vxUpsert('memberships', rows.slice(i,i+200)); }catch(e){ return; } }
+    try{ await this._membershipsFetch(); }catch(e){}
   }
   _feePlans(){ const f=this.feePlans||{}; return {'3x':Number(f['3x'])||650, '4x':Number(f['4x'])||750, '6x':Number(f['6x'])||850, fitness:Number(f.fitness)||360}; }
   feePlanSave(key, val){ const n=parseFloat(val); if(isNaN(n)) return; const f={...this._feePlans(), [key]:n};
@@ -9150,7 +9227,7 @@ class Component extends DCLogic {
   // empty; this re-fetches them with the signed-in user's JWT so their data appears.
   _refetchAll(){
     try{ this._repullOnce(); }catch(e){}
-    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_wearFetch','_wearStatusFetch','_hrSetsFetch','_wellnessFetch','_inbodyFetch','_invoicesFetch','_planCustomFetch','_familyFetch']
+    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_wearFetch','_wearStatusFetch','_hrSetsFetch','_wellnessFetch','_inbodyFetch','_invoicesFetch','_membershipsFetch','_entriesFetch','_planCustomFetch','_familyFetch']
       .forEach((f)=>{ try{ if(typeof this[f]==='function') this[f](); }catch(e){} });
     try{ this._attendFetchStaged(); }catch(e){}
   }
@@ -9161,7 +9238,7 @@ class Component extends DCLogic {
     if(this._liveLast && now-this._liveLast<1500){ if(!this._liveTimer){ this._liveTimer=setTimeout(()=>{ this._liveTimer=null; this._liveRefresh(); }, 1600); } return; }
     this._liveLast=now;
     try{ if(window.__vxRepull) window.__vxRepull(); }catch(e){}
-    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_wellnessFetch','_inbodyFetch','_invoicesFetch','_hrSetsFetch','_wearFetch','_planCustomFetch']
+    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_wellnessFetch','_inbodyFetch','_invoicesFetch','_membershipsFetch','_entriesFetch','_hrSetsFetch','_wearFetch','_planCustomFetch']
       .forEach((f)=>{ try{ if(typeof this[f]==='function') this[f](); }catch(e){} });
   }
   // Stage B: give a signed-in staff member a real Supabase Auth session (JWT) in the background,
@@ -9855,6 +9932,8 @@ class Component extends DCLogic {
     this._wellnessFetch();
     this._inbodyFetch();
     this._invoicesFetch();
+    this._membershipsFetch();
+    this._entriesFetch();
     this._attendFetchStaged();
     this._planCustomFetch();
     // Also pull family accounts on open. This is what re-uploads ("self-heals") a

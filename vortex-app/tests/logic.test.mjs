@@ -1672,6 +1672,92 @@ describe("InBody sheet", () => {
     itAsync("with no sync layer it claims only what it knows", async () =>
       eq(await run(undefined), "Saved on this device ✓"));
   });
+  // Changing one swimmer's package used to rewrite all 304 of them. A membership is what a
+  // family is charged, so a stale copy winning does not announce itself — it quietly bills the
+  // wrong amount next month.
+  describe("a membership is one swimmer's row", () => {
+    const run = (existing, swId, patch) => {
+      const sent = [], deleted = [];
+      const ctx = { memberships: existing, forceUpdate() {}, _saveJSON() {} };
+      const restore = globalThis.window;
+      globalThis.window = {
+        __vxUpsert: (t, rows) => { sent.push([t, rows]); return Promise.resolve(true); },
+        __vxDelete: (t, qs) => { deleted.push([t, qs]); return Promise.resolve(true); },
+      };
+      try { bind("setMembership", ctx, ["_membership", "_memToRow"])(swId, patch); }
+      finally { globalThis.window = restore; }
+      return { sent, deleted, ctx };
+    };
+    it("setting one package writes one row", () => {
+      const { sent } = run({ s1: { pkg: "3x" }, s2: { pkg: "4x" } }, "s1", { pkg: "6x" });
+      const rows = sent.flatMap(([, r]) => r);
+      eq(rows.length, 1);
+      eq(rows[0].sw_id, "s1");
+      eq(rows[0].pkg, "6x");
+    });
+    it("clearing a package deletes that row rather than leaving it behind", () => {
+      const { deleted, sent } = run({ s1: { pkg: "3x" } }, "s1", { pkg: "", fitness: false });
+      eq(sent.length, 0);
+      eq(/sw_id=eq\.s1/.test(deleted[0][1]), true);
+    });
+    it("a blank date is stored as nothing, not an empty string", () => {
+      const rows = run({}, "s1", { pkg: "3x", start: "", end: "2026-12-31" }).sent.flatMap(([, r]) => r);
+      eq(rows[0].start_date, null, "a date column refuses an empty string and loses the write");
+      eq(rows[0].end_date, "2026-12-31");
+    });
+    it("a round trip changes nothing", () => {
+      const m = { pkg: "4x", fitness: true, paid: true, start: "2026-01-01", end: "2026-12-31", note: "n" };
+      eq(JSON.stringify(bind("_memFromRow", {}, [])(bind("_memToRow", {}, [])("s1", m))), JSON.stringify(m));
+    });
+  });
+
+  // An entry has a closing date. One that disappears after the deadline is a child who does not
+  // swim, and nobody finds out until the heat sheets go up.
+  describe("a meet entry is a row, not a rewrite of every meet", () => {
+    const E = (swId, event, heat, lane) => ({ swId, name: swId, event, heat, lane });
+    const run = (before, after, meet = "Doha Open") => {
+      const sent = [], deleted = [];
+      const ctx = { meetEntries: { [meet]: before, "Other Meet": [E("s9", "50 Free", 1, 1)] },
+        forceUpdate() {}, _saveJSON() {} };
+      const restore = globalThis.window;
+      globalThis.window = {
+        __vxUpsert: (t, rows) => { sent.push([t, rows]); return Promise.resolve(true); },
+        __vxDelete: (t, qs) => { deleted.push([t, qs]); return Promise.resolve(true); },
+      };
+      try { bind("_entriesSave", ctx, ["_entryId", "_entryToRow"])(meet, after); }
+      finally { globalThis.window = restore; }
+      return { sent, deleted, ctx };
+    };
+    it("adding one entry writes one row", () => {
+      const rows = run([E("s1", "100 Free", 1, 1)], [E("s1", "100 Free", 1, 1), E("s2", "50 Fly", 1, 2)])
+        .sent.flatMap(([, r]) => r);
+      eq(rows.length, 1);
+      eq(rows[0].id, "Doha Open::s2::50 Fly");
+    });
+    it("re-seeding writes the entries whose heat or lane moved, and only those", () => {
+      const rows = run([E("s1", "100 Free", 1, 1), E("s2", "100 Free", 1, 2)],
+        [E("s1", "100 Free", 2, 4), E("s2", "100 Free", 1, 2)]).sent.flatMap(([, r]) => r);
+      eq(rows.length, 1);
+      eq(rows[0].heat, 2);
+      eq(rows[0].lane, 4);
+    });
+    it("a scratched entry is deleted, or the swimmer is still on the sheet", () => {
+      const { deleted } = run([E("s1", "100 Free", 1, 1), E("s2", "50 Fly", 1, 2)], [E("s1", "100 Free", 1, 1)]);
+      eq(/id=in\.\(/.test(deleted[0][1]), true);
+      eq(/s2%3A%3A50%20Fly|s2::50 Fly/.test(decodeURIComponent(deleted[0][1])) || /s2/.test(deleted[0][1]), true);
+    });
+    it("another meet's entries are never touched", () => {
+      const { sent, deleted, ctx } = run([E("s1", "100 Free", 1, 1)], [E("s1", "100 Free", 1, 1), E("s2", "50 Fly", 1, 2)]);
+      for (const [, rows] of sent) for (const r of rows) eq(r.meet, "Doha Open");
+      eq(deleted.length, 0);
+      eq(ctx.meetEntries["Other Meet"].length, 1, "the other meet must survive untouched in memory too");
+    });
+    it("one swimmer swims an event once, so re-entering corrects rather than duplicates", () => {
+      const id = bind("_entryId", {}, [])("Doha Open", E("s1", "100 Free", 3, 5));
+      eq(id, "Doha Open::s1::100 Free", "heat and lane are not part of the identity");
+    });
+  });
+
   // Marking one family paid used to rewrite the club's entire billing history, which is the
   // shape that lost the InBody scans twice. It is worse here: a lost scan gets retyped from a
   // printout, a lost payment is a family told they still owe money they have already handed over.

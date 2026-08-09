@@ -70,6 +70,32 @@ A write the database refuses now shows in the app as *"refused — this account 
 make that change"* and is **not** retried, so a policy that is too tight shows up as a clear
 message rather than a red banner that never clears.
 
+## Memberships and meet entries live in the database, one row each
+
+**Run `supabase/memberships_and_entries.sql`.** Until it exists both keep working exactly as
+before, off the old blobs.
+
+`vx_memberships` held every swimmer's package in one JSON document, so changing one rewrote all
+304. `vx_meet_entries` held every entry for every meet, so adding one swimmer to one event
+rewrote the club's entire declarations. Same shape that lost the InBody scans twice.
+
+What it costs differs and is bad either way. A membership is what a family is charged, so a stale
+copy winning does not announce itself — it quietly bills the wrong amount next month. A meet
+entry has a **closing date**: one that disappears after the deadline is a child who does not
+swim, and nobody finds out until the heat sheets go up.
+
+`setMembership` writes the one swimmer's row, and deletes it when a package is cleared rather
+than leaving a stale one behind. Every change to a meet's entries now goes through
+`_entriesSave`, which diffs and writes **only the entries that moved** — re-seeding a meet writes
+the entries whose heat or lane changed and nothing else, and a scratched entry is deleted.
+
+An entry is identified by meet + swimmer + event, because a swimmer swims an event once at a
+meet: re-entering corrects the heat and lane instead of adding a duplicate. `0001_init.sql`
+declares a `meet_entries` table keyed on uuids the app never used, so this one is
+`meet_declarations` rather than a redefinition of a table already in the schema.
+
+Existing memberships and entries are copied up once, automatically.
+
 ## Invoices live in the database, one row each
 
 **Run `supabase/invoices.sql` in the Supabase SQL editor.** Until it exists the app keeps working
