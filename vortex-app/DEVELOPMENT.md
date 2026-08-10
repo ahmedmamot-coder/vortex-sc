@@ -316,6 +316,33 @@ Whatever reads it, a photograph **fills the form in and waits to be checked**. A
 would put a wrong body-fat figure on a child's record looking exactly as authoritative as a
 correct one, so a person confirms it before it is saved. A text PDF still saves itself.
 
+### The weight is checked before anything is measured against it
+
+A sheet came back with **8 readings instead of 23**, and the one figure that survived was the
+wrong one: 167 kg, on a swimmer 167 cm tall. Height and weight sit next to each other on an
+InBody sheet, in centimetres and kilogrammes, and they are the two numbers a reader most easily
+swaps.
+
+One wrong field condemned a correct sheet. Every check in `_inbodySanity` is measured against the
+weight, so with 167 kg standing in for 55.8 kg the protein, minerals, total body water, fat free
+mass and body cell mass were each impossible for a person that size and were thrown out; the
+reconciliation then had nothing left to agree with and failed. Fifteen correct readings were
+discarded to protect the record from the one number that was actually wrong.
+
+`_weightImplausible(w, h)` now tests the weight first — against the height, and against bounds no
+swimmer falls outside — and returns a phrase naming what is wrong with it. When it fails, the
+weight is dropped, **nothing is saved**, and the sheet is routed into the form for a person to
+correct, with the message saying which number was refused and why. The same check runs in
+`addInbody`, for the mix-up typed by hand.
+
+It runs on **all three ways a sheet comes in**. The reconciliation only ever ran on this device's
+own OCR, which is the one path the 167 did not take: it came off the server reader, and a text
+PDF takes a third path that saves itself with nobody seeing the figure at all. A guard in a place
+the bug does not go is not a guard.
+
+Scans already stored are not re-checked — the app cannot know which of the two numbers on an old
+record was the mistaken one. Delete the scan with its × and enter it again from the paper.
+
 **There is nowhere in the app to enter a key, deliberately.** Settings used to offer a box that
 kept an Anthropic key on the device; nothing ever read it, no page in this app calls Anthropic,
 and none should — a key in a browser can be read off the phone by whoever is holding it, and it

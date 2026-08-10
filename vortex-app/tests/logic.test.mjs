@@ -1507,7 +1507,9 @@ describe("InBody sheet", () => {
   // lifted off a printed axis, a phase angle of 10. Every one of those looks like a reading.
   describeSanity();
   function describeSanity() {
-    const check = bind("_inbodySanity", {});
+    const ctx = {};
+    ctx._weightImplausible = bind("_weightImplausible", ctx);
+    const check = bind("_inbodySanity", ctx);
 
     it("the real sheet reconciles", () => {
       const r = check({ weight: 55.8, bodyFatMass: 6.3, ffm: 49.5, pbf: 11.4, bmi: 20, height: 167,
@@ -1547,7 +1549,55 @@ describe("InBody sheet", () => {
       const r = check({ testDate: "2026-07-14", pbf: 11.4 });
       eq(r.values.testDate, "2026-07-14");
     });
+
+    // The scan that started this: 167 in the Weight box on a swimmer 167 cm tall. Weighed
+    // against 167 kg, protein, minerals, total body water, fat free mass and body cell mass are
+    // each impossible, so they were dropped and the reconciliation failed — 23 readings came
+    // back as 8, and the only figure that survived was the wrong one.
+    it("the height typed into the weight box does not condemn the sheet", () => {
+      const sheet = { testDate: "2026-07-14", weight: 167, height: 167, smm: 27.4, protein: 9.7,
+                      minerals: 3.5, tbw: 36.3, ffm: 49.5, bodyCellMass: 32.2, pbf: 11.4 };
+      const r = check(sheet);
+      eq(r.values.weight, undefined, "167 kg must not reach a child's record");
+      eq(!!r.badWeight, true, "the app has to be able to say what was wrong");
+      eq(/167 kg against a height of 167 cm/.test(r.badWeight), true);
+      eq(r.reconciled, false, "nothing is offered rather than a sheet anchored to a wrong weight");
+      eq(r.values.height, 167, "the height is the one figure that is plainly a height");
+    });
+    it("a weight no swimmer has is refused on its own, with no height to compare", () => {
+      eq(!!check({ weight: 167, smm: 27.4 }).badWeight, true);
+      eq(!!check({ weight: 4.2, smm: 27.4 }).badWeight, true, "a decimal point in the wrong place");
+      eq(!!check({ weight: 55.8, height: 167 }).badWeight, false, "a real weight is not refused");
+    });
+    it("a heavy adult and a small child are still weights", () => {
+      const heavy = check({ weight: 148, height: 190, bodyFatMass: 30, ffm: 118 });
+      eq(!!heavy.badWeight, false, "a masters swimmer is not a misread");
+      eq(!!check({ weight: 18.5, height: 110 }).badWeight, false, "a five-year-old in the learn-to-swim squad");
+    });
   }
+
+  // The reconciliation above runs only on what this device's own OCR guessed at. The 167 came
+  // off the server reader — and a text PDF takes a third path that saves itself with nobody
+  // seeing the figure at all. The weight has to be checked on all three, or the guard is in a
+  // place the bug never goes.
+  it("the weight is checked whichever way the sheet came in", () => {
+    const fn = (SOURCE.match(/async profileInbodyPdf\(e, swId\)\{[\s\S]*?\n  \}\n/) || [""])[0];
+    const guardAt = fn.indexOf("_weightImplausible");
+    const ocrAt = fn.indexOf("if(pictureRead && !serverRead)");
+    eq(guardAt > -1, true, "the import never checks the weight");
+    eq(ocrAt > -1 && guardAt < ocrAt, true, "the check sits inside the OCR-only branch again");
+    eq(/badWeight\)\{ delete data\.weight; fromPhoto=true; \}/.test(fn), true,
+       "a bad weight must be dropped and the sheet held back for a person to check");
+  });
+  it("a sheet held back for a bad weight says which number was wrong", () => {
+    eq(/badWeight \? \('The weight read as '\+badWeight/.test(SOURCE), true,
+       "'did not add up' does not tell anyone what to correct");
+  });
+  it("the same mix-up typed by hand is refused before it is saved", () => {
+    const add = (SOURCE.match(/  addInbody\(swId\)\{[\s\S]*?\n    const m=this\._swMeta/) || [""])[0];
+    eq(/const wWhy=this\._weightImplausible\(w, isNaN\(typedH\)\?null:typedH\);/.test(add), true);
+    eq(/if\(wWhy\)\{[\s\S]*?return;/.test(add), true, "it has to stop, not just warn");
+  });
 
   // Automatic reading needs an account somebody has to set up and pay for. Typing the sheet
   // out has to be a real option, not three boxes and a shrug.

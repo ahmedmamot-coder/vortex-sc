@@ -5293,7 +5293,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-10a';
+const VX_BUILD='2026-08-10b';
 const VX_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 class Component extends DCLogic {
   constructor(props){
@@ -7402,6 +7402,15 @@ class Component extends DCLogic {
     // copy out twenty figures, press Save, and watch nothing happen with nothing to read. There
     // is now a prominent Save button that is far easier to reach, so it has to say why.
     if(!w){ this.setState({profileIbMsg:'Add the weight before saving \u2014 every other reading on the sheet is checked against it. Nothing else you have typed is lost.'}); return; }
+    // The same mix-up, typed by hand. Height and weight sit next to each other on the sheet and
+    // 167 goes in the wrong box easily; refusing it here costs one correction, and accepting it
+    // puts a figure on a child's record that everything else is then measured against.
+    const typedH=parseFloat(f.height);
+    const wWhy=this._weightImplausible(w, isNaN(typedH)?null:typedH);
+    if(wWhy){
+      this.setState({profileIbMsg:'That is '+wWhy+'. Check the sheet — the weight in kilogrammes goes in the Weight box, the height in centimetres in the Height box.'});
+      return;
+    }
     const m=this._swMeta(swId);
     // Carry the imported sheet onto the record being saved. Without this an imported photo
     // left its file on one entry and the numbers on another.
@@ -7712,11 +7721,35 @@ class Component extends DCLogic {
   // reconcile was not read — it was guessed at, and a guess on a child's record looks exactly
   // as authoritative as a measurement. This throws out the values that contradict the sheet,
   // and says whether the sheet's own arithmetic came out.
+  // The weight is the one number every other reading is measured against, so a wrong one does
+  // not record a single bad figure — it condemns a correct sheet. 167 in the Weight box threw
+  // out protein, minerals, total body water, fat free mass and body cell mass as impossible for
+  // a person of that size, and the reconciliation then failed: a 23-reading sheet came back as
+  // 8, with the wrong number the one thing that survived.
+  //
+  // Height and weight sit next to each other on an InBody sheet, in centimetres and kilogrammes,
+  // and they are the two figures a reader — machine or person — most easily swaps. That is the
+  // mix-up worth naming; the bounds catch the rest. Returns a phrase saying what is wrong with
+  // the number, or '' when it looks like a weight.
+  _weightImplausible(w, h){
+    if(w==null || isNaN(w)) return '';
+    if(h!=null && !isNaN(h) && Math.abs(w-h)<1)
+      return w+' kg against a height of '+h+' cm — the same number in both boxes';
+    if(w<15) return w+' kg, too light to be a swimmer’s weight';
+    if(w>150) return w+' kg, too heavy to be a swimmer’s weight';
+    return '';
+  }
   _inbodySanity(d){
     const v={...(d||{})};
     const drop=(...ks)=>ks.forEach(k=>{ delete v[k]; });
     const W=v.weight;
     if(W==null) return {values:{testDate:v.testDate}, reconciled:false};
+
+    // Check the weight itself before trusting it, because every test below measures the rest of
+    // the sheet against it. Nothing else is offered when it fails — half a sheet anchored to a
+    // wrong weight is worse than no sheet.
+    const why=this._weightImplausible(W, v.height);
+    if(why) return {values:{testDate:v.testDate, height:v.height}, reconciled:false, badWeight:why};
 
     // Impossible for a person of this weight, whatever the sheet appeared to say.
     if(v.smm!=null && (v.smm > W*0.65 || v.smm < W*0.15)) drop('smm');
@@ -7809,6 +7842,19 @@ class Component extends DCLogic {
         }
       }
     }catch(err){ data=data||{}; }
+
+    // Check the weight whichever way the sheet came in. The reconciliation below runs only on
+    // what this device's own OCR guessed at, which left the two paths that actually read the
+    // 167 unchecked: the server reader, and a PDF with a text layer — and that last one saves
+    // itself without anyone seeing the figure first. So the weight is tested here, once, for
+    // all three. When it fails, the number is dropped and the sheet is routed into the form to
+    // be checked by a person rather than written to the record.
+    let badWeight='';
+    if(data && data.weight!=null){
+      badWeight=this._weightImplausible(data.weight, data.height);
+      if(badWeight){ delete data.weight; fromPhoto=true; }
+    }
+
     if(pictureRead && !serverRead){
       const checked=this._inbodySanity(data);
       data=checked.values; reconciled=checked.reconciled;
@@ -7831,6 +7877,9 @@ class Component extends DCLogic {
         ibPending:{ fileUrl:fileUrl||null, fileName:file.name||'', extra:data, testDate:data.testDate||null },
         profileIbBusy:false,
         profileIbMsg: !fileUrl ? 'The photo could not be uploaded \u2014 check your connection.'
+          : badWeight ? ('The weight read as '+badWeight+', so it is not being offered \u2014 everything on the sheet is measured against the weight, and a wrong one makes the correct readings look impossible. '
+              + (readCount ? ('The other '+readCount+' value'+(readCount===1?'':'s')+' are below. ') : '')
+              + 'Type the weight in from the paper and Save.')
           : readCount ? ('Read '+readCount+' value'+(readCount===1?'':'s')+' off the sheet. Check them against the paper, then Save \u2014 nothing is on the record yet.')
           : (reconciled
               ? 'The sheet is attached, but nothing could be read off it. Type the values in and Save.'
