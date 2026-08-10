@@ -1145,6 +1145,24 @@ describe("expired session", () => {
     it("a permission and a rejected shape are told apart", () =>
       eq(/S\.saveFailLast\.status===403 \|\| S\.saveFailLast\.status===401\)\s*\n\s*\? ' · refused/.test(SOURCE), true,
          "they need different people, so they cannot share one message"));
+    it("a banner that can never clear has a way out", () => {
+      eq(/saveFailDiscardShow: \(S\.saveRefused>0 && S\.saveRefused>=S\.saveFailCount && !S\.authDead\)/.test(SOURCE), true,
+         "Retry cannot work and the x only hides it until the count moves");
+      eq(/window\.__vxClearFailed\(\)/.test(SOURCE), true);
+    });
+    it("discarding is never offered while a write could still succeed", () => {
+      const vm = (SOURCE.match(/saveFailDiscardShow: [^\n]*/) || [""])[0];
+      eq(/S\.saveRefused>=S\.saveFailCount/.test(vm), true,
+         "one retryable write in the queue means Discard would lose a coach's register");
+    });
+    it("the update bar and the unsaved banner do not cover each other", () => {
+      eq(/bottom:\{\{ updateBarBottom \}\}/.test(SOURCE), true);
+      eq(/updateBarBottom: \(\(S\.saveFailCount>0 \|\| S\.authDead\) && !S\.saveFailHidden\) \? '62px' : '0'/.test(SOURCE), true,
+         "the hidden one was Update, on the device that most needed it");
+    });
+    it("a stuck device is allowed to look for the fix sooner", () =>
+      eq(/\(stuck\?30000:240000\)/.test(SOURCE), true,
+         "four minutes of a red banner with the fix already live"));
     it("the repair does not undo the lockdown", () => {
       const sql = readFileSync(new URL("../supabase/family_accounts_repair.sql", import.meta.url), "utf8");
       eq(/create policy/i.test(sql), false,

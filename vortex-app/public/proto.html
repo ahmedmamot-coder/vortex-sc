@@ -5253,7 +5253,10 @@ if ('serviceWorker' in navigator) {
     <div style="position:fixed;top:0;left:0;right:0;z-index:130;background:#B4690E;color:#fff;text-align:center;padding:3px 8px;font-size:10.5px;font-weight:800;letter-spacing:.06em">STAGING · TEST COPY — NOT THE REAL CLUB APP</div>
   </sc-if>
   <sc-if value="{{ updateReady }}" hint-placeholder-val="{{ false }}">
-    <div style="position:fixed;left:0;right:0;bottom:0;z-index:121;background:#0A0F1A;color:#fff;padding:10px 14px calc(10px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:10px;box-shadow:0 -6px 20px rgba(0,0,0,.25)">
+    <!-- Above the unsaved-changes banner, never on top of it. Both were fixed to bottom:0, so
+         whichever won the z-index hid the other — and the one being hidden was Update, in the
+         exact situation where the device is on an old build and needs it. -->
+    <div style="position:fixed;left:0;right:0;bottom:{{ updateBarBottom }};z-index:121;background:#0A0F1A;color:#fff;padding:10px 14px calc(10px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:10px;box-shadow:0 -6px 20px rgba(0,0,0,.25)">
       <i data-lucide="rocket" style="width:18px;height:18px;flex:none;color:#22D7D7"></i>
       <span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;font-weight:800">A newer version of the app is ready</span><span style="display:block;font-size:11px;color:rgba(255,255,255,.7);margin-top:1px">This device is still on {{ updateHave }}. The live one is {{ updateLatest }}.</span></span>
       <button onclick="{{ onUpdateNow }}" style="flex:none;background:#22D7D7;color:#04262A;border:none;border-radius:9px;padding:7px 13px;font-family:inherit;font-weight:800;font-size:11.5px;cursor:pointer">Update</button>
@@ -5264,6 +5267,12 @@ if ('serviceWorker' in navigator) {
       <i data-lucide="cloud-off" style="width:18px;height:18px;flex:none"></i>
       <span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;font-weight:800">{{ saveFailTitle }}</span><span style="display:block;font-size:11px;color:rgba(255,255,255,.8);margin-top:1px">{{ saveFailDetail }}</span></span>
       <button onclick="{{ onSaveFailRetry }}" style="flex:none;background:#fff;color:#7F1D1D;border:none;border-radius:9px;padding:7px 12px;font-family:inherit;font-weight:800;font-size:11.5px;cursor:pointer">{{ saveFailActionLabel }}</button>
+      <!-- When every held write has been permanently rejected there is nothing Retry can do and
+           nothing the club can do, and × only hides it until the count moves. Without this the
+           banner is on every screen, on every device, for ever. -->
+      <sc-if value="{{ saveFailDiscardShow }}" hint-placeholder-val="{{ false }}">
+        <button onclick="{{ onSaveFailDiscard }}" style="flex:none;background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:9px;padding:7px 12px;font-family:inherit;font-weight:800;font-size:11.5px;cursor:pointer">Discard</button>
+      </sc-if>
       <button onclick="{{ onSaveFailDismiss }}" style="flex:none;width:28px;height:28px;border-radius:8px;border:none;background:rgba(255,255,255,.15);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:14px;height:14px"></i></button>
     </div>
   </sc-if>
@@ -5344,7 +5353,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-10e';
+const VX_BUILD='2026-08-10f';
 const VX_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 class Component extends DCLogic {
   constructor(props){
@@ -7191,7 +7200,13 @@ class Component extends DCLogic {
   // anything a coach typed into it before is cleared off the device rather than left lying there.
   async _checkForUpdate(){
     // Once every few minutes at most; resuming an app should not mean a request every time.
-    const now=Date.now(); if(this._lastUpdChk && now-this._lastUpdChk < 240000) return;
+    // The exception is a device holding a write the database has permanently rejected: that is
+    // precisely the device running a build that cannot cope, and four minutes of a red banner
+    // with the fix already live is four minutes too long. It still cannot ask faster than twice
+    // a minute.
+    const now=Date.now();
+    let stuck=false; try{ stuck=(window.__vxFailed?window.__vxFailed():[]).some(x=>x&&x.refused); }catch(e){}
+    if(this._lastUpdChk && now-this._lastUpdChk < (stuck?30000:240000)) return;
     this._lastUpdChk=now;
     try{
       const r=await fetch('/api/version', {cache:'no-store'});
@@ -13047,6 +13062,21 @@ class Component extends DCLogic {
         if(window.__vxRetryFailed){ const r=await window.__vxRetryFailed(); this._refreshFailState(); if(r && r.fixed) this.setState({saveFailHidden:false}); }
       },
       onSaveFailDismiss: ()=>this.setState({saveFailHidden:true}),
+      // Only when nothing held can ever succeed. While a single write is still retryable,
+      // offering to throw the lot away is offering to lose a coach's register.
+      saveFailDiscardShow: (S.saveRefused>0 && S.saveRefused>=S.saveFailCount && !S.authDead),
+      onSaveFailDiscard: ()=>{
+        const n=S.saveFailCount||0;
+        const what=(S.saveFailLast&&S.saveFailLast.table)||'these';
+        if(!window.confirm('Throw away '+n+' change'+(n===1?'':'s')+' the database has refused?\n\n'
+          +'They are writes to '+what+' that it will not accept, so they can never be saved as they are. '
+          +'Account rows are written again the next time that person signs in.\n\n'
+          +'The reason is still in Settings → Data check.')) return;
+        try{ if(window.__vxClearFailed) window.__vxClearFailed(); }catch(e){}
+        this._refreshFailState();
+      },
+      // The two fixed bars stack rather than covering each other.
+      updateBarBottom: ((S.saveFailCount>0 || S.authDead) && !S.saveFailHidden) ? '62px' : '0',
       adminOpen: !!S.adminSection, onCloseAdmin,
       adminTitle: adminTitleMap[S.adminSection]||'', adminSub: adminSubMap[S.adminSection]||'',
       adminSwimmers: S.adminSection==='swimmers', adminMeets: S.adminSection==='meets', adminStaff: S.adminSection==='staff', adminSettings: S.adminSection==='settings',
