@@ -1169,6 +1169,32 @@ describe("expired session", () => {
          "the earlier repair scripts recreated the anon-open policies as part of the fix");
       eq(/notify pgrst, 'reload schema'/.test(sql), true, "PostgREST caches the table's shape");
     });
+    // What the database actually said: null value in column "full_name" violates not-null.
+    // full_name is required, has no default, and the app writes `name`.
+    it("the repair answers the constraint that was rejecting every save", () => {
+      const sql = readFileSync(new URL("../supabase/family_accounts_repair.sql", import.meta.url), "utf8");
+      eq(/alter column full_name drop not null/.test(sql), true);
+      eq(/alter column full_name set default ''/.test(sql), true, "a raw insert must work too");
+      eq(/create trigger family_accounts_fill_full_name_trg/.test(sql), true,
+         "so it holds the parent's name rather than an empty string");
+      eq(/drop not null', c\.column_name/.test(sql), true,
+         "one required column the app never sends rejects 100% of writes — fix them, don't just name them");
+    });
+    it("the repair reports its result as a row, not only a notice", () => {
+      const sql = readFileSync(new URL("../supabase/family_accounts_repair.sql", import.meta.url), "utf8");
+      eq(/still_required_but_never_sent/.test(sql), true, "notices are in a tab people miss");
+    });
+    it("every column the app writes is one the repair guarantees", () => {
+      const sql = readFileSync(new URL("../supabase/family_accounts_repair.sql", import.meta.url), "utf8");
+      const written = [...SOURCE.matchAll(/__vx(?:Insert|Upsert)\('family_accounts', \[\{([^}]*)\}/g)]
+        .flatMap((m) => [...m[1].matchAll(/(\w+)\s*:/g)].map((x) => x[1]));
+      eq(written.length > 0, true, "the call sites must still be found by this test");
+      eq(/create table if not exists public\.family_accounts \(\s*id text primary key/.test(sql), true,
+         "id is the key the table is created with, not an added column");
+      for (const col of new Set(written.filter((c) => c !== "id")))
+        eq(new RegExp("add column if not exists\\s+" + col + "\\b").test(sql), true,
+           col + " is written by the app but the repair does not ensure it exists");
+    });
   });
 
   it("the backfill of the whole register is staff-only", () =>
