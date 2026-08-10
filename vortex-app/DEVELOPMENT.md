@@ -63,6 +63,34 @@ Supabase links a social sign-in to an existing account with the same email addre
 who registered with a password and later taps *Continue with Google* keeps the same account and
 the same children.
 
+## Children's files: signed links, private bucket
+
+`vx-media` holds birth certificates, passports, medical certificates, photographs and race
+videos. A **public** bucket serves all of those through an endpoint that bypasses row-level
+security entirely — so locking the `swimmer_docs` table hid the index and did nothing to the
+documents. Anyone with a URL could open a child's passport, with no account.
+
+The app now asks Supabase for a **one-hour signed link** each time it shows a file: avatars,
+documents, InBody sheets, the video player and the download link all go through `_mediaSrc()`.
+
+**Run `supabase/media_private.sql` LAST**, once every device is on build `2026-08-10a` or later
+(Admin → Settings → About this club names the build). Flip the bucket first and every photo,
+document, scan and video breaks at once for all 304 swimmers.
+
+Two details make the switch safe to do in one step rather than as a flag day:
+
+- `_mediaSrc()` returns **what it has** and signs in the background — the stored URL while the
+  bucket is still public, the signed one the moment it arrives, then a re-render. Nothing is ever
+  a blank box waiting on a request.
+- `_openUrl()` never awaits. A window opened after an `await` is a blocked pop-up and the
+  document simply never appears, so the tab is opened in the same tick as the tap.
+
+Links are re-signed at 80% of their life, so one cannot expire while somebody is looking at it,
+and one request is made per file rather than one per render.
+
+A signed link still leaks if it is forwarded. It stops being a *permanent public address* for a
+child's passport, which is what it was.
+
 ## Activity log — who did what, and when
 
 **Run `supabase/audit_log.sql`.** Admin → **Activity log** reads it. Until the table exists the

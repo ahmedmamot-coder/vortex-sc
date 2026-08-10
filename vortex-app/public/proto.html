@@ -5293,7 +5293,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-09z';
+const VX_BUILD='2026-08-10a';
 const VX_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 class Component extends DCLogic {
   constructor(props){
@@ -5691,6 +5691,10 @@ class Component extends DCLogic {
   imgD(p){ return p ? 'block' : 'none'; }
   imgSrc(p){ return p || this.PH; }
   av(photo, initials, size, radius, bg, fg, fontSize, ring){
+    // Photographs of children live in the same bucket as their documents, so they are signed
+    // like everything else. Anything that is not ours — an app asset, a data: URL — passes
+    // straight through.
+    try{ if(photo) photo=this._mediaSrc(photo); }catch(e){}
     const R=window.React;
     const psrc = photo ? ((window.VX_PHOTOS && window.VX_PHOTOS[photo]) || photo) : null;
     // No photo → render a shiny gradient "initials" tile (when the bg is a solid hex colour).
@@ -7320,7 +7324,70 @@ class Component extends DCLogic {
       this.forceUpdate();
     }catch(err){ this.setState({docBusy:null, docMsg:'Upload failed — '+((err&&err.message)||'try again')}); }
   }
-  _openUrl(url){ if(!url) return; try{ const w=window.open(url,'_blank'); if(!w) location.href=url; }catch(e){ try{ location.href=url; }catch(x){} } }
+  // ---- Signed media links --------------------------------------------------------------------
+  // The vx-media bucket holds children's birth certificates, passports, medical certificates,
+  // photographs and race videos. While the bucket is public, every one of those is reachable by
+  // anyone who has the URL, with no sign-in — a public bucket serves files through an endpoint
+  // that bypasses row-level security entirely, so locking the swimmer_docs table hid the index
+  // and not the documents.
+  //
+  // The fix is to make the bucket private and ask Supabase for a short-lived link each time a
+  // file is shown. A link that expires in an hour still leaks if it is forwarded, but it stops
+  // being a permanent public address for a child's passport.
+  //
+  // Rendering is synchronous and signing is not, so this returns what it has and fetches what it
+  // does not: the stored URL first (which works while the bucket is still public), a signed one
+  // the moment it arrives, and a re-render to swap it in. That ordering is what makes the switch
+  // to a private bucket safe to do in one step rather than a flag day.
+  _mediaPath(url){
+    const u=String(url||'');
+    if(!u) return '';
+    // Both shapes the app has ever stored, and a signed one is left alone.
+    const m=u.match(/\/storage\/v1\/object\/(?:public\/)?vx-media\/([^?]+)/);
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+  _mediaSrc(url){
+    const path=this._mediaPath(url);
+    if(!path) return url||'';          // not ours — a YouTube link, a data: URL, an app asset
+    const c=(this._signCache=this._signCache||{})[path];
+    const now=Date.now();
+    if(c && c.url && c.exp>now) return c.url;
+    // Not signed yet, or close to expiring. Ask, and meanwhile hand back what we have — the
+    // stored URL still works while the bucket is public, and once it is private this is a
+    // broken image for one render rather than for ever.
+    this._signMedia(path);
+    return (c && c.url) || url || '';
+  }
+  _signMedia(path){
+    this._signing=this._signing||{};
+    if(this._signing[path]) return;                 // one request per file, not one per render
+    const tok=(window.__VX_AUTH && window.__VX_AUTH.token)||'';
+    if(!tok) return;                                // signed out: nothing to sign with
+    this._signing[path]=true;
+    const life=3600;
+    fetch(this._sbUrl()+'/storage/v1/object/sign/vx-media/'+path.split('/').map(encodeURIComponent).join('/'), {
+      method:'POST',
+      headers:{'apikey':this._sbAnon(), 'Authorization':'Bearer '+tok, 'Content-Type':'application/json'},
+      body:JSON.stringify({expiresIn:life})
+    }).then(r=>r.ok?r.json():null).then(j=>{
+      const rel=j && (j.signedURL||j.signedUrl);
+      if(rel){
+        this._signCache=this._signCache||{};
+        // Re-sign at 80% of the life, so a link never expires while somebody is looking at it.
+        this._signCache[path]={url:this._sbUrl()+'/storage/v1'+rel, exp:Date.now()+life*800};
+        this.forceUpdate();
+      }
+    }).catch(()=>{}).then(()=>{ delete this._signing[path]; });
+  }
+  _sbUrl(){ try{ return (window.__VX_SB && window.__VX_SB.url) || ''; }catch(e){ return ''; } }
+  _openUrl(url){ if(!url) return;
+    // Signing is a request, and a pop-up opened after one is blocked — so open the window first
+    // and point it at the signed link when it arrives.
+    const path=this._mediaPath(url);
+    if(!path){ try{ const w=window.open(url,'_blank'); if(!w) location.href=url; }catch(e){ try{ location.href=url; }catch(x){} } return; }
+    const ready=this._mediaSrc(url);
+    try{ const w=window.open(ready,'_blank'); if(!w) location.href=ready; }catch(e){ try{ location.href=ready; }catch(x){} }
+  }
   _openDoc(doc){ if(!doc) return; if(doc.url) this._openUrl(doc.url); else if(doc.dataUrl) this._openDataUrl(doc.dataUrl); }
   removeDoc(swId, key){
     const map={...(this.swimmerDocs||{})}; if(map[swId]){ const d={...map[swId]}; delete d[key]; map[swId]=d; } this.swimmerDocs=map;
@@ -8558,7 +8625,7 @@ class Component extends DCLogic {
     if(!v) return;
     if(v.kind==='mp4'){
       const vidEl=document.createElement('video');
-      vidEl.controls=true; vidEl.playsInline=true; vidEl.style.cssText='width:100%;height:100%;object-fit:cover;background:#000'; vidEl.src=v.url; vidEl.playbackRate=this.state.videoRate||1;
+      vidEl.controls=true; vidEl.playsInline=true; vidEl.style.cssText='width:100%;height:100%;object-fit:cover;background:#000'; vidEl.src=this._mediaSrc(v.url); vidEl.playbackRate=this.state.videoRate||1;
       el.appendChild(vidEl); this._videoElRef=vidEl;
     } else if(v.kind==='youtube'){
       const holder=document.createElement('div'); const holderId='vx-yt-holder-'+v.id; holder.id=holderId; holder.style.cssText='width:100%;height:100%';
@@ -8798,7 +8865,7 @@ class Component extends DCLogic {
     return list.map(m=>{ const mine=(viewer==='staff')?(m.sender==='staff'):(m.sender==='family');
       return { id:m.id, mine, notMine:!mine, align: mine?'flex-end':'flex-start', name:m.fromName, avatar:this.av(m.fromPhoto||null, (m.fromName||'?').slice(0,2).toUpperCase(), 24, 8, mine?'#0A0F1A':'#067EEA', '#fff', 9),
         bubbleBg: mine?'#0A0F1A':'#F1F4F8', bubbleFg: mine?'#fff':'#0C1116',
-        hasBody:!!m.body, body:m.body, hasSet:!!m.setText, setText:m.setText, hasVideo:!!m.video, videoEl:this._videoEmbedEl(m.video),
+        hasBody:!!m.body, body:m.body, hasSet:!!m.setText, setText:m.setText, hasVideo:!!m.video, videoEl:this._videoEmbedEl(this._mediaSrc(m.video)),
         time: m.ts? this.notifTimeAgo(new Date(m.ts).toISOString()):'' }; }); }
   async deleteFitSession(squadId, id){ const list=((this.fitSaved&&this.fitSaved[squadId])||[]).filter(r=>r.id!==id); this.fitSaved={...(this.fitSaved||{}), [squadId]:list}; this.forceUpdate();
     try{ if(window.__vxDelete){ await window.__vxDelete('fitness_sessions', 'id=eq.'+encodeURIComponent(id)); await this._fitSessFetch(); } }catch(e){} }
@@ -13227,7 +13294,7 @@ class Component extends DCLogic {
       videoRateOptions, onVideoAddLap:()=>this.videoAddLap(), videoHasLaps, videoNoLaps: !videoHasLaps, onVideoClearLaps: activeVid?()=>this.videoClearLaps(activeVid.id):null,
       raceTypeOptions, nextSplitLabel, videoSplitsDone, videoSplitsTotal, videoAllSplitsDone, videoSplitsRemaining: !videoAllSplitsDone,
       videoIsUploaded, videoDeviceOnly, videoCanDownload,
-      videoUploadMsg:S.videoUploadMsg||'', videoUploadMsgShow:!!S.videoUploadMsg, activeVideoDownloadUrl: activeVid?activeVid.url:'', activeVideoDownloadName: activeVid?(activeVid.title||'clip')+'.mp4':'clip.mp4',
+      videoUploadMsg:S.videoUploadMsg||'', videoUploadMsgShow:!!S.videoUploadMsg, activeVideoDownloadUrl: activeVid?this._mediaSrc(activeVid.url):'', activeVideoDownloadName: activeVid?(activeVid.title||'clip')+'.mp4':'clip.mp4',
       onVideoUploadClick:()=>{ const el=document.getElementById('vx-video-upload'); if(el) el.click(); },
       onVideoUploadChange:(e)=>this.videoUploadFile(e),
       onYoutubeQuickOpen:()=>this.setState({videoAddOpen:true, videoUrlDraft:'https://www.youtube.com/watch?v='}),

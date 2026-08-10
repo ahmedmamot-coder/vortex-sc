@@ -1730,6 +1730,72 @@ describe("InBody sheet", () => {
     });
   });
 
+  // The vx-media bucket holds children's birth certificates, passports, medical certificates,
+  // photographs and race videos. A public bucket serves those through an endpoint that bypasses
+  // row-level security entirely, so locking the swimmer_docs table hid the index and not the
+  // documents. Short-lived signed links are the only thing that closes it.
+  describe("signed links for children's files", () => {
+    const path = bind("_mediaPath", {}, []);
+    it("a stored public URL yields its path", () =>
+      eq(path("https://x.supabase.co/storage/v1/object/public/vx-media/docs/s1/birth.pdf"), "docs/s1/birth.pdf"));
+    it("the private shape works too, since both have been stored", () =>
+      eq(path("https://x.supabase.co/storage/v1/object/vx-media/photos/s1.jpg"), "photos/s1.jpg"));
+    it("a token on the end is not part of the path", () =>
+      eq(path("https://x.supabase.co/storage/v1/object/public/vx-media/videos/v1.mp4?token=abc"), "videos/v1.mp4"));
+    it("an escaped space comes back as a space", () =>
+      eq(path("https://x.supabase.co/storage/v1/object/public/vx-media/meets/Doha%20Open.pdf"), "meets/Doha Open.pdf"));
+    it("someone else's link is left alone", () => {
+      eq(path("https://youtube.com/watch?v=abc"), "");
+      eq(path("assets/logo-mark.png"), "");
+      eq(path(""), "");
+    });
+
+    const src = (url, cache, token) => {
+      const ctx = { _signCache: cache || {}, _signing: {}, forceUpdate() {},
+        _sbAnon: () => "anon", _sbUrl: () => "https://x.supabase.co" };
+      const restore = globalThis.window;
+      globalThis.window = { __VX_AUTH: token ? { token } : null, __VX_SB: { url: "https://x.supabase.co" } };
+      try { return bind("_mediaSrc", ctx, ["_mediaPath", "_signMedia", "_sbUrl", "_sbAnon"])(url); }
+      finally { globalThis.window = restore; }
+    };
+    it("a fresh signature is used when there is one", () => {
+      const cache = { "docs/s1/birth.pdf": { url: "SIGNED", exp: Date.now() + 60000 } };
+      eq(src("https://x.supabase.co/storage/v1/object/public/vx-media/docs/s1/birth.pdf", cache, "t"), "SIGNED");
+    });
+    it("an expired one is not used", () => {
+      const cache = { "docs/s1/birth.pdf": { url: "OLD", exp: Date.now() - 1000 } };
+      const out = src("https://x.supabase.co/storage/v1/object/public/vx-media/docs/s1/birth.pdf", cache, "t");
+      eq(out, "OLD", "the stale link is shown for one render while a new one is fetched, not a blank");
+    });
+    it("with nothing signed yet the stored URL is handed back, not an empty box", () => {
+      const u = "https://x.supabase.co/storage/v1/object/public/vx-media/photos/s1.jpg";
+      eq(src(u, {}, "t"), u, "this is what makes flipping the bucket safe to do in one step");
+    });
+    it("a link that is not ours is returned untouched", () =>
+      eq(src("https://youtube.com/watch?v=abc", {}, "t"), "https://youtube.com/watch?v=abc"));
+
+    it("everything that shows a stored file goes through it", () => {
+      // Avatars, documents, InBody sheets, the video player and the download link.
+      eq(/av\(photo, initials[\s\S]{0,400}?photo=this\._mediaSrc\(photo\)/.test(SOURCE), true, "swimmer photographs");
+      eq(/vidEl\.src=this\._mediaSrc\(v\.url\)/.test(SOURCE), true, "the video player");
+      eq(/activeVideoDownloadUrl: activeVid\?this\._mediaSrc\(/.test(SOURCE), true, "the download link");
+      eq(/const ready=this\._mediaSrc\(url\);/.test(SOURCE), true, "documents and scans opened in a tab");
+    });
+    it("opening a document never waits on a request first", () => {
+      // A window opened after an await is a blocked pop-up and the document simply never
+      // appears. _mediaSrc returns what it has and signs in the background, so the window is
+      // opened in the same tick as the tap.
+      const fn = sourceBetween("_openUrl(url){", "_openDoc(doc){");
+      eq(/await/.test(fn), false, "awaiting here is what gets the pop-up blocked");
+      eq(/const ready=this\._mediaSrc\(url\);/.test(fn), true);
+    });
+    it("one signing request per file, not one per render", () => {
+      const fn = sourceBetween("_signMedia(path){", "_sbUrl(){");
+      eq(/if\(this\._signing\[path\]\) return;/.test(fn), true);
+      eq(/exp:Date\.now\(\)\+life\*800/.test(fn), true, "re-signed at 80% of its life, so it cannot expire mid-view");
+    });
+  });
+
   // An audit log is read by more people than the thing it describes, and it is worthless if the
   // people it records can edit it or if it can stop them working.
   describe("the activity log", () => {
