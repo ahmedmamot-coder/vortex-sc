@@ -1180,6 +1180,32 @@ describe("expired session", () => {
       eq(/drop not null', c\.column_name/.test(sql), true,
          "one required column the app never sends rejects 100% of writes — fix them, don't just name them");
     });
+    // The first version of the repair widened id to text so the app's invented ids would fit.
+    // The database refused: 42804, family_accounts_id_fkey cannot be implemented, text vs uuid.
+    // That key says an account row must belong to a real Auth user — the app was wrong, not it.
+    it("the repair does not break the link to the Auth user", () => {
+      const sql = readFileSync(new URL("../supabase/family_accounts_repair.sql", import.meta.url), "utf8");
+      eq(/alter column id type text/.test(sql), false,
+         "widening id has to break family_accounts_id_fkey, and that key is worth keeping");
+    });
+    it("the app never invents an id for a table keyed on the Auth user", () => {
+      const writes = [...SOURCE.matchAll(/__vx(?:Insert|Upsert)\('family_accounts',/g)];
+      eq(writes.length >= 5, true, "the call sites must still be found by this test");
+      for (const m of writes) {
+        const before = SOURCE.slice(Math.max(0, m.index - 220), m.index);
+        eq(/_isUuid\(/.test(before), true,
+           "a made-up id is refused by the column, and a refused write blocks the queue");
+      }
+      eq(/rec\.id=_uid/.test(SOURCE), true, "registration must use the uuid sign-up just minted");
+    });
+    it("a uuid is checked properly, not just for being a string", () => {
+      const isUuid = bind("_isUuid", {});
+      eq(isUuid("9f2a1c3e-5b7d-4e21-9a08-6c3f1b2d4e5a"), true);
+      eq(isUuid("fam1a2b3c_x9"), false, "the id the app used to invent");
+      eq(isUuid(""), false);
+      eq(isUuid(null), false);
+      eq(isUuid("9f2a1c3e5b7d4e219a086c3f1b2d4e5a"), false, "no dashes is not a uuid PostgREST accepts");
+    });
     it("the repair reports its result as a row, not only a notice", () => {
       const sql = readFileSync(new URL("../supabase/family_accounts_repair.sql", import.meta.url), "utf8");
       eq(/still_required_but_never_sent/.test(sql), true, "notices are in a tab people miss");

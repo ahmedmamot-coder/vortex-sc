@@ -41,17 +41,27 @@ alter table public.family_accounts add column if not exists ts          bigint;
 alter table public.family_accounts add column if not exists created_at  timestamptz not null default now();
 
 -- ---------------------------------------------------------------------------------------------
--- 2. The app generates text ids ('fam1a2b3c_x9'). A uuid column rejects every one of them, and
---    an Auth uuid is still perfectly good text, so widening loses nothing.
+-- 2. id is LEFT ALONE, deliberately.
+--
+--    An earlier version of this script widened it to text, so that the text ids the app was
+--    inventing ('fam1a2b3c_x9') would be accepted. The database refused:
+--
+--      42804: foreign key constraint "family_accounts_id_fkey" cannot be implemented
+--      Key columns "id" and "id" are of incompatible types: text and uuid.
+--
+--    It was right to. That foreign key says an account row must belong to a real Auth user,
+--    which is a constraint worth keeping — it is what stops rows existing for logins that do
+--    not. Widening the column would have had to break it.
+--
+--    So the app was fixed instead (build 2026-08-10g): it writes the Auth user's uuid, which
+--    sign-up returns, and never invents an id for this table.
 -- ---------------------------------------------------------------------------------------------
 do $$
+declare t text;
 begin
-  if exists (select 1 from information_schema.columns
-              where table_schema='public' and table_name='family_accounts'
-                and column_name='id' and data_type <> 'text') then
-    alter table public.family_accounts alter column id type text using id::text;
-    raise notice 'vx: family_accounts.id widened to text';
-  end if;
+  select data_type into t from information_schema.columns
+   where table_schema='public' and table_name='family_accounts' and column_name='id';
+  raise notice 'vx: family_accounts.id is % — left as it is', coalesce(t,'(missing)');
 end $$;
 
 -- ---------------------------------------------------------------------------------------------
