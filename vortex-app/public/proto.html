@@ -63,13 +63,36 @@ if ('serviceWorker' in navigator) {
   function _failLoad(){ try{ return JSON.parse(localStorage.getItem(FAILK)||"[]")||[]; }catch(e){ return []; } }
   function _failSave(a){ try{ localStorage.setItem(FAILK, JSON.stringify(a.slice(-100))); }catch(e){} }
   var _lastAuthFix=0;
+  // Which failures can a retry ever fix?
+  //
+  // 401 is the token having expired: refresh it and the same request works, so it is retried.
+  // 408, 425 and 429 are "busy, ask again", and anything 5xx is the server having a bad moment
+  // — all retried. Every OTHER 4xx is the database saying the request itself is wrong: a column
+  // that does not exist, a value the column will not take, a policy that says no. The identical
+  // bytes sent again get the identical answer.
+  //
+  // Only 403 was treated that way. A 400 was retried every 45 seconds for as long as the app
+  // stayed open, on every device, behind a banner that said "retrying automatically" — which was
+  // not a description of anything that could happen.
+  function _permanent(status){
+    if(status===401 || status===408 || status===425 || status===429) return false;
+    return status>=400 && status<500;
+  }
   function _failAdd(op, table, payload, status, body){
     var a=_failLoad();
-    // 403 is the database saying "understood, and no". Sending it again cannot change the
-    // answer, so it is kept in the log where somebody can see it but left out of the retries
-    // — otherwise one wrong permission would leave a red banner on a phone for ever.
+    // What the database said, kept in a form a person can act on. For a rejected shape this is
+    // the whole diagnosis — "column family_accounts.pass does not exist" is one line and one
+    // fix, and it was being written to a console nobody has open on a phone at the poolside.
+    var said=""; try{ var j=JSON.parse(body); said=j.message||""; if(j.hint) said+=" — "+j.hint; }catch(e){}
+    // One write, one entry. A retry that fails calls back in here, so a single rejected save
+    // was counted again every 45 seconds — "8 changes have not been saved" could be one change
+    // that had been tried eight times, which makes the number worse than useless: it reads as
+    // eight lost registrations.
+    var sig=""; try{ sig=op+"|"+table+"|"+JSON.stringify(payload); }catch(e){ sig=op+"|"+table; }
+    a=a.filter(function(x){ return x && x.sig !== sig; });
     a.push({ id:Date.now()+"_"+Math.random().toString(36).slice(2,7), op:op, table:table, payload:payload,
-             status:status||0, refused:(status===403), body:String(body||"").slice(0,300), ts:Date.now() });
+             sig:sig, status:status||0, refused:_permanent(status), said:said||"",
+             body:String(body||"").slice(0,300), ts:Date.now() });
     _failSave(a);
     window.__vxLastError = { table:table, status:status, body:String(body||"").slice(0,300), ts:Date.now() };
     // A 401 means the token died, not that the data was bad. Refresh and replay at once
@@ -5321,7 +5344,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-10d';
+const VX_BUILD='2026-08-10e';
 const VX_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 class Component extends DCLogic {
   constructor(props){
@@ -12999,10 +13022,17 @@ class Component extends DCLogic {
         ? (S.saveFailCount>0
             ? 'Your session expired. Sign in again and these will save automatically.'
             : 'Your session expired. Sign in again before you mark anything.')
+        // "family_accounts · HTTP 400 · retrying automatically" named the table and the number
+        // and then said the one thing that was not true. A rejected write is one of three
+        // different problems and they need three different people: a permission is the club's
+        // to change, a rejected shape is the database's, and a bad connection fixes itself.
         : (S.saveFailLast ? (S.saveFailLast.table+' · '+(S.saveFailLast.status?('HTTP '+S.saveFailLast.status):'no connection')) : '')
-          + ((S.saveRefused>0 && S.saveRefused>=S.saveFailCount)
-              ? ' · refused — this account is not allowed to make that change'
-              : ' · retrying automatically'),
+          + (!(S.saveRefused>0 && S.saveRefused>=S.saveFailCount) ? ' · retrying automatically'
+            : (S.saveFailLast && (S.saveFailLast.status===403 || S.saveFailLast.status===401)
+                ? ' · refused — this account is not allowed to make that change'
+                : ' · the database rejected it, so retrying cannot help'
+                  + ((S.saveFailLast && S.saveFailLast.said) ? (': '+S.saveFailLast.said) : '')
+                  + '. Show this to whoever looks after the database.')),
       // Signed out, the Retry button is a lie — there is nothing it can do. It becomes the
       // one action that does work: go and sign in. The marks are already safe in the queue
       // and replay by themselves the moment the sign-in lands.

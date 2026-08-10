@@ -1090,6 +1090,69 @@ describe("expired session", () => {
     await t.win.__vxRetryFailed();
     eq(t.upserted.length, 1, "the recoverable one must still go through");
   });
+  // The banner a manager was actually looking at: "8 changes have not been saved —
+  // family_accounts · HTTP 400 · retrying automatically". A 400 is the database rejecting the
+  // SHAPE of the write — a column that does not exist, a value the column will not take. The
+  // same bytes get the same answer, so it was retried every 45 seconds for as long as the app
+  // stayed open, on every device, and the banner could never clear.
+  describe("a write the database will never accept", () => {
+    const FOUR_HUNDRED = res(400, { message: "column family_accounts.pass does not exist", code: "42703" });
+
+    itAsync("a rejected shape is not retried", async () => {
+      const t = boot({ auth: LIVE, reply: (url) => (url.includes("/family_accounts") ? FOUR_HUNDRED : GOOD_TOKEN) });
+      await t.win.__vxInsert("family_accounts", [{ id: "fam1", name: "A" }]);
+      await flush();
+      const held = t.win.__vxFailed();
+      eq(held.length, 1);
+      eq(held[0].refused, true, "retrying identical bytes cannot change the answer");
+    });
+    itAsync("what the database said is kept, because it is the whole fix", async () => {
+      const t = boot({ auth: LIVE, reply: (url) => (url.includes("/family_accounts") ? FOUR_HUNDRED : GOOD_TOKEN) });
+      await t.win.__vxInsert("family_accounts", [{ id: "fam1" }]);
+      await flush();
+      eq(/column family_accounts\.pass does not exist/.test(t.win.__vxFailed()[0].said), true);
+    });
+    itAsync("one rejected write is one entry, however many times it is tried", async () => {
+      const t = boot({ auth: LIVE, reply: (url) => (url.includes("/family_accounts") ? FOUR_HUNDRED : GOOD_TOKEN) });
+      const row = [{ id: "fam1", name: "A" }];
+      await t.win.__vxInsert("family_accounts", row);
+      await flush();
+      await t.win.__vxInsert("family_accounts", row);
+      await flush();
+      await t.win.__vxInsert("family_accounts", row);
+      await flush();
+      eq(t.win.__vxFailedCount(), 1, "'8 changes' read as eight lost registrations; it was one");
+    });
+    itAsync("an expired token is still retried — that one a refresh does fix", async () => {
+      const t = boot({ auth: LIVE, reply: (url) => (url.includes("/family_accounts") ? res(401, { message: "JWT expired" }) : GOOD_TOKEN) });
+      await t.win.__vxInsert("family_accounts", [{ id: "fam1" }]);
+      await flush();
+      const held = t.win.__vxFailed();
+      eq(held.length, 1);
+      eq(!!held[0].refused, false, "a 401 clears the moment the token is refreshed");
+    });
+    itAsync("a server having a bad moment is still retried", async () => {
+      const t = boot({ auth: LIVE, reply: (url) => (url.includes("/family_accounts") ? res(503, { message: "upstream" }) : GOOD_TOKEN) });
+      await t.win.__vxInsert("family_accounts", [{ id: "fam1" }]);
+      await flush();
+      eq(!!t.win.__vxFailed()[0].refused, false, "5xx is not the request being wrong");
+    });
+    it("the banner stops promising a retry that cannot happen", () => {
+      eq(/the database rejected it, so retrying cannot help/.test(SOURCE), true);
+      eq(/Show this to whoever looks after the database/.test(SOURCE), true,
+         "a rejected shape is not the club's to fix, and the banner has to say whose it is");
+    });
+    it("a permission and a rejected shape are told apart", () =>
+      eq(/S\.saveFailLast\.status===403 \|\| S\.saveFailLast\.status===401\)\s*\n\s*\? ' · refused/.test(SOURCE), true,
+         "they need different people, so they cannot share one message"));
+    it("the repair does not undo the lockdown", () => {
+      const sql = readFileSync(new URL("../supabase/family_accounts_repair.sql", import.meta.url), "utf8");
+      eq(/create policy/i.test(sql), false,
+         "the earlier repair scripts recreated the anon-open policies as part of the fix");
+      eq(/notify pgrst, 'reload schema'/.test(sql), true, "PostgREST caches the table's shape");
+    });
+  });
+
   it("the backfill of the whole register is staff-only", () =>
     eq(/window\.__VX_AUTH\.token && this\._isStaffSession\(\)/.test(SOURCE), true));
 

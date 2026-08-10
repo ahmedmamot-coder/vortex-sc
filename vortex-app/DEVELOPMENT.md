@@ -142,6 +142,33 @@ Three properties make it a log rather than a list of events:
 Reading it is staff-only **once `security_4_roles.sql` has been run**. Before that, the script
 falls back to any signed-in user and says so in its output.
 
+## A write the database will never accept
+
+`8 changes have not been saved — family_accounts · HTTP 400 · retrying automatically`
+
+Three separate faults met in that one line.
+
+**A 400 was retried forever.** Only `403` was treated as final. But a 400 is the database
+rejecting the *shape* of the write — a column that does not exist (42703), a NOT NULL column the
+app never sends (23502), a text id against a uuid column (22P02). The same bytes get the same
+answer, so it was retried every 45 seconds for as long as the app stayed open, on every device,
+behind a banner promising something that could not happen. `_permanent(status)` now decides:
+401 is retried (a refresh genuinely fixes it), 408/425/429 and anything 5xx are retried, and every
+other 4xx is kept on file and left alone.
+
+**The count was inflated by its own retries.** Each failed retry called back into `_failAdd` and
+pushed another entry, so one rejected save could read as *eight changes* — which sounds like eight
+lost registrations. Entries are now keyed by operation, table and payload: one write, one entry.
+
+**The banner never said what was wrong.** PostgREST returns the reason in the body, and it was
+going to a console nobody has open at the poolside. `said` is now kept and shown, so
+*"column family_accounts.pass does not exist"* reaches the person who can act on it, along with
+whose problem it is — a permission is the club's to change, a rejected shape is the database's.
+
+`supabase/family_accounts_repair.sql` makes the table accept what the app writes. It is
+schema-only **on purpose**: the two earlier repair scripts recreated the wide-open anon policies
+as part of their fix, and running one of those today would silently undo the Stage 4 lockdown.
+
 ## Signing in must not read a table first
 
 Stage 4 makes `staff_accounts` staff-only. To anyone not yet signed in it therefore reads as
