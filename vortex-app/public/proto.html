@@ -5321,7 +5321,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-10c';
+const VX_BUILD='2026-08-10d';
 const VX_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 class Component extends DCLogic {
   constructor(props){
@@ -12017,16 +12017,34 @@ class Component extends DCLogic {
         // had full admin and could sign into the database as a coach. Both are gone.
         // Match on username, full name, OR email — people naturally try their email address.
         const acct=this.accounts.find(a=>(a.user&&norm(a.user).toLowerCase()===u)||(a.label&&norm(a.label).toLowerCase()===u)||(a.email&&(''+a.email).trim().toLowerCase()===u));
-        if(!acct) return this.setState({loginErr:'No account with that username or email'});
-        if(!acct.email) return this.setState({loginErr:'This account has no email yet — ask an admin to set it up.'});
+        // Signing in must not depend on being able to read the staff table first — the family
+        // side has worked this way for months and the staff side did not. Under the role
+        // policies staff_accounts is staff-only, so to anyone not yet signed in it reads as
+        // empty: on a device that has never been used here, the account list is the built-in
+        // one with no email addresses on it, and the lookup below would turn away a coach who
+        // typed the right password. An email address needs no lookup at all.
+        const email = u.includes('@') ? u
+          : (acct && acct.email ? String(acct.email).trim().toLowerCase() : '');
+        if(!email) return this.setState({loginErr: acct
+          ? 'This account has no email address on this device yet — sign in with your email address instead.'
+          : 'No account with that username on this device — sign in with your email address.'});
         this.setState({loginErr:'Checking…'});
-        this._authPost('/token?grant_type=password', {email:acct.email, password:(pEl?pEl.value:'')}).then(res=>{
+        this._authPost('/token?grant_type=password', {email:email, password:(pEl?pEl.value:'')}).then(async res=>{
           if(res && res.ok && res.j && res.j.access_token){
             if(window.__vxSetAuth){ try{ window.__vxSetAuth(res.j); }catch(e){} }
+            // Now we ARE signed in, which on a new device is the first moment the staff table
+            // can be read at all — so this is where the real account (role, squad, photo) is
+            // found. Signing in with an email the app has never seen still works; it just
+            // starts as a coach with no squad until the row arrives.
+            let real=acct;
+            if(!real || !real.email){ try{ await this._staffFetch(); }catch(e){}
+              real=this.accounts.find(a=>(a.email&&String(a.email).trim().toLowerCase()===email)) || acct; }
+            if(!real) real={id:'st_'+email, user:email, label:email.split('@')[0], role:'Coach',
+              accent:'#2733D6', initials:email.slice(0,2).toUpperCase(), squadId:'', email:email};
             // Show the app first. The coach is signed in the moment the token lands; making
             // them watch "Checking…" while a dozen background fetches finish is time spent for
             // nothing, and the screens fill in as each one arrives anyway.
-            doLogin(acct);
+            doLogin(real);
             try{ this._refetchAll(); this._postLoginRefresh(); }catch(e){}
             return;
           }

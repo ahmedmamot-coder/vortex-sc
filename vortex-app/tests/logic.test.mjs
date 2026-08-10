@@ -2578,11 +2578,39 @@ describe("sign-in speed", () => {
     const login = SOURCE.slice(SOURCE.indexOf("_postLoginRefresh()"), SOURCE.indexOf("_refetchAll()"));
     eq(/location\.reload/.test(login), false, "re-downloading 1.1MB on mobile data was the wait");
   });
+  // Under the role policies staff_accounts is staff-only, so to anyone not yet signed in it
+  // reads as empty. A sign-in that has to look the account up in it first would turn away every
+  // coach on a device that has never been used here — including whoever had to set the next one
+  // up. The family side has never read a table before signing in; the staff side did.
+  describe("signing in cannot depend on reading the staff table", () => {
+    const submit = sourceBetween("onLoginSubmit: async ()=>{", "pickedAcct:{");
+    it("an email address is used as typed, with no lookup", () =>
+      eq(/const email = u\.includes\('@'\) \? u/.test(submit), true,
+         "the one identifier that needs nothing read to resolve it"));
+    it("an unknown username sends the coach to their email, not to a dead end", () => {
+      eq(/sign in with your email address/.test(submit), true);
+      eq(/'No account with that username or email'/.test(submit), false,
+         "that message was a dead end on a new device");
+    });
+    it("the staff row is read after the token, not before", () => {
+      const at = submit.indexOf("__vxSetAuth"), fetchAt = submit.indexOf("this._staffFetch()");
+      eq(fetchAt > at && at > -1, true, "reading it earlier is the thing that cannot work");
+    });
+    it("an email the app has never seen still gets in", () =>
+      eq(/if\(!real\) real=\{id:'st_'\+email/.test(submit), true,
+         "a coach whose row has not arrived yet must not be refused"));
+    it("a known account still signs in without any extra fetch", () =>
+      eq(/if\(!real \|\| !real\.email\)\{ try\{ await this\._staffFetch\(\); \}catch\(e\)\{\}/.test(submit), true,
+         "the common path must not pay for the new-device path"));
+  });
+
   // The order is the point — the screen switches the moment the session is good, and the dozen
   // background fetches fill it in afterwards. Pinning the indentation as well meant this broke
   // the first time the code moved, saying nothing about whether the order had changed.
   it("the app is shown before the background fetches, not after", () => {
-    const hits = [...SOURCE.matchAll(/doLogin\(acct\);\s*\}?\s*\n\s*try\{ this\._refetchAll\(\); this\._postLoginRefresh\(\);/g)];
+    // Matched by shape, not by the variable's name — the account passed in stopped being the
+    // one found before sign-in once staff_accounts became unreadable to anonymous visitors.
+    const hits = [...SOURCE.matchAll(/doLogin\(\w+\);\s*\}?\s*\n\s*try\{ this\._refetchAll\(\); this\._postLoginRefresh\(\);/g)];
     eq(hits.length > 0, true, "doLogin must run first so the screen switches immediately");
   });
   it("the shared club data is pulled once per sign-in, not twice", () =>

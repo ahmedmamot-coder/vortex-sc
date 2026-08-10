@@ -142,6 +142,22 @@ Three properties make it a log rather than a list of events:
 Reading it is staff-only **once `security_4_roles.sql` has been run**. Before that, the script
 falls back to any signed-in user and says so in its output.
 
+## Signing in must not read a table first
+
+Stage 4 makes `staff_accounts` staff-only. To anyone not yet signed in it therefore reads as
+**empty** — and staff sign-in used to look the account up in it to turn a username into an email
+address before calling Supabase Auth. On a device that had never been used here, the account list
+is the built-in one with no email addresses on it, so that lookup would have turned away every
+coach who typed the right password, including whoever had to set the next device up. Applying
+Stage 4 without this change locks the club out of its own app.
+
+The family side has worked correctly for months — *"No table read before sign-in"* — and the staff
+side now matches it: an email address is used exactly as typed and needs nothing read to resolve
+it; the staff row is fetched **after** the token arrives, which on a new device is the first moment
+it is readable at all; and an email the app has never seen still gets in, as a coach with no squad,
+until the row arrives. A username still works wherever the device already knows the account, which
+is the ordinary case, and costs no extra request.
+
 ## Who can see what (row-level security)
 
 Until Stage 4, every policy read `to authenticated using (true)`. `authenticated` means *any*

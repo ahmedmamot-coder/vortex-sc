@@ -313,6 +313,51 @@ begin
   end if;
 end $$;
 
+-- ---- keeping the staff list true after today ---------------------------------------------------
+-- vx_staff_emails is filled once, above, from whoever is in staff_accounts at the moment this
+-- runs. Without what follows it would stay frozen there: a coach added next month would not be
+-- in it, so every policy would treat them as a parent — they would sign in, see no squads, no
+-- plans and no register, and the cause would be a script somebody ran once in August.
+--
+-- The trigger keeps the two in step. An email removed from a staff row is removed here too, so
+-- taking a coach off the roster actually takes their access away; the managers named at the top
+-- are left alone, since they are not in staff_accounts to begin with.
+create or replace function vx_staff_email_sync() returns trigger
+language plpgsql security definer set search_path = public, pg_temp as $fn$
+begin
+  if (tg_op = 'DELETE' or tg_op = 'UPDATE') and old.email is not null and trim(old.email) <> '' then
+    if not exists (select 1 from public.staff_accounts s
+                    where lower(trim(s.email)) = lower(trim(old.email))
+                      and s.id is distinct from old.id) then
+      delete from vx_staff_emails where email = lower(trim(old.email));
+    end if;
+  end if;
+  if tg_op <> 'DELETE' and new.email is not null and trim(new.email) <> '' then
+    insert into vx_staff_emails (email) values (lower(trim(new.email)))
+    on conflict (email) do nothing;
+  end if;
+  return null;
+end $fn$;
+
+do $$
+begin
+  if to_regclass('public.staff_accounts') is not null then
+    drop trigger if exists vx_staff_email_sync_t on public.staff_accounts;
+    create trigger vx_staff_email_sync_t
+      after insert or update or delete on public.staff_accounts
+      for each row execute function vx_staff_email_sync();
+    raise notice 'vx: staff_accounts now keeps vx_staff_emails in step';
+  end if;
+end $$;
+
+-- The managers must never be removable by that trigger — they are the way back in if the staff
+-- table is ever emptied by accident.
+insert into vx_staff_emails (email) values
+  ('ahmedmamot@gmail.com'),
+  ('sameh4142@gmail.com'),
+  ('sameh@vortexswimmingclub.com')
+on conflict (email) do nothing;
+
 commit;
 
 -- What to expect in the output above:
