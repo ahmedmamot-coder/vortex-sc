@@ -1198,6 +1198,35 @@ describe("expired session", () => {
       }
       eq(/rec\.id=_uid/.test(SOURCE), true, "registration must use the uuid sign-up just minted");
     });
+    // With the ids finally correct, every write hit the row that was already there:
+    // 409, duplicate key value violates unique constraint "family_accounts_pkey".
+    it("writing a family account is an upsert, never a plain insert", () => {
+      eq(/__vxInsert\('family_accounts'/.test(SOURCE), false,
+         "the id is the Auth user's, so the row always exists after the first write");
+      eq((SOURCE.match(/__vxUpsert\('family_accounts'/g) || []).length >= 5, true);
+    });
+    // Driven through __vxInsert because that is what this sandbox carries, but the counting
+    // lives in _failAdd, which every write path shares.
+    itAsync("a repeat of the same row does not count as another lost change", async () => {
+      const conflict = res(409, { message: 'duplicate key value violates unique constraint "family_accounts_pkey"' });
+      const t = boot({ auth: LIVE, reply: (url) => (url.includes("/family_accounts") ? conflict : GOOD_TOKEN) });
+      // Every write carries ts:Date.now(), so the payloads differ even for one unchanged row.
+      const ID = "9f2a1c3e-5b7d-4e21-9a08-6c3f1b2d4e5a";
+      for (const ts of [1, 2, 3]) {
+        await t.win.__vxInsert("family_accounts", [{ id: ID, name: "A", ts }]);
+        await flush();
+      }
+      eq(t.win.__vxFailedCount(), 1, "15 became 30 with nothing new going wrong");
+    });
+    itAsync("two different rows are still two changes", async () => {
+      const conflict = res(409, { message: "duplicate key" });
+      const t = boot({ auth: LIVE, reply: (url) => (url.includes("/family_accounts") ? conflict : GOOD_TOKEN) });
+      await t.win.__vxInsert("family_accounts", [{ id: "aaaaaaaa-0000-4000-8000-000000000001", ts: 1 }]);
+      await flush();
+      await t.win.__vxInsert("family_accounts", [{ id: "bbbbbbbb-0000-4000-8000-000000000002", ts: 2 }]);
+      await flush();
+      eq(t.win.__vxFailedCount(), 2, "collapsing unrelated rows would hide a real loss");
+    });
     it("a uuid is checked properly, not just for being a string", () => {
       const isUuid = bind("_isUuid", {});
       eq(isUuid("9f2a1c3e-5b7d-4e21-9a08-6c3f1b2d4e5a"), true);

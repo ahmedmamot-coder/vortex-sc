@@ -84,11 +84,24 @@ if ('serviceWorker' in navigator) {
     // the whole diagnosis — "column family_accounts.pass does not exist" is one line and one
     // fix, and it was being written to a console nobody has open on a phone at the poolside.
     var said=""; try{ var j=JSON.parse(body); said=j.message||""; if(j.hint) said+=" — "+j.hint; }catch(e){}
-    // One write, one entry. A retry that fails calls back in here, so a single rejected save
-    // was counted again every 45 seconds — "8 changes have not been saved" could be one change
-    // that had been tried eight times, which makes the number worse than useless: it reads as
-    // eight lost registrations.
-    var sig=""; try{ sig=op+"|"+table+"|"+JSON.stringify(payload); }catch(e){ sig=op+"|"+table; }
+    // One row, one entry. A retry that fails calls back in here, so a single rejected save was
+    // counted again every 45 seconds — "8 changes have not been saved" could be one change tried
+    // eight times, which makes the number worse than useless: it reads as eight lost
+    // registrations.
+    //
+    // Keyed on the row's id rather than the whole payload, because almost every write carries
+    // ts:Date.now(). Comparing payloads therefore said "different change" every single time and
+    // the count kept climbing — 15 became 30 while nothing new was going wrong. Two pending
+    // writes to one row collapsing into the later one is also the right answer: these are
+    // upserts, so the last one is what the row should say.
+    var sig="";
+    try{
+      var _rows = Array.isArray(payload) ? payload : [payload];
+      var _ids = _rows.map(function(r){ return (r && (r.id!=null ? r.id : r.key)) || null; });
+      sig = (_ids.length && _ids.every(function(x){ return x!=null; }))
+        ? (op+"|"+table+"|"+_ids.join(","))
+        : (op+"|"+table+"|"+JSON.stringify(payload));
+    }catch(e){ sig=op+"|"+table; }
     a=a.filter(function(x){ return x && x.sig !== sig; });
     a.push({ id:Date.now()+"_"+Math.random().toString(36).slice(2,7), op:op, table:table, payload:payload,
              sig:sig, status:status||0, refused:_permanent(status), said:said||"",
@@ -5353,7 +5366,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-10g';
+const VX_BUILD='2026-08-10h';
 const VX_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 class Component extends DCLogic {
   constructor(props){
@@ -5970,6 +5983,12 @@ class Component extends DCLogic {
   // like 'fam1a2b3c_x9' when it had no uuid to hand; the column rejects every one of them, and
   // a rejected id looks exactly like a rejected anything else from the outside. So a row is
   // written only when there is a real uuid for it, and never with a made-up one.
+  //
+  // Every write to this table is an UPSERT, never a plain insert. The id is the Auth user's, so
+  // writing the row always means "make it say this" and never "add another one" — and a plain
+  // insert against a row that already exists is a 409 on the primary key, which is what the
+  // whole club got the moment the ids started being correct. The backfill in _familyFetch runs
+  // on every fetch, so an insert there was guaranteed to collide.
   _isUuid(v){ return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v||'')); }
   _saveFamily(list){ this.family=list; try{ this._saveLocalOnly('vx_family', list); }catch(e){} this.setState({family:list}); }
   async _familyFetch(){ if(!window.__vxSelect) return; const rows=await window.__vxSelect('family_accounts', 'select=*&limit=2000');
@@ -5992,7 +6011,7 @@ class Component extends DCLogic {
     const localOnly=candidates.filter(f=>!have.has((f.email||'').trim().toLowerCase()));
     // Only rows that already carry the Auth uuid. There is no uuid to invent for a local-only
     // record, and sending a made-up one had every write refused rather than just that one.
-    localOnly.forEach(f=>{ if(window.__vxInsert && this._isUuid(f.id)) try{ window.__vxInsert('family_accounts', [{id:f.id, name:f.name, email:f.email, phone:f.phone, pass:f.pass, role:f.role, swimmer_ids:f.swimmerIds||[], ts:Date.now()}]); }catch(e){} });
+    localOnly.forEach(f=>{ if(window.__vxUpsert && this._isUuid(f.id)) try{ window.__vxUpsert('family_accounts', [{id:f.id, name:f.name, email:f.email, phone:f.phone, pass:f.pass, role:f.role, swimmer_ids:f.swimmerIds||[], ts:Date.now()}]); }catch(e){} });
     const list=[...fromTable, ...localOnly];
     this.family=list; try{ this._saveLocalOnly('vx_family', list); }catch(e){} this.setState({family:list});
   }
@@ -6100,7 +6119,7 @@ class Component extends DCLogic {
     try{ await this._familyFetch(); }catch(e){}
     let rec=(this.family||[]).find(f=>(f.email||'').trim().toLowerCase()===email);
     if(!rec){ const u=authUser||{}; const md=u.user_metadata||{}; rec={id:u.id||this._uid('fam'), name:md.name||email.split('@')[0], email, phone:md.phone||'', role:md.role||'parent', swimmerIds:md.swimmer_ids||[]};
-      if(window.__vxInsert && this._isUuid(rec.id)) try{ window.__vxInsert('family_accounts', [{id:rec.id, name:rec.name, email:rec.email, phone:rec.phone, pass:'', role:rec.role, swimmer_ids:rec.swimmerIds, ts:Date.now()}]); }catch(e){}
+      if(window.__vxUpsert && this._isUuid(rec.id)) try{ window.__vxUpsert('family_accounts', [{id:rec.id, name:rec.name, email:rec.email, phone:rec.phone, pass:'', role:rec.role, swimmer_ids:rec.swimmerIds, ts:Date.now()}]); }catch(e){}
       this._saveFamily([...(this.family||[]), rec]); }
     try{ localStorage.setItem('vx_session', JSON.stringify({type:'family', email:rec.email})); }catch(e){}
     // Every sign-in is recorded: guarantee the account row exists (now that we ARE signed in,
@@ -6947,7 +6966,7 @@ class Component extends DCLogic {
     const upd={...fu, name:(d.name||fu.name), phone:(d.phone||fu.phone), photo:(d.photo!=null?d.photo:fu.photo)};
     const list=(this.family||[]).map(f=>f.id===fu.id?upd:f); this._saveFamily(list);
     this.setState({familyUser:upd, settingsMsg:'Profile saved ✓'});
-    if(window.__vxInsert && this._isUuid(upd.id)){ try{ await window.__vxInsert('family_accounts', [{id:upd.id, name:upd.name, email:upd.email, phone:upd.phone, pass:upd.pass||'', role:upd.role, swimmer_ids:upd.swimmerIds, ts:Date.now()}]); }catch(e){} } }
+    if(window.__vxUpsert && this._isUuid(upd.id)){ try{ await window.__vxUpsert('family_accounts', [{id:upd.id, name:upd.name, email:upd.email, phone:upd.phone, pass:upd.pass||'', role:upd.role, swimmer_ids:upd.swimmerIds, ts:Date.now()}]); }catch(e){} } }
   async famProfilePhoto(e){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(!f) return;
     let val=await this._uploadImage(f, 'family');
     if(!val){ try{ val=await this._resizeImage(f, 400, 0.8); }catch(err){} }
@@ -9503,7 +9522,7 @@ class Component extends DCLogic {
     const rec={...list[i], swimmerIds:((list[i].swimmerIds)||[]).slice()};
     mutate(rec); list[i]=rec;
     this._saveFamily(list); this.forceUpdate();
-    if(window.__vxInsert && this._isUuid(rec.id)){ try{ await window.__vxInsert('family_accounts', [{id:rec.id, name:rec.name, email:rec.email, phone:rec.phone, pass:rec.pass||'', role:rec.role, swimmer_ids:rec.swimmerIds, ts:Date.now()}]); await this._familyFetch(); }catch(e){} }
+    if(window.__vxUpsert && this._isUuid(rec.id)){ try{ await window.__vxUpsert('family_accounts', [{id:rec.id, name:rec.name, email:rec.email, phone:rec.phone, pass:rec.pass||'', role:rec.role, swimmer_ids:rec.swimmerIds, ts:Date.now()}]); await this._familyFetch(); }catch(e){} }
   }
   famAdminUnlink(famId, uid){
     this._famAdminUpdate(famId, r=>{ r.swimmerIds=(r.swimmerIds||[]).filter(x=>x!==uid); });
@@ -9569,7 +9588,7 @@ class Component extends DCLogic {
     // _familyFetch self-heals by re-uploading it, so the account is never lost.
     // No uuid means the sign-up did not complete; the row is written on the first sign-in
     // instead, which is the moment this code already treats as the reliable one.
-    if(window.__vxInsert && this._isUuid(rec.id)){ try{ const ok=await window.__vxInsert('family_accounts', [{id:rec.id, name:rec.name, email:rec.email, phone:rec.phone, pass:rec.pass, role:rec.role, swimmer_ids:rec.swimmerIds, ts:Date.now()}]); if(ok) this._familyFetch(); }catch(e){} }
+    if(window.__vxUpsert && this._isUuid(rec.id)){ try{ const ok=await window.__vxUpsert('family_accounts', [{id:rec.id, name:rec.name, email:rec.email, phone:rec.phone, pass:rec.pass, role:rec.role, swimmer_ids:rec.swimmerIds, ts:Date.now()}]); if(ok) this._familyFetch(); }catch(e){} }
     // Notify the coaches/admins that a new family signed up.
     const kidNames=S.famPicked.map(uid=>{ const [sq,sw]=uid.split('::'); const s=(this.roster[sq]||[]).find(x=>x.id===sw); return s?s.name:''; }).filter(Boolean).join(', ');
     const _signTitle='New '+(rec.role==='swimmer'?'swimmer':'parent')+' sign-up';
