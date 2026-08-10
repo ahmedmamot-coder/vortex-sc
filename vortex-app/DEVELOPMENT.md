@@ -63,6 +63,34 @@ Supabase links a social sign-in to an existing account with the same email addre
 who registered with a password and later taps *Continue with Google* keeps the same account and
 the same children.
 
+## Activity log — who did what, and when
+
+**Run `supabase/audit_log.sql`.** Admin → **Activity log** reads it. Until the table exists the
+screen says so by name; the app carries on either way, because recording something must never be
+able to stop it happening.
+
+Recorded: sign-in and sign-out (staff and family), a session saved, a register marked, invoices
+issued, an invoice marked paid, a membership changed, a document uploaded, an InBody scan saved
+or deleted, meet entries changed, a staff password set, a staff account deleted.
+
+Three properties make it a log rather than a list of events:
+
+- **Append-only.** There is an insert policy and a read policy and deliberately *no update or
+  delete policy at all* — with RLS on, a command with no policy is refused for everybody. Not
+  even a manager can rewrite it from the app. Removing a row needs the SQL editor, which is a
+  deliberate act rather than a tap.
+- **The server stamps the time.** `at` defaults to `now()` and the app never sends one. Device
+  clocks are wrong often enough to matter, and a timeline assembled from twelve phones' opinions
+  of the time is not a timeline.
+- **It records what changed, not the contents.** "saved a session for Vortex B, 6,700 m" and not
+  the plan; "uploaded a medical certificate" and not the certificate. An audit log is read by
+  more people than the thing it describes, so copying children's data into it widens the
+  exposure rather than narrowing it. The device is stored as a kind — iPhone, iPad, Mac — not the
+  full user-agent, which is a fingerprint and answers no question anybody has.
+
+Reading it is staff-only **once `security_4_roles.sql` has been run**. Before that, the script
+falls back to any signed-in user and says so in its output.
+
 ## Who can see what (row-level security)
 
 Until Stage 4, every policy read `to authenticated using (true)`. `authenticated` means *any*

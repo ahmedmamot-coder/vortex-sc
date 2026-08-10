@@ -1730,6 +1730,87 @@ describe("InBody sheet", () => {
     });
   });
 
+  // An audit log is read by more people than the thing it describes, and it is worthless if the
+  // people it records can edit it or if it can stop them working.
+  describe("the activity log", () => {
+    // navigator is a getter-only global in Node, so it is replaced by descriptor and put back.
+    const withNav = (ua, fn) => {
+      const had = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+      Object.defineProperty(globalThis, "navigator", { value: { userAgent: ua }, configurable: true });
+      try { return fn(); }
+      finally { if (had) Object.defineProperty(globalThis, "navigator", had); else delete globalThis.navigator; }
+    };
+    const run = (fn, ua = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0)") => {
+      const sent = [];
+      const restore = globalThis.window;
+      globalThis.window = { __vxInsert: (t, rows) => { sent.push([t, rows]); return Promise.resolve(true); } };
+      try { withNav(ua, fn); } finally { globalThis.window = restore; }
+      return sent;
+    };
+    const ctxStaff = () => ({ state: { familyUser: null }, _me: () => ({ email: "A@Club.com", label: "Ahmed", role: "Owner" }) });
+
+    it("an entry names who, what and where — and carries no timestamp", () => {
+      const ctx = ctxStaff();
+      const sent = run(() => bind("audit", ctx, ["_auditWho"])("plan.save", "Vortex B", { metres: 6700 }));
+      const row = sent[0][1][0];
+      eq(sent[0][0], "audit_log");
+      eq(row.actor, "a@club.com");
+      eq(row.actor_name, "Ahmed");
+      eq(row.action, "plan.save");
+      eq(row.detail.metres, 6700);
+      eq("at" in row, false, "the server stamps the time — a timeline built from twelve phones' clocks is not a timeline");
+    });
+    it("a parent is recorded as the parent, not as whichever coach used the device last", () => {
+      const ctx = { state: { familyUser: { email: "P@x.com", name: "A Parent" } }, _me: () => ({ label: "Ahmed" }) };
+      const row = run(() => bind("audit", ctx, ["_auditWho"])("sign-in", "A Parent", {}))[0][1][0];
+      eq(row.actor, "p@x.com");
+      eq(row.actor_role, "parent");
+    });
+    it("the device is a kind, not a fingerprint", () => {
+      const row = run(() => bind("audit", ctxStaff(), ["_auditWho"])("sign-in", "", {}))[0][1][0];
+      eq(row.ua, "iPhone");
+      eq(/Mozilla|CPU iPhone OS/.test(row.ua), false, "the full user-agent is a fingerprint and answers no question here");
+    });
+    it("recording something can never stop it happening", () => {
+      const ctx = ctxStaff();
+      const restore = globalThis.window;
+      globalThis.window = { __vxInsert: () => { throw new Error("database is down"); } };
+      try { bind("audit", ctx, ["_auditWho"])("attendance.mark", "x", {}); }
+      finally { globalThis.window = restore; }
+      // Reaching here at all is the assertion: a register must be markable with the log broken.
+      eq(true, true);
+    });
+    it("with no sync layer it does nothing rather than failing", () => {
+      const restore = globalThis.window;
+      globalThis.window = {};
+      try { bind("audit", ctxStaff(), ["_auditWho"])("sign-in", "", {}); }
+      finally { globalThis.window = restore; }
+      eq(true, true);
+    });
+
+    it("the actions worth answering questions about are all recorded", () => {
+      for (const a of ["sign-in", "sign-out", "plan.save", "attendance.mark", "invoice.issue",
+                       "invoice.paid", "membership.set", "document.upload", "inbody.save",
+                       "inbody.delete", "meet.entries", "staff.password", "staff.delete"])
+        eq(SOURCE.includes("'" + a + "'"), true, a + " is not recorded anywhere");
+    });
+    it("no child's name or document is copied into the log", () => {
+      // Every call site passes an id, a date or a count — never a name or a file.
+      const calls = [...SOURCE.matchAll(/this\.audit\('([\w.-]+)',\s*([^,]*),/g)].map((m) => m[2]);
+      eq(calls.length >= 13, true, "the call sites must still be found by this test");
+      for (const arg of calls)
+        eq(/\bsw\.name\b|\bswimmer\.name\b|dataUrl|fileUrl|\bfile\b/.test(arg), false,
+          "a log is read by more people than the record it describes: " + arg);
+    });
+    it("it cannot be edited or deleted from the app", () => {
+      const sql = readFileSync(new URL("../supabase/audit_log.sql", import.meta.url), "utf8");
+      eq(/for insert to authenticated/.test(sql), true);
+      eq(/for update/i.test(sql), false, "an update policy would make it a list of events, not a log");
+      eq(/for delete/i.test(sql), false);
+      eq(/at\s+timestamptz not null default now\(\)/.test(sql), true, "the server's clock, not the phone's");
+    });
+  });
+
   // The plan review counted a session's volume by summing the distances alone, so 8x100 counted
   // as 100. A real 6,700 m session was reviewed as 4,150 m against a 6,000 m guide — so it
   // passed a check that exists to stop a squad of children being over-trained, and the sessions

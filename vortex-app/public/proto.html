@@ -4669,6 +4669,41 @@ if ('serviceWorker' in navigator) {
                   </sc-if>
 
                   <!-- SETTINGS ADMIN -->
+                  <sc-if value="{{ adminAudit }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;flex-direction:column;gap:11px">
+                      <div style="display:flex;align-items:flex-start;gap:8px;background:#EEF3FF;border:1px solid #D3E0FA;border-radius:11px;padding:10px 11px">
+                        <i data-lucide="shield-check" style="width:15px;height:15px;color:#2733D6;flex:none;margin-top:1px"></i>
+                        <span style="font-size:11.5px;color:#28345A;line-height:1.45">Every sign-in and every change, with the time the <b>server</b> recorded it. Nothing here can be edited or deleted from the app — that is what makes it worth reading.</span>
+                      </div>
+                      <div style="display:flex;gap:7px">
+                        <div style="flex:1;min-width:0;display:flex;align-items:center;gap:7px;background:#fff;border:1px solid #E5E9F0;border-radius:11px;padding:9px 11px">
+                          <i data-lucide="search" style="width:14px;height:14px;color:#9AA2B4;flex:none"></i>
+                          <input value="{{ auditQuery }}" oninput="{{ onAuditQuery }}" placeholder="A name, an email, or an action…" style="flex:1;min-width:0;border:none;outline:none;background:none;font-family:inherit;font-size:12.5px;color:#0C1116">
+                        </div>
+                        <button onclick="{{ onAuditRefresh }}" style="flex:none;background:var(--vx-blue);color:#fff;border:none;border-radius:11px;padding:0 14px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px"><i data-lucide="refresh-cw" style="width:14px;height:14px"></i>Load</button>
+                      </div>
+                      <p style="margin:0 2px;font-size:11px;color:#9AA2B4">{{ auditCount }}</p>
+                      <sc-if value="{{ auditErrShow }}" hint-placeholder-val="{{ false }}">
+                        <p style="margin:0 2px;font-size:11.5px;font-weight:700;color:#B42318;line-height:1.45">{{ auditErr }}</p>
+                      </sc-if>
+                      <sc-if value="{{ auditEmpty }}" hint-placeholder-val="{{ true }}">
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:20px;text-align:center;font-size:12px;color:#9AA2B4">Tap Load to read the log.</div>
+                      </sc-if>
+                      <sc-for list="{{ auditRows }}" as="al" hint-placeholder-count="8">
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:10px 12px;box-shadow:0 1px 3px rgba(11,20,40,.04)">
+                          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:9px">
+                            <span style="font-size:12.5px;font-weight:800;color:{{ al.color }}">{{ al.action }}</span>
+                            <span style="flex:none;font-family:var(--font-mono);font-size:10.5px;color:#9AA2B4">{{ al.when }}</span>
+                          </div>
+                          <p style="margin:3px 0 0;font-size:12.5px;color:#0C1116;font-weight:600">{{ al.target }}</p>
+                          <p style="margin:2px 0 0;font-size:11px;color:#7A8296">{{ al.who }} · {{ al.whoSub }} · {{ al.device }}</p>
+                          <sc-if value="{{ al.hasFacts }}" hint-placeholder-val="{{ false }}">
+                            <p style="margin:3px 0 0;font-family:var(--font-mono);font-size:10.5px;color:#9AA2B4;line-height:1.5">{{ al.facts }}</p>
+                          </sc-if>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
                   <sc-if value="{{ adminSettings }}" hint-placeholder-val="{{ false }}">
                     <div style="display:flex;flex-direction:column;gap:14px">
                       <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:15px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
@@ -5258,7 +5293,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-09y';
+const VX_BUILD='2026-08-09z';
 const VX_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 class Component extends DCLogic {
   constructor(props){
@@ -5471,6 +5506,7 @@ class Component extends DCLogic {
       updateReady:false, updateLatest:'',
       pwNew:'', pwNew2:'', pwMsg:'', pwOk:true, profileMsg:'', profileOk:true,
       staffPwDrafts:{}, staffPwMsg:'', staffPwOk:true,
+      auditQuery:'', auditErr:'', auditLoaded:false,
       swQuery:'', swSquadFilter:'all', swDobFilter:false, swEditId:null, swAddOpen:false, swForm:{name:'',age:'',dob:'',gender:'Boys',squadId:'',pbs:[]},
       swPbEventSel:'50 Free', swPbTimeDraft:'', swPbCourse:'LCM', swPbMeet:'', swPbMeetDate:'',
       swEditPbs:[], swEditPbEventSel:'50 Free', swEditPbTimeDraft:'', swEditPbCourse:'LCM', swEditPbMeet:'', swEditPbMeetDate:'',
@@ -5724,6 +5760,10 @@ class Component extends DCLogic {
     return 'present';
   }
   setAttendStatus(squadId, dateISO, swId, status){
+    // The swimmer by id and the day by date — enough to answer "who marked this register, and
+    // when", without copying a child's name into a log more people can read.
+    try{ this.audit('attendance.mark', ((this.squadById[squadId]||{}).name||squadId)+' · '+dateISO,
+      {squad:squadId, day:dateISO, swimmer:swId, status:status}); }catch(e){}
     this.attendLog[squadId]=this.attendLog[squadId]||{};
     this.attendLog[squadId][dateISO]=this.attendLog[squadId][dateISO]||{};
     this.attendLog[squadId][dateISO][swId]=status;
@@ -5843,6 +5883,7 @@ class Component extends DCLogic {
         body:JSON.stringify({email, password:pw, name:acct.label||''})});
       const j=await r.json().catch(()=>({}));
       if(!r.ok) return this.setState({staffPwMsg:(j&&j.error)||('Failed (HTTP '+r.status+')'), staffPwOk:false});
+      try{ this.audit('staff.password', acct.label||email, {account:acct.id||'', email:email}); }catch(e){}
       this.setState({staffPwMsg:(acct.label||email)+' can now sign in with that password \u2713', staffPwOk:true,
         staffPwDrafts:{...(this.state.staffPwDrafts||{}), [acct.id]:''}});
     }catch(e){ this.setState({staffPwMsg:'Could not reach the server.', staffPwOk:false}); }
@@ -5889,6 +5930,49 @@ class Component extends DCLogic {
   _sbAuthUrl(){ const sb=window.__VX_SB||{}; return (sb.url||'')+'/auth/v1'; }
   _sbAnon(){ const sb=window.__VX_SB||{}; return sb.anon||''; }
   async _authPost(path, body){ try{ const r=await fetch(this._sbAuthUrl()+path, {method:'POST', headers:{'apikey':this._sbAnon(),'Authorization':'Bearer '+this._sbAnon(),'Content-Type':'application/json'}, body:JSON.stringify(body||{})}); let j={}; try{ j=await r.json(); }catch(e){} return {ok:r.ok, status:r.status, j}; }catch(e){ return {ok:false, status:0, j:{}, netfail:true}; } }
+  // ---- Audit log -----------------------------------------------------------------------------
+  // Who did what, and when. A club holding 304 children's records has to be able to answer that
+  // — for a safeguarding question, a billing dispute, or a coach saying a plan was not theirs.
+  //
+  // Three rules, and they are what make it a log rather than a list of events:
+  //  · it records WHAT CHANGED, never the contents. "saved a session, 6,700 m" and not the plan;
+  //    "uploaded a medical certificate" and not the certificate. More people read an audit log
+  //    than read the thing it describes, so copying a child's data into it widens the exposure.
+  //  · the SERVER stamps the time. Nothing here sends a timestamp: device clocks are wrong often
+  //    enough to matter, and a timeline assembled from twelve phones' opinions is not a timeline.
+  //  · it never blocks or breaks what it is recording. A failed write to the log must not stop a
+  //    register being marked, so every call is fire-and-forget and swallows its own errors.
+  _auditWho(){
+    const fam=this.state.familyUser;
+    if(fam) return {email:(fam.email||'').toLowerCase(), name:fam.name||fam.email||'Family', role:'parent'};
+    const me=(typeof this._me==='function') ? this._me() : null;
+    if(me) return {email:(me.email||'').toLowerCase(), name:me.label||me.name||'Staff', role:me.role||'Staff'};
+    return {email:'', name:'Unknown', role:''};
+  }
+  audit(action, target, detail){
+    try{
+      if(!window.__vxInsert) return;
+      const who=this._auditWho();
+      // A phone or an iPad or a laptop — enough to tell two sessions apart, and no more. The
+      // full user-agent string is a fingerprint and is not worth keeping to answer this question.
+      let ua='device';
+      try{ const u=navigator.userAgent||''; ua = /iPad/i.test(u)?'iPad' : /iPhone/i.test(u)?'iPhone'
+        : /Android/i.test(u)?'Android' : /Mac/i.test(u)?'Mac' : /Windows/i.test(u)?'Windows' : 'device'; }catch(e){}
+      const row={ actor:who.email||null, actor_name:who.name, actor_role:who.role,
+        action:String(action||'').slice(0,40), target:String(target||'').slice(0,120),
+        detail:(detail&&typeof detail==='object')?detail:{}, ua:ua };
+      // No await and no .then that could throw: recording something must never be able to stop
+      // it happening.
+      try{ const p=window.__vxInsert('audit_log', [row]); if(p&&p.catch) p.catch(()=>{}); }catch(e){}
+    }catch(e){}
+  }
+  async _auditFetch(){
+    if(!window.__vxSelect) return;
+    const q=(this.state.auditQuery||'').trim();
+    const rows=await window.__vxSelect('audit_log', 'select=*&order=at.desc&limit=400');
+    if(rows==null){ this.setState({auditErr:'Could not read the log — it may not exist yet. Run supabase/audit_log.sql.'}); return; }
+    this.auditRows=rows; this.setState({auditErr:'', auditLoaded:true});
+  }
   // Everything that happens once a family sign-in succeeds. One path in, so the portal
   // cannot open by one route with a step missed on the other.
   async famContinueSignIn(email, authUser){
@@ -5903,6 +5987,7 @@ class Component extends DCLogic {
     // Every sign-in is recorded: guarantee the account row exists (now that we ARE signed in,
     // so it can never be refused), and tell the admin who signed in and when.
     this._famRecordLogin(rec);
+    try{ this.audit('sign-in', (rec.name||rec.email||'Family'), {side:'family', children:(rec.swimmerIds||[]).length}); }catch(e){}
     return this.setState({familyUser:rec, familyActiveIdx:0, screen:'app', view:'family', famErr:'', famBusy:false});
   }
   // ---- Signing in with Google or Apple -----------------------------------------------------
@@ -6562,7 +6647,9 @@ class Component extends DCLogic {
     this.setState({staffAddOpen:false, staffAddForm:{name:'',user:'',pin:'',role:'Coach',phone:'',squadId:''}});
     if(window.__vxUpsert){ window.__vxUpsert('staff_accounts', [this._staffRow(id, o, true)]).then(ok=>{ if(ok) this._staffFetch(); }); }
   }
-  staffAddDelete(id){ this.customStaff=this.customStaff.filter(function(a){return a.id!==id;}); if(this.accountOvr[id]){ delete this.accountOvr[id]; } this._rebuildAccounts(); this.setState({staffEditId:null});
+  staffAddDelete(id){ const gone=(this.accounts||[]).find(a=>a.id===id);
+    try{ this.audit('staff.delete', (gone&&gone.label)||id, {account:id}); }catch(e){}
+    this.customStaff=this.customStaff.filter(function(a){return a.id!==id;}); if(this.accountOvr[id]){ delete this.accountOvr[id]; } this._rebuildAccounts(); this.setState({staffEditId:null});
     if(window.__vxDelete){ window.__vxDelete('staff_accounts', 'id=eq.'+encodeURIComponent(id)).then(ok=>{ if(ok) this._staffFetch(); }); }
   }
   _rebuildAccounts(){
@@ -7213,6 +7300,8 @@ class Component extends DCLogic {
   // browser storage quota — the write then failed silently and the document "disappeared".
   async uploadDoc(e, swId, key){
     const file=e.target.files && e.target.files[0]; e.target.value=''; if(!file) return;
+    // The kind of document, never the document. This log is read by more people than the file is.
+    try{ this.audit('document.upload', key+' · '+swId, {swimmer:swId, kind:key}); }catch(e){}
     this.setState({docBusy:key, docMsg:''});
     try{
       if(!window.__vxUploadFile) throw new Error('storage unavailable');
@@ -7271,6 +7360,7 @@ class Component extends DCLogic {
     this.inbodyRows={...(this.inbodyRows||{}), [swId]:[rec, ...cur].sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')))};
     this.setState({inbodyForm:{weight:'',fat:'',muscle:''}, ibPending:null, ibFullOpen:false,
       profileIbMsg:'Saving\u2026'});
+    try{ this.audit('inbody.save', swId+' · '+rec.date, {swimmer:swId, date:rec.date}); }catch(e){}
     // Say where it went, not merely that a button was pressed.
     //
     // "Saved" used to appear the moment the value reached this phone, whether or not it ever
@@ -7359,6 +7449,7 @@ class Component extends DCLogic {
   }
   async deleteInbody(swId, idx){
     const list=this._swInbody(swId); const rec=list[idx]; if(!rec) return;
+    try{ this.audit('inbody.delete', swId+' · '+rec.date, {swimmer:swId, date:rec.date}); }catch(e){}
     this.inbodyRows={...(this.inbodyRows||{}), [swId]:(((this.inbodyRows||{})[swId])||[]).filter(r=>r.date!==rec.date)};
     // Remove it from the old blob too, or it would reappear the moment the two are merged.
     const m=this._swMeta(swId); const legacy=(m.inbody||[]).filter(r=>r.date!==rec.date);
@@ -7825,6 +7916,7 @@ class Component extends DCLogic {
   // that disappears after the deadline is a child who does not swim, and nobody finds out until
   // the heat sheets go up. Seeding a meet touches every entry in that meet and nothing else.
   _entriesSave(meetName, list){
+    try{ this.audit('meet.entries', meetName, {meet:meetName, entries:(list||[]).length}); }catch(e){}
     const before={}; ((this.meetEntries||{})[meetName]||[]).forEach(e=>{ const id=this._entryId(meetName,e); if(id) before[id]=e; });
     this.meetEntries={...this.meetEntries, [meetName]:list};
     // Still written, so a device that has not run the SQL yet behaves exactly as before.
@@ -8036,6 +8128,7 @@ class Component extends DCLogic {
   // winning does not announce itself — it quietly bills the wrong amount next month.
   setMembership(swId, patch){
     const cur=this._membership(swId); const next={...cur, ...patch};
+    try{ this.audit('membership.set', swId, {pkg:next.pkg||'(none)', fitness:!!next.fitness, was:cur.pkg||'(none)'}); }catch(e){}
     const map={...(this.memberships||{})};
     const dropped=(!next.pkg && !next.fitness);
     if(dropped) delete map[swId]; else map[swId]=next;
@@ -8235,6 +8328,8 @@ class Component extends DCLogic {
     }));
     if(!made.length){ this.setState({billMsg:'Nothing to issue — every active swimmer already has an invoice for '+this._periodLabel(p)}); return; }
     this._billingSave(list);
+    try{ this.audit('invoice.issue', this._periodLabel(p),
+      {count:made.length, total:made.reduce((a,iv)=>a+(+iv.total||0),0), period:p}); }catch(e){}
     this.setState({billMsg:made.length+' invoice'+(made.length===1?'':'s')+' issued for '+this._periodLabel(p)});
     // One push for the whole run. A notification per family would put hundreds of rows into
     // the shared notifications blob every month for no extra information.
@@ -8247,6 +8342,9 @@ class Component extends DCLogic {
   _billingPatch(id, patch){ this._billingSave(this._billing().invoices.map(iv=> iv.id===id ? {...iv, ...patch} : iv)); }
   billingMarkPaid(id, method){
     const iv=this._invById(id); if(!iv) return;
+    // Money changing hands is the entry somebody will most want to look up months later.
+    try{ this.audit('invoice.paid', iv.period+' · '+iv.swId,
+      {invoice:id, swimmer:iv.swId, amount:iv.total, method:method||'cash', period:iv.period}); }catch(e){}
     this._billingPatch(id, { status:'paid', paid:{ date:this.todayISO(), method:method||'cash',
       ref:(iv.paid&&iv.paid.ref)||'', by:(this._me().label||'') } });
   }
@@ -9279,7 +9377,7 @@ class Component extends DCLogic {
     // the only way in, and it verifies a real hashed password.
     return this.setState({famBusy:false, famErr:'Wrong email or password - or reset it below.'});
   }
-  famLogout(){ try{ localStorage.removeItem('vx_session'); }catch(e){} if(window.__vxClearAuth){ try{ window.__vxClearAuth(); }catch(e){} } this.setState({familyUser:null, screen:'login', loginStage:'accounts', famMode:'login', famName:'', famEmail:'', famPass:'', famPass2:'', famPicked:[], famSearch:'', famErr:''}); }
+  famLogout(){ try{ this.audit('sign-out', '', {side:'family'}); }catch(e){} try{ localStorage.removeItem('vx_session'); }catch(e){} if(window.__vxClearAuth){ try{ window.__vxClearAuth(); }catch(e){} } this.setState({familyUser:null, screen:'login', loginStage:'accounts', famMode:'login', famName:'', famEmail:'', famPass:'', famPass2:'', famPicked:[], famSearch:'', famErr:''}); }
   // After login: if the boot pull loaded no shared data (which only happens once anonymous reads
   // are blocked by row-level security), reload once so boot re-runs carrying the user's JWT and
   // loads everything. While policies are open, boot already has data, so this never fires.
@@ -9649,6 +9747,8 @@ class Component extends DCLogic {
     // Optimistic add
     const list=[rec, ...((this.savedPlans&&this.savedPlans[squadId])||[])]; this.savedPlans={...(this.savedPlans||{}), [squadId]:list};
     this.setState({savedPlanMsg:'Session saved for '+this._fmtDMY(date)+' · '+slot+(time?(' '+time):'')+' ✓'});
+    try{ this.audit('plan.save', ((this.squadById[squadId]||{}).name||squadId)+' · '+rec.title,
+      {squad:squadId, date:date, slot:slot, metres:rec.totalM, zone:rec.zone}); }catch(e){}
     // Append a row (never overwrites another device's sessions), then refresh from the table.
     const row={ id, squad_id:squadId, title:rec.title, zone:rec.zone, total_m:rec.totalM, plan:planCopy, sday:date, ts:Date.now() };
     try{ if(window.__vxInsert){ const ok=await window.__vxInsert('plan_sessions', [row]); if(ok) await this._plansFetch(); else this.setState({savedPlanMsg:'Saved on this device, but the database rejected it — run the plan_sessions SQL.'}); } }catch(e){}
@@ -10350,6 +10450,7 @@ class Component extends DCLogic {
       {id:'brand', icon:'palette', title:'Club Configuration', sub:'Brand · zone method · locale · currency', divider:'#EEF1F5'},
       {id:'staff', icon:'user-cog', title:'Staff', sub:'Coaches · names & PINs', divider:'#EEF1F5'},
       {id:'families', icon:'users-round', title:'Family accounts', sub:(this.family||[]).length+' parent / swimmer logins · linked children', divider:'#EEF1F5'},
+      {id:'audit', icon:'scroll-text', title:'Activity log', sub:'Who signed in, who changed what, and when', divider:'transparent'},
       {id:'settings', icon:'settings', title:'Settings', sub:'AI reader · database · reset data', divider:'transparent'},
     ].map(r=>({...r, onClick:()=>{ if(r.id==='families'){ try{ this._familyFetch(); }catch(e){} } this.setState({adminSection:r.id, famAdminQuery:'', famAdminAddFor:null, famAdminSwQuery:'', famAdminMsg:''}); }}));
 
@@ -11509,8 +11610,8 @@ class Component extends DCLogic {
     const aiPlaceMap={season:'Describe the target meet & timeframe…',dryland:'Squad, equipment & focus…',nutrition:'Training day, age & any constraints…',review:'Paste a set to review…'};
 
     // ---- admin section overlay ----
-    const adminTitleMap={swimmers:'Swimmers',meets:'Meets',staff:'Staff',families:'Family accounts',settings:'Settings',brand:'Club Configuration'};
-    const adminSubMap={swimmers:this.allSwimmersFlat().length+' swimmers · '+this.squads.length+' squads', meets:this.allMeets().length+' meets on record', staff:'Admins, coaches & staff · names, usernames & PINs', families:'Check and fix which children each login can see', settings:'AI reader · database · reset data', brand:'Brand · zone method · locale · currency'};
+    const adminTitleMap={swimmers:'Swimmers',meets:'Meets',staff:'Staff',families:'Family accounts',audit:'Activity log',settings:'Settings',brand:'Club Configuration'};
+    const adminSubMap={swimmers:this.allSwimmersFlat().length+' swimmers · '+this.squads.length+' squads', meets:this.allMeets().length+' meets on record', staff:'Admins, coaches & staff · names, usernames & PINs', families:'Check and fix which children each login can see', audit:'Every sign-in and every change, newest first', settings:'AI reader · database · reset data', brand:'Brand · zone method · locale · currency'};
     const onCloseAdmin=()=>this.setState({adminSection:null, swEditId:null, swAddOpen:false, staffEditId:null, meetImportOpen:false, meetImportPreview:null, meetExpanded:null});
 
     // -- swimmers admin --
@@ -11703,7 +11804,8 @@ class Component extends DCLogic {
         const rawU = (uEl && uEl.value) || this.state.loginUser || '';
         const rawP = (pEl && pEl.value) || this.state.loginPinVal || '';
         const u=norm(rawU).toLowerCase(); const pl=norm(rawP).toLowerCase();
-        const doLogin=(acct)=>{ const st={screen:'app', view:'hub', pickedId:acct.id, loginUser:'', loginPinVal:'', loginErr:''}; if(acct.squadId){ st.squadId=acct.squadId; } if(uEl)uEl.value=''; if(pEl)pEl.value=''; try{ localStorage.setItem('vx_session', JSON.stringify({type:'staff', id:acct.id})); }catch(e){} try{ this._staffAuthEnsure(acct); }catch(e){} this.setState(st); };
+        const doLogin=(acct)=>{ const st={screen:'app', view:'hub', pickedId:acct.id, loginUser:'', loginPinVal:'', loginErr:''};
+          try{ this.audit('sign-in', (acct.label||'')+' · '+(acct.role||'staff'), {side:'staff'}); }catch(e){} if(acct.squadId){ st.squadId=acct.squadId; } if(uEl)uEl.value=''; if(pEl)pEl.value=''; try{ localStorage.setItem('vx_session', JSON.stringify({type:'staff', id:acct.id})); }catch(e){} try{ this._staffAuthEnsure(acct); }catch(e){} this.setState(st); };
         // Staff sign-in is verified by Supabase Auth against a hashed password — NOT in the
         // browser. The old code compared a PIN that was hardcoded in this page's source, and
         // carried a permanent ahmed/7777 + sameh/1234 backdoor, so anyone who viewed source
@@ -11876,7 +11978,7 @@ class Component extends DCLogic {
         };
       })(),
       onGoAdmin:()=>this.setState({view:'admin'}), onGoTools:()=>{ const a=this.accounts.find(x=>x.id===S.pickedId)||{}; const adm=!!(a.id==='ahmed'||a.id==='sameh'); this.setState({view:'tools', toolScopeClub:adm}); }, onGoMove:()=>this.setState({view:'move'}),
-      onGoHub:()=>this.setState({view:'hub', showSwitcher:false}), onLogout:()=>{ try{ localStorage.removeItem('vx_session'); }catch(e){} if(window.__vxClearAuth){ try{ window.__vxClearAuth(); }catch(e){} } this.setState({screen:'login', loginStage:'accounts', pin:'', view:'hub'}); },
+      onGoHub:()=>this.setState({view:'hub', showSwitcher:false}), onLogout:()=>{ try{ this.audit('sign-out', '', {side:'staff'}); }catch(e){} try{ localStorage.removeItem('vx_session'); }catch(e){} if(window.__vxClearAuth){ try{ window.__vxClearAuth(); }catch(e){} } this.setState({screen:'login', loginStage:'accounts', pin:'', view:'hub'}); },
       onGoHandbook:()=>this.setState({view:'handbook'}), onOpenHandbookPdf:()=>this._openUrl('vortex-handbook.pdf'), handbookCards:this.handbook.map(c=>({icon:c.icon, title:c.title, summary:c.summary, expanded:S.handbookOpen===c.id, chevron:S.handbookOpen===c.id?'chevron-up':'chevron-down', onToggle:()=>this.setState({handbookOpen:S.handbookOpen===c.id?null:c.id}), sections:c.sections.map(s=>({h:s.h, lead:s.lead||'', hasLead:!!s.lead, bullets:s.bullets||[]}))})),
       ...(()=>{
         const famCtx = S.familyUser ? {swimmerIds:S.familyUser.swimmerIds} : null;
@@ -12695,6 +12797,36 @@ class Component extends DCLogic {
       adminOpen: !!S.adminSection, onCloseAdmin,
       adminTitle: adminTitleMap[S.adminSection]||'', adminSub: adminSubMap[S.adminSection]||'',
       adminSwimmers: S.adminSection==='swimmers', adminMeets: S.adminSection==='meets', adminStaff: S.adminSection==='staff', adminSettings: S.adminSection==='settings',
+      adminAudit: S.adminSection==='audit',
+      auditQuery: S.auditQuery||'', onAuditQuery:(e)=>this.setState({auditQuery:e.target.value}),
+      onAuditRefresh:()=>this._auditFetch(),
+      auditErr: S.auditErr||'', auditErrShow: !!S.auditErr,
+      ...(()=>{
+        const q=(S.auditQuery||'').trim().toLowerCase();
+        const all=(this.auditRows||[]);
+        const rows=all.filter(r=>!q
+            || String(r.actor_name||'').toLowerCase().includes(q)
+            || String(r.actor||'').toLowerCase().includes(q)
+            || String(r.action||'').toLowerCase().includes(q)
+            || String(r.target||'').toLowerCase().includes(q))
+          .slice(0,200)
+          .map(r=>{
+            const d=new Date(r.at);
+            // Both, deliberately: the day tells you which session, the clock tells you the order
+            // within it, and an audit trail read a month later needs the first as much as the second.
+            const when=isNaN(d) ? String(r.at||'')
+              : (this._fmtDMY(d.toISOString().slice(0,10))+' · '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}));
+            const facts=Object.keys(r.detail||{}).filter(k=>r.detail[k]!=null && r.detail[k]!=='')
+              .map(k=>k+': '+r.detail[k]).join(' · ');
+            const c=/sign-in/.test(r.action)?'#0C7A4F' : /sign-out/.test(r.action)?'#7A8296'
+              : /delete/.test(r.action)?'#B42318' : /paid|invoice/.test(r.action)?'#B4690E' : '#2733D6';
+            return { id:String(r.id), when, who:(r.actor_name||r.actor||'Unknown'),
+              whoSub:(r.actor||'')+(r.actor_role?(' · '+r.actor_role):''),
+              action:r.action, target:r.target||'', facts, hasFacts:!!facts, color:c, device:r.ua||'' };
+          });
+        return { auditRows:rows, auditEmpty:rows.length===0,
+          auditCount: all.length ? (all.length+' entries · showing '+rows.length) : 'Nothing recorded yet' };
+      })(),
       adminFamilies: S.adminSection==='families',
       famAdminQuery:S.famAdminQuery, onFamAdminQuery:(e)=>this.setState({famAdminQuery:e.target.value}),
       onFamAdminSync:async()=>{ this.setState({famAdminMsg:'Syncing…'});
