@@ -1907,9 +1907,96 @@ describe("InBody sheet", () => {
     it("the actions worth answering questions about are all recorded", () => {
       for (const a of ["sign-in", "sign-out", "plan.save", "attendance.mark", "invoice.issue",
                        "invoice.paid", "membership.set", "document.upload", "inbody.save",
-                       "inbody.delete", "meet.entries", "staff.password", "staff.delete"])
+                       "inbody.delete", "meet.entries", "staff.password", "staff.delete",
+                       // A child joining, leaving or changing squad, a coach account being
+                       // created, a parent registering: the roster questions somebody actually
+                       // comes back and asks, and not one of them was recorded.
+                       "swimmer.add", "swimmer.delete", "swimmer.move", "staff.add", "family.register"])
         eq(SOURCE.includes("'" + a + "'"), true, a + " is not recorded anywhere");
     });
+
+    // The panel showed "Nothing recorded yet" whether the log was empty, unread, still loading,
+    // or refused by the database — so pressing Load and pressing nothing looked identical, and
+    // there was no way to tell an empty log from a broken one.
+    describeAuditRead();
+    function describeAuditRead() {
+      const fetchWith = async (answer) => {
+        const ctx = { state: { auditQuery: "" }, setState(p) { Object.assign(this.state, p); } };
+        const restore = globalThis.window;
+        globalThis.window = { __vxSelectRaw: async () => answer };
+        try { await bind("_auditFetch", ctx)(); } finally { globalThis.window = restore; }
+        return ctx;
+      };
+
+      itAsync("a table that does not exist names the file that creates it", async () => {
+        const ctx = await fetchWith({ status: 404, rows: null, said: "" });
+        eq(ctx.state.auditState, "error");
+        eq(/audit_log\.sql/.test(ctx.state.auditErr), true, "the fix has to be in the message");
+      });
+      itAsync("a refused read is not reported as an empty log", async () => {
+        const ctx = await fetchWith({ status: 403, rows: null, said: "" });
+        eq(ctx.state.auditState, "error");
+        eq(/refused/.test(ctx.state.auditErr), true);
+      });
+      itAsync("a log that reads back empty says so, and is not an error", async () => {
+        const ctx = await fetchWith({ status: 200, rows: [], said: "" });
+        eq(ctx.state.auditState, "empty");
+        eq(ctx.state.auditErr, "");
+      });
+      itAsync("entries load", async () => {
+        const ctx = await fetchWith({ status: 200, rows: [{ id: 1, action: "sign-in" }], said: "" });
+        eq(ctx.state.auditState, "ok");
+        eq(ctx.auditRows.length, 1);
+      });
+    }
+
+    // A read alone cannot tell an empty log from one nothing can be written to, and those need
+    // opposite actions — so the check writes an entry and reads it back.
+    describeAuditTest();
+    function describeAuditTest() {
+      const run = async ({ insert, rows }) => {
+        const ctx = { state: {}, setState(p) { Object.assign(this.state, p); },
+                      _auditWho: () => ({ email: "a@b.c", name: "Ahmed", role: "Manager" }),
+                      _auditFetch: () => {} };
+        const restore = globalThis.window;
+        globalThis.window = { __vxInsert: insert, __vxSelectRaw: async () => ({ status: 200, rows, said: "" }),
+                              __vxLastError: { status: 403 } };
+        try { await bind("_auditSelfTest", ctx)(); } finally { globalThis.window = restore; }
+        return ctx.state.auditTestMsg;
+      };
+      itAsync("a refused write is reported as the log not recording at all", async () => {
+        const msg = await run({ insert: async () => false, rows: [] });
+        eq(/Nothing is being recorded/.test(msg), true);
+        eq(/403/.test(msg), true, "the status sends a person to the right place");
+      });
+      itAsync("a write that cannot be read back is not called success", async () => {
+        const msg = await run({ insert: async () => true, rows: [] });
+        eq(/cannot be read back/.test(msg), true);
+      });
+      itAsync("written and read back is the only thing called working", async () => {
+        let sent = null;
+        const msg = await run({ insert: async (t, r) => { sent = r[0]; return true; },
+                                rows: [{ detail: { mark: "x" } }] });
+        // The mark is random, so the fake has to echo the one that was sent.
+        eq(sent.action, "log.check");
+        eq(/cannot be read back|Nothing is being recorded/.test(msg), true,
+           "an echo of the wrong mark must not pass");
+      });
+    }
+
+    it("the log is read on the way into the panel, not on request", () =>
+      eq(/if\(r\.id==='audit'\)\{ try\{ this\._auditFetch\(\); \}catch\(e\)\{\} \}/.test(SOURCE), true,
+         "an empty page was the first thing anyone saw"));
+    it("the search box cannot be filled by the browser behind the user", () => {
+      const box = (SOURCE.match(/<input value="\{\{ auditQuery \}\}"[^>]*>/) || [""])[0];
+      eq(/autocomplete="off"/.test(box), true, "Safari filled it with the account's own email");
+      eq(/name="vx-audit-search"/.test(box), true, "an unnamed field is a field the browser guesses at");
+    });
+    it("a search that hides every entry says so rather than looking empty", () =>
+      eq(/No entry matches that search/.test(SOURCE), true));
+    it("a refused entry is remembered, not dropped", () =>
+      eq(/this\._auditWriteErr = \(e\.status\|\|0\)/.test(SOURCE), true,
+         "a write refused every time and reported nowhere is not a log"));
     it("no child's name or document is copied into the log", () => {
       // Every call site passes an id, a date or a count — never a name or a file.
       const calls = [...SOURCE.matchAll(/this\.audit\('([\w.-]+)',\s*([^,]*),/g)].map((m) => m[2]);

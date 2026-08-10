@@ -93,6 +93,29 @@ child's passport, which is what it was.
 
 ## Activity log — who did what, and when
 
+**It has to be able to say when it is not working.** The first version showed *"Nothing recorded
+yet"* for four completely different situations: the panel had not been loaded, it was loading, the
+log was genuinely empty, and the database had refused the read. Pressing **Load** and pressing
+nothing looked identical, so a log that was never created and a log with nothing in it were the
+same screen. `__vxSelect` is the reason — it flattens every failure to `null`, which is right for
+a roster that can retry and wrong for anything that has to explain itself, because a missing table
+(404) and a table whose policies return nothing (200 with an empty list) come back the same.
+
+`__vxSelectRaw` returns `{status, rows, said}`, and the panel now names the situation: the SQL file
+to run when the table is missing, "the database refused the read" on a 401/403, and — when the read
+worked and returned nothing — that the entries are being *refused* rather than not happening.
+
+**Check recording** answers the question properly, by recording something: it writes one
+`log.check` entry and reads it back. A read alone cannot tell an empty log from a log nothing can
+be written to, and those two need opposite actions. Written **and** read back is the only outcome
+called working.
+
+The panel also loads itself on the way in — every other Admin panel arrives with its contents, and
+this one arrived with a button — and its search box carries `autocomplete="off"` and a real `name`,
+because Safari was filling it with the signed-in account's own email address the moment the panel
+opened, silently filtering out every entry.
+
+
 **Run `supabase/audit_log.sql`.** Admin → **Activity log** reads it. Until the table exists the
 screen says so by name; the app carries on either way, because recording something must never be
 able to stop it happening.

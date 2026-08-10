@@ -238,6 +238,22 @@ if ('serviceWorker' in navigator) {
       return null;
     }).catch(function(){ return null; });
   };
+  // The same read, but with the answer the database actually gave. __vxSelect flattens every
+  // failure to null, which is right for a roster that can retry later and wrong for anything
+  // that has to explain itself: a missing table (404) and a table whose policies return nothing
+  // (200 with an empty list) look identical through it, and they send a person to completely
+  // different places. Returns {status, rows, said}.
+  window.__vxSelectRaw = function(table, qs, _retried){
+    return fetch(SB_URL+"/rest/v1/"+table+(qs?("?"+qs):""), { headers: dyn() }).then(function(r){
+      if(r.ok) return r.json().then(function(j){ return {status:200, rows:j||[], said:""}; });
+      if(r.status===401 && !_retried && window.__vxEnsureAuth){
+        return window.__vxEnsureAuth(true).then(function(ok){
+          return ok ? window.__vxSelectRaw(table, qs, true) : {status:401, rows:null, said:"the session has expired"}; });
+      }
+      return r.text().then(function(t){ var said=""; try{ said=(JSON.parse(t)||{}).message||""; }catch(e){}
+        return {status:r.status, rows:null, said:said||String(t||"").slice(0,200)}; });
+    }).catch(function(e){ return {status:0, rows:null, said:"it could not be reached from this device"+((e&&e.message)?(" ("+e.message+")"):"")}; });
+  };
   // Exact row count for a table (owner Data-Check panel). Uses PostgREST's Content-Range header
   // (Prefer: count=exact) so we never download the rows themselves. Returns a number, or -1 on error.
   window.__vxCount = function(table, qs){ return fetch(SB_URL+"/rest/v1/"+table+"?select=id"+(qs?("&"+qs):""), { method:"HEAD", headers: dyn({"Prefer":"count=exact","Range-Unit":"items","Range":"0-0"}) }).then(function(r){ var cr=r.headers.get("content-range")||""; var m=cr.split("/"); var n=m.length>1?parseInt(m[1],10):NaN; return isNaN(n)?(r.ok?0:-1):n; }).catch(function(){ return -1; }); };
@@ -4678,16 +4694,28 @@ if ('serviceWorker' in navigator) {
                       <div style="display:flex;gap:7px">
                         <div style="flex:1;min-width:0;display:flex;align-items:center;gap:7px;background:#fff;border:1px solid #E5E9F0;border-radius:11px;padding:9px 11px">
                           <i data-lucide="search" style="width:14px;height:14px;color:#9AA2B4;flex:none"></i>
-                          <input value="{{ auditQuery }}" oninput="{{ onAuditQuery }}" placeholder="A name, an email, or an action…" style="flex:1;min-width:0;border:none;outline:none;background:none;font-family:inherit;font-size:12.5px;color:#0C1116">
+                          <!-- name/autocomplete off, or Safari fills this with the account's own
+                               email address the moment the panel opens, and the log reads empty
+                               because everything is being filtered against a search nobody typed. -->
+                          <input value="{{ auditQuery }}" oninput="{{ onAuditQuery }}" name="vx-audit-search" type="search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-1p-ignore data-lpignore="true" placeholder="A name, an email, or an action…" style="flex:1;min-width:0;-webkit-appearance:none;appearance:none;border:none;outline:none;background:none;font-family:inherit;font-size:12.5px;color:#0C1116">
+                          <sc-if value="{{ auditHasQuery }}" hint-placeholder-val="{{ false }}">
+                            <button onclick="{{ onAuditClear }}" style="flex:none;border:none;background:none;padding:0;cursor:pointer;display:flex;align-items:center"><i data-lucide="x" style="width:14px;height:14px;color:#9AA2B4"></i></button>
+                          </sc-if>
                         </div>
                         <button onclick="{{ onAuditRefresh }}" style="flex:none;background:var(--vx-blue);color:#fff;border:none;border-radius:11px;padding:0 14px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px"><i data-lucide="refresh-cw" style="width:14px;height:14px"></i>Load</button>
                       </div>
-                      <p style="margin:0 2px;font-size:11px;color:#9AA2B4">{{ auditCount }}</p>
+                      <div style="display:flex;align-items:center;justify-content:space-between;gap:9px">
+                        <p style="margin:0 2px;font-size:11px;color:#9AA2B4">{{ auditCount }}</p>
+                        <button onclick="{{ onAuditTest }}" style="flex:none;background:#fff;color:#2733D6;border:1px solid #D3E0FA;border-radius:9px;padding:5px 10px;font-family:inherit;font-weight:700;font-size:11px;cursor:pointer">Check recording</button>
+                      </div>
+                      <sc-if value="{{ auditTestShow }}" hint-placeholder-val="{{ false }}">
+                        <p style="margin:0 2px;font-size:11.5px;color:#28345A;line-height:1.45;background:#EEF3FF;border:1px solid #D3E0FA;border-radius:10px;padding:9px 11px">{{ auditTestMsg }}</p>
+                      </sc-if>
                       <sc-if value="{{ auditErrShow }}" hint-placeholder-val="{{ false }}">
                         <p style="margin:0 2px;font-size:11.5px;font-weight:700;color:#B42318;line-height:1.45">{{ auditErr }}</p>
                       </sc-if>
                       <sc-if value="{{ auditEmpty }}" hint-placeholder-val="{{ true }}">
-                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:20px;text-align:center;font-size:12px;color:#9AA2B4">Tap Load to read the log.</div>
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:20px;text-align:center;font-size:12px;color:#9AA2B4;line-height:1.5">{{ auditBlank }}</div>
                       </sc-if>
                       <sc-for list="{{ auditRows }}" as="al" hint-placeholder-count="8">
                         <div style="background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:10px 12px;box-shadow:0 1px 3px rgba(11,20,40,.04)">
@@ -5293,7 +5321,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-10b';
+const VX_BUILD='2026-08-10c';
 const VX_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 class Component extends DCLogic {
   constructor(props){
@@ -5506,7 +5534,7 @@ class Component extends DCLogic {
       updateReady:false, updateLatest:'',
       pwNew:'', pwNew2:'', pwMsg:'', pwOk:true, profileMsg:'', profileOk:true,
       staffPwDrafts:{}, staffPwMsg:'', staffPwOk:true,
-      auditQuery:'', auditErr:'', auditLoaded:false,
+      auditQuery:'', auditErr:'', auditLoaded:false, auditState:'idle', auditTestMsg:'',
       swQuery:'', swSquadFilter:'all', swDobFilter:false, swEditId:null, swAddOpen:false, swForm:{name:'',age:'',dob:'',gender:'Boys',squadId:'',pbs:[]},
       swPbEventSel:'50 Free', swPbTimeDraft:'', swPbCourse:'LCM', swPbMeet:'', swPbMeetDate:'',
       swEditPbs:[], swEditPbEventSel:'50 Free', swEditPbTimeDraft:'', swEditPbCourse:'LCM', swEditPbMeet:'', swEditPbMeetDate:'',
@@ -5966,16 +5994,63 @@ class Component extends DCLogic {
         action:String(action||'').slice(0,40), target:String(target||'').slice(0,120),
         detail:(detail&&typeof detail==='object')?detail:{}, ua:ua };
       // No await and no .then that could throw: recording something must never be able to stop
-      // it happening.
-      try{ const p=window.__vxInsert('audit_log', [row]); if(p&&p.catch) p.catch(()=>{}); }catch(e){}
+      // it happening. But a write that is refused every time and says so nowhere is not a log —
+      // it is a page that always reads "nothing recorded yet", which is exactly how this looked.
+      // Remember the last refusal so the Activity log can say the recording itself is broken.
+      try{ const p=window.__vxInsert('audit_log', [row]);
+        if(p&&p.then) p.then(ok=>{ this._auditWriteOk = !!ok;
+          if(!ok){ const e=window.__vxLastError||{}; this._auditWriteErr = (e.status||0); } }).catch(()=>{});
+      }catch(e){}
     }catch(e){}
   }
+  // What the log is doing, in the words a person needs: not loaded, loading, empty, or broken —
+  // and if broken, which of the two very different reasons it is. "Nothing recorded yet" was
+  // shown for all four, so pressing Load and pressing nothing looked the same.
   async _auditFetch(){
-    if(!window.__vxSelect) return;
-    const q=(this.state.auditQuery||'').trim();
-    const rows=await window.__vxSelect('audit_log', 'select=*&order=at.desc&limit=400');
-    if(rows==null){ this.setState({auditErr:'Could not read the log — it may not exist yet. Run supabase/audit_log.sql.'}); return; }
-    this.auditRows=rows; this.setState({auditErr:'', auditLoaded:true});
+    if(!window.__vxSelectRaw){ this.setState({auditErr:'This device cannot reach the database.', auditState:'error'}); return; }
+    this.setState({auditErr:'', auditState:'loading'});
+    const r=await window.__vxSelectRaw('audit_log', 'select=*&order=at.desc&limit=400');
+    if(r.rows==null){
+      const why = r.status===404
+          ? 'The activity_log table does not exist in the database yet. Run supabase/audit_log.sql in the Supabase SQL editor, then Load again.'
+        : (r.status===401 || r.status===403)
+          ? 'The database refused the read. Sign out and sign back in; if it keeps happening, the log’s policies need running again (supabase/audit_log.sql).'
+        : ('Could not read the log — '+(r.said||('the database answered HTTP '+r.status))+'.');
+      this.auditRows=[]; this.setState({auditErr:why, auditState:'error'});
+      return;
+    }
+    this.auditRows=r.rows;
+    // An empty list here means the read worked and there is genuinely nothing in it — which,
+    // if the app has been used at all, means the writes are being refused rather than that
+    // nothing happened. Say which.
+    this.setState({auditErr:'', auditLoaded:true, auditState: r.rows.length ? 'ok' : 'empty'});
+  }
+  // "Is it recording?" answered by recording something. A read alone cannot tell an empty log
+  // from a log nothing can be written to, and those need opposite actions.
+  async _auditSelfTest(){
+    this.setState({auditTestMsg:'Checking…', auditErr:''});
+    if(!window.__vxInsert || !window.__vxSelectRaw){ this.setState({auditTestMsg:'This device cannot reach the database.'}); return; }
+    const who=this._auditWho();
+    const mark='check-'+Math.random().toString(36).slice(2,9);
+    let ok=false;
+    try{ ok=await window.__vxInsert('audit_log', [{ actor:who.email||null, actor_name:who.name, actor_role:who.role,
+      action:'log.check', target:'Activity log', detail:{mark:mark}, ua:'device' }]); }catch(e){ ok=false; }
+    if(!ok){
+      const e=window.__vxLastError||{};
+      this.setState({auditTestMsg: e.status===404
+          ? 'Nothing is being recorded: the audit_log table does not exist. Run supabase/audit_log.sql.'
+        : (e.status===401||e.status===403)
+          ? 'Nothing is being recorded: the database refused the entry (HTTP '+e.status+'). Only a signed-in account may write to the log — sign out and back in, and check supabase/audit_log.sql has been run.'
+          : 'Nothing is being recorded: the database answered HTTP '+(e.status||'nothing')+'.' });
+      return;
+    }
+    // Written. Now prove it can be read back, because a log that only writes is no use either.
+    const r=await window.__vxSelectRaw('audit_log', 'select=*&action=eq.log.check&order=at.desc&limit=5');
+    const found=(r.rows||[]).some(x=>x && x.detail && x.detail.mark===mark);
+    this.setState({auditTestMsg: found
+      ? 'Recording works ✓ — that check is in the log below, stamped by the server. Every sign-in and every change is recorded the same way, automatically.'
+      : 'The entry was accepted but cannot be read back — the log’s read policy is not letting this account see it. Run supabase/audit_log.sql again.'});
+    this._auditFetch();
   }
   // Everything that happens once a family sign-in succeeds. One path in, so the portal
   // cannot open by one route with a step missed on the other.
@@ -6541,6 +6616,7 @@ class Component extends DCLogic {
     const sw={id:this._uid('sw'), first, last, name:form.name.trim(), initials, dob:(form.dob||''), age:(dobAge!=null?dobAge:(parseInt(form.age,10)||0)), gender:form.gender||'Boys', pbs:d.pbs, results:d.results, entries:d.entries, meets:d.meets, meetCount:d.meetCount, topEvent:top?top.event:'—', topTime:top?top.time:'—', topSec:top?top.sec:999};
     this.rosterEdits.added[squadId]=[...(this.rosterEdits.added[squadId]||[]), sw];
     this.persistRosterEdits();
+    try{ this.audit('swimmer.add', ((this.squadById[squadId]||{}).name||squadId), {swimmer:sw.id, squad:squadId, age:sw.age}); }catch(e){}
     this.setState({swAddOpen:false, swForm:{name:'',age:'',dob:'',gender:'Boys',squadId:'',pbs:[]}, swPbEventSel:'50 Free', swPbTimeDraft:'', swPbCourse:'LCM', swPbMeet:'', swPbMeetDate:''});
   }
   // Add a meet to the club meets list if it isn't already there (matched by name), then sync.
@@ -6623,6 +6699,9 @@ class Component extends DCLogic {
     this.setState({swEditId:null});
   }
   adminDeleteSwimmer(squadId, id){
+    // A child leaving the roster is the single change most likely to be asked about later,
+    // and it was the one change nothing recorded.
+    try{ this.audit('swimmer.delete', id+' · '+((this.squadById[squadId]||{}).name||squadId), {swimmer:id, squad:squadId}); }catch(e){}
     if((this.rosterEdits.added[squadId]||[]).find(s=>s.id===id)){
       this.rosterEdits.added[squadId]=this.rosterEdits.added[squadId].filter(s=>s.id!==id);
     } else {
@@ -6649,6 +6728,7 @@ class Component extends DCLogic {
     const o={label:name, user:user, pin:pin, role:f.role||'Coach', squadId:(f.squadId||'').trim(), photo:'', phone:(f.phone||'').trim(), email:'', bio:''};
     this.customStaff.push({id:id, name:name, user:user, pin:pin, role:o.role, squadId:o.squadId, phone:o.phone, email:'', bio:''}); this.accountOvr[id]=o; this._rebuildAccounts();
     this.setState({staffAddOpen:false, staffAddForm:{name:'',user:'',pin:'',role:'Coach',phone:'',squadId:''}});
+    try{ this.audit('staff.add', name+' · '+(o.role||'Coach'), {account:id, role:o.role||'Coach', squad:o.squadId||''}); }catch(e){}
     if(window.__vxUpsert){ window.__vxUpsert('staff_accounts', [this._staffRow(id, o, true)]).then(ok=>{ if(ok) this._staffFetch(); }); }
   }
   staffAddDelete(id){ const gone=(this.accounts||[]).find(a=>a.id===id);
@@ -8005,6 +8085,7 @@ class Component extends DCLogic {
     this._saveJSON('vx_roster_edits', this.rosterEdits);
     this.rebuildRoster();
     const m=this._promoMeta(swId); this._savePromo(swId, {...m, suggested:false, lastReview:new Date().toISOString().slice(0,10)});
+    try{ this.audit('swimmer.move', swId, {swimmer:swId, from:((this.squadById[fromSquadId]||{}).name||fromSquadId), to:((this.squadById[toSquadId]||{}).name||toSquadId)}); }catch(e){}
     this.setState({shareNote:sw.name+' moved to '+(this.squadById[toSquadId]?this.squadById[toSquadId].name:toSquadId)+' ✓'});
   }
   brandSave(){ const d=this.state.brandDraft || this.brandConfig; this.brandConfig={...d}; this._saveJSON('vx_brand', this.brandConfig); this.setState({brandDraft:null, settingsMsg:'Club configuration saved ✓'}); }
@@ -9452,6 +9533,9 @@ class Component extends DCLogic {
       window.open('https://wa.me/'+waNum+'?text='+waText, '_blank');
     }catch(e){}
     const _ar=this._famRegAuthRes||{}; const _hasSession=_ar.ok && _ar.j && _ar.j.access_token;
+    // A new account with children attached to it — recorded before the branch below, because
+    // only one of the two paths signs the person in and both create the account.
+    try{ this.audit('family.register', S.famName.trim()+' · '+email, {side:'family', role:S.famRole||'parent', children:(rec.swimmerIds||[]).length}); }catch(e){}
     if(_hasSession){ try{ this._pushSend({role:'staff'}, _signTitle, _signBody, '/'); }catch(e){} this._refetchAll(); this._postLoginRefresh(); }
     if(_hasSession || _ar.netfail){ try{ localStorage.setItem('vx_session', JSON.stringify({type:'family', email:rec.email})); }catch(e){}
       this.setState({familyUser:rec, familyActiveIdx:0, screen:'app', view:'family', famErr:'', famBusy:false}); }
@@ -10568,7 +10652,12 @@ class Component extends DCLogic {
       {id:'families', icon:'users-round', title:'Family accounts', sub:(this.family||[]).length+' parent / swimmer logins · linked children', divider:'#EEF1F5'},
       {id:'audit', icon:'scroll-text', title:'Activity log', sub:'Who signed in, who changed what, and when', divider:'transparent'},
       {id:'settings', icon:'settings', title:'Settings', sub:'AI reader · database · reset data', divider:'transparent'},
-    ].map(r=>({...r, onClick:()=>{ if(r.id==='families'){ try{ this._familyFetch(); }catch(e){} } this.setState({adminSection:r.id, famAdminQuery:'', famAdminAddFor:null, famAdminSwQuery:'', famAdminMsg:''}); }}));
+    ].map(r=>({...r, onClick:()=>{ if(r.id==='families'){ try{ this._familyFetch(); }catch(e){} }
+      // Read it on the way in. Every other panel in Admin arrives with its contents; this one
+      // arrived with a button, so an empty page was the first thing anyone saw and there was no
+      // way to tell it from a log that had failed to load.
+      if(r.id==='audit'){ try{ this._auditFetch(); }catch(e){} }
+      this.setState({adminSection:r.id, famAdminQuery:'', auditQuery:'', auditTestMsg:'', famAdminAddFor:null, famAdminSwQuery:'', famAdminMsg:''}); }}));
 
     // ---- move ----
     // Every swimmer in the club, alphabetical. This used to take 2 per squad and then the
@@ -12916,6 +13005,9 @@ class Component extends DCLogic {
       adminAudit: S.adminSection==='audit',
       auditQuery: S.auditQuery||'', onAuditQuery:(e)=>this.setState({auditQuery:e.target.value}),
       onAuditRefresh:()=>this._auditFetch(),
+      onAuditClear:()=>this.setState({auditQuery:''}),
+      onAuditTest:()=>this._auditSelfTest(),
+      auditTestMsg: S.auditTestMsg||'', auditTestShow: !!S.auditTestMsg,
       auditErr: S.auditErr||'', auditErrShow: !!S.auditErr,
       ...(()=>{
         const q=(S.auditQuery||'').trim().toLowerCase();
@@ -12940,8 +13032,22 @@ class Component extends DCLogic {
               whoSub:(r.actor||'')+(r.actor_role?(' · '+r.actor_role):''),
               action:r.action, target:r.target||'', facts, hasFacts:!!facts, color:c, device:r.ua||'' };
           });
-        return { auditRows:rows, auditEmpty:rows.length===0,
-          auditCount: all.length ? (all.length+' entries · showing '+rows.length) : 'Nothing recorded yet' };
+        // Four different situations were all reported as "Nothing recorded yet": not loaded,
+        // loading, loaded-and-empty, and a search that matches none of the entries that are
+        // there. Each needs a different thing done about it.
+        const st=S.auditState||'idle';
+        const blank = st==='loading' ? 'Reading the log…'
+          : st==='error' ? 'The log could not be read — see above.'
+          : st==='empty' ? 'The log is readable, and there is nothing in it yet. If the app has been used since it was set up, the entries are being refused rather than not happening — tap Check recording.'
+          : (all.length && !rows.length) ? 'No entry matches that search. Clear it to see all '+all.length+'.'
+          : 'Tap Load to read the log.';
+        const count = st==='loading' ? 'Reading…'
+          : all.length ? (all.length+' entr'+(all.length===1?'y':'ies')+(q?(' · '+rows.length+' matching'):'')+' · newest first')
+          : st==='empty' ? 'Nothing recorded yet'
+          : st==='error' ? '' : 'Not loaded yet';
+        return { auditRows:rows, auditEmpty:rows.length===0, auditBlank:blank,
+          auditHasQuery:!!q,
+          auditCount: count };
       })(),
       adminFamilies: S.adminSection==='families',
       famAdminQuery:S.famAdminQuery, onFamAdminQuery:(e)=>this.setState({famAdminQuery:e.target.value}),
