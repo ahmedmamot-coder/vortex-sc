@@ -146,7 +146,35 @@ $$;
 -- Every table is checked for existence, and every column a policy names is checked too. The
 -- schema is not fully in the repo, so a table this does not recognise is skipped and named in
 -- the output — skipping is honest, guessing at a column name is not.
+--
+-- EVERY EXISTING POLICY ON A TARGETED TABLE IS DROPPED FIRST, and this is the part that makes
+-- the difference between working and merely appearing to.
+--
+-- Postgres combines permissive policies with OR. This project's tables already carry policies
+-- with names of their own — open_all, fam_delete, attm_lk_delete, club_select — and an
+-- `open_all ... using (true)` sitting beside a new staff-only policy means anybody still gets
+-- in. The script would report success, every check would pass, and nothing whatsoever would
+-- have been restricted. A security change that quietly does nothing is worse than none, because
+-- from then on everybody believes the club is protected.
+--
+-- So each targeted table is cleared of its policies before the new ones are created, and the
+-- names dropped are printed. Read that list: if something there was doing a job nobody
+-- remembered, this is where it went.
 -- ---------------------------------------------------------------------------------------------
+-- Clear every policy off one table, and say which were removed.
+create or replace function vx_s4_clear(tbl text) returns void
+language plpgsql security definer set search_path = public, pg_temp as $fn$
+declare p text; gone text[] := '{}';
+begin
+  for p in select policyname from pg_policies where schemaname='public' and tablename=tbl loop
+    execute format('drop policy if exists %I on public.%I', p, tbl);
+    gone := gone || p;
+  end loop;
+  if array_length(gone,1) is not null then
+    raise notice 'vx: %  dropped: %', rpad(tbl, 22), array_to_string(gone, ', ');
+  end if;
+end $fn$;
+
 do $$
 declare
   -- staff-only: nothing here belongs to a family, and nothing here should be readable by one.
@@ -169,8 +197,7 @@ begin
   foreach t in array staff_only loop
     if to_regclass('public.'||t) is null then skipped := skipped || t; continue; end if;
     execute format('alter table public.%I enable row level security', t);
-    execute format('drop policy if exists vx_s4_read on public.%I', t);
-    execute format('drop policy if exists vx_s4_write on public.%I', t);
+    perform vx_s4_clear(t);
     execute format('create policy vx_s4_read on public.%I for select to authenticated using (vx_is_staff())', t);
     execute format('create policy vx_s4_write on public.%I for all to authenticated using (vx_is_staff()) with check (vx_is_staff())', t);
   end loop;
@@ -184,8 +211,7 @@ begin
       skipped := skipped || (t||' (no '||col||' column)'); continue;
     end if;
     execute format('alter table public.%I enable row level security', t);
-    execute format('drop policy if exists vx_s4_read on public.%I', t);
-    execute format('drop policy if exists vx_s4_write on public.%I', t);
+    perform vx_s4_clear(t);
     execute format('create policy vx_s4_read on public.%I for select to authenticated using (vx_is_staff() or vx_is_my_swimmer(%I::text))', t, col);
     -- Writing is staff-only, with two deliberate exceptions handled below: a family replying to
     -- a message, and a family saying they have paid.
@@ -203,7 +229,6 @@ end $$;
 do $$
 begin
   if to_regclass('public.family_messages') is not null then
-    drop policy if exists vx_s4_family_reply on public.family_messages;
     create policy vx_s4_family_reply on public.family_messages
       for insert to authenticated
       with check (vx_is_my_swimmer(swimmer_id::text) and sender = 'family');
@@ -215,7 +240,6 @@ end $$;
 do $$
 begin
   if to_regclass('public.invoices') is not null then
-    drop policy if exists vx_s4_family_paid on public.invoices;
     create policy vx_s4_family_paid on public.invoices
       for update to authenticated
       using (vx_is_my_swimmer(sw_id::text))
@@ -231,9 +255,7 @@ do $$
 begin
   if to_regclass('public.family_accounts') is not null then
     alter table public.family_accounts enable row level security;
-    drop policy if exists vx_s4_read on public.family_accounts;
-    drop policy if exists vx_s4_write on public.family_accounts;
-    drop policy if exists vx_s4_self_insert on public.family_accounts;
+    perform vx_s4_clear('family_accounts');
     create policy vx_s4_read on public.family_accounts
       for select to authenticated using (vx_is_staff() or lower(trim(email)) = vx_email());
     create policy vx_s4_self_insert on public.family_accounts
@@ -250,8 +272,7 @@ do $$
 begin
   if to_regclass('public.announcements') is not null then
     alter table public.announcements enable row level security;
-    drop policy if exists vx_s4_read on public.announcements;
-    drop policy if exists vx_s4_write on public.announcements;
+    perform vx_s4_clear('announcements');
     create policy vx_s4_read on public.announcements for select to authenticated using (true);
     create policy vx_s4_write on public.announcements for all to authenticated
       using (vx_is_staff()) with check (vx_is_staff());
@@ -263,8 +284,7 @@ do $$
 begin
   if to_regclass('public.push_subscriptions') is not null then
     alter table public.push_subscriptions enable row level security;
-    drop policy if exists vx_s4_read on public.push_subscriptions;
-    drop policy if exists vx_s4_write on public.push_subscriptions;
+    perform vx_s4_clear('push_subscriptions');
     -- Anyone signed in may register the device they are holding; only staff read the list, since
     -- that is what the send endpoint needs.
     create policy vx_s4_read on public.push_subscriptions for select to authenticated using (vx_is_staff());
@@ -285,8 +305,7 @@ do $$
 begin
   if to_regclass('public.club_state') is not null then
     alter table public.club_state enable row level security;
-    drop policy if exists vx_s4_read on public.club_state;
-    drop policy if exists vx_s4_write on public.club_state;
+    perform vx_s4_clear('club_state');
     create policy vx_s4_read on public.club_state for select to authenticated using (true);
     create policy vx_s4_write on public.club_state for all to authenticated
       using (vx_is_staff() or key in ('vx_event_requests','vx_notifications'))

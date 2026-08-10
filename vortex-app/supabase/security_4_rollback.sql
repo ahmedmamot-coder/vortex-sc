@@ -25,15 +25,15 @@ declare
 begin
   foreach t in array tables loop
     if to_regclass('public.'||t) is null then continue; end if;
-    -- Every policy Stage 4 created is named vx_s4_*, so nothing else in the project is touched.
-    execute format('drop policy if exists vx_s4_read on public.%I', t);
-    execute format('drop policy if exists vx_s4_write on public.%I', t);
-    execute format('drop policy if exists vx_s4_self_insert on public.%I', t);
-    execute format('drop policy if exists vx_s4_family_reply on public.%I', t);
-    execute format('drop policy if exists vx_s4_family_paid on public.%I', t);
-    -- Back to the open policy the project had before.
-    execute format('drop policy if exists vx_open_read on public.%I', t);
-    execute format('drop policy if exists vx_open_write on public.%I', t);
+    -- Everything, not only the vx_s4_* names. Stage 4 clears each table before it writes its
+    -- own policies, so the originals are already gone and leaving half of a mixed set behind
+    -- would be its own puzzle. This restores one known-open state instead.
+    declare p text;
+    begin
+      for p in select policyname from pg_policies where schemaname='public' and tablename=t loop
+        execute format('drop policy if exists %I on public.%I', p, t);
+      end loop;
+    end;
     execute format('create policy vx_open_read on public.%I for select to authenticated using (true)', t);
     execute format('create policy vx_open_write on public.%I for all to authenticated using (true) with check (true)', t);
   end loop;

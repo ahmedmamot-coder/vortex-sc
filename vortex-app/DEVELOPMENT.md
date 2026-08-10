@@ -73,6 +73,14 @@ family's messages or the club's billing; but screens are not a security boundary
 `supabase/security_4_roles.sql` tells them apart. Undo with `security_4_rollback.sql`. Both exist
 now — this document referred to them for a while before they were written.
 
+**Existing policies are dropped first, and that is the whole point.** Postgres combines
+permissive policies with OR, and these tables already carry policies of their own (`open_all`,
+`fam_delete`, `attm_lk_delete`, `club_select`). An `open_all ... using (true)` beside a new
+staff-only policy means everyone still gets in — the script would report success, every check
+would pass, and nothing would be restricted. A security change that quietly does nothing is
+worse than none, because from then on everybody believes the club is protected. The script
+clears each table it touches and prints the policy names it removed.
+
 **It cannot be verified against this repo.** Most of the schema was created directly in Supabase
 and its DDL was never committed, so the script checks every table and every column before it
 touches anything, skips what it does not recognise, and **names the skipped tables in the
