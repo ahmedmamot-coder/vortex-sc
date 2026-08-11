@@ -235,6 +235,34 @@ begin
   end if;
 end $$;
 
+-- The daily wellness check-in. The family portal has a swimmer or parent rate sleep, energy,
+-- mood, hydration and soreness every morning, and it is saved as an upsert — so BOTH insert and
+-- update have to be allowed, or it fails on the second check-in of the day rather than the
+-- first, which is far harder to notice.
+do $$
+begin
+  if to_regclass('public.wellness_checkins') is not null then
+    create policy vx_s4_family_wellness_new on public.wellness_checkins
+      for insert to authenticated with check (vx_is_my_swimmer(sw_id::text));
+    create policy vx_s4_family_wellness_edit on public.wellness_checkins
+      for update to authenticated
+      using (vx_is_my_swimmer(sw_id::text)) with check (vx_is_my_swimmer(sw_id::text));
+  end if;
+end $$;
+
+-- Band readings typed in by hand from the family portal — recovery, resting heart rate, HRV,
+-- sleep, strain — for their own child only. Also an upsert, for the same reason.
+do $$
+begin
+  if to_regclass('public.wearable_readings') is not null then
+    create policy vx_s4_family_wear_new on public.wearable_readings
+      for insert to authenticated with check (vx_is_my_swimmer(sw_id::text));
+    create policy vx_s4_family_wear_edit on public.wearable_readings
+      for update to authenticated
+      using (vx_is_my_swimmer(sw_id::text)) with check (vx_is_my_swimmer(sw_id::text));
+  end if;
+end $$;
+
 -- A parent marking their own invoice as paid — they may change the status of their own child's
 -- invoice and nothing else. They cannot issue one, delete one, or alter the amount.
 do $$

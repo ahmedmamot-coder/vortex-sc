@@ -2010,6 +2010,44 @@ describe("InBody sheet", () => {
 
   // An audit log is read by more people than the thing it describes, and it is worthless if the
   // people it records can edit it or if it can stop them working.
+  // Stage 4 makes every per-swimmer table staff-only to write. That is right for a register and
+  // wrong for the handful of things a family fills in themselves — and a policy that is too
+  // tight fails silently, which is the kind of breakage nobody reports for a fortnight.
+  describe("what a family is still allowed to write", () => {
+    const s4 = readFileSync(new URL("../supabase/security_4_roles.sql", import.meta.url), "utf8");
+    // Every table the family portal writes to, taken from the family view's own handlers.
+    const famWrites = { wellness_checkins: "onWellSave", wearable_readings: "onFamWearAdd",
+                        family_messages: "onFamSendMsg", invoices: null, family_accounts: null };
+
+    it("the family portal's own writes are all still possible", () => {
+      for (const t of Object.keys(famWrites))
+        eq(new RegExp("on public\\." + t).test(s4), true,
+           t + " is written from the family portal but Stage 4 gives a family no way to");
+    });
+    it("the daily check-in can be saved twice in one day", () => {
+      // It is an upsert, so insert alone passes the first check-in and fails the second.
+      for (const t of ["wellness_checkins", "wearable_readings"]) {
+        const block = (s4.match(new RegExp("public\\." + t + "[\\s\\S]*?end \\$\\$;")) || [""])[0];
+        eq(/for insert to authenticated/.test(block), true, t + " cannot be created by a family");
+        eq(/for update to authenticated/.test(block), true,
+           t + " is an upsert — without update it fails on the second save, not the first");
+      }
+    });
+    it("a family writes only for their own child", () => {
+      for (const p of ["vx_s4_family_wellness_new", "vx_s4_family_wellness_edit",
+                       "vx_s4_family_wear_new", "vx_s4_family_wear_edit"]) {
+        const line = (s4.match(new RegExp(p + "[\\s\\S]*?;")) || [""])[0];
+        eq(/vx_is_my_swimmer\(sw_id::text\)/.test(line), true, p + " does not check whose child it is");
+        eq(/using \(true\)|with check \(true\)/.test(line), false, p + " is open to any signed-in user");
+      }
+    });
+    it("the handlers this is derived from still exist", () => {
+      for (const [t, handler] of Object.entries(famWrites))
+        if (handler) eq(SOURCE.includes(handler + ":"), true,
+          "the family portal no longer has " + handler + " — recheck what it writes to " + t);
+    });
+  });
+
   describe("the activity log", () => {
     // navigator is a getter-only global in Node, so it is replaced by descriptor and put back.
     const withNav = (ua, fn) => {
