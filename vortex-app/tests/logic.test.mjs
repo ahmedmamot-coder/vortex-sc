@@ -2048,6 +2048,46 @@ describe("InBody sheet", () => {
     });
   });
 
+  // The anon key and the service_role key sit next to each other on the same Supabase page and
+  // look identical. Pasted into the wrong slot, the anon key passes every presence check and
+  // then reads nothing, because row-level security still applies to it — a backup would come
+  // back empty and look like an empty club.
+  describe("the service key is the right key", () => {
+    const claim = (role) =>
+      "x." + Buffer.from(JSON.stringify({ iss: "supabase", role })).toString("base64") + ".y";
+    const roleOf = async (val) => {
+      const prev = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      process.env.SUPABASE_SERVICE_ROLE_KEY = val;
+      // The module reads the env at import, so each case needs its own instance.
+      const m = await import("../src/lib/wearable.ts?probe=" + encodeURIComponent(String(val)));
+      if (prev === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+      else process.env.SUPABASE_SERVICE_ROLE_KEY = prev;
+      return m.serviceKeyRole();
+    };
+
+    itAsync("the service_role key is recognised", async () =>
+      eq(await roleOf(claim("service_role")), "service_role"));
+    itAsync("the anon key in that slot is named, not accepted", async () =>
+      eq(await roleOf(claim("anon")), "anon"));
+    itAsync("an empty setting is 'missing', not 'unknown'", async () =>
+      eq(await roleOf(""), "missing"));
+    itAsync("something that is not a key at all does not throw", async () =>
+      eq(await roleOf("not-a-jwt"), "unknown"));
+
+    it("the wrong key is reported as loudly as no key", () => {
+      const route = readFileSync(new URL("../src/app/api/wearable/status/route.ts", import.meta.url), "utf8");
+      eq(/holds the ANON key/.test(route), true,
+         "'it will read and write nothing' is the whole point of saying it");
+      eq(/missing\.push/.test(route.slice(route.indexOf("serviceRole !== "))), true,
+         "it has to reach the same list a missing key reaches");
+    });
+    it("the key itself is never returned", () => {
+      const route = readFileSync(new URL("../src/app/api/wearable/status/route.ts", import.meta.url), "utf8");
+      eq(/SB_SERVICE|process\.env\.SUPABASE_SERVICE_ROLE_KEY/.test(route), false,
+         "this endpoint reports configuration, never values");
+    });
+  });
+
   describe("the activity log", () => {
     // navigator is a getter-only global in Node, so it is replaced by descriptor and put back.
     const withNav = (ua, fn) => {

@@ -12,6 +12,28 @@ export function haveService() {
   return !!SB_SERVICE;
 }
 
+// Which key is actually in SUPABASE_SERVICE_ROLE_KEY.
+//
+// Presence is not enough. The anon key and the service_role key sit next to each other on the
+// same Supabase page, look identical, and are both accepted here — but the anon key is subject
+// to row-level security, so every service-role feature would quietly read nothing and write
+// nothing rather than fail. Backups would come back empty and look like an empty club.
+//
+// A Supabase key is an unsigned-to-us JWT whose payload names the role it carries. Reading our
+// own key's claim needs no verification and returns a role name, never the key.
+export function serviceKeyRole(): "service_role" | "anon" | "unknown" | "missing" {
+  if (!SB_SERVICE) return "missing";
+  try {
+    const body = SB_SERVICE.split(".")[1];
+    if (!body) return "unknown";
+    const json = JSON.parse(Buffer.from(body.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"));
+    const role = json && json.role;
+    return role === "service_role" || role === "anon" ? role : "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
 export type ProviderToken = { access_token: string; refresh_token?: string; expires_in?: number; scope?: string };
 export type Connection = {
   sw_id: string;
