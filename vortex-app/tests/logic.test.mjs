@@ -2065,10 +2065,16 @@ describe("InBody sheet", () => {
       return m.serviceKeyRole();
     };
 
-    itAsync("the service_role key is recognised", async () =>
+    itAsync("the legacy service_role JWT is recognised", async () =>
       eq(await roleOf(claim("service_role")), "service_role"));
-    itAsync("the anon key in that slot is named, not accepted", async () =>
+    itAsync("the legacy anon JWT in that slot is named, not accepted", async () =>
       eq(await roleOf(claim("anon")), "anon"));
+    // Supabase's current keys are opaque strings, not JWTs. Reading them as JWTs reported a
+    // perfectly good key as unrecognised, which is a false alarm about a working club.
+    itAsync("the current secret key is recognised", async () =>
+      eq(await roleOf("sb_secret_A1b2C3d4E5f6G7h8"), "service_role"));
+    itAsync("the current publishable key in that slot is named", async () =>
+      eq(await roleOf("sb_publishable_A1b2C3d4E5f6"), "anon"));
     itAsync("an empty setting is 'missing', not 'unknown'", async () =>
       eq(await roleOf(""), "missing"));
     itAsync("something that is not a key at all does not throw", async () =>
@@ -2076,10 +2082,24 @@ describe("InBody sheet", () => {
 
     it("the wrong key is reported as loudly as no key", () => {
       const route = readFileSync(new URL("../src/app/api/wearable/status/route.ts", import.meta.url), "utf8");
-      eq(/holds the ANON key/.test(route), true,
-         "'it will read and write nothing' is the whole point of saying it");
-      eq(/missing\.push/.test(route.slice(route.indexOf("serviceRole !== "))), true,
+      eq(/read and write nothing/.test(route), true,
+         "saying what it will do is the whole point of saying it");
+      eq(/missing\.push/.test(route.slice(route.indexOf("serviceOk === false"))), true,
          "it has to reach the same list a missing key reaches");
+    });
+    // A shape check can only ever guess, and guessed wrong the moment the format changed. The
+    // admin endpoint no other key can reach settles it, and will still be right next time.
+    it("the verdict comes from Supabase, not from reading the string", () => {
+      const lib = readFileSync(new URL("../src/lib/wearable.ts", import.meta.url), "utf8");
+      eq(/auth\/v1\/admin\/users/.test(lib), true, "the one endpoint only service-role reaches");
+      eq(/if \(r\.status === 401 \|\| r\.status === 403\) return false/.test(lib), true);
+      eq(/return null;\s*\/\/ Supabase had a bad moment/.test(lib), true,
+         "an outage must not be reported as a wrong key");
+    });
+    it("only a definite no is called a fault", () => {
+      const route = readFileSync(new URL("../src/app/api/wearable/status/route.ts", import.meta.url), "utf8");
+      eq(/serviceOk === false/.test(route), true, "null means cannot tell, and must not raise an alarm");
+      eq(/!serviceOk\)/.test(route), false, "that would treat 'cannot tell' as 'wrong'");
     });
     it("the key itself is never returned", () => {
       const route = readFileSync(new URL("../src/app/api/wearable/status/route.ts", import.meta.url), "utf8");

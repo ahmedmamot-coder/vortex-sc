@@ -12,17 +12,22 @@ export function haveService() {
   return !!SB_SERVICE;
 }
 
-// Which key is actually in SUPABASE_SERVICE_ROLE_KEY.
+// Which key is in SUPABASE_SERVICE_ROLE_KEY, as far as its shape can say.
 //
-// Presence is not enough. The anon key and the service_role key sit next to each other on the
-// same Supabase page, look identical, and are both accepted here — but the anon key is subject
-// to row-level security, so every service-role feature would quietly read nothing and write
-// nothing rather than fail. Backups would come back empty and look like an empty club.
+// Presence is not enough: the publishable/anon key and the secret/service key sit next to each
+// other on the same Supabase page, and the wrong one here passes every check and then reads and
+// writes nothing, because row-level security still applies to it. A backup would come back
+// empty and look like an empty club.
 //
-// A Supabase key is an unsigned-to-us JWT whose payload names the role it carries. Reading our
-// own key's claim needs no verification and returns a role name, never the key.
+// Supabase has two generations of key and this has to know both. The current ones are opaque
+// strings — `sb_secret_…` and `sb_publishable_…`. The legacy ones are JWTs carrying a `role`
+// claim, which can be read without verification because it is our own key. Anything else is
+// genuinely unrecognised, which is not the same as wrong: see serviceKeyWorks(), which settles
+// it by asking Supabase rather than by reading the string.
 export function serviceKeyRole(): "service_role" | "anon" | "unknown" | "missing" {
   if (!SB_SERVICE) return "missing";
+  if (/^sb_secret_/.test(SB_SERVICE)) return "service_role";
+  if (/^sb_publishable_/.test(SB_SERVICE)) return "anon";
   try {
     const body = SB_SERVICE.split(".")[1];
     if (!body) return "unknown";
@@ -31,6 +36,27 @@ export function serviceKeyRole(): "service_role" | "anon" | "unknown" | "missing
     return role === "service_role" || role === "anon" ? role : "unknown";
   } catch {
     return "unknown";
+  }
+}
+
+// The question the shape can only guess at: does this key actually carry service-role rights?
+//
+// Asked of GoTrue's admin endpoint, which no other key can reach at all — so the answer does
+// not depend on knowing today's key format, and will still be right the next time Supabase
+// changes it. Reads one user and keeps none of it.
+export async function serviceKeyWorks(): Promise<boolean | null> {
+  if (!SB_SERVICE) return false;
+  try {
+    const r = await fetch(SB_URL + "/auth/v1/admin/users?page=1&per_page=1", {
+      headers: { apikey: SB_SERVICE, Authorization: "Bearer " + SB_SERVICE },
+      signal: AbortSignal.timeout(6000),
+      cache: "no-store",
+    });
+    if (r.ok) return true;
+    if (r.status === 401 || r.status === 403) return false;
+    return null;                       // Supabase had a bad moment; "cannot tell" is not "no".
+  } catch {
+    return null;
   }
 }
 
