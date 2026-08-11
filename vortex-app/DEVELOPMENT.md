@@ -185,6 +185,34 @@ it is readable at all; and an email the app has never seen still gets in, as a c
 until the row arrives. A username still works wherever the device already knows the account, which
 is the ordinary case, and costs no extra request.
 
+## Checking what is open — the obvious query is wrong
+
+`select * from pg_policies where roles::text like '%public%'` is **not** the check. It flags
+`to public using (is_staff())`, which is not open at all: `public` includes `anon`, but
+`is_staff()` is false for anyone not signed in, so every row is filtered out anyway. Run against
+this database it returns 45 rows, almost all of them fine — and a check that cries wolf is worse
+than no check, because the next real finding is buried in the same list.
+
+What makes a policy open is the **expression**, and which expression depends on the command:
+`SELECT`/`DELETE` are governed by `qual` alone, `INSERT` by `with_check` alone (its `qual` is
+always null — normal, not a finding), `UPDATE`/`ALL` by both. `supabase/security_check_open.sql`
+asks it that way, and also lists tables with RLS switched off entirely — those are wide open and
+appear in no policy listing at all, so they are exactly what a policy query cannot find.
+
+### There are two sets of tables in this database
+
+The app writes to `attendance_marks`, `inbody_readings`, `plan_sessions`, `memberships`,
+`meet_declarations`, `invoices`, `family_accounts`, … Running the check turned up a second,
+older family alongside them: `attendance`, `inbody_scans`, `plans`, `plan_sections`, `plan_sets`,
+`meets`, `meet_results`, `meet_entries`, `personal_bests`, `profiles`, `family_links`, `club`,
+`academy_fees`, `academy_trials`.
+
+Stage 4 only ever named the first set, so the second has never been through any of the lockdown
+stages. Most of it carries sensible `is_staff()` policies from an earlier effort; `academy_fees`
+and `meets` were readable by anyone. Which set holds live data is not yet established, and until
+it is, neither "it is protected" nor "it is empty, ignore it" can be said honestly — query 3 in
+that file answers it.
+
 ## Who can see what (row-level security)
 
 Until Stage 4, every policy read `to authenticated using (true)`. `authenticated` means *any*
