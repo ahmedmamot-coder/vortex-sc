@@ -5393,7 +5393,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-10i';
+const VX_BUILD='2026-08-10j';
 // Roles that carry the run of the club: Club Administration, adding and editing anywhere.
 // Coach, Assistant Coach and Fitness Coach are deliberately absent — a fitness coach works
 // across every squad without being able to rewrite the club.
@@ -12485,7 +12485,12 @@ class Component extends DCLogic {
       trialNotes:acadTrialForm.notes, onTrialNotes:(e)=>this.setState({trialForm:{...acadTrialForm, notes:e.target.value}}),
       onTrialSubmit:()=>this.trialSubmit(), trialSubmitted:!!S.trialSubmitted,
       squadCards, switcherList,
-      squadsHeading: _lockSquad ? 'Your squad' : 'The 9 squads',
+      // Counts what this account can actually see: one squad, two, or all of them. It read a
+      // single locked squad, and referred to a variable that no longer exists — which took the
+      // whole app down rather than showing the wrong heading.
+      squadsHeading: (_visibleSquads.length===this.squads.length)
+        ? ('The '+this.squads.length+' squads')
+        : (_visibleSquads.length===1 ? 'Your squad' : ('Your '+_visibleSquads.length+' squads')),
       adminStats, squadBars, attendRing, adminLoadBars:loadBarsAdmin, adminRows,
       moveQuery:S.moveQuery, onMoveQuery:(e)=>this.setState({moveQuery:e.target.value}), onAutoAssign,
       moveCountLine: moveRows.length+' swimmers · pick a squad or auto-assign by age', moveRows,

@@ -2231,6 +2231,43 @@ describe("InBody sheet", () => {
          "'all squads' and 'full access' read as the same thing until one of them says otherwise"));
   });
 
+  // A white screen and "Can't find variable: _lockSquad" — the whole app, on every device,
+  // because a rename left one reference behind. `new Function(src)` parses it happily: an
+  // undeclared variable is not a syntax error, it is a runtime one, and the runtime here is a
+  // coach's phone at the poolside.
+  //
+  // renderVals() builds every value the page renders and is where these locals live. They are
+  // written with a leading underscore by convention, which makes them findable: each one used
+  // must be declared in the same function.
+  it("every local in renderVals is one that exists", () => {
+    const start = SOURCE.indexOf("  renderVals(){");
+    eq(start > -1, true, "renderVals must still be findable by this test");
+    // Bounded by the method's own closing brace — the first line that is exactly two spaces
+    // and a brace. Getting this wrong once meant the slice ran to the end of the file and the
+    // check reported a property from a different method.
+    const end = SOURCE.indexOf("\n  }\n", start);
+    eq(end > start, true, "renderVals must have a findable end");
+    const body = SOURCE.slice(start, end + 4);   // include the closing brace itself
+    eq(body.length > 10000, true, "the slice must actually cover the function");
+    // The failure that made this check useless the first time: indexOf returned -1, the slice
+    // ran to the end of the file, and it reported a property from a different method.
+    eq(end !== -1 && body.trimEnd().endsWith("}"), true, "the slice must stop at the method's end");
+
+    const declared = new Set();
+    for (const m of body.matchAll(/\b(?:const|let|var)\s+(_\w+)/g)) declared.add(m[1]);
+    // Destructuring and parameters, e.g. `const [_a, _b] =` or `.map((_x)=>`.
+    for (const m of body.matchAll(/[[({,]\s*(_\w+)\s*[,\])=]/g)) declared.add(m[1]);
+
+    // Comments name these variables when explaining them, and a mention in prose is not a use —
+    // scanning them reported _isBlob, which is a property of a video and always was.
+    const code = body.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+    const used = new Set();
+    for (const m of code.matchAll(/(^|[^\w.$'"])(_[a-zA-Z]\w*)/gm)) used.add(m[2]);
+
+    const missing = [...used].filter((n) => !declared.has(n));
+    eq(missing.join(", "), "", "used in renderVals but never declared there");
+  });
+
   describe("the activity log", () => {
     // navigator is a getter-only global in Node, so it is replaced by descriptor and put back.
     const withNav = (ua, fn) => {
