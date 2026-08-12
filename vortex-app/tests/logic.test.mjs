@@ -2268,6 +2268,38 @@ describe("InBody sheet", () => {
     eq(missing.join(", "), "", "used in renderVals but never declared there");
   });
 
+  // A build that throws while drawing the screen takes the whole interface with it — including
+  // the Update bar, which is the only thing that could fetch the build that fixes it. The advice
+  // left was "close the tab and hope".
+  describe("a way out of a build that will not start", () => {
+    const boot = sourceBetween("---- A way out of a broken build", "</script>");
+
+    it("it lives outside the app, before any of it runs", () => {
+      const at = SOURCE.indexOf("A way out of a broken build");
+      eq(at > -1 && at < SOURCE.indexOf("class Component extends"), true,
+         "inside the app it would be taken down by the same error it exists to survive");
+      eq(at < SOURCE.indexOf('<script src="assets/react.js">'), true, "and before the framework");
+    });
+    it("an uncaught error is what triggers it", () => {
+      eq(/addEventListener\('error'/.test(boot), true);
+      eq(/unhandledrejection/.test(boot), true, "a failed promise leaves the same blank screen");
+    });
+    it("a broken image is not a broken app", () =>
+      eq(/e\.target !== window && e\.target\.tagName\) return/.test(boot), true,
+         "a missing photo must not put a scary bar on a working app"));
+    it("it clears the saved copy, which is the thing a plain reload will not", () => {
+      eq(/getRegistrations\(\)/.test(boot), true, "the service worker serves the old shell");
+      eq(/caches\.delete\(k\)/.test(boot), true);
+      eq(/location\.replace\(location\.pathname \+ '\?v=' \+ Date\.now\(\)\)/.test(boot), true,
+         "and the URL has to change, or the browser answers from its own cache");
+    });
+    it("the button can never be left spinning", () =>
+      eq(/setTimeout\(done, 4000\)/.test(boot), true,
+         "if clearing hangs, reloading anyway is better than a dead button"));
+    it("it says nothing at all while the app is working", () =>
+      eq(/var shown = false;/.test(boot), true, "and never twice"));
+  });
+
   describe("the activity log", () => {
     // navigator is a getter-only global in Node, so it is replaced by descriptor and put back.
     const withNav = (ua, fn) => {

@@ -26,6 +26,63 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(function(){ /* offline/unsupported: app still works */ });
   });
 }
+
+/* ---- A way out of a broken build -------------------------------------------------------
+   A build that throws while drawing the screen takes the whole interface with it: no Update
+   bar, no Settings, no way to fetch the build that fixes it. One stale reference to a renamed
+   variable did exactly that, on every device at once, and the only advice left was "close the
+   tab and hope".
+
+   This lives outside the app, in plain script that runs before any of it, so it survives
+   whatever the app does. On the first uncaught error it puts one button on the screen: clear
+   the offline copy and the caches, then reload past them — the same thing Settings' Update
+   does, reachable when Settings is not.
+
+   It stays quiet unless something actually threw. An app that is running never shows it. */
+(function(){
+  var shown = false;
+  function offerRecovery(what){
+    if (shown) return; shown = true;
+    try{
+      var bar = document.createElement('div');
+      bar.setAttribute('data-vx-recover','1');
+      bar.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:2147483647;background:#0A0F1A;color:#fff;'
+        + 'padding:12px 14px calc(12px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:10px;'
+        + 'font-family:system-ui,-apple-system,sans-serif;box-shadow:0 -6px 20px rgba(0,0,0,.35)';
+      var txt = document.createElement('span');
+      txt.style.cssText = 'flex:1;min-width:0;font-size:12.5px;line-height:1.4';
+      txt.innerHTML = '<b>This app did not start.</b><br><span style="opacity:.75;font-size:11px">'
+        + 'Get the newest version \u2014 this clears the copy saved on the device.</span>';
+      var btn = document.createElement('button');
+      btn.textContent = 'Get the fix';
+      btn.style.cssText = 'flex:none;background:#22D7D7;color:#04262A;border:none;border-radius:9px;padding:9px 14px;'
+        + 'font-family:inherit;font-weight:800;font-size:12.5px;cursor:pointer';
+      btn.onclick = function(){
+        btn.textContent = 'Working\u2026'; btn.disabled = true;
+        var done = function(){
+          try{ location.replace(location.pathname + '?v=' + Date.now()); }
+          catch(e){ location.reload(); }
+        };
+        var jobs = [];
+        try{ if (navigator.serviceWorker) jobs.push(navigator.serviceWorker.getRegistrations()
+          .then(function(rs){ return Promise.all(rs.map(function(r){ return r.unregister(); })); })); }catch(e){}
+        try{ if (window.caches) jobs.push(caches.keys()
+          .then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })); }catch(e){}
+        /* Never leave the button spinning: reload regardless, and no later than 4 seconds. */
+        Promise.all(jobs).then(done, done);
+        setTimeout(done, 4000);
+      };
+      bar.appendChild(txt); bar.appendChild(btn);
+      (document.body || document.documentElement).appendChild(bar);
+    }catch(e){ /* if even this fails there is nothing further to try */ }
+  }
+  window.addEventListener('error', function(e){
+    /* A failed image or stylesheet is not the app failing to start. */
+    if (e && e.target && e.target !== window && e.target.tagName) return;
+    offerRecovery(e && e.message);
+  }, true);
+  window.addEventListener('unhandledrejection', function(){ offerRecovery('promise'); });
+})();
 </script>
 <script src="assets/react.js"></script>
 <script src="assets/react-dom.js"></script>
@@ -5393,7 +5450,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-10j';
+const VX_BUILD='2026-08-10k';
 // Roles that carry the run of the club: Club Administration, adding and editing anywhere.
 // Coach, Assistant Coach and Fitness Coach are deliberately absent — a fitness coach works
 // across every squad without being able to rewrite the club.
