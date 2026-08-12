@@ -5528,7 +5528,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-10p';
+const VX_BUILD='2026-08-10q';
 // Roles that carry the run of the club: Club Administration, adding and editing anywhere.
 // Coach, Assistant Coach and Fitness Coach are deliberately absent — a fitness coach works
 // across every squad without being able to rewrite the club.
@@ -8647,7 +8647,10 @@ class Component extends DCLogic {
     this.loungeComments=by; this.forceUpdate();
   }
   _me(){ return this.accounts.find(a=>a.id===this.state.pickedId)||{label:'Staff', role:'', initials:'?', photo:''}; }
-  _isAdmin(){ const m=this._me(); return m.id==='ahmed'||m.id==='sameh'; }
+  // Was the same two hardcoded ids that locked every other manager out of Club Administration.
+  // It gates the managers' notifications, the sign-up alerts and the database check — all of
+  // which are a manager's job, not those two people's in particular.
+  _isAdmin(){ return this._isFullAccess(this._me()); }
   // Managers a coach can send a private request to.
   _adminChoices(){ return (this.accounts||[]).filter(a=> a.id==='ahmed'||a.id==='sameh'||/admin|manager|director|head/i.test(a.role||'')); }
   // People who can be @mentioned — all staff accounts.
@@ -12694,7 +12697,12 @@ class Component extends DCLogic {
         const today=this.todayISO();
         let present=0, total=0; scopeIds.forEach(sid=>{ (this.roster[sid]||[]).forEach((sw,idx)=>{ total++; if(this.getAttendStatus(sid, today, sw.id, idx)==='present') present++; }); });
         const dashAttendPct = total? Math.round(present/total*100) : 0;
-        const scopeSw = isAdm ? this.allSwimmersFlat() : (acc.squadId?(this.roster[acc.squadId]||[]).map(sw=>({...sw, squadId:acc.squadId})):this.allSwimmersFlat());
+        // Every squad this account can see, not one. Read raw, acc.squadId is 'vortexb,vortexa'
+        // for a two-squad coach, and this.roster has no such key — so the dashboard counted
+        // nobody at all rather than both squads.
+        const scopeSw = _myIds
+          ? _myIds.reduce((out, sid)=>out.concat((this.roster[sid]||[]).map(sw=>({...sw, squadId:sid}))), [])
+          : this.allSwimmersFlat();
         let redCount=0; scopeSw.forEach(sw=>{ const wl=this._wearLatest(sw.id); if(wl && wl.recovery!=null && wl.recovery<34) redCount++; });
         // next upcoming meet
         const _pm=(s)=>{ if(!s) return null; let m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); if(m) return new Date(+m[3],+m[1]-1,+m[2]); const mo={jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11}; m=s.match(/^(\d{1,2})\s+([A-Za-z]{3})[a-z]*\s+(\d{4})$/); if(m && mo[m[2].toLowerCase()]!=null) return new Date(+m[3],mo[m[2].toLowerCase()],+m[1]); return null; };
@@ -12715,7 +12723,8 @@ class Component extends DCLogic {
           dashMeetName: nextMeet?nextMeet.name:'No meet scheduled', dashMeetSub: nextMeet?((nextMeet.course||'')+' · '+(nextMeet.date||'')):'—', dashHasMeet:!!nextMeet,
           onDashAttend:()=>{ this.setState({attDayISO:this.todayISO()}); this.openTool('attday', true); },
           onDashRecovery:()=>this.setState({view:'tools', tool:'recovery', toolScopeClub:isAdm}),
-          onDashMeets:()=>this.setState({view:'squad', squadId:(acc.squadId||this.state.squadId||'seniora'), tab:'more'}),
+          // One squad id, never the list — the same mistake that took the app down at sign-in.
+          onDashMeets:()=>this.setState({view:'squad', squadId:((_myIds&&_myIds[0])||this.state.squadId||(this.squads[0]||{}).id), tab:'more'}),
         };
       })(),
       onGoAdmin:()=>this.setState({view:'admin'}), onGoTools:()=>{ const a=this.accounts.find(x=>x.id===S.pickedId)||{}; const adm=!!(a.id==='ahmed'||a.id==='sameh'); this.setState({view:'tools', toolScopeClub:adm}); }, onGoMove:()=>this.setState({view:'move'}),

@@ -2516,6 +2516,31 @@ describe("InBody sheet", () => {
       eq(c._squadIdsOf({ squadId: "deleted,junior" })[0], "junior", "a stale id must not become the current squad");
       eq(c._squadIdsOf({ squadId: "" })[0], undefined, "all squads has no first one, and must not invent it");
     });
+    // Three bugs in one day came from the same mistake: reading an ACCOUNT's squadId as if it
+    // were one squad. It is a list now, so `this.roster[acc.squadId]` is undefined and
+    // `state.squadId = acc.squadId` is a squad that does not exist. A swimmer's squadId is
+    // still single and is not what this is about.
+    it("no account's squad list is ever used as a single squad", () => {
+      const offenders = [];
+      const patterns = [
+        /this\.roster\[(?:acc|acct|a|_a)\.squadId\]/g,     // the whole list as a roster key
+        /squadId:\s*\(?(?:acc|acct|_a)\.squadId/g,          // stored as the current squad
+        /squadById\[(?:acc|acct|a|_a)\.squadId\]/g,         // looked up as one squad
+      ];
+      for (const re of patterns)
+        for (const m of SOURCE.matchAll(re)) offenders.push(m[0]);
+      eq(offenders.join(" | "), "", "read through _squadIdsOf / _mySquadIds instead");
+    });
+    it("a two-squad coach's dashboard counts both squads", () => {
+      const line = (SOURCE.match(/const scopeSw = [\s\S]{0,260}?;\n/) || [""])[0];
+      eq(/_myIds\s*\n?\s*\? _myIds\.reduce/.test(line), true,
+         "it counted nobody at all, because roster has no 'vortexb,vortexa' key");
+    });
+    it("the managers' gate is the same one everywhere", () => {
+      eq(/_isAdmin\(\)\{ return this\._isFullAccess\(this\._me\(\)\); \}/.test(SOURCE), true,
+         "two hardcoded ids locked every other manager out of the alerts and the data check");
+      eq(/m\.id==='ahmed'\|\|m\.id==='sameh'/.test(SOURCE), false);
+    });
     it("squad edits sync to the database like everything else", () =>
       eq(/var SYNC = \["vx_squads"/.test(SOURCE), true,
          "a squad added on one device has to exist on all of them"));
