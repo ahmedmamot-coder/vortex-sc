@@ -2495,6 +2495,59 @@ describe("InBody sheet", () => {
       eq(/deleteHint: n>0 \? \('Move its '\+n\+' swimmer'/.test(SOURCE), true));
   });
 
+  // Registration is open to anyone, so the club collects logins nobody recognises — a coach who
+  // signed up through the parent tab, a test account, an address typed twice. There was no way
+  // to remove one.
+  describe("deleting a family account", () => {
+    const route = readFileSync(new URL("../src/app/api/family/delete/route.ts", import.meta.url), "utf8");
+
+    it("only a manager may ask for it", () => {
+      eq(/ADMIN_EMAILS\.includes\(email\)/.test(route), true, "the caller's own token is checked");
+      eq(/status: 403/.test(route), true);
+      eq(/this\._isFullAccess\(\) &&/.test(SOURCE), true, "and the button is not shown to a coach");
+    });
+    // Deleting only the row is worse than doing nothing: the person can still sign in, and the
+    // app rebuilds their account from the Auth user's metadata the moment they do.
+    it("the sign-in goes with the row, or it comes straight back", () => {
+      eq(/auth\/v1\/admin\/users\/\$\{uid\}/.test(route), true);
+      eq(/method: "DELETE"/.test(route), true);
+      eq(/it would come back next time they signed in/.test(route), true,
+         "a half-delete has to be reported as a failure, not a success");
+    });
+    // A coach's staff login and their stray parent registration can be the same address.
+    it("a staff address keeps its login", () => {
+      eq(/isStaffEmail/.test(route), true);
+      const guard = route.slice(route.indexOf("const staff = await isStaffEmail"));
+      eq(/if \(staff\) \{[\s\S]*?action: "family-row-only"/.test(guard), true,
+         "deleting that Auth user would lock a coach out of the club");
+      eq(/return true;\s*\/\/ cannot tell/.test(route), true,
+         "if the staff table cannot be read, keeping the login is the safe way to be wrong");
+    });
+    it("a manager cannot delete themselves or the other manager", () => {
+      eq(/email === who\.email/.test(route), true);
+      eq(/that is a manager's account and cannot be deleted here/.test(route), true);
+      eq(/'sameh@vortexswimmingclub\.com'\]\.includes/.test(SOURCE), true,
+         "and the button is hidden on those rows too");
+    });
+    it("the confirmation says how many children are attached", () => {
+      const fn = sourceBetween("async famAdminDelete(famId){", "\n  famAdminUnlink(");
+      eq(/child'\+\(kids===1\?'':'ren'\)\+' linked/.test(fn), true,
+         "no children means a stray registration; two means somebody's parent");
+      eq(/Nothing about the swimmers themselves is deleted/.test(fn), true);
+      eq(/window\.confirm\(warn\)/.test(fn), true);
+    });
+    it("it is recorded in the activity log", () => {
+      const fn = sourceBetween("async famAdminDelete(famId){", "\n  famAdminUnlink(");
+      eq(/this\.audit\('family\.delete'/.test(fn), true, "removing somebody's access is exactly what a log is for");
+    });
+    it("a failure leaves the list alone rather than pretending", () => {
+      const fn = sourceBetween("async famAdminDelete(famId){", "\n  famAdminUnlink(");
+      const afterErr = fn.slice(fn.indexOf("if(!r.ok)"));
+      eq(afterErr.indexOf("return this.setState") < afterErr.indexOf("_saveFamily"), true,
+         "the row must not disappear from the screen when the server refused");
+    });
+  });
+
   describe("the activity log", () => {
     // navigator is a getter-only global in Node, so it is replaced by descriptor and put back.
     const withNav = (ua, fn) => {

@@ -4821,6 +4821,9 @@ if ('serviceWorker' in navigator) {
                               </sc-for>
                             </div>
                           </sc-if>
+                          <sc-if value="{{ fa.canDelete }}" hint-placeholder-val="{{ false }}">
+                            <button onclick="{{ fa.onDeleteAccount }}" style="width:100%;margin-top:9px;background:#fff;color:#B42318;border:1px solid #F3B7B7;border-radius:10px;padding:8px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px"><i data-lucide="trash-2" style="width:14px;height:14px"></i>{{ fa.deleteLabel }}</button>
+                          </sc-if>
                         </div>
                       </sc-for>
                     </div>
@@ -5525,7 +5528,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-10n';
+const VX_BUILD='2026-08-10o';
 // Roles that carry the run of the club: Club Administration, adding and editing anywhere.
 // Coach, Assistant Coach and Fitness Coach are deliberately absent — a fitness coach works
 // across every squad without being able to rewrite the club.
@@ -9880,6 +9883,41 @@ class Component extends DCLogic {
     this._saveFamily(list); this.forceUpdate();
     if(window.__vxUpsert && this._isUuid(rec.id)){ try{ await window.__vxUpsert('family_accounts', [{id:rec.id, name:rec.name, email:rec.email, phone:rec.phone, pass:rec.pass||'', role:rec.role, swimmer_ids:rec.swimmerIds, ts:Date.now()}]); await this._familyFetch(); }catch(e){} }
   }
+  // Remove a family account entirely. Registration is open to anyone, so the club collects
+  // logins nobody recognises — a coach who signed up through the parent tab, a test account, an
+  // address typed twice. There was no way to remove one.
+  //
+  // The server does the deleting, because it needs the service role: removing only what this
+  // device can reach would leave the sign-in alive, and the account would rebuild itself from
+  // the Auth user the next time that person signed in.
+  async famAdminDelete(famId){
+    const rec=(this.family||[]).find(f=>f.id===famId); if(!rec) return;
+    const email=(rec.email||'').trim().toLowerCase();
+    if(!email) return this.setState({famAdminMsg:'That account has no email address, so there is nothing to delete on the server.'});
+    const kids=(rec.swimmerIds||[]).length;
+    // Naming the children is the point of the question: an account with none is very likely a
+    // stray registration, and an account with two is somebody's parent.
+    const warn='Delete the account for '+(rec.name||email)+'?\n\n'
+      + email + '\n'
+      + (kids ? (kids+' child'+(kids===1?'':'ren')+' linked \u2014 they will lose access to '+(kids===1?'their':'their children\u2019s')+' records.\n')
+              : 'No children linked.\n')
+      + '\nThis removes the account and its sign-in. Nothing about the swimmers themselves is deleted.';
+    if(!window.confirm(warn)) return;
+    this.setState({famAdminMsg:'Deleting\u2026'});
+    let tok=''; try{ tok=(window.__VX_AUTH&&window.__VX_AUTH.token)||''; }catch(e){}
+    if(!tok) return this.setState({famAdminMsg:'Your own session has expired \u2014 sign out and back in, then try again.'});
+    try{
+      const r=await fetch('/api/family/delete', {method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok},
+        body:JSON.stringify({email})});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok) return this.setState({famAdminMsg:(j&&j.error)||('Could not delete it (HTTP '+r.status+').')});
+      this._saveFamily((this.family||[]).filter(f=>f.id!==famId));
+      try{ this.audit('family.delete', email, {children:kids, action:(j&&j.action)||''}); }catch(e){}
+      this.setState({famAdminMsg:(rec.name||email)+' deleted \u2713'+((j&&j.note)?(' '+j.note):'')});
+      try{ await this._familyFetch(); }catch(e){}
+    }catch(e){ this.setState({famAdminMsg:'Could not reach the server.'}); }
+  }
   famAdminUnlink(famId, uid){
     this._famAdminUpdate(famId, r=>{ r.swimmerIds=(r.swimmerIds||[]).filter(x=>x!==uid); });
     this.setState({famAdminMsg:'Child unlinked ✓'});
@@ -13680,7 +13718,11 @@ class Component extends DCLogic {
                 .slice(0,8)
                 .map(s=>({ label:s.name, sub:(((this.squadById[s.squadId]||{}).name)||'')+' · Age '+this._swAge(s),
                   onPick:()=>this.famAdminLink(f.id, s.squadId+'::'+s.id) })) : [],
-              addHint: swq.length>=2 ? '' : 'Type at least 2 letters of the child’s name'
+              addHint: swq.length>=2 ? '' : 'Type at least 2 letters of the child’s name',
+              // Only a manager, and never on the two manager accounts themselves.
+              canDelete: this._isFullAccess() && !['ahmedmamot@gmail.com','sameh@vortexswimmingclub.com'].includes((f.email||'').trim().toLowerCase()),
+              deleteLabel: ids.length ? ('Delete account · '+ids.length+' child'+(ids.length===1?'':'ren')) : 'Delete account',
+              onDeleteAccount:()=>this.famAdminDelete(f.id)
             };
           });
         const nProblem=Object.keys(problemIds).length;
