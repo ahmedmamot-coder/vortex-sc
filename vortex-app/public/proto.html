@@ -5528,7 +5528,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-10q';
+const VX_BUILD='2026-08-10r';
 // Roles that carry the run of the club: Club Administration, adding and editing anywhere.
 // Coach, Assistant Coach and Fitness Coach are deliberately absent — a fitness coach works
 // across every squad without being able to rewrite the club.
@@ -6215,10 +6215,15 @@ class Component extends DCLogic {
     if(me) return {email:(me.email||'').toLowerCase(), name:me.label||me.name||'Staff', role:me.role||'Staff'};
     return {email:'', name:'Unknown', role:''};
   }
-  audit(action, target, detail){
+  // `who` may be passed in, and for a sign-in it MUST be. The actor is worked out from the
+  // signed-in account held in state — and at the moment a sign-in is recorded, state still
+  // holds the previous one, because setState has not run yet and would not be synchronous if
+  // it had. So every sign-in went into the log as 'Staff' with no email: the one question the
+  // log exists to answer was the one thing it could not.
+  audit(action, target, detail, who0){
     try{
       if(!window.__vxInsert) return;
-      const who=this._auditWho();
+      const who=who0||this._auditWho();
       // A phone or an iPad or a laptop — enough to tell two sessions apart, and no more. The
       // full user-agent string is a fingerprint and is not worth keeping to answer this question.
       let ua='device';
@@ -6300,7 +6305,8 @@ class Component extends DCLogic {
     // Every sign-in is recorded: guarantee the account row exists (now that we ARE signed in,
     // so it can never be refused), and tell the admin who signed in and when.
     this._famRecordLogin(rec);
-    try{ this.audit('sign-in', (rec.name||rec.email||'Family'), {side:'family', children:(rec.swimmerIds||[]).length}); }catch(e){}
+    try{ this.audit('sign-in', (rec.name||rec.email||'Family'), {side:'family', children:(rec.swimmerIds||[]).length},
+      {email:(rec.email||'').toLowerCase(), name:rec.name||rec.email||'Family', role:rec.role||'parent'}); }catch(e){}
     return this.setState({familyUser:rec, familyActiveIdx:0, screen:'app', view:'family', famErr:'', famBusy:false});
   }
   // ---- Signing in with Google or Apple -----------------------------------------------------
@@ -12527,7 +12533,8 @@ class Component extends DCLogic {
         const rawP = (pEl && pEl.value) || this.state.loginPinVal || '';
         const u=norm(rawU).toLowerCase(); const pl=norm(rawP).toLowerCase();
         const doLogin=(acct)=>{ const st={screen:'app', view:'hub', pickedId:acct.id, loginUser:'', loginPinVal:'', loginErr:''};
-          try{ this.audit('sign-in', (acct.label||'')+' · '+(acct.role||'staff'), {side:'staff'}); }catch(e){} { const _first=this._squadIdsOf(acct)[0]; if(_first) st.squadId=_first; } if(uEl)uEl.value=''; if(pEl)pEl.value=''; try{ localStorage.setItem('vx_session', JSON.stringify({type:'staff', id:acct.id})); }catch(e){} try{ this._staffAuthEnsure(acct); }catch(e){} this.setState(st); };
+          try{ this.audit('sign-in', (acct.label||'')+' \u00b7 '+(this._roleLabel(acct)||'staff'), {side:'staff'},
+            {email:(acct.email||'').toLowerCase(), name:acct.label||'Staff', role:this._roleLabel(acct)||'Staff'}); }catch(e){} { const _first=this._squadIdsOf(acct)[0]; if(_first) st.squadId=_first; } if(uEl)uEl.value=''; if(pEl)pEl.value=''; try{ localStorage.setItem('vx_session', JSON.stringify({type:'staff', id:acct.id})); }catch(e){} try{ this._staffAuthEnsure(acct); }catch(e){} this.setState(st); };
         // Staff sign-in is verified by Supabase Auth against a hashed password — NOT in the
         // browser. The old code compared a PIN that was hardcoded in this page's source, and
         // carried a permanent ahmed/7777 + sameh/1234 backdoor, so anyone who viewed source
@@ -12712,7 +12719,7 @@ class Component extends DCLogic {
         // unread: swimmers whose last family message awaits a coach reply
         let unread=0; const fm=this.famMessages||{}; scopeSw.forEach(sw=>{ const t=fm[sw.id]; if(t&&t.length&&t[t.length-1].sender==='family') unread++; });
         return {
-          hubUserName: acc.label||'', hubUserRole: acc.role||'', hubUserAvatar: this.av(acc.photo||null, acc.initials||'?', 54, 15, acc.accent||'#067EEA', '#fff', 20),
+          hubUserName: acc.label||'', hubUserRole: this._roleLabel(acc)||'', hubUserAvatar: this.av(acc.photo||null, acc.initials||'?', 54, 15, acc.accent||'#067EEA', '#fff', 20),
           clubStatLine: isAdm ? (this.allSwimmersFlat().length+' swimmers across '+this.squads.length+' squads · '+this.allMeets().length+' meets on record.')
             : (lockSq ? (lockSq.count+' swimmers · '+lockSq.name+' · '+lockSq.coach) : 'Welcome back.'),
           toolsSpan: isAdm ? 'auto' : 'span 2',

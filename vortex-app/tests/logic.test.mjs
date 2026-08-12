@@ -2657,6 +2657,41 @@ describe("InBody sheet", () => {
       eq(true, true);
     });
 
+    // A coach signed in and the log named nobody. The actor is worked out from the account held
+    // in state, and at the moment a sign-in is recorded state still holds the previous one —
+    // setState has not run, and would not be synchronous if it had. So every sign-in went in as
+    // 'Staff' with no email: the one question the log exists to answer.
+    describe("a sign-in says who signed in", () => {
+      const rowFor = (call) => {
+        const ctx = { state: {}, _auditWho: () => ({ email: "", name: "Staff", role: "Staff" }),
+                      _roleLabel: (a) => String((a && a.role) || "").split(",").map((x) => x.trim()).filter(Boolean).join(" · ") };
+        let sent = null;
+        const restore = globalThis.window;
+        globalThis.window = { __vxInsert: (t, rows) => { sent = rows[0]; return Promise.resolve(true); } };
+        try { call(bind("audit", ctx, ["_auditWho"])); } finally { globalThis.window = restore; }
+        return sent;
+      };
+
+      it("an explicit actor beats whatever state still holds", () => {
+        const row = rowFor((audit) => audit("sign-in", "Ahmed Abdelwahab", { side: "staff" },
+          { email: "ahmed.a@vortex.qa", name: "Ahmed Abdelwahab", role: "Assistant Coach · Fitness Coach" }));
+        eq(row.actor, "ahmed.a@vortex.qa", "'Staff' with no email answers nothing");
+        eq(row.actor_name, "Ahmed Abdelwahab");
+      });
+      it("without one it still falls back rather than failing", () => {
+        const row = rowFor((audit) => audit("plan.save", "Vortex B", {}));
+        eq(row.actor_name, "Staff", "every other action is recorded after state has caught up");
+      });
+      it("both sign-in paths name the account", () => {
+        eq(/\{email:\(acct\.email\|\|''\)\.toLowerCase\(\)/.test(SOURCE), true, "staff sign-in");
+        eq(/\{email:\(rec\.email\|\|''\)\.toLowerCase\(\)/.test(SOURCE), true, "family sign-in has the same problem");
+      });
+      it("the position is spelled out, not comma-jammed", () => {
+        eq(/hubUserRole: this\._roleLabel\(acc\)/.test(SOURCE), true,
+           "the header read 'ASSISTANT COACH,FITNESS COACH' straight from storage");
+      });
+    });
+
     it("the actions worth answering questions about are all recorded", () => {
       for (const a of ["sign-in", "sign-out", "plan.save", "attendance.mark", "invoice.issue",
                        "invoice.paid", "membership.set", "document.upload", "inbody.save",
