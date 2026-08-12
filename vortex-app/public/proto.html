@@ -4605,9 +4605,16 @@ if ('serviceWorker' in navigator) {
                             <input value="{{ staffForm.user }}" oninput="{{ onStaffUser }}" placeholder="Username (optional)" autocapitalize="off" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
                           </div>
                           <span style="font-size:10.5px;color:#7A8296;line-height:1.45">The password is shown as you type it so you can pass it on — write it down before you press Create. They can sign in with the email or the username.</span>
-                          <select value="{{ staffForm.role }}" onchange="{{ onStaffRole }}" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
-                            <option>Owner</option><option>CEO</option><option>Aquatic Director</option><option>Technical Manager</option><option>Head Coach</option><option>Manager</option><option>Marketing Team</option><option>Admin</option><option>Coach</option><option>Assistant Coach</option><option>Fitness Coach</option>
-                          </select>
+                          <!-- Positions, plural: one person can be an assistant coach and the
+                               fitness coach without needing two logins. -->
+                          <div style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 10px">
+                            <span style="display:block;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4;font-weight:700;margin-bottom:6px">Position — tap one or more</span>
+                            <div style="display:flex;flex-wrap:wrap;gap:5px">
+                              <sc-for list="{{ staffRoleChips }}" as="rc" hint-placeholder-count="11">
+                                <button onclick="{{ rc.onToggle }}" style="background:{{ rc.bg }};color:{{ rc.fg }};border:1px solid {{ rc.border }};border-radius:8px;padding:5px 10px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer">{{ rc.label }}</button>
+                              </sc-for>
+                            </div>
+                          </div>
                           <!-- Squads are chosen, not picked one at a time: a coach may have two, a
                                fitness coach may have all nine. Choosing none means every squad,
                                which is what an empty setting has always meant here. -->
@@ -4658,9 +4665,14 @@ if ('serviceWorker' in navigator) {
                                 <input value="{{ s.editUser }}" oninput="{{ s.onEditUser }}" placeholder="Username" autocapitalize="off" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
                                 <input value="{{ s.editPin }}" oninput="{{ s.onEditPin }}" placeholder="PIN" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:var(--font-mono);font-size:12.5px;color:#0C1116;outline:none">
                               </div>
-                              <select value="{{ s.editRole }}" onchange="{{ s.onEditRole }}" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
-                                <option>Owner</option><option>CEO</option><option>Aquatic Director</option><option>Technical Manager</option><option>Head Coach</option><option>Manager</option><option>Marketing Team</option><option>Admin</option><option>Coach</option><option>Assistant Coach</option><option>Fitness Coach</option>
-                              </select>
+                              <div style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 10px">
+                                <span style="display:block;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4;font-weight:700;margin-bottom:6px">Position — tap one or more</span>
+                                <div style="display:flex;flex-wrap:wrap;gap:5px">
+                                  <sc-for list="{{ s.editRoleChips }}" as="er" hint-placeholder-count="11">
+                                    <button onclick="{{ er.onToggle }}" style="background:{{ er.bg }};color:{{ er.fg }};border:1px solid {{ er.border }};border-radius:8px;padding:5px 10px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer">{{ er.label }}</button>
+                                  </sc-for>
+                                </div>
+                              </div>
                               <!-- The same chips as the Add form. Without this an existing coach
                                    could never be given a second squad, only replaced. -->
                               <div style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 10px">
@@ -4873,6 +4885,12 @@ if ('serviceWorker' in navigator) {
                         <p style="margin:0;font-size:12px;color:#3A4152;line-height:1.7">Vortex SC · 9 squads · {{ swimmerTotal }} swimmers · {{ meetTotal }} meets on record</p>
                         <p style="margin:7px 0 0;font-size:11px;color:#9AA2B4;line-height:1.5;font-family:var(--font-mono)">App build {{ appBuild }} on this device</p>
                         <p style="margin:2px 0 0;font-size:11px;color:{{ appBuildColor }};line-height:1.5">{{ appBuildNote }}</p>
+                        <!-- Always here, not only when a newer build has been detected. The check
+                             runs every few minutes and can be wrong or late, and the one time it
+                             matters most is when the app is misbehaving and nobody can tell which
+                             build a phone is on. -->
+                        <button onclick="{{ onForceUpdate }}" style="width:100%;margin-top:11px;background:#0A0F1A;color:#fff;border:none;border-radius:10px;padding:11px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px"><i data-lucide="refresh-cw" style="width:15px;height:15px"></i>{{ forceUpdateLabel }}</button>
+                        <p style="margin:7px 0 0;font-size:10.5px;color:#9AA2B4;line-height:1.45">Fetches the newest version and clears the copy saved on this device. Nothing on the record is affected — everything lives in the database.</p>
                       </div>
                       <div style="background:#FBE4E4;border:1px solid #F3B7B7;border-radius:16px;padding:15px">
                         <p style="margin:0 0 4px;font-size:13px;font-weight:700;color:#B42318">Reset local data</p>
@@ -5450,10 +5468,12 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-10k';
+const VX_BUILD='2026-08-10l';
 // Roles that carry the run of the club: Club Administration, adding and editing anywhere.
 // Coach, Assistant Coach and Fitness Coach are deliberately absent — a fitness coach works
 // across every squad without being able to rewrite the club.
+const VX_ROLES=['Owner','CEO','Aquatic Director','Technical Manager','Head Coach','Manager',
+  'Marketing Team','Admin','Coach','Assistant Coach','Fitness Coach'];
 const VX_FULL_ACCESS_ROLES=['Owner','CEO','Aquatic Director','Technical Manager','Head Coach','Manager','Admin'];
 const VX_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 class Component extends DCLogic {
@@ -6889,6 +6909,7 @@ class Component extends DCLogic {
     if(!name) return bad('Enter the coach\u2019s full name.');
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return bad('Enter the email address they will sign in with.');
     if(pass.length<8) return bad('The password must be at least 8 characters \u2014 Supabase refuses anything shorter.');
+    if(!String(f.role||'').trim()) return bad('Choose at least one position \u2014 it decides what they can do.');
     if((this.accounts||[]).some(a=>(a.email||'').trim().toLowerCase()===email))
       return bad('There is already an account on that email address. Set a new password for it below instead.');
 
@@ -6904,7 +6925,7 @@ class Component extends DCLogic {
     }catch(e){ this.setState({staffAddBusy:false}); return bad('Could not reach the server. Nothing has been saved.'); }
 
     const id='st_'+Date.now()+'_'+Math.random().toString(36).slice(2,5);
-    const o={label:name, user:user, pin:'', role:f.role||'Coach', squadId:(f.squadId||'').trim(), photo:'', phone:(f.phone||'').trim(), email:email, bio:''};
+    const o={label:name, user:user, pin:'', role:String(f.role||'Coach').trim(), squadId:(f.squadId||'').trim(), photo:'', phone:(f.phone||'').trim(), email:email, bio:''};
     this.customStaff.push({id:id, name:name, user:user, pin:'', role:o.role, squadId:o.squadId, phone:o.phone, email:email, bio:''});
     this.accountOvr[id]=o; this._rebuildAccounts();
     this.setState({staffAddForm:{name:'',user:'',pass:'',email:'',pin:'',role:'Coach',phone:'',squadId:''}, staffAddBusy:false,
@@ -6946,10 +6967,20 @@ class Component extends DCLogic {
   // which the club already sets and already means this, rather than a second flag to keep in
   // step with it. A Fitness Coach given every squad therefore sees every squad and still cannot
   // rewrite the club, which is exactly the distinction that was missing.
+  // Somebody can hold two positions — an assistant coach who also runs the fitness work is one
+  // person with one login, not two accounts. Held in the same role column, comma-separated, so
+  // nothing in the database changes and every existing single role keeps working.
+  _rolesOf(acct){
+    const a=acct||this._me();
+    return String((a&&a.role)||'').split(',').map(x=>x.trim()).filter(Boolean);
+  }
+  _roleLabel(acct){ const r=this._rolesOf(acct); return r.length ? r.join(' \u00b7 ') : ''; }
   _isFullAccess(acct){
     const a=acct||this._me(); if(!a) return false;
     if(a.id==='ahmed' || a.id==='sameh') return true;
-    return VX_FULL_ACCESS_ROLES.indexOf(String(a.role||'').trim()) >= 0;
+    // Any one of them is enough. A head coach who also helps with fitness does not lose the
+    // run of the club by taking on the second job.
+    return this._rolesOf(a).some(r=>VX_FULL_ACCESS_ROLES.indexOf(r)>=0);
   }
   _rebuildAccounts(){
     // Rebuild this.accounts from the base staff + synced custom staff + per-account overrides.
@@ -12162,7 +12193,7 @@ class Component extends DCLogic {
       const onSetPw=()=>this.staffSetPassword(a, pwDraft);
       const isCustom=(''+a.id).indexOf('st_')===0; const isAdminAcc=(a.id==='ahmed'||a.id==='sameh');
       const badge = sq? sq.short : (a.initials||'?'); const accent = sq? sq.accent : (a.accent||'#2733D6');
-      const primary = a.role || (sq? sq.name : ''); const contactBits=[a.phone, a.email, _accessLine].filter(Boolean).join(' · ');
+      const primary = this._roleLabel(a) || (sq? sq.name : ''); const contactBits=[a.phone, a.email, _accessLine].filter(Boolean).join(' · ');
       const sub = primary + (sq?(' · '+sq.name):'') + ' · @' + (a.user||'') + (contactBits?(' · '+contactBits):'');
       const d=S.staffAccDraft||{}; const draftPhoto = editing? (d.photo ?? a.photo ?? '') : (a.photo||'');
       return { id:a.id, name:a.label||'', sub:sub, isCustom, isAdminAcc, editing, pwDraft, onPwDraft, onSetPw,
@@ -12184,14 +12215,22 @@ class Component extends DCLogic {
         onEditUser:(e)=>this.staffAccChange('user', e.target.value),
         onEditPin:(e)=>this.staffAccChange('pin', e.target.value),
         onEditRole:(e)=>this.staffAccChange('role', e.target.value),
+        editRoleChips: (()=>{
+          const picked=String(((S.staffAccDraft||{}).role)||'').split(',').map(x=>x.trim()).filter(Boolean);
+          const set=(rs)=>this.staffAccChange('role', rs.join(','));
+          return VX_ROLES.map(r=>{ const on=picked.indexOf(r)>=0; return {
+            label:r, bg:on?'var(--vx-blue)':'#fff', fg:on?'#fff':'#3A4152', border:on?'var(--vx-blue)':'#E5E9F0',
+            onToggle:()=>set(on ? picked.filter(x=>x!==r) : picked.concat([r])) }; });
+        })(),
         onEditSquad:(e)=>this.staffAccChange('squadId', e.target.value),
         ...(()=>{
           const d=S.staffAccDraft||{};
           const picked=String(d.squadId||'').split(',').map(x=>x.trim()).filter(Boolean);
           const set=(ids)=>this.staffAccChange('squadId', ids.join(','));
           const all=picked.length===0;
-          const role=String(d.role||a.role||'Coach').trim();
-          const full=(a.id==='ahmed'||a.id==='sameh')||VX_FULL_ACCESS_ROLES.indexOf(role)>=0;
+          const roles=String(d.role!=null?d.role:(a.role||'')).split(',').map(x=>x.trim()).filter(Boolean);
+          const role=roles.length?roles.join(' \u00b7 '):'no position yet';
+          const full=(a.id==='ahmed'||a.id==='sameh')||roles.some(r=>VX_FULL_ACCESS_ROLES.indexOf(r)>=0);
           return {
             editAllBg: all?'var(--vx-blue)':'#fff', editAllFg: all?'#fff':'#3A4152',
             editAllBorder: all?'var(--vx-blue)':'#E5E9F0',
@@ -13252,6 +13291,8 @@ class Component extends DCLogic {
       appBuildNote: S.updateReady ? ('A newer build is live ('+(S.updateLatest||'')+') — use the Update bar at the bottom.') : 'This is the current build.',
       appBuildColor: S.updateReady ? '#B4690E' : '#0C7A4F',
       onUpdateNow: ()=>this._applyUpdate(),
+      forceUpdateLabel: S.updateReady ? ('Update to '+(S.updateLatest||'the newest version')) : 'Get the latest version',
+      onForceUpdate: ()=>{ this.setState({settingsMsg:'Fetching the newest version\u2026'}); this._applyUpdate(); },
       saveFailShow: (S.saveFailCount>0 || S.authDead) && !S.saveFailHidden,
       saveFailTitle: S.authDead
         ? (S.saveFailCount>0
@@ -13503,14 +13544,22 @@ class Component extends DCLogic {
       staffAddMsg: S.staffAddMsg||'', staffAddMsgShow: !!S.staffAddMsg,
       staffAddMsgColor: S.staffAddOk ? '#0C7A4F' : '#B42318',
       onStaffRole:(e)=>this.setState({staffAddForm:{...(this.state.staffAddForm||{}), role:e.target.value}}),
+      staffRoleChips: (()=>{
+        const picked=String((S.staffAddForm&&S.staffAddForm.role)||'').split(',').map(x=>x.trim()).filter(Boolean);
+        const set=(rs)=>this.setState({staffAddForm:{...(this.state.staffAddForm||{}), role:rs.join(',')}});
+        return VX_ROLES.map(r=>{ const on=picked.indexOf(r)>=0; return {
+          label:r, bg:on?'var(--vx-blue)':'#fff', fg:on?'#fff':'#3A4152', border:on?'var(--vx-blue)':'#E5E9F0',
+          onToggle:()=>set(on ? picked.filter(x=>x!==r) : picked.concat([r])) }; });
+      })(),
       onStaffPhone:(e)=>this.setState({staffAddForm:{...(this.state.staffAddForm||{}), phone:e.target.value}}),
       onStaffSquad:(e)=>this.setState({staffAddForm:{...(this.state.staffAddForm||{}), squadId:e.target.value}}),
       ...(()=>{
         const picked=String((S.staffAddForm&&S.staffAddForm.squadId)||'').split(',').map(x=>x.trim()).filter(Boolean);
         const setSquads=(ids)=>this.setState({staffAddForm:{...(this.state.staffAddForm||{}), squadId:ids.join(',')}});
         const all=picked.length===0;
-        const role=String((S.staffAddForm&&S.staffAddForm.role)||'Coach').trim();
-        const full=VX_FULL_ACCESS_ROLES.indexOf(role)>=0;
+        const roles=String((S.staffAddForm&&S.staffAddForm.role)||'').split(',').map(x=>x.trim()).filter(Boolean);
+        const role=roles.length?roles.join(' \u00b7 '):'no position yet';
+        const full=roles.some(r=>VX_FULL_ACCESS_ROLES.indexOf(r)>=0);
         return {
           staffSquadAllBg: all?'var(--vx-blue)':'#fff', staffSquadAllFg: all?'#fff':'#3A4152',
           staffSquadAllBorder: all?'var(--vx-blue)':'#E5E9F0',
@@ -13531,7 +13580,7 @@ class Component extends DCLogic {
       onStaffCreate:()=>this.staffAddCreate(),
       customStaffRows: this.customStaff.map((a)=>{ const ids=this._squadIdsOf(a);
         const scope = ids.length ? ids.map(id=>(this.squadById[id]||{}).name||id).join(' + ')+' only' : 'all squads';
-        return {id:a.id, name:a.name, sub:(a.role||'')+' · '+scope+(this._isFullAccess(a)?' · full access':'')+(a.phone?(' · '+a.phone):'')+(a.email?(' · '+a.email):''), initials:(a.name||'?').slice(0,2).toUpperCase(), onDelete:()=>this.staffAddDelete(a.id)}; }),
+        return {id:a.id, name:a.name, sub:(this._roleLabel(a)||'')+' · '+scope+(this._isFullAccess(a)?' · full access':'')+(a.phone?(' · '+a.phone):'')+(a.email?(' · '+a.email):''), initials:(a.name||'?').slice(0,2).toUpperCase(), onDelete:()=>this.staffAddDelete(a.id)}; }),
       isAdminUser: this._isFullAccess(this.accounts.find(a=>a.id===S.pickedId)),
       meetsForm: S.meetsCalForm||{name:'',date:'',place:''},
       onMeetsName:(e)=>this.setState({meetsCalForm:{...(this.state.meetsCalForm||{}), name:e.target.value}}),

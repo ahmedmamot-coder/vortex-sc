@@ -2164,7 +2164,9 @@ describe("InBody sheet", () => {
       c._squadIdsOf = bind("_squadIdsOf", c);
       c._mySquadIds = bind("_mySquadIds", c);
       c._canSeeSquad = bind("_canSeeSquad", c);
-      c._isFullAccess = bind("_isFullAccess", c, ["_me"]);
+      c._rolesOf = bind("_rolesOf", c, ["_me"]);
+      c._roleLabel = bind("_roleLabel", c, ["_rolesOf"]);
+      c._isFullAccess = bind("_isFullAccess", c, ["_me", "_rolesOf"]);
       return c;
     };
 
@@ -2212,6 +2214,44 @@ describe("InBody sheet", () => {
       eq(c._isFullAccess({ id: "ahmed", role: "Coach" }), true);
       eq(c._isFullAccess({ id: "sameh", role: "Coach" }), true);
     });
+    // One person, two jobs: an assistant coach who also runs the fitness work is one login,
+    // not two accounts.
+    it("somebody can hold two positions", () => {
+      const c = ctx();
+      const a = { role: "Assistant Coach,Fitness Coach" };
+      eq(c._rolesOf(a).length, 2);
+      eq(c._roleLabel(a), "Assistant Coach · Fitness Coach");
+      eq(c._isFullAccess(a), false, "neither job carries the run of the club");
+    });
+    it("one full-access position is enough, whatever the other one is", () => {
+      const c = ctx();
+      eq(c._isFullAccess({ role: "Head Coach,Fitness Coach" }), true,
+         "taking on the fitness work must not cost a head coach the run of the club");
+      eq(c._isFullAccess({ role: "Fitness Coach,Coach" }), false);
+    });
+    it("a single position still works exactly as it did", () => {
+      const c = ctx();
+      eq(c._roleLabel({ role: "Coach" }), "Coach");
+      eq(c._isFullAccess({ role: "Manager" }), true);
+    });
+    it("spacing around the comma does not change who can do what", () => {
+      const c = ctx();
+      eq(c._isFullAccess({ role: " Head Coach , Fitness Coach " }), true);
+      eq(c._rolesOf({ role: "Coach, ,Fitness Coach" }).length, 2, "an empty entry is not a position");
+    });
+    it("no position at all is not full access", () =>
+      eq(ctx()._isFullAccess({ role: "" }), false));
+    it("the position catalogue is shared by both forms", () => {
+      eq(/const VX_ROLES=\[/.test(SOURCE), true);
+      for (const r of ["Assistant Coach", "Fitness Coach", "Head Coach", "Owner"])
+        eq(new RegExp("'" + r + "'").test((SOURCE.match(/const VX_ROLES=\[[^\]]*\]/) || [""])[0]), true,
+           r + " is missing from the list both forms draw from");
+      eq(/<option>Owner<\/option>/.test(SOURCE), false, "the single-choice dropdown is gone");
+    });
+    it("creating a coach with no position at all is refused", () =>
+      eq(/Choose at least one position/.test(SOURCE), true,
+         "the position decides what they can do, so it cannot be left empty"));
+
     it("full access is no longer two hardcoded ids", () =>
       eq(/isAdminUser: \(\(\)=>\{ const acc=.*acc\.id==='ahmed'/.test(SOURCE), false,
          "every other manager was locked out of Club Administration by that"));
@@ -2298,6 +2338,26 @@ describe("InBody sheet", () => {
          "if clearing hangs, reloading anyway is better than a dead button"));
     it("it says nothing at all while the app is working", () =>
       eq(/var shown = false;/.test(boot), true, "and never twice"));
+  });
+
+  // The update bar only appears once a background check has noticed a newer build. That check
+  // runs every few minutes and can be late — and the moment it matters most is when the app is
+  // misbehaving and nobody can tell which build a phone is on.
+  describe("getting the latest version without waiting to be told", () => {
+    it("there is a button that is always there", () => {
+      eq(/onclick="\{\{ onForceUpdate \}\}"/.test(SOURCE), true);
+      eq(/onForceUpdate: \(\)=>\{[\s\S]{0,200}?this\._applyUpdate\(\)/.test(SOURCE), true,
+         "it has to clear the saved copy, not just reload");
+    });
+    it("it is inside About this club, next to the build number", () => {
+      const about = SOURCE.slice(SOURCE.indexOf("About this club"), SOURCE.indexOf("Reset local data"));
+      eq(/\{\{ onForceUpdate \}\}/.test(about), true, "that is where somebody looks when checking a build");
+      eq(/\{\{ appBuild \}\}/.test(about), true);
+    });
+    it("it names the newer build when one is known", () =>
+      eq(/forceUpdateLabel: S\.updateReady \? \('Update to '/.test(SOURCE), true));
+    it("it promises nothing about losing data, because it loses none", () =>
+      eq(/Nothing on the record is affected/.test(SOURCE), true));
   });
 
   describe("the activity log", () => {
