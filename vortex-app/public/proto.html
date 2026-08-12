@@ -4551,9 +4551,19 @@ if ('serviceWorker' in navigator) {
                           <select value="{{ staffForm.role }}" onchange="{{ onStaffRole }}" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
                             <option>Owner</option><option>CEO</option><option>Aquatic Director</option><option>Technical Manager</option><option>Head Coach</option><option>Manager</option><option>Marketing Team</option><option>Admin</option><option>Coach</option><option>Assistant Coach</option><option>Fitness Coach</option>
                           </select>
-                          <select value="{{ staffForm.squadId }}" onchange="{{ onStaffSquad }}" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
-                            <option value="">Full access — all squads (managers/directors)</option><option value="preteam">Locked to Pre-Team</option><option value="advb">Locked to Advanced B</option><option value="adva">Locked to Advanced A</option><option value="junior">Locked to Junior</option><option value="seniorb">Locked to Senior B</option><option value="seniora">Locked to Senior A</option><option value="vortexb">Locked to Vortex B</option><option value="vortexa">Locked to Vortex A</option><option value="legend">Locked to Legend</option>
-                          </select>
+                          <!-- Squads are chosen, not picked one at a time: a coach may have two, a
+                               fitness coach may have all nine. Choosing none means every squad,
+                               which is what an empty setting has always meant here. -->
+                          <div style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 10px">
+                            <span style="display:block;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4;font-weight:700;margin-bottom:6px">Squads they can see</span>
+                            <div style="display:flex;flex-wrap:wrap;gap:5px">
+                              <button onclick="{{ onStaffSquadAll }}" style="background:{{ staffSquadAllBg }};color:{{ staffSquadAllFg }};border:1px solid {{ staffSquadAllBorder }};border-radius:8px;padding:5px 10px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer">All squads</button>
+                              <sc-for list="{{ staffSquadChips }}" as="sc" hint-placeholder-count="9">
+                                <button onclick="{{ sc.onToggle }}" style="background:{{ sc.bg }};color:{{ sc.fg }};border:1px solid {{ sc.border }};border-radius:8px;padding:5px 10px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer">{{ sc.label }}</button>
+                              </sc-for>
+                            </div>
+                            <span style="display:block;font-size:10.5px;color:#7A8296;line-height:1.45;margin-top:7px">{{ staffAccessNote }}</span>
+                          </div>
                           <input value="{{ staffForm.phone }}" oninput="{{ onStaffPhone }}" placeholder="Phone / WhatsApp (optional)" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
                           <button onclick="{{ onStaffCreate }}" style="background:var(--vx-blue);color:#fff;border:none;border-radius:10px;padding:10px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer">{{ staffCreateLabel }}</button>
                           <sc-if value="{{ staffAddMsgShow }}" hint-placeholder-val="{{ false }}">
@@ -4594,9 +4604,18 @@ if ('serviceWorker' in navigator) {
                               <select value="{{ s.editRole }}" onchange="{{ s.onEditRole }}" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
                                 <option>Owner</option><option>CEO</option><option>Aquatic Director</option><option>Technical Manager</option><option>Head Coach</option><option>Manager</option><option>Marketing Team</option><option>Admin</option><option>Coach</option><option>Assistant Coach</option><option>Fitness Coach</option>
                               </select>
-                              <select value="{{ s.editSquad }}" onchange="{{ s.onEditSquad }}" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
-                                <option value="">Full access — all squads</option><option value="preteam">Locked to Pre-Team</option><option value="advb">Locked to Advanced B</option><option value="adva">Locked to Advanced A</option><option value="junior">Locked to Junior</option><option value="seniorb">Locked to Senior B</option><option value="seniora">Locked to Senior A</option><option value="vortexb">Locked to Vortex B</option><option value="vortexa">Locked to Vortex A</option><option value="legend">Locked to Legend</option>
-                              </select>
+                              <!-- The same chips as the Add form. Without this an existing coach
+                                   could never be given a second squad, only replaced. -->
+                              <div style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 10px">
+                                <span style="display:block;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4;font-weight:700;margin-bottom:6px">Squads they can see</span>
+                                <div style="display:flex;flex-wrap:wrap;gap:5px">
+                                  <button onclick="{{ s.onEditSquadAll }}" style="background:{{ s.editAllBg }};color:{{ s.editAllFg }};border:1px solid {{ s.editAllBorder }};border-radius:8px;padding:5px 10px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer">All squads</button>
+                                  <sc-for list="{{ s.editSquadChips }}" as="es" hint-placeholder-count="9">
+                                    <button onclick="{{ es.onToggle }}" style="background:{{ es.bg }};color:{{ es.fg }};border:1px solid {{ es.border }};border-radius:8px;padding:5px 10px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer">{{ es.label }}</button>
+                                  </sc-for>
+                                </div>
+                                <span style="display:block;font-size:10.5px;color:#7A8296;line-height:1.45;margin-top:7px">{{ s.editAccessNote }}</span>
+                              </div>
                               <div style="display:flex;gap:7px">
                                 <input value="{{ s.editPhone }}" oninput="{{ s.onEditPhone }}" placeholder="Phone / WhatsApp" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
                                 <input value="{{ s.editEmail }}" oninput="{{ s.onEditEmail }}" placeholder="Email" autocapitalize="off" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
@@ -5375,6 +5394,10 @@ if ('serviceWorker' in navigator) {
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
 const VX_BUILD='2026-08-10i';
+// Roles that carry the run of the club: Club Administration, adding and editing anywhere.
+// Coach, Assistant Coach and Fitness Coach are deliberately absent — a fitness coach works
+// across every squad without being able to rewrite the club.
+const VX_FULL_ACCESS_ROLES=['Owner','CEO','Aquatic Director','Technical Manager','Head Coach','Manager','Admin'];
 const VX_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 class Component extends DCLogic {
   constructor(props){
@@ -6829,7 +6852,9 @@ class Component extends DCLogic {
     this.accountOvr[id]=o; this._rebuildAccounts();
     this.setState({staffAddForm:{name:'',user:'',pass:'',email:'',pin:'',role:'Coach',phone:'',squadId:''}, staffAddBusy:false,
       staffAddMsg:name+' can sign in now with '+email+' \u2713 Give them that password \u2014 it is not shown again.', staffAddOk:true});
-    try{ this.audit('staff.add', name+' \u00b7 '+(o.role||'Coach'), {account:id, role:o.role||'Coach', squad:o.squadId||'', access:(o.squadId?'one squad':'all squads')}); }catch(e){}
+    try{ const _n=this._squadIdsOf(o).length;
+      this.audit('staff.add', name+' \u00b7 '+(o.role||'Coach'), {account:id, role:o.role||'Coach', squads:(o.squadId||'all'),
+        access:(_n?(_n+' squad'+(_n===1?'':'s')):'all squads')+(this._isFullAccess(o)?' + full access':'')}); }catch(e){}
     // The row carries the email, which is what puts them on the staff list the database checks
     // (vx_staff_emails, kept in step by a trigger). Without it they would sign in and be treated
     // as a parent: no squads, no plans, no register.
@@ -6839,6 +6864,35 @@ class Component extends DCLogic {
     try{ this.audit('staff.delete', (gone&&gone.label)||id, {account:id}); }catch(e){}
     this.customStaff=this.customStaff.filter(function(a){return a.id!==id;}); if(this.accountOvr[id]){ delete this.accountOvr[id]; } this._rebuildAccounts(); this.setState({staffEditId:null});
     if(window.__vxDelete){ window.__vxDelete('staff_accounts', 'id=eq.'+encodeURIComponent(id)).then(ok=>{ if(ok) this._staffFetch(); }); }
+  }
+  // Squad access and full access are two different questions, and one dropdown was answering
+  // both: "no squad" meant every squad AND the run of the club, so a fitness coach who needs to
+  // see all nine squads could only be given it by making them a manager. And a coach could be
+  // locked to exactly one squad or none, with no way to say "these two".
+  //
+  // Which squads: a list, held in the same squad_id column as a comma-separated string, so
+  // nothing in the database has to change and every existing single value keeps working.
+  // An empty list means every squad — that is what it has always meant.
+  _squadIdsOf(acct){
+    const raw=(acct && acct.squadId!=null) ? String(acct.squadId) : '';
+    const ids=raw.split(',').map(x=>x.trim()).filter(Boolean).filter(id=>!!this.squadById[id]);
+    return ids;
+  }
+  // Which squads this account may see. null means all of them, and is not the same as none.
+  _mySquadIds(acct){
+    const a=acct||this._me();
+    const ids=this._squadIdsOf(a);
+    return ids.length ? ids : null;
+  }
+  _canSeeSquad(sqId, acct){ const ids=this._mySquadIds(acct); return !ids || ids.indexOf(sqId)>=0; }
+  // Full access — Club Administration, adding and editing across the club. It follows the ROLE,
+  // which the club already sets and already means this, rather than a second flag to keep in
+  // step with it. A Fitness Coach given every squad therefore sees every squad and still cannot
+  // rewrite the club, which is exactly the distinction that was missing.
+  _isFullAccess(acct){
+    const a=acct||this._me(); if(!a) return false;
+    if(a.id==='ahmed' || a.id==='sameh') return true;
+    return VX_FULL_ACCESS_ROLES.indexOf(String(a.role||'').trim()) >= 0;
   }
   _rebuildAccounts(){
     // Rebuild this.accounts from the base staff + synced custom staff + per-account overrides.
@@ -10728,8 +10782,7 @@ class Component extends DCLogic {
     // ---- squads ----
     const badgeOf=(sq)=>{ const w=sq.coach.replace('Coach ','').trim(); return w.slice(0,2).toUpperCase(); };
     const _acct = this.accounts.find(a=>a.id===S.pickedId);
-    const _lockSquad = (_acct && _acct.squadId) ? _acct.squadId : null;
-    const _visibleSquads = _lockSquad ? this.squads.filter(sq=>sq.id===_lockSquad) : this.squads;
+    const _visibleSquads = this.squads.filter(sq=>this._canSeeSquad(sq.id, _acct));
     const squadCards = _visibleSquads.map(sq=>({
       name:sq.name, ages:sq.ages, coach:sq.coach, count:sq.count, accent:sq.accent, glow:sq.glow,
       avatar:this.av(sq.photo||null, badgeOf(sq), 38, 11, sq.accent, '#fff', 12),
@@ -12039,13 +12092,20 @@ class Component extends DCLogic {
     // Unified staff list — admins (Ahmed, Sameh), the 9 squad coaches and any added staff.
     // Everyone here is editable: name, username & PIN (added staff also role, squad + delete).
     const staffPw=S.staffPwDrafts||{};
-    const staffAllRows=this.accounts.map(a=>{ const editing=S.staffEditId===a.id; const sq=a.squadId?this.squadById[a.squadId]:null;
+    const staffAllRows=this.accounts.map(a=>{ const editing=S.staffEditId===a.id;
+      // The badge and colour still come from a single squad, because a badge can only show one.
+      // What they may SEE is the list, and it is spelled out under the name.
+      const _ids=this._squadIdsOf(a); const sq=_ids.length===1?this.squadById[_ids[0]]:null;
+      const _accessLine = (_ids.length
+          ? (_ids.map(id=>(this.squadById[id]||{}).name||id).join(' · '))
+          : 'All squads')
+        + (this._isFullAccess(a) ? ' · full access' : '');
       const pwDraft=staffPw[a.id]||'';
       const onPwDraft=(e)=>this.setState({staffPwDrafts:{...(this.state.staffPwDrafts||{}), [a.id]:e.target.value}});
       const onSetPw=()=>this.staffSetPassword(a, pwDraft);
       const isCustom=(''+a.id).indexOf('st_')===0; const isAdminAcc=(a.id==='ahmed'||a.id==='sameh');
       const badge = sq? sq.short : (a.initials||'?'); const accent = sq? sq.accent : (a.accent||'#2733D6');
-      const primary = a.role || (sq? sq.name : ''); const contactBits=[a.phone, a.email].filter(Boolean).join(' · ');
+      const primary = a.role || (sq? sq.name : ''); const contactBits=[a.phone, a.email, _accessLine].filter(Boolean).join(' · ');
       const sub = primary + (sq?(' · '+sq.name):'') + ' · @' + (a.user||'') + (contactBits?(' · '+contactBits):'');
       const d=S.staffAccDraft||{}; const draftPhoto = editing? (d.photo ?? a.photo ?? '') : (a.photo||'');
       return { id:a.id, name:a.label||'', sub:sub, isCustom, isAdminAcc, editing, pwDraft, onPwDraft, onSetPw,
@@ -12068,6 +12128,26 @@ class Component extends DCLogic {
         onEditPin:(e)=>this.staffAccChange('pin', e.target.value),
         onEditRole:(e)=>this.staffAccChange('role', e.target.value),
         onEditSquad:(e)=>this.staffAccChange('squadId', e.target.value),
+        ...(()=>{
+          const d=S.staffAccDraft||{};
+          const picked=String(d.squadId||'').split(',').map(x=>x.trim()).filter(Boolean);
+          const set=(ids)=>this.staffAccChange('squadId', ids.join(','));
+          const all=picked.length===0;
+          const role=String(d.role||a.role||'Coach').trim();
+          const full=(a.id==='ahmed'||a.id==='sameh')||VX_FULL_ACCESS_ROLES.indexOf(role)>=0;
+          return {
+            editAllBg: all?'var(--vx-blue)':'#fff', editAllFg: all?'#fff':'#3A4152',
+            editAllBorder: all?'var(--vx-blue)':'#E5E9F0',
+            onEditSquadAll:()=>set([]),
+            editSquadChips: this.squads.map(sq=>{ const on=picked.indexOf(sq.id)>=0; return {
+              label:sq.name, bg:on?'var(--vx-blue)':'#fff', fg:on?'#fff':'#3A4152', border:on?'var(--vx-blue)':'#E5E9F0',
+              onToggle:()=>set(on ? picked.filter(x=>x!==sq.id) : picked.concat([sq.id])) }; }),
+            editAccessNote: (all ? 'Every squad, including any added later.'
+                : (picked.length===1 ? 'One squad only.' : picked.length+' squads only.'))
+              + (full ? ' As ' + role + ' they also get full access: Club Administration, and adding or editing anywhere.'
+                      : ' As ' + role + ' they can coach and record, but not open Club Administration or edit the club.')
+          };
+        })(),
         onEditPhone:(e)=>this.staffAccChange('phone', e.target.value),
         onEditEmail:(e)=>this.staffAccChange('email', e.target.value),
         onEditBio:(e)=>this.staffAccChange('bio', e.target.value),
@@ -12287,9 +12367,13 @@ class Component extends DCLogic {
       showHub:S.view==='hub', showAdmin:S.view==='admin', showMove:S.view==='move', showToolsHome:S.view==='tools', showHandbook:S.view==='handbook',
       clubSwimmerCount: this.allSwimmersFlat().length,
       showSquad:S.view==='squad', showProfile:S.view==='profile', showNav:S.view==='squad', showFamily:S.view==='family',
-      ...(()=>{ const acc=this.accounts.find(a=>a.id===S.pickedId)||{}; const isAdm=!!(acc.id==='ahmed'||acc.id==='sameh'); const lockSq=acc.squadId?this.squadById[acc.squadId]:null;
+      ...(()=>{ const acc=this.accounts.find(a=>a.id===S.pickedId)||{}; const isAdm=this._isFullAccess(acc);
+        const _myIds=this._mySquadIds(acc);
+        const lockSq=(_myIds && _myIds.length===1) ? this.squadById[_myIds[0]] : null;
         // ---- coach "Today" dashboard (attendance · red recovery · next meet · unread) ----
-        const scopeIds = isAdm ? this.squads.map(s=>s.id) : (acc.squadId?[acc.squadId]:this.squads.map(s=>s.id));
+        // Full access is about what may be CHANGED, not about how many squads are watched:
+        // a fitness coach with every squad should see every squad's numbers here.
+        const scopeIds = _myIds ? _myIds.slice() : this.squads.map(s=>s.id);
         const today=this.todayISO();
         let present=0, total=0; scopeIds.forEach(sid=>{ (this.roster[sid]||[]).forEach((sw,idx)=>{ total++; if(this.getAttendStatus(sid, today, sw.id, idx)==='present') present++; }); });
         const dashAttendPct = total? Math.round(present/total*100) : 0;
@@ -13359,9 +13443,34 @@ class Component extends DCLogic {
       onStaffRole:(e)=>this.setState({staffAddForm:{...(this.state.staffAddForm||{}), role:e.target.value}}),
       onStaffPhone:(e)=>this.setState({staffAddForm:{...(this.state.staffAddForm||{}), phone:e.target.value}}),
       onStaffSquad:(e)=>this.setState({staffAddForm:{...(this.state.staffAddForm||{}), squadId:e.target.value}}),
+      ...(()=>{
+        const picked=String((S.staffAddForm&&S.staffAddForm.squadId)||'').split(',').map(x=>x.trim()).filter(Boolean);
+        const setSquads=(ids)=>this.setState({staffAddForm:{...(this.state.staffAddForm||{}), squadId:ids.join(',')}});
+        const all=picked.length===0;
+        const role=String((S.staffAddForm&&S.staffAddForm.role)||'Coach').trim();
+        const full=VX_FULL_ACCESS_ROLES.indexOf(role)>=0;
+        return {
+          staffSquadAllBg: all?'var(--vx-blue)':'#fff', staffSquadAllFg: all?'#fff':'#3A4152',
+          staffSquadAllBorder: all?'var(--vx-blue)':'#E5E9F0',
+          onStaffSquadAll:()=>setSquads([]),
+          staffSquadChips: this.squads.map(sq=>{ const on=picked.indexOf(sq.id)>=0; return {
+            label:sq.name, bg:on?'var(--vx-blue)':'#fff', fg:on?'#fff':'#3A4152', border:on?'var(--vx-blue)':'#E5E9F0',
+            onToggle:()=>setSquads(on ? picked.filter(x=>x!==sq.id) : picked.concat([sq.id])) }; }),
+          // Says what the two choices together actually grant, because "all squads" and "full
+          // access" were one setting until now and everyone reads them as the same thing.
+          staffAccessNote: (all
+              ? 'Every squad, including any added later.'
+              : (picked.length===1 ? 'One squad only.' : picked.length+' squads only.'))
+            + (full
+              ? ' As ' + role + ' they also get full access: Club Administration, and adding or editing anywhere.'
+              : ' As ' + role + ' they can coach and record, but not open Club Administration or edit the club.')
+        };
+      })(),
       onStaffCreate:()=>this.staffAddCreate(),
-      customStaffRows: this.customStaff.map((a)=>({id:a.id, name:a.name, sub:(a.role||'')+(a.squadId&&this.squadById[a.squadId]?(' · '+this.squadById[a.squadId].name+' only'):'')+(a.phone?(' · '+a.phone):'')+(a.user?(' · @'+a.user):''), initials:(a.name||'?').slice(0,2).toUpperCase(), onDelete:()=>this.staffAddDelete(a.id)})),
-      isAdminUser: (()=>{ const acc=this.accounts.find(a=>a.id===S.pickedId); return !!(acc && (acc.id==='ahmed'||acc.id==='sameh')); })(),
+      customStaffRows: this.customStaff.map((a)=>{ const ids=this._squadIdsOf(a);
+        const scope = ids.length ? ids.map(id=>(this.squadById[id]||{}).name||id).join(' + ')+' only' : 'all squads';
+        return {id:a.id, name:a.name, sub:(a.role||'')+' · '+scope+(this._isFullAccess(a)?' · full access':'')+(a.phone?(' · '+a.phone):'')+(a.email?(' · '+a.email):''), initials:(a.name||'?').slice(0,2).toUpperCase(), onDelete:()=>this.staffAddDelete(a.id)}; }),
+      isAdminUser: this._isFullAccess(this.accounts.find(a=>a.id===S.pickedId)),
       meetsForm: S.meetsCalForm||{name:'',date:'',place:''},
       onMeetsName:(e)=>this.setState({meetsCalForm:{...(this.state.meetsCalForm||{}), name:e.target.value}}),
       onMeetsDate:(e)=>this.setState({meetsCalForm:{...(this.state.meetsCalForm||{}), date:e.target.value}}),
@@ -13431,8 +13540,7 @@ class Component extends DCLogic {
         const filt=S.attDayStatus||'all';
         const today=this.todayISO();
         // Which squads this account may see (a coach stays locked to their own squad).
-        const mySq=(this._me()||{}).squadId;
-        const squads=this.squads.filter(sq=> !mySq || sq.id===mySq);
+        const squads=this.squads.filter(sq=>this._canSeeSquad(sq.id));
         let tP=0,tA=0,tL=0;
         const sqRows=squads.map(sq=>{
           const list=(this.roster[sq.id]||[]);

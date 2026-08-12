@@ -2143,9 +2143,92 @@ describe("InBody sheet", () => {
       eq(/if\(!name\|\|!user\|\|!pin\)/.test(fn), false, "nothing reads the PIN at sign-in");
       eq(/pin:''/.test(fn), true, "and none is stored");
     });
-    it("the new coach's access level is recorded", () =>
-      eq(/access:\(o\.squadId\?'one squad':'all squads'\)/.test(fn), true,
-         "who was given the run of the club is exactly what the log is for"));
+    it("the new coach's access level is recorded", () => {
+      eq(/access:\(_n\?\(_n\+' squad'/.test(fn), true, "how many squads they were given");
+      eq(/this\._isFullAccess\(o\)\?' \+ full access':''/.test(fn), true,
+         "who was given the run of the club is exactly what the log is for");
+    });
+  });
+
+  // One dropdown was answering two questions: "no squad" meant every squad AND the run of the
+  // club. So a fitness coach who needs all nine squads could only be given them by making them
+  // a manager, and a coach could have one squad or none — never two.
+  describe("squad access and full access are different questions", () => {
+    const squads = [{ id: "junior" }, { id: "seniora" }, { id: "vortexa" }];
+    // The real list, read out of the page rather than repeated here — a copy would keep passing
+    // after somebody gave Fitness Coach the run of the club.
+    globalThis.VX_FULL_ACCESS_ROLES = JSON.parse(
+      (SOURCE.match(/const VX_FULL_ACCESS_ROLES=(\[[^\]]*\])/) || [])[1].replace(/'/g, '"'));
+    const ctx = () => {
+      const c = { squads, squadById: Object.fromEntries(squads.map((s) => [s.id, s])), _me: () => null };
+      c._squadIdsOf = bind("_squadIdsOf", c);
+      c._mySquadIds = bind("_mySquadIds", c);
+      c._canSeeSquad = bind("_canSeeSquad", c);
+      c._isFullAccess = bind("_isFullAccess", c, ["_me"]);
+      return c;
+    };
+
+    it("two squads is now something that can be said", () => {
+      const c = ctx();
+      const a = { squadId: "junior,seniora" };
+      eq(c._mySquadIds(a).length, 2);
+      eq(c._canSeeSquad("junior", a), true);
+      eq(c._canSeeSquad("seniora", a), true);
+      eq(c._canSeeSquad("vortexa", a), false, "a third squad was not granted");
+    });
+    it("one squad still works exactly as it did", () => {
+      const c = ctx();
+      eq(c._canSeeSquad("junior", { squadId: "junior" }), true);
+      eq(c._canSeeSquad("seniora", { squadId: "junior" }), false);
+    });
+    it("none means every squad, as it always has", () => {
+      const c = ctx();
+      eq(c._mySquadIds({ squadId: "" }), null);
+      for (const s of squads) eq(c._canSeeSquad(s.id, { squadId: "" }), true);
+    });
+    it("a squad that no longer exists is ignored, not treated as a lock", () => {
+      const c = ctx();
+      eq(c._mySquadIds({ squadId: "deleted_squad" }), null,
+         "a stale id must not leave a coach seeing nothing at all");
+      eq(c._mySquadIds({ squadId: "junior,deleted_squad" }).length, 1);
+    });
+    it("a fitness coach can have every squad without the run of the club", () => {
+      const c = ctx();
+      const fitness = { role: "Fitness Coach", squadId: "" };
+      eq(c._mySquadIds(fitness), null, "every squad");
+      eq(c._isFullAccess(fitness), false, "and still cannot open Club Administration");
+    });
+    it("a coach locked to one squad is still not an admin", () =>
+      eq(ctx()._isFullAccess({ role: "Coach", squadId: "junior" }), false));
+    it("the roles that do carry full access", () => {
+      const c = ctx();
+      for (const role of ["Owner", "CEO", "Aquatic Director", "Technical Manager", "Head Coach", "Manager", "Admin"])
+        eq(c._isFullAccess({ role }), true, role + " must be able to run the club");
+      for (const role of ["Coach", "Assistant Coach", "Fitness Coach"])
+        eq(c._isFullAccess({ role }), false, role + " must not be able to rewrite the club");
+    });
+    it("the two managers keep it whatever their role says", () => {
+      const c = ctx();
+      eq(c._isFullAccess({ id: "ahmed", role: "Coach" }), true);
+      eq(c._isFullAccess({ id: "sameh", role: "Coach" }), true);
+    });
+    it("full access is no longer two hardcoded ids", () =>
+      eq(/isAdminUser: \(\(\)=>\{ const acc=.*acc\.id==='ahmed'/.test(SOURCE), false,
+         "every other manager was locked out of Club Administration by that"));
+    it("the dashboard counts every squad a coach can see, not just one", () => {
+      const line = (SOURCE.match(/const scopeIds = [^\n]*/) || [""])[0];
+      eq(/_myIds \? _myIds\.slice\(\) : this\.squads\.map/.test(line), true,
+         "it read one squad or all, so two squads would have counted as none of them");
+    });
+    it("the form can express all of it", () => {
+      eq(/onStaffSquadAll/.test(SOURCE), true, "'all squads' has to be reachable in one tap");
+      eq(/staffSquadChips/.test(SOURCE), true, "and each squad individually, to make two");
+      eq(/<option value="">Full access — all squads/.test(SOURCE), false,
+         "that option is what conflated the two questions");
+    });
+    it("the form says what the choice actually grants", () =>
+      eq(/they can coach and record, but not open Club Administration/.test(SOURCE), true,
+         "'all squads' and 'full access' read as the same thing until one of them says otherwise"));
   });
 
   describe("the activity log", () => {
