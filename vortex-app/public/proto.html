@@ -102,7 +102,7 @@ if ('serviceWorker' in navigator) {
   var HEAD = { "apikey": SB_ANON, "Authorization": "Bearer " + SB_ANON, "Content-Type": "application/json" };
   // Every shared data type the club edits. No secret is kept per-device: the Anthropic key
   // lives on the server, and any copy an earlier build left on a phone is deleted on start-up.
-  var SYNC = ["vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_meet_events","vx_meet_cuts","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_sw_status","vx_memberships","vx_fee_plans","vx_billing","vx_race_splits","vx_bday_sent"];
+  var SYNC = ["vx_squads","vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_meet_events","vx_meet_cuts","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_sw_status","vx_memberships","vx_fee_plans","vx_billing","vx_race_splits","vx_bday_sent"];
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
   // Auth-retry queue: if a write is rejected because we weren't signed in yet (401/403 under the
@@ -4590,6 +4590,63 @@ if ('serviceWorker' in navigator) {
                   </sc-if>
 
                   <!-- STAFF ADMIN -->
+                  <sc-if value="{{ adminSquads }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;flex-direction:column;gap:8px">
+                      <button onclick="{{ onSquadAddToggle }}" style="display:flex;align-items:center;justify-content:center;gap:8px;background:var(--vx-blue);color:#fff;border:none;border-radius:12px;padding:11px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer"><i data-lucide="plus" style="width:16px;height:16px"></i>Add a squad</button>
+                      <sc-if value="{{ squadAddOpen }}" hint-placeholder-val="{{ false }}">
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:13px;display:flex;flex-direction:column;gap:8px">
+                          <input value="{{ squadFormName }}" oninput="{{ onSquadFormName }}" placeholder="Squad name" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                          <div style="display:flex;gap:7px">
+                            <input value="{{ squadFormAges }}" oninput="{{ onSquadFormAges }}" placeholder="Ages (e.g. 11–12)" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                            <input value="{{ squadFormShort }}" oninput="{{ onSquadFormShort }}" placeholder="Badge (3 letters)" maxlength="3" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                          </div>
+                          <input value="{{ squadFormCoach }}" oninput="{{ onSquadFormCoach }}" placeholder="Coach (optional)" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                          <div style="display:flex;align-items:center;gap:9px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:7px 11px">
+                            <span style="flex:1;font-size:12px;color:#3A4152">Squad colour</span>
+                            <input type="color" value="{{ squadFormAccent }}" oninput="{{ onSquadFormAccent }}" style="width:44px;height:28px;border:none;background:none;padding:0;cursor:pointer">
+                          </div>
+                          <button onclick="{{ onSquadCreate }}" style="background:var(--vx-blue);color:#fff;border:none;border-radius:10px;padding:10px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer">Create squad</button>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ squadMsgShow }}" hint-placeholder-val="{{ false }}">
+                        <p style="margin:0 2px;font-size:11.5px;font-weight:700;color:{{ squadMsgColor }};line-height:1.45">{{ squadMsg }}</p>
+                      </sc-if>
+                      <sc-for list="{{ squadRows }}" as="sq" hint-placeholder-count="9">
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:11px 12px;display:flex;flex-direction:column;gap:8px">
+                          <div style="display:flex;align-items:center;gap:10px">
+                            <span style="width:34px;height:34px;flex:none;border-radius:10px;background:{{ sq.accent }};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11.5px">{{ sq.short }}</span>
+                            <span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:13px;color:#0C1116">{{ sq.name }}</span><span style="display:block;font-size:10.5px;color:#7A8296;margin-top:1px">{{ sq.meta }}</span></span>
+                            <button onclick="{{ sq.onUp }}" style="flex:none;background:#F1F4F8;border:none;border-radius:7px;width:26px;height:26px;cursor:pointer;color:#3A4152"><i data-lucide="chevron-up" style="width:14px;height:14px"></i></button>
+                            <button onclick="{{ sq.onDown }}" style="flex:none;background:#F1F4F8;border:none;border-radius:7px;width:26px;height:26px;cursor:pointer;color:#3A4152"><i data-lucide="chevron-down" style="width:14px;height:14px"></i></button>
+                            <button onclick="{{ sq.onToggleEdit }}" style="flex:none;background:#EAF1FF;color:var(--vx-blue-dark);border:none;border-radius:8px;padding:6px 11px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">{{ sq.editLabel }}</button>
+                          </div>
+                          <sc-if value="{{ sq.editing }}" hint-placeholder-val="{{ false }}">
+                            <div style="display:flex;flex-direction:column;gap:7px;border-top:1px solid #EEF1F5;padding-top:9px">
+                              <input value="{{ sq.editName }}" oninput="{{ sq.onEditName }}" placeholder="Squad name" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                              <div style="display:flex;gap:7px">
+                                <input value="{{ sq.editAges }}" oninput="{{ sq.onEditAges }}" placeholder="Ages" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                                <input value="{{ sq.editShort }}" oninput="{{ sq.onEditShort }}" placeholder="Badge" maxlength="3" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                              </div>
+                              <div style="display:flex;align-items:center;gap:9px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:7px 11px">
+                                <span style="flex:1;font-size:12px;color:#3A4152">Squad colour</span>
+                                <input type="color" value="{{ sq.editAccent }}" oninput="{{ sq.onEditAccent }}" style="width:44px;height:28px;border:none;background:none;padding:0;cursor:pointer">
+                              </div>
+                              <div style="display:flex;align-items:center;gap:9px">
+                                <span style="flex:1;font-size:10.5px;color:#7A8296;line-height:1.4">{{ sq.deleteHint }}</span>
+                                <sc-if value="{{ sq.canDelete }}" hint-placeholder-val="{{ false }}">
+                                  <button onclick="{{ sq.onDelete }}" style="flex:none;background:#B42318;color:#fff;border:none;border-radius:9px;padding:7px 13px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Delete squad</button>
+                                </sc-if>
+                              </div>
+                            </div>
+                          </sc-if>
+                        </div>
+                      </sc-for>
+                      <div style="display:flex;align-items:flex-start;gap:8px;background:#FFF7E6;border:1px solid #F5D9A0;border-radius:11px;padding:10px 11px">
+                        <i data-lucide="info" style="width:15px;height:15px;color:#B4690E;flex:none;margin-top:1px"></i>
+                        <span style="font-size:11.5px;color:#7A5A18;line-height:1.45">Renaming a squad changes only what is shown. Everything filed under it — attendance, plans, invoices, meet entries, coaches' access — stays attached. A squad with swimmers in it cannot be deleted; move them out first.</span>
+                      </div>
+                    </div>
+                  </sc-if>
                   <sc-if value="{{ adminStaff }}" hint-placeholder-val="{{ false }}">
                     <div style="display:flex;flex-direction:column;gap:8px">
                       <button onclick="{{ onStaffAddToggle }}" style="display:flex;align-items:center;justify-content:center;gap:8px;background:var(--vx-blue);color:#fff;border:none;border-radius:12px;padding:11px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer"><i data-lucide="user-plus" style="width:16px;height:16px"></i>Add staff account</button>
@@ -5468,7 +5525,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-10m';
+const VX_BUILD='2026-08-10n';
 // Roles that carry the run of the club: Club Administration, adding and editing anywhere.
 // Coach, Assistant Coach and Fitness Coach are deliberately absent — a fitness coach works
 // across every squad without being able to rewrite the club.
@@ -5498,7 +5555,11 @@ class Component extends DCLogic {
     try { this.accountOvr = JSON.parse(localStorage.getItem('vx_account_ovr')||'{}'); } catch(e){ this.accountOvr = {}; }
     this._rebuildAccounts();
     try { this.meetsCal = JSON.parse(localStorage.getItem('vx_meets_cal')||'[]'); } catch(e){ this.meetsCal = []; }
-    this.squads = [
+    // The nine the club started with. Editing never touches this list: a change is an overlay
+    // on top of it, so an id — which every register mark, plan, invoice, membership, meet entry
+    // and coach's access is keyed to — can never move under the data pointing at it. Renaming
+    // changes the label and nothing else.
+    this._baseSquads = [
       {id:'preteam', name:'Pre-Team', ages:'≤6', count:3, coach:'Coach Fathy & Coach Mahady', accent:'#22C1DA', glow:'rgba(34,193,218,.35)', photo:'assets/coach-fathy.jpg', short:'Pre'},
       {id:'advb', name:'Advanced B', ages:'7–8', count:41, coach:'Coach Matuze', accent:'#1BA5E6', glow:'rgba(27,165,230,.35)', photo:'', short:'AdvB'},
       {id:'adva', name:'Advanced A', ages:'9–10', count:65, coach:'Coach Sherif', accent:'#067EEA', glow:'rgba(6,126,234,.35)', photo:'', short:'AdvA'},
@@ -5509,7 +5570,9 @@ class Component extends DCLogic {
       {id:'vortexa', name:'Vortex A', ages:'16', count:15, coach:'Coach Mahmoud · asst. Ahmed Abdelwahab', accent:'#8A22D5', glow:'rgba(138,34,213,.35)', photo:'assets/coach-mahmoud.jpg', short:'VxA'},
       {id:'legend', name:'Legend', ages:'17+', count:17, coach:'Coach Martin', accent:'#1B22E4', glow:'rgba(27,34,228,.4)', photo:'assets/coach-martin.jpg', short:'Lgd'},
     ];
-    this.squadById = {}; this.squads.forEach(s=>this.squadById[s.id]=s);
+    // {ovr:{id:{name,ages,accent,short}}, added:[squad], removed:{id:true}, order:[id]}
+    this.squadEdits = this._loadJSON('vx_squads', {ovr:{}, added:[], removed:{}, order:[]});
+    this._rebuildSquads();
     this.events = [
       {k:'50 Free', b:26.8},{k:'100 Free', b:57.5},{k:'200 Free', b:125},
       {k:'100 Back', b:66},{k:'100 Breast', b:74},{k:'100 Fly', b:62},{k:'200 IM', b:138}
@@ -5688,6 +5751,7 @@ class Component extends DCLogic {
       pwNew:'', pwNew2:'', pwMsg:'', pwOk:true, profileMsg:'', profileOk:true,
       staffPwDrafts:{}, staffPwMsg:'', staffPwOk:true,
       auditQuery:'', auditErr:'', auditLoaded:false, auditState:'idle', auditTestMsg:'',
+      squadAddOpen:false, squadForm:{name:'',ages:'',accent:'#2733D6',short:'',coach:''}, squadMsg:'', squadOk:false, squadEditId:null,
       swQuery:'', swSquadFilter:'all', swDobFilter:false, swEditId:null, swAddOpen:false, swForm:{name:'',age:'',dob:'',gender:'Boys',squadId:'',pbs:[]},
       swPbEventSel:'50 Free', swPbTimeDraft:'', swPbCourse:'LCM', swPbMeet:'', swPbMeetDate:'',
       swEditPbs:[], swEditPbEventSel:'50 Free', swEditPbTimeDraft:'', swEditPbCourse:'LCM', swEditPbMeet:'', swEditPbMeetDate:'',
@@ -6319,6 +6383,101 @@ class Component extends DCLogic {
   }
   _saveLocalOnly(key, val){ try{ (window.__vxsetlocal||localStorage.setItem.bind(localStorage))(key, JSON.stringify(val)); }catch(e){} }
 
+  // Build the live squad list from the base nine plus anything the club has added, with the
+  // overlay applied. Called wherever the list can change, so nothing holds a stale copy.
+  _rebuildSquads(){
+    const e=this.squadEdits||{ovr:{}, added:[], removed:{}, order:[]};
+    const all=[...this._baseSquads.map(s=>({...s})), ...(e.added||[]).map(s=>({...s}))]
+      .filter(s=>!(e.removed||{})[s.id]);
+    all.forEach(s=>{ const o=(e.ovr||{})[s.id]; if(!o) return;
+      if(o.name){ s.name=o.name; }
+      if(o.ages!=null){ s.ages=o.ages; }
+      if(o.accent){ s.accent=o.accent; s.glow=this._glowFrom(o.accent); }
+      if(o.short){ s.short=o.short; }
+    });
+    const order=(e.order||[]).filter(id=>all.some(s=>s.id===id));
+    if(order.length){
+      const pos=(id)=>{ const i=order.indexOf(id); return i<0 ? order.length : i; };
+      all.sort((a,b)=>pos(a.id)-pos(b.id));
+    }
+    this.squads=all;
+    this.squadById={}; this.squads.forEach(s=>this.squadById[s.id]=s);
+  }
+  // The soft halo behind a squad card is the accent at low opacity. Derived rather than stored,
+  // so a colour change cannot leave the glow showing the old one.
+  _glowFrom(hex){
+    const h=String(hex||'').replace('#','');
+    if(h.length!==6) return 'rgba(39,51,214,.35)';
+    const n=parseInt(h,16);
+    return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+',.35)';
+  }
+  _saveSquads(next){
+    this.squadEdits=next;
+    this._saveJSON('vx_squads', next);
+    this._rebuildSquads();
+    try{ this.rebuildRoster(); }catch(e){}
+    this.forceUpdate();
+  }
+  // ---- adding, renaming and removing a squad -------------------------------------------------
+  squadAdd(){
+    const f=this.state.squadForm||{};
+    const name=(f.name||'').trim();
+    const bad=(m)=>this.setState({squadMsg:m, squadOk:false});
+    if(!name) return bad('Give the squad a name.');
+    if(this.squads.some(s=>String(s.name||'').trim().toLowerCase()===name.toLowerCase()))
+      return bad('There is already a squad called '+name+'.');
+    // The id is made once, from the name, and never changes again — everything stored about a
+    // squad hangs off it. A name can be corrected later without any of that coming loose.
+    let base=name.toLowerCase().replace(/[^a-z0-9]+/g,'').slice(0,12) || 'squad';
+    let id=base, n=2;
+    while(this.squadById[id] || (this.squadEdits.removed||{})[id]){ id=base+n; n++; }
+    const accent=(f.accent||'#2733D6');
+    const sq={id, name, ages:(f.ages||'').trim(), count:0, coach:(f.coach||'').trim(),
+      accent, glow:this._glowFrom(accent), photo:'',
+      short:((f.short||name).trim().slice(0,3)||'SQ')};
+    const e=this.squadEdits;
+    this._saveSquads({...e, added:[...(e.added||[]), sq],
+      order:(e.order&&e.order.length)? [...e.order, id] : this.squads.map(x=>x.id).concat([id])});
+    this.setState({squadAddOpen:false, squadForm:{name:'',ages:'',accent:'#2733D6',short:'',coach:''},
+      squadMsg:name+' added \u2713 It has no swimmers yet \u2014 use Move swimmers to fill it.', squadOk:true});
+    try{ this.audit('squad.add', name, {squad:id}); }catch(e){}
+  }
+  squadFieldSave(id, patch){
+    const e=this.squadEdits;
+    const cur=(e.ovr||{})[id]||{};
+    this._saveSquads({...e, ovr:{...(e.ovr||{}), [id]:{...cur, ...patch}}});
+    try{ this.audit('squad.edit', id, {squad:id, changed:Object.keys(patch).join(',')}); }catch(err){}
+  }
+  // A squad with swimmers in it is never deleted. Every register mark, plan, invoice and meet
+  // entry for those children is keyed to this squad's id; removing it would leave the records
+  // in the database pointing at a squad the app no longer lists, so the swimmers would simply
+  // stop appearing anywhere. Moving them out first is the only safe order, and the only thing
+  // this offers.
+  squadDelete(id){
+    const sq=this.squadById[id]; if(!sq) return;
+    const n=(this.roster[id]||[]).length;
+    if(n>0){
+      return this.setState({squadMsg:sq.name+' still has '+n+' swimmer'+(n===1?'':'s')+' in it, so it cannot be deleted. '
+        +'Move them to another squad first \u2014 Admin \u2192 Move swimmers \u2014 then delete it. '
+        +'Their attendance, plans, invoices and meet entries are all filed under this squad, and would be left pointing at nothing.', squadOk:false});
+    }
+    if(this.squads.length<=1)
+      return this.setState({squadMsg:'This is the only squad left. The club needs at least one.', squadOk:false});
+    if(!window.confirm('Delete '+sq.name+'?\n\nIt has no swimmers. This can be undone by adding it again, but its name and colour would have to be set once more.')) return;
+    const e=this.squadEdits;
+    this._saveSquads({...e, removed:{...(e.removed||{}), [id]:true},
+      added:(e.added||[]).filter(x=>x.id!==id),
+      order:(e.order||[]).filter(x=>x!==id)});
+    this.setState({squadMsg:sq.name+' deleted \u2713', squadOk:true});
+    try{ this.audit('squad.delete', sq.name, {squad:id}); }catch(err){}
+  }
+  squadMove(id, dir){
+    const ids=this.squads.map(s=>s.id);
+    const i=ids.indexOf(id); const j=i+dir;
+    if(i<0 || j<0 || j>=ids.length) return;
+    ids.splice(j, 0, ids.splice(i, 1)[0]);
+    this._saveSquads({...this.squadEdits, order:ids});
+  }
   rebuildRoster(){
     const base = window.VX_ROSTER || {};
     const ed = this.rosterEdits;
@@ -8320,15 +8479,20 @@ class Component extends DCLogic {
   // Move many swimmers in one go. promoteSwimmer saves and rebuilds the whole roster on
   // every call, which would freeze the app if looped over a few hundred swimmers.
   _moveSwimmersBatch(moves){
-    let n=0;
+    let n=0, lost=0;
     (moves||[]).forEach(mv=>{
       const sw=(this.roster[mv.from]||[]).find(x=>x.id===mv.swId);
       if(!sw || mv.from===mv.to) return;
+      // Now that a squad can be deleted, a move can name one that is no longer there. The
+      // roster is rebuilt only from squads that exist, so a swimmer sent to a missing one
+      // would disappear from every screen while still sitting in the stored edits.
+      if(!this.squadById[mv.to]){ lost++; return; }
       this.rosterEdits.deleted[mv.from]=this.rosterEdits.deleted[mv.from]||{};
       this.rosterEdits.deleted[mv.from][mv.swId]=true;
       this.rosterEdits.added[mv.to]=[...(this.rosterEdits.added[mv.to]||[]), sw];
       n++;
     });
+    if(lost) this.setState({shareNote:lost+' swimmer'+(lost===1?'':'s')+' were not moved \u2014 that squad no longer exists.'});
     if(!n) return;
     this._saveJSON('vx_roster_edits', this.rosterEdits);   // one save
     this.rebuildRoster();                                   // one rebuild
@@ -8336,6 +8500,7 @@ class Component extends DCLogic {
   }
   promoteSwimmer(swId, fromSquadId, toSquadId){
     const sw=(this.roster[fromSquadId]||[]).find(x=>x.id===swId); if(!sw) return;
+    if(!this.squadById[toSquadId]) return this.setState({shareNote:'That squad no longer exists \u2014 nobody was moved.'});
     this.rosterEdits.deleted[fromSquadId]=this.rosterEdits.deleted[fromSquadId]||{}; this.rosterEdits.deleted[fromSquadId][swId]=true;
     this.rosterEdits.added[toSquadId]=[...(this.rosterEdits.added[toSquadId]||[]), sw];
     this._saveJSON('vx_roster_edits', this.rosterEdits);
@@ -10915,6 +11080,7 @@ class Component extends DCLogic {
       {id:'swimmers', icon:'users', title:'Swimmers', sub:'Roster · add / edit · squad data', divider:'#EEF1F5'},
       {id:'meets', icon:'medal', title:'Meets', sub:this.allMeets().length+' meets · Hy-Tek & PDF import', divider:'#EEF1F5'},
       {id:'brand', icon:'palette', title:'Club Configuration', sub:'Brand · zone method · locale · currency', divider:'#EEF1F5'},
+      {id:'squads', icon:'layout-grid', title:'Squads', sub:this.squads.length+' squads · add, rename, colours', divider:'#EEF1F5'},
       {id:'staff', icon:'user-cog', title:'Staff', sub:'Coaches · names & PINs', divider:'#EEF1F5'},
       {id:'families', icon:'users-round', title:'Family accounts', sub:(this.family||[]).length+' parent / swimmer logins · linked children', divider:'#EEF1F5'},
       {id:'audit', icon:'scroll-text', title:'Activity log', sub:'Who signed in, who changed what, and when', divider:'transparent'},
@@ -10924,7 +11090,7 @@ class Component extends DCLogic {
       // arrived with a button, so an empty page was the first thing anyone saw and there was no
       // way to tell it from a log that had failed to load.
       if(r.id==='audit'){ try{ this._auditFetch(); }catch(e){} }
-      this.setState({adminSection:r.id, famAdminQuery:'', auditQuery:'', auditTestMsg:'', famAdminAddFor:null, famAdminSwQuery:'', famAdminMsg:''}); }}));
+      this.setState({adminSection:r.id, famAdminQuery:'', auditQuery:'', auditTestMsg:'', famAdminAddFor:null, famAdminSwQuery:'', famAdminMsg:'', squadMsg:''}); }}));
 
     // ---- move ----
     // Every swimmer in the club, alphabetical. This used to take 2 per squad and then the
@@ -10948,7 +11114,10 @@ class Component extends DCLogic {
       ? ('Showing '+MOVE_CAP+' of '+moveMatched.length+' \u2014 search a name to find anyone')
       : (moveMatched.length+' swimmer'+(moveMatched.length===1?'':'s')+(q?' matching':' in the club'));
     const onAutoAssign=()=>{
-      const wrong=flat.filter(m=>autoAssignFor(this._swAge(m.sw))!==m.homeId)
+      // The age-to-squad map names the nine the club started with. Any of them may since have
+      // been deleted, so a target that no longer exists is left alone rather than moved into.
+      const wrong=flat.filter(m=>{ const to=autoAssignFor(this._swAge(m.sw));
+                                   return to!==m.homeId && !!this.squadById[to]; })
                       .map(m=>({swId:m.sw.id, from:m.homeId, to:autoAssignFor(this._swAge(m.sw))}));
       if(!wrong.length) return this.setState({shareNote:'Everyone is already in the squad that matches their age \u2713'});
       if(!window.confirm('Move '+wrong.length+' swimmer'+(wrong.length===1?'':'s')+' into the squad matching their age?\n\nYou can move anyone back afterwards.')) return;
@@ -13356,6 +13525,37 @@ class Component extends DCLogic {
       adminTitle: adminTitleMap[S.adminSection]||'', adminSub: adminSubMap[S.adminSection]||'',
       adminSwimmers: S.adminSection==='swimmers', adminMeets: S.adminSection==='meets', adminStaff: S.adminSection==='staff', adminSettings: S.adminSection==='settings',
       adminAudit: S.adminSection==='audit',
+      adminSquads: S.adminSection==='squads',
+      squadAddOpen: !!S.squadAddOpen,
+      onSquadAddToggle: ()=>this.setState({squadAddOpen:!S.squadAddOpen, squadMsg:''}),
+      squadFormName: (S.squadForm||{}).name||'', onSquadFormName:(e)=>this.setState({squadForm:{...(this.state.squadForm||{}), name:e.target.value}, squadMsg:''}),
+      squadFormAges: (S.squadForm||{}).ages||'', onSquadFormAges:(e)=>this.setState({squadForm:{...(this.state.squadForm||{}), ages:e.target.value}}),
+      squadFormShort: (S.squadForm||{}).short||'', onSquadFormShort:(e)=>this.setState({squadForm:{...(this.state.squadForm||{}), short:e.target.value}}),
+      squadFormCoach: (S.squadForm||{}).coach||'', onSquadFormCoach:(e)=>this.setState({squadForm:{...(this.state.squadForm||{}), coach:e.target.value}}),
+      squadFormAccent: (S.squadForm||{}).accent||'#2733D6', onSquadFormAccent:(e)=>this.setState({squadForm:{...(this.state.squadForm||{}), accent:e.target.value}}),
+      onSquadCreate: ()=>this.squadAdd(),
+      squadMsg: S.squadMsg||'', squadMsgShow: !!S.squadMsg,
+      squadMsgColor: S.squadOk ? '#0C7A4F' : '#B42318',
+      squadRows: this.squads.map((sq, i)=>{
+        const n=(this.roster[sq.id]||[]).length;
+        const editing=S.squadEditId===sq.id;
+        return {
+          id:sq.id, name:sq.name, accent:sq.accent, short:sq.short||'', ages:sq.ages||'',
+          // The count is the guard made visible, so nobody presses Delete and is surprised.
+          meta:(n===1?'1 swimmer':n+' swimmers')+(sq.ages?(' · ages '+sq.ages):'')+' · id '+sq.id,
+          editing, editLabel: editing?'Done':'Edit',
+          onToggleEdit:()=>this.setState({squadEditId: editing?null:sq.id, squadMsg:''}),
+          editName:sq.name, onEditName:(e)=>this.squadFieldSave(sq.id, {name:e.target.value}),
+          editAges:sq.ages||'', onEditAges:(e)=>this.squadFieldSave(sq.id, {ages:e.target.value}),
+          editShort:sq.short||'', onEditShort:(e)=>this.squadFieldSave(sq.id, {short:e.target.value}),
+          editAccent:sq.accent, onEditAccent:(e)=>this.squadFieldSave(sq.id, {accent:e.target.value}),
+          canDelete: n===0 && this.squads.length>1,
+          deleteHint: n>0 ? ('Move its '+n+' swimmer'+(n===1?'':'s')+' out first') : (this.squads.length<=1?'The club needs at least one squad':'No swimmers \u2014 safe to delete'),
+          onDelete:()=>this.squadDelete(sq.id),
+          canUp: i>0, canDown: i<this.squads.length-1,
+          onUp:()=>this.squadMove(sq.id,-1), onDown:()=>this.squadMove(sq.id,1),
+        };
+      }),
       auditQuery: S.auditQuery||'', onAuditQuery:(e)=>this.setState({auditQuery:e.target.value}),
       onAuditRefresh:()=>this._auditFetch(),
       onAuditClear:()=>this.setState({auditQuery:''}),

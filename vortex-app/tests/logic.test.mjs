@@ -2370,6 +2370,131 @@ describe("InBody sheet", () => {
       eq(/Nothing on the record is affected/.test(SOURCE), true));
   });
 
+  // Squads were written into the page: nine of them, fixed. Now they can be added, renamed,
+  // recoloured and reordered — and the two ways that could lose a child's history are the ones
+  // worth pinning down.
+  describe("squads can be changed without losing what is filed under them", () => {
+    const mk = (roster, edits) => {
+      const c = {
+        _baseSquads: [
+          { id: "junior", name: "Junior", ages: "11–12", accent: "#2A63E0", short: "Jr" },
+          { id: "seniora", name: "Senior A", ages: "14", accent: "#3B23C7", short: "SrA" },
+        ],
+        roster: roster || {},
+        squadEdits: edits || { ovr: {}, added: [], removed: {}, order: [] },
+        state: { squadForm: {} },
+        setState(p) { Object.assign(this.state, p); },
+        forceUpdate() {},
+        rebuildRoster() {},
+        _saveJSON() {},
+        audit() {},
+        _loadJSON: () => ({}),
+      };
+      c._glowFrom = bind("_glowFrom", c);
+      c._rebuildSquads = bind("_rebuildSquads", c, ["_glowFrom"]);
+      c._saveSquads = bind("_saveSquads", c, ["_rebuildSquads", "rebuildRoster", "forceUpdate", "_saveJSON"]);
+      c.squadAdd = bind("squadAdd", c, ["_glowFrom", "_saveSquads", "audit"]);
+      c.squadDelete = bind("squadDelete", c, ["_saveSquads", "audit"]);
+      c.squadFieldSave = bind("squadFieldSave", c, ["_saveSquads", "audit"]);
+      c.squadMove = bind("squadMove", c, ["_saveSquads"]);
+      c._rebuildSquads();
+      return c;
+    };
+
+    it("a squad with swimmers in it cannot be deleted", () => {
+      const c = mk({ junior: [{ id: "s1" }, { id: "s2" }], seniora: [] });
+      c.squadDelete("junior");
+      eq(!!c.squadById.junior, true, "the squad must still be there");
+      eq(/still has 2 swimmers/.test(c.state.squadMsg), true);
+      eq(c.state.squadOk, false);
+    });
+    it("and it says where to move them, because that is the only safe order", () => {
+      const c = mk({ junior: [{ id: "s1" }], seniora: [] });
+      c.squadDelete("junior");
+      eq(/Move swimmers/.test(c.state.squadMsg), true);
+      eq(/pointing at nothing/.test(c.state.squadMsg), true, "the reason is not obvious from outside");
+    });
+    it("an empty squad can be deleted", () => {
+      const c = mk({ junior: [{ id: "s1" }], seniora: [] });
+      globalThis.window = { confirm: () => true };
+      c.squadDelete("seniora");
+      eq(!!c.squadById.seniora, false);
+      eq(c.squads.length, 1);
+    });
+    it("the last squad is never deleted, even when empty", () => {
+      const c = mk({ junior: [], seniora: [] });
+      globalThis.window = { confirm: () => true };
+      c.squadDelete("seniora");
+      c.squadDelete("junior");
+      eq(c.squads.length, 1, "a club with no squads has nowhere to put anybody");
+    });
+    it("declining the confirmation deletes nothing", () => {
+      const c = mk({ junior: [{ id: "s1" }], seniora: [] });
+      globalThis.window = { confirm: () => false };
+      c.squadDelete("seniora");
+      eq(!!c.squadById.seniora, true);
+    });
+
+    // The id is what every register mark, plan, invoice, membership, meet entry and coach's
+    // access is keyed to. A rename that changed it would detach all of it, silently.
+    it("renaming changes the label and never the id", () => {
+      const c = mk({});
+      c.squadFieldSave("junior", { name: "Juniors 11-12" });
+      eq(c.squadById.junior.name, "Juniors 11-12");
+      eq(c.squads.filter((s) => s.id === "junior").length, 1, "the id must survive a rename");
+      eq(!!c.squadById.juniors1112, false, "and no new id may appear");
+    });
+    it("a new squad gets an id of its own, never a used one", () => {
+      const c = mk({});
+      c.state.squadForm = { name: "Junior", ages: "11" };
+      c.squadAdd();
+      eq(/already a squad called Junior/.test(c.state.squadMsg), true, "a duplicate name is refused");
+      c.state.squadForm = { name: "Juniors B", ages: "12" };
+      c.squadAdd();
+      const added = c.squads.find((s) => s.name === "Juniors B");
+      eq(!!added, true);
+      eq(added.id !== "junior", true, "a fresh squad must not inherit another's history");
+      eq(added.count, 0);
+    });
+    it("a squad with no name is refused", () => {
+      const c = mk({});
+      c.state.squadForm = { name: "   " };
+      c.squadAdd();
+      eq(/Give the squad a name/.test(c.state.squadMsg), true);
+    });
+    it("the glow follows the colour rather than being left behind", () => {
+      const c = mk({});
+      c.squadFieldSave("junior", { accent: "#FF0000" });
+      eq(c.squadById.junior.glow, "rgba(255,0,0,.35)");
+    });
+    it("reordering keeps every squad", () => {
+      const c = mk({});
+      c.squadMove("seniora", -1);
+      eq(c.squads.map((s) => s.id).join(","), "seniora,junior");
+      eq(c.squads.length, 2, "moving must not drop one");
+      c.squadMove("seniora", -1);
+      eq(c.squads.map((s) => s.id).join(","), "seniora,junior", "moving past the top does nothing");
+    });
+    // Deleting a squad makes a target that no longer exists possible for the first time. The
+    // roster is rebuilt only from squads that exist, so a swimmer sent to a missing one would
+    // vanish from every screen while still sitting in the stored edits.
+    it("nobody can be moved into a squad that no longer exists", () => {
+      eq(/if\(!this\.squadById\[mv\.to\]\)\{ lost\+\+; return; \}/.test(SOURCE), true,
+         "a batch move must skip a missing target, not write it");
+      eq(/that squad no longer exists/.test(SOURCE), true, "and say so rather than losing them quietly");
+      eq(/if\(!this\.squadById\[toSquadId\]\) return this\.setState/.test(SOURCE), true,
+         "the single move needs the same check");
+    });
+    it("auto-assign leaves alone any squad that has been deleted", () =>
+      eq(/return to!==m\.homeId && !!this\.squadById\[to\];/.test(SOURCE), true,
+         "the age map names the original nine, and any of them may be gone"));
+    it("squad edits sync to the database like everything else", () =>
+      eq(/var SYNC = \["vx_squads"/.test(SOURCE), true,
+         "a squad added on one device has to exist on all of them"));
+    it("the panel shows the swimmer count, so Delete is never a surprise", () =>
+      eq(/deleteHint: n>0 \? \('Move its '\+n\+' swimmer'/.test(SOURCE), true));
+  });
+
   describe("the activity log", () => {
     // navigator is a getter-only global in Node, so it is replaced by descriptor and put back.
     const withNav = (ua, fn) => {
