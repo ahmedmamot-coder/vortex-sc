@@ -5468,7 +5468,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-10l';
+const VX_BUILD='2026-08-10m';
 // Roles that carry the run of the club: Club Administration, adding and editing anywhere.
 // Coach, Assistant Coach and Fitness Coach are deliberately absent — a fitness coach works
 // across every squad without being able to rewrite the club.
@@ -7412,15 +7412,19 @@ class Component extends DCLogic {
   // read out of it by anyone holding the phone, and it bills the club. The reading happens on
   // the server, where the key is the deployment's and never leaves. So the box is gone, and
   // anything a coach typed into it before is cleared off the device rather than left lying there.
-  async _checkForUpdate(){
-    // Once every few minutes at most; resuming an app should not mean a request every time.
-    // The exception is a device holding a write the database has permanently rejected: that is
-    // precisely the device running a build that cannot cope, and four minutes of a red banner
-    // with the fix already live is four minutes too long. It still cannot ask faster than twice
-    // a minute.
+  async _checkForUpdate(force){
+    // Opening the app is exactly the moment somebody should be told there is a newer one, so a
+    // start-up or a return to the foreground always asks. The four-minute throttle was written
+    // to stop a resume meaning a request every time — but it also meant a coach could reopen a
+    // stale build three times in a row and be told nothing, which is how two builds took twenty
+    // minutes to reach a phone tonight.
+    //
+    // The floor on a forced check is there to absorb a burst of tab-switching, not to schedule
+    // anything: the request is one line of JSON and costs less than a single icon.
     const now=Date.now();
     let stuck=false; try{ stuck=(window.__vxFailed?window.__vxFailed():[]).some(x=>x&&x.refused); }catch(e){}
-    if(this._lastUpdChk && now-this._lastUpdChk < (stuck?30000:240000)) return;
+    const floor = force ? 15000 : (stuck ? 30000 : 240000);
+    if(this._lastUpdChk && now-this._lastUpdChk < floor) return;
     this._lastUpdChk=now;
     try{
       const r=await fetch('/api/version', {cache:'no-store'});
@@ -10592,8 +10596,13 @@ class Component extends DCLogic {
     // screen that had already been replaced kept being reported as broken. Ask on start-up and
     // whenever the app is brought back to the front, and offer the reload rather than forcing
     // it: a coach mid-register does not want the page pulled out from under them.
-    this._checkForUpdate();
-    this._onVisible=()=>{ if(!document.hidden) this._checkForUpdate(); };
+    this._checkForUpdate(true);
+    this._onVisible=()=>{ if(!document.hidden) this._checkForUpdate(true); };
+    // An installed app that is resumed rather than reloaded fires pageshow, not always
+    // visibilitychange — on iOS a home-screen app can come back from the background without a
+    // single visibility event, which is the case where a stale build persists longest.
+    this._onShow=()=>this._checkForUpdate(true);
+    try{ window.addEventListener('pageshow', this._onShow); window.addEventListener('focus', this._onShow); }catch(e){}
     try{ document.addEventListener('visibilitychange', this._onVisible); }catch(e){}
     // Watch for rejected saves so the banner appears the moment one happens.
     this._refreshFailState();

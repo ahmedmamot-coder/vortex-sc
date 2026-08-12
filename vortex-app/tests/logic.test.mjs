@@ -1161,8 +1161,18 @@ describe("expired session", () => {
          "the hidden one was Update, on the device that most needed it");
     });
     it("a stuck device is allowed to look for the fix sooner", () =>
-      eq(/\(stuck\?30000:240000\)/.test(SOURCE), true,
+      eq(/\(stuck \? 30000 : 240000\)/.test(SOURCE), true,
          "four minutes of a red banner with the fix already live"));
+    // Opening the app is the moment to be told there is a newer one. The throttle meant a coach
+    // could reopen a stale build three times in a row and be told nothing.
+    it("opening the app always asks whether there is a newer build", () => {
+      eq(/const floor = force \? 15000 :/.test(SOURCE), true, "a forced check is not on the schedule");
+      eq(/this\._checkForUpdate\(true\)/.test(SOURCE), true);
+      const mount = SOURCE.slice(SOURCE.indexOf("this._checkForUpdate(true);"), SOURCE.indexOf("this._refreshFailState();"));
+      for (const ev of ["visibilitychange", "pageshow", "focus"])
+        eq(mount.includes(ev), true,
+           "an installed app can come back without a " + ev + " neighbour firing");
+    });
     it("the repair does not undo the lockdown", () => {
       const sql = readFileSync(new URL("../supabase/family_accounts_repair.sql", import.meta.url), "utf8");
       eq(/create policy/i.test(sql), false,
