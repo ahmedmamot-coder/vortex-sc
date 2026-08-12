@@ -2488,6 +2488,34 @@ describe("InBody sheet", () => {
     it("auto-assign leaves alone any squad that has been deleted", () =>
       eq(/return to!==m\.homeId && !!this\.squadById\[to\];/.test(SOURCE), true,
          "the age map names the original nine, and any of them may be gone"));
+    // A coach with two squads signed in and got a white screen: undefined is not an object,
+    // evaluating 'squad.count'. The account's squads are held as 'vortexb,vortexa', and that
+    // whole string was stored as the CURRENT squad — which matches no squad at all.
+    it("the current squad is one squad, never the list", () => {
+      const signIn = (SOURCE.match(/\{ const _first=this\._squadIdsOf\(acct\)\[0\][^\n]*/) || [""])[0];
+      eq(/if\(_first\) st\.squadId=_first;/.test(signIn), true,
+         "storing the whole list makes every squad lookup fail");
+      eq(/if\(acct\.squadId\)\{ st\.squadId=acct\.squadId; \}/.test(SOURCE), false,
+         "that assignment is what took the app down for a two-squad coach");
+    });
+    it("a restored session picks a squad that exists", () => {
+      const restore = (SOURCE.match(/var _fs=String\(_a\.squadId\|\|''\)[\s\S]{0,220}?if\(_fs\)/) || [""])[0];
+      eq(/this\.squadById\[x\]/.test(restore), true, "a deleted squad must not come back as the current one");
+      eq(/\[0\]/.test(restore), true, "one of them, not all of them");
+    });
+    it("the page never draws with a squad that is not there", () => {
+      const fallback = (SOURCE.match(/const squad = this\.squadById\[S\.squadId\][\s\S]{0,220}?;/) || [""])[0];
+      eq(/this\.squadById\[\(this\._mySquadIds\(\)\|\|\[\]\)\[0\]\]/.test(fallback), true,
+         "fall back to a squad this account can see");
+      eq(/\|\| this\.squads\[0\];/.test(fallback), true, "and to the first squad rather than nothing at all");
+    });
+    it("the first of a coach's squads is a real one", () => {
+      const c = mk({});
+      c._squadIdsOf = bind("_squadIdsOf", c);
+      eq(c._squadIdsOf({ squadId: "seniora,junior" })[0], "seniora");
+      eq(c._squadIdsOf({ squadId: "deleted,junior" })[0], "junior", "a stale id must not become the current squad");
+      eq(c._squadIdsOf({ squadId: "" })[0], undefined, "all squads has no first one, and must not invent it");
+    });
     it("squad edits sync to the database like everything else", () =>
       eq(/var SYNC = \["vx_squads"/.test(SOURCE), true,
          "a squad added on one device has to exist on all of them"));

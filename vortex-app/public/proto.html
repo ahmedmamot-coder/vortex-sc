@@ -5528,7 +5528,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-10o';
+const VX_BUILD='2026-08-10p';
 // Roles that carry the run of the club: Club Administration, adding and editing anywhere.
 // Coach, Assistant Coach and Fitness Coach are deliberately absent — a fitness coach works
 // across every squad without being able to rewrite the club.
@@ -5816,7 +5816,7 @@ class Component extends DCLogic {
     // Keep the user signed in across a page refresh (per-device session — NOT synced).
     try { var _sess=JSON.parse(localStorage.getItem('vx_session')||'null');
       var _nav=null; try{ _nav=JSON.parse(localStorage.getItem('vx_nav')||'null'); }catch(e){}
-      if(_sess && _sess.type==='staff' && _sess.id){ var _a=this.accounts.find(function(x){return x.id===_sess.id;}); if(_a){ this.state.screen='app'; this.state.view='hub'; this.state.pickedId=_a.id; if(_a.squadId) this.state.squadId=_a.squadId;
+      if(_sess && _sess.type==='staff' && _sess.id){ var _a=this.accounts.find(function(x){return x.id===_sess.id;}); if(_a){ this.state.screen='app'; this.state.view='hub'; this.state.pickedId=_a.id; var _fs=String(_a.squadId||'').split(',').map(function(x){return x.trim();}).filter(function(x){return x && this.squadById[x];}, this)[0]; if(_fs) this.state.squadId=_fs;
         if(_nav && _nav.view){ this.state.view=_nav.view; if(_nav.squadId) this.state.squadId=_nav.squadId; if(_nav.tab) this.state.tab=_nav.tab; this.state.tool=_nav.tool||null; if(_nav.swimmerId) this.state.swimmerId=_nav.swimmerId; if(_nav.adminSection) this.state.adminSection=_nav.adminSection; } } }
       else if(_sess && _sess.type==='family' && _sess.email){ var _f=(this.state.family||[]).find(function(x){return (x.email||'').toLowerCase()===(''+_sess.email).toLowerCase();}); if(_f){ this.state.screen='app'; this.state.view='family'; this.state.familyUser=_f; this.state.familyActiveIdx=(_nav&&_nav.familyActiveIdx)||0; if(_nav && _nav.famTab) this.state.famTab=_nav.famTab; } }
       // vx_session (this app) and vx_auth (the database) are two different sessions, and only
@@ -11063,7 +11063,12 @@ class Component extends DCLogic {
   renderVals(){
     const S=this.state; const self=this;
     const picked = this.accounts.find(a=>a.id===S.pickedId) || this.accounts[0];
-    const squad = this.squadById[S.squadId];
+    // A coach with two squads had the whole list ('vortexb,vortexa') stored as the current
+    // squad, which matches none of them — and every screen reads squad.count. Fall back to the
+    // first squad this account can actually see rather than letting the page fail to draw.
+    const squad = this.squadById[S.squadId]
+      || this.squadById[(this._mySquadIds()||[])[0]]
+      || this.squads[0];
 
     // ---- login ----
     const accountTiles = this.accounts.map(a=>({
@@ -12519,7 +12524,7 @@ class Component extends DCLogic {
         const rawP = (pEl && pEl.value) || this.state.loginPinVal || '';
         const u=norm(rawU).toLowerCase(); const pl=norm(rawP).toLowerCase();
         const doLogin=(acct)=>{ const st={screen:'app', view:'hub', pickedId:acct.id, loginUser:'', loginPinVal:'', loginErr:''};
-          try{ this.audit('sign-in', (acct.label||'')+' · '+(acct.role||'staff'), {side:'staff'}); }catch(e){} if(acct.squadId){ st.squadId=acct.squadId; } if(uEl)uEl.value=''; if(pEl)pEl.value=''; try{ localStorage.setItem('vx_session', JSON.stringify({type:'staff', id:acct.id})); }catch(e){} try{ this._staffAuthEnsure(acct); }catch(e){} this.setState(st); };
+          try{ this.audit('sign-in', (acct.label||'')+' · '+(acct.role||'staff'), {side:'staff'}); }catch(e){} { const _first=this._squadIdsOf(acct)[0]; if(_first) st.squadId=_first; } if(uEl)uEl.value=''; if(pEl)pEl.value=''; try{ localStorage.setItem('vx_session', JSON.stringify({type:'staff', id:acct.id})); }catch(e){} try{ this._staffAuthEnsure(acct); }catch(e){} this.setState(st); };
         // Staff sign-in is verified by Supabase Auth against a hashed password — NOT in the
         // browser. The old code compared a PIN that was hardcoded in this page's source, and
         // carried a permanent ahmed/7777 + sameh/1234 backdoor, so anyone who viewed source
