@@ -2108,6 +2108,46 @@ describe("InBody sheet", () => {
     });
   });
 
+  // Sign-in is an email and a password checked by Supabase. The Add staff form asked for a
+  // username and a PIN, which sign-in reads for neither purpose — so every account it created
+  // looked complete in Admin and could not be signed into at all.
+  describe("adding a coach creates an account they can sign in with", () => {
+    const fn = sourceBetween("async staffAddCreate(){", "\n  staffAddDelete(");
+
+    it("it asks for the two things sign-in actually uses", () => {
+      const form = SOURCE.slice(SOURCE.indexOf("{{ staffAddOpen }}"), SOURCE.indexOf("{{ staffCreateLabel }}"));
+      eq(/\{\{ staffForm\.email \}\}/.test(form), true, "the email is what they sign in with");
+      eq(/\{\{ staffForm\.pass \}\}/.test(form), true, "and there is no way to set a password later without one");
+    });
+    it("the sign-in account is created before the row, not after", () => {
+      const authAt = fn.indexOf("/api/staff/set-password");
+      const rowAt = fn.indexOf("__vxUpsert('staff_accounts'");
+      eq(authAt > -1 && rowAt > authAt, true,
+         "a row with no login is the state this exists to stop, and must not be left behind");
+    });
+    it("a failed sign-in account saves nothing at all", () => {
+      const block = fn.slice(fn.indexOf("if(!r.ok)"), fn.indexOf("const id='st_"));
+      eq(/return bad\(/.test(block), true, "it has to stop before the row is written");
+      eq(/Nothing has been saved/.test(fn), true, "and say so, or the coach is told to try a login that does not exist");
+    });
+    it("the row carries the email, or the database treats the coach as a parent", () => {
+      eq(/email:email/.test(fn), true,
+         "vx_staff_emails is filled from this column — without it: no squads, no plans, no register");
+    });
+    it("a password Supabase will refuse is refused here first", () =>
+      eq(/pass\.length<8/.test(fn), true, "a 502 from the server is not an explanation"));
+    it("an email already in use is caught before the server is asked", () =>
+      eq(/some\(a=>\(a\.email\|\|''\)\.trim\(\)\.toLowerCase\(\)===email\)/.test(fn), true,
+         "otherwise adding a coach twice silently resets their password"));
+    it("the PIN is no longer required to create an account", () => {
+      eq(/if\(!name\|\|!user\|\|!pin\)/.test(fn), false, "nothing reads the PIN at sign-in");
+      eq(/pin:''/.test(fn), true, "and none is stored");
+    });
+    it("the new coach's access level is recorded", () =>
+      eq(/access:\(o\.squadId\?'one squad':'all squads'\)/.test(fn), true,
+         "who was given the run of the club is exactly what the log is for"));
+  });
+
   describe("the activity log", () => {
     // navigator is a getter-only global in Node, so it is replaced by descriptor and put back.
     const withNav = (ua, fn) => {

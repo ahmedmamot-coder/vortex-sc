@@ -4539,10 +4539,15 @@ if ('serviceWorker' in navigator) {
                       <sc-if value="{{ staffAddOpen }}" hint-placeholder-val="{{ false }}">
                         <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:13px;display:flex;flex-direction:column;gap:8px">
                           <input value="{{ staffForm.name }}" oninput="{{ onStaffName }}" placeholder="Full name" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                          <!-- Email and password are what a coach actually signs in with. The form used
+                               to ask for a username and a PIN, neither of which sign-in reads any more, so
+                               every account it made was one nobody could use. -->
+                          <input value="{{ staffForm.email }}" oninput="{{ onStaffEmail }}" placeholder="Email address — this is what they sign in with" type="email" autocapitalize="off" autocorrect="off" spellcheck="false" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
                           <div style="display:flex;gap:7px">
-                            <input value="{{ staffForm.user }}" oninput="{{ onStaffUser }}" placeholder="Username" autocapitalize="off" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
-                            <input value="{{ staffForm.pin }}" oninput="{{ onStaffPin }}" placeholder="PIN" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:var(--font-mono);font-size:12.5px;color:#0C1116;outline:none">
+                            <input value="{{ staffForm.pass }}" oninput="{{ onStaffPass }}" placeholder="Password (8+ characters)" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                            <input value="{{ staffForm.user }}" oninput="{{ onStaffUser }}" placeholder="Username (optional)" autocapitalize="off" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
                           </div>
+                          <span style="font-size:10.5px;color:#7A8296;line-height:1.45">The password is shown as you type it so you can pass it on — write it down before you press Create. They can sign in with the email or the username.</span>
                           <select value="{{ staffForm.role }}" onchange="{{ onStaffRole }}" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
                             <option>Owner</option><option>CEO</option><option>Aquatic Director</option><option>Technical Manager</option><option>Head Coach</option><option>Manager</option><option>Marketing Team</option><option>Admin</option><option>Coach</option><option>Assistant Coach</option><option>Fitness Coach</option>
                           </select>
@@ -4550,7 +4555,10 @@ if ('serviceWorker' in navigator) {
                             <option value="">Full access — all squads (managers/directors)</option><option value="preteam">Locked to Pre-Team</option><option value="advb">Locked to Advanced B</option><option value="adva">Locked to Advanced A</option><option value="junior">Locked to Junior</option><option value="seniorb">Locked to Senior B</option><option value="seniora">Locked to Senior A</option><option value="vortexb">Locked to Vortex B</option><option value="vortexa">Locked to Vortex A</option><option value="legend">Locked to Legend</option>
                           </select>
                           <input value="{{ staffForm.phone }}" oninput="{{ onStaffPhone }}" placeholder="Phone / WhatsApp (optional)" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
-                          <button onclick="{{ onStaffCreate }}" style="background:var(--vx-blue);color:#fff;border:none;border-radius:10px;padding:10px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer">Create account</button>
+                          <button onclick="{{ onStaffCreate }}" style="background:var(--vx-blue);color:#fff;border:none;border-radius:10px;padding:10px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer">{{ staffCreateLabel }}</button>
+                          <sc-if value="{{ staffAddMsgShow }}" hint-placeholder-val="{{ false }}">
+                            <p style="margin:0;font-size:11.5px;font-weight:700;color:{{ staffAddMsgColor }};line-height:1.45">{{ staffAddMsg }}</p>
+                          </sc-if>
                         </div>
                       </sc-if>
                       <div style="display:flex;align-items:flex-start;gap:8px;background:#FFF7E6;border:1px solid #F5D9A0;border-radius:11px;padding:10px 11px">
@@ -5366,7 +5374,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-10h';
+const VX_BUILD='2026-08-10i';
 const VX_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 class Component extends DCLogic {
   constructor(props){
@@ -5589,7 +5597,7 @@ class Component extends DCLogic {
       showVortexId:false,
       compBuildOpen:false, compName:'', compLocation:'', compDate:'', compCourse:'LCM', compEvents:[], compErr:'',
       printPreviewOpen:false,
-      staffEditId:null, staffForm:{name:'',pin:''}, staffAddOpen:false, staffAddForm:{name:'',user:'',pin:'',role:'Coach',phone:'',squadId:''}, meetsCalForm:{name:'',date:'',place:''},
+      staffEditId:null, staffForm:{name:'',pin:''}, staffAddOpen:false, staffAddForm:{name:'',user:'',pass:'',email:'',pin:'',role:'Coach',phone:'',squadId:''}, staffAddMsg:'', staffAddOk:false, staffAddBusy:false, meetsCalForm:{name:'',date:'',place:''},
       settingsMsg:'',
       pushOn:(function(){ try{ return localStorage.getItem('vx_push_on')==='1'; }catch(e){ return false; } })(),
       pushMsg:'', annMsg:'', annAudience:'all',
@@ -6782,12 +6790,49 @@ class Component extends DCLogic {
     this._rebuildAccounts(); this.setState({});
   }
   _staffRow(id, o, isCustom){ return {id:id, name:o.label||o.name||'', username:(o.user||'').toLowerCase(), pin:o.pin||'', role:o.role||'Coach', squad_id:o.squadId||'', phone:o.phone||'', email:o.email||'', bio:o.bio||'', photo:o.photo||'', is_custom:!!isCustom, ts:Date.now()}; }
-  staffAddCreate(){ const f=this.state.staffAddForm||{}; const name=(f.name||'').trim(); const user=(f.user||'').trim().toLowerCase(); const pin=(f.pin||'').trim(); if(!name||!user||!pin){ return; }
+  // Creating a staff account has to create the thing they sign in WITH, not just a row in a
+  // table. Sign-in is an email and a password checked by Supabase; the username and PIN this
+  // form used to ask for are read by nothing. An account made the old way looked complete in
+  // Admin and could not be signed into at all, and the coach had no way of knowing why.
+  //
+  // Two steps, in this order: the Auth user first, because that is the one that can fail and
+  // the one that matters. Only if it succeeds is the staff row written — a row without a login
+  // is the state that caused this, and it is not worth recreating in the name of saving
+  // something.
+  async staffAddCreate(){
+    const f=this.state.staffAddForm||{};
+    const name=(f.name||'').trim();
+    const email=(f.email||'').trim().toLowerCase();
+    const pass=(f.pass||'');
+    const user=(f.user||'').trim().toLowerCase();
+    const bad=(m)=>this.setState({staffAddMsg:m, staffAddOk:false});
+    if(!name) return bad('Enter the coach\u2019s full name.');
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return bad('Enter the email address they will sign in with.');
+    if(pass.length<8) return bad('The password must be at least 8 characters \u2014 Supabase refuses anything shorter.');
+    if((this.accounts||[]).some(a=>(a.email||'').trim().toLowerCase()===email))
+      return bad('There is already an account on that email address. Set a new password for it below instead.');
+
+    this.setState({staffAddMsg:'Creating the account\u2026', staffAddOk:true, staffAddBusy:true});
+    let tok=''; try{ tok=(window.__VX_AUTH&&window.__VX_AUTH.token)||''; }catch(e){}
+    if(!tok){ this.setState({staffAddBusy:false}); return bad('Your own session has expired \u2014 sign out and back in, then try again.'); }
+    try{
+      const r=await fetch('/api/staff/set-password', {method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok},
+        body:JSON.stringify({email, password:pass, name})});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok){ this.setState({staffAddBusy:false}); return bad((j&&j.error)||('The sign-in account could not be created (HTTP '+r.status+'). Nothing has been saved.')); }
+    }catch(e){ this.setState({staffAddBusy:false}); return bad('Could not reach the server. Nothing has been saved.'); }
+
     const id='st_'+Date.now()+'_'+Math.random().toString(36).slice(2,5);
-    const o={label:name, user:user, pin:pin, role:f.role||'Coach', squadId:(f.squadId||'').trim(), photo:'', phone:(f.phone||'').trim(), email:'', bio:''};
-    this.customStaff.push({id:id, name:name, user:user, pin:pin, role:o.role, squadId:o.squadId, phone:o.phone, email:'', bio:''}); this.accountOvr[id]=o; this._rebuildAccounts();
-    this.setState({staffAddOpen:false, staffAddForm:{name:'',user:'',pin:'',role:'Coach',phone:'',squadId:''}});
-    try{ this.audit('staff.add', name+' · '+(o.role||'Coach'), {account:id, role:o.role||'Coach', squad:o.squadId||''}); }catch(e){}
+    const o={label:name, user:user, pin:'', role:f.role||'Coach', squadId:(f.squadId||'').trim(), photo:'', phone:(f.phone||'').trim(), email:email, bio:''};
+    this.customStaff.push({id:id, name:name, user:user, pin:'', role:o.role, squadId:o.squadId, phone:o.phone, email:email, bio:''});
+    this.accountOvr[id]=o; this._rebuildAccounts();
+    this.setState({staffAddForm:{name:'',user:'',pass:'',email:'',pin:'',role:'Coach',phone:'',squadId:''}, staffAddBusy:false,
+      staffAddMsg:name+' can sign in now with '+email+' \u2713 Give them that password \u2014 it is not shown again.', staffAddOk:true});
+    try{ this.audit('staff.add', name+' \u00b7 '+(o.role||'Coach'), {account:id, role:o.role||'Coach', squad:o.squadId||'', access:(o.squadId?'one squad':'all squads')}); }catch(e){}
+    // The row carries the email, which is what puts them on the staff list the database checks
+    // (vx_staff_emails, kept in step by a trigger). Without it they would sign in and be treated
+    // as a parent: no squads, no plans, no register.
     if(window.__vxUpsert){ window.__vxUpsert('staff_accounts', [this._staffRow(id, o, true)]).then(ok=>{ if(ok) this._staffFetch(); }); }
   }
   staffAddDelete(id){ const gone=(this.accounts||[]).find(a=>a.id===id);
@@ -13301,11 +13346,16 @@ class Component extends DCLogic {
       staffRows, staffAllRows,
       staffPwMsg:S.staffPwMsg||'', staffPwMsgShow:!!S.staffPwMsg, staffPwMsgColor:(S.staffPwOk===false?'#B42318':'#0C7A4F'),
       staffAddOpen: S.staffAddOpen,
-      staffForm: S.staffAddForm||{name:'',user:'',pin:'',role:'Coach',phone:''},
-      onStaffAddToggle:()=>this.setState({staffAddOpen:!S.staffAddOpen}),
+      staffForm: S.staffAddForm||{name:'',user:'',pass:'',email:'',pin:'',role:'Coach',phone:''},
+      onStaffAddToggle:()=>this.setState({staffAddOpen:!S.staffAddOpen, staffAddMsg:''}),
       onStaffName:(e)=>this.setState({staffAddForm:{...(this.state.staffAddForm||{}), name:e.target.value}}),
       onStaffUser:(e)=>this.setState({staffAddForm:{...(this.state.staffAddForm||{}), user:e.target.value}}),
+      onStaffEmail:(e)=>this.setState({staffAddForm:{...(this.state.staffAddForm||{}), email:e.target.value}, staffAddMsg:''}),
+      onStaffPass:(e)=>this.setState({staffAddForm:{...(this.state.staffAddForm||{}), pass:e.target.value}, staffAddMsg:''}),
       onStaffPin:(e)=>this.setState({staffAddForm:{...(this.state.staffAddForm||{}), pin:e.target.value}}),
+      staffCreateLabel: S.staffAddBusy ? 'Creating\u2026' : 'Create account',
+      staffAddMsg: S.staffAddMsg||'', staffAddMsgShow: !!S.staffAddMsg,
+      staffAddMsgColor: S.staffAddOk ? '#0C7A4F' : '#B42318',
       onStaffRole:(e)=>this.setState({staffAddForm:{...(this.state.staffAddForm||{}), role:e.target.value}}),
       onStaffPhone:(e)=>this.setState({staffAddForm:{...(this.state.staffAddForm||{}), phone:e.target.value}}),
       onStaffSquad:(e)=>this.setState({staffAddForm:{...(this.state.staffAddForm||{}), squadId:e.target.value}}),
