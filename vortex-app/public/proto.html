@@ -4969,6 +4969,18 @@ if ('serviceWorker' in navigator) {
                         <button onclick="{{ onForceUpdate }}" style="width:100%;margin-top:11px;background:#0A0F1A;color:#fff;border:none;border-radius:10px;padding:11px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px"><i data-lucide="refresh-cw" style="width:15px;height:15px"></i>{{ forceUpdateLabel }}</button>
                         <p style="margin:7px 0 0;font-size:10.5px;color:#9AA2B4;line-height:1.45">Fetches the newest version and clears the copy saved on this device. Nothing on the record is affected — everything lives in the database.</p>
                       </div>
+                      <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:15px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                        <p style="margin:0 0 4px;font-size:13px;font-weight:700;color:#0C1116">Roster copy</p>
+                        <p style="margin:0 0 10px;font-size:11.5px;color:#7A8296;line-height:1.5">The roster is one shared document, so the last device to change anything replaces every other device's copy. If the swimmer count is wrong, compare the two and choose.</p>
+                        <div style="display:flex;gap:7px;flex-wrap:wrap">
+                          <button onclick="{{ onRosterCheck }}" style="flex:1;min-width:120px;background:#fff;color:#2733D6;border:1px solid #D3E0FA;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Compare copies</button>
+                          <button onclick="{{ onRosterUseDb }}" style="flex:1;min-width:120px;background:#fff;color:#3A4152;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Use the database copy</button>
+                          <button onclick="{{ onRosterUseDevice }}" style="flex:1;min-width:120px;background:#0A0F1A;color:#fff;border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Use this device's copy</button>
+                        </div>
+                        <sc-if value="{{ rosterFixMsgShow }}" hint-placeholder-val="{{ false }}">
+                          <p style="margin:9px 0 0;font-size:11.5px;font-weight:700;color:{{ rosterFixColor }};line-height:1.45">{{ rosterFixMsg }}</p>
+                        </sc-if>
+                      </div>
                       <div style="background:#FBE4E4;border:1px solid #F3B7B7;border-radius:16px;padding:15px">
                         <p style="margin:0 0 4px;font-size:13px;font-weight:700;color:#B42318">Reset local data</p>
                         <p style="margin:0 0 10px;font-size:11.5px;color:#8A2E2E;line-height:1.4">Clears saved plans, family logins and roster edits on this device. Cannot be undone.</p>
@@ -5545,7 +5557,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-10w';
+const VX_BUILD='2026-08-10x';
 // Roles that carry the run of the club: Club Administration, adding and editing anywhere.
 // Coach, Assistant Coach and Fitness Coach are deliberately absent — a fitness coach works
 // across every squad without being able to rewrite the club.
@@ -5771,7 +5783,7 @@ class Component extends DCLogic {
       pwNew:'', pwNew2:'', pwMsg:'', pwOk:true, profileMsg:'', profileOk:true,
       staffPwDrafts:{}, staffPwMsg:'', staffPwOk:true,
       auditQuery:'', auditErr:'', auditLoaded:false, auditState:'idle', auditTestMsg:'',
-      squadAddOpen:false, squadForm:{name:'',ages:'',accent:'#2733D6',short:'',coach:''}, squadMsg:'', squadOk:false, squadEditId:null, squadDraft:null,
+      squadAddOpen:false, squadForm:{name:'',ages:'',accent:'#2733D6',short:'',coach:''}, squadMsg:'', squadOk:false, squadEditId:null, squadDraft:null, rosterFixMsg:'', rosterFixOk:true,
       swQuery:'', swSquadFilter:'all', swDobFilter:false, swEditId:null, swAddOpen:false, swForm:{name:'',age:'',dob:'',gender:'Boys',squadId:'',pbs:[]},
       swPbEventSel:'50 Free', swPbTimeDraft:'', swPbCourse:'LCM', swPbMeet:'', swPbMeetDate:'',
       swEditPbs:[], swEditPbEventSel:'50 Free', swEditPbTimeDraft:'', swEditPbCourse:'LCM', swEditPbMeet:'', swEditPbMeetDate:'',
@@ -6610,6 +6622,66 @@ class Component extends DCLogic {
       sq.count=merged[sq.id].length;
     });
     this.roster=merged;
+  }
+  // How many swimmers a given set of roster edits produces, without disturbing the live one.
+  // The roster is one shared document: the whole club's additions and removals in a single row,
+  // so the last device to write ANY change replaces every other device's work. That is how 304
+  // became 317 — an older copy somewhere touched something and won.
+  _rosterTotalFor(ed){
+    try{
+      const base=window.VX_ROSTER||{}; const e=ed||{edits:{},deleted:{},added:{}};
+      let n=0;
+      (this.squads||[]).forEach(sq=>{
+        const kept=(base[sq.id]||[]).filter(sw=>!((e.deleted||{})[sq.id]||{})[sw.id]).length;
+        n += kept + (((e.added||{})[sq.id])||[]).length;
+      });
+      return n;
+    }catch(err){ return -1; }
+  }
+  // Which copy of the roster is where, and a way to choose. Nothing here decides for anybody:
+  // only a person knows whether 304 or 317 is the real number.
+  async rosterInspect(){
+    this.setState({rosterFixMsg:'Checking\u2026', rosterFixOk:true});
+    const localN=this._rosterTotalFor(this._loadJSON('vx_roster_edits', this.rosterEdits));
+    let dbTxt='could not be read', dbN=-1, dbTs=0;
+    try{
+      const r=await window.__vxSelectRaw('club_state', 'select=value,updated_at&key=eq.vx_roster_edits');
+      const row=(r&&r.rows&&r.rows[0])||null;
+      if(!row) dbTxt='there is no roster row in the database';
+      else{
+        const v=(typeof row.value==='string')?JSON.parse(row.value):row.value;
+        dbN=this._rosterTotalFor(v); dbTs=row.updated_at?Date.parse(row.updated_at):0;
+        dbTxt=dbN+' swimmers, saved '+(dbTs?new Date(dbTs).toLocaleString():'at an unknown time');
+      }
+    }catch(e){ dbTxt='could not be read'; }
+    this.setState({rosterFixOk:(dbN===localN), rosterFixMsg:
+      'Database: '+dbTxt+'. This device: '+localN+' swimmers. On screen: '+this._rosterTotalFor(this.rosterEdits)+'. '
+      +(dbN===localN ? 'They agree.'
+        : 'They disagree \u2014 choose which is right. Nothing decides this for you, because only a person knows which number is the real one.')});
+  }
+  async rosterUseDatabase(){
+    try{
+      const r=await window.__vxSelectRaw('club_state', 'select=value&key=eq.vx_roster_edits');
+      const row=(r&&r.rows&&r.rows[0])||null; if(!row) return this.setState({rosterFixMsg:'There is nothing in the database to take.', rosterFixOk:false});
+      const v=(typeof row.value==='string')?JSON.parse(row.value):row.value;
+      if(!v||typeof v!=='object') return this.setState({rosterFixMsg:'The database copy could not be read.', rosterFixOk:false});
+      try{ localStorage.removeItem('__vxts_vx_roster_edits'); }catch(e){}
+      try{ if(window.__VX_PULLED) window.__VX_PULLED['vx_roster_edits']=v; }catch(e){}
+      try{ (window.__vxsetlocal||localStorage.setItem.bind(localStorage))('vx_roster_edits', JSON.stringify(v)); }catch(e){}
+      this.rosterEdits=v; this.rebuildRoster(); this.forceUpdate();
+      this.setState({rosterFixMsg:'Taken from the database \u2014 '+this._rosterTotalFor(v)+' swimmers.', rosterFixOk:true});
+      try{ this.audit('roster.restore', 'from database', {swimmers:this._rosterTotalFor(v)}); }catch(e){}
+    }catch(e){ this.setState({rosterFixMsg:'Could not reach the database.', rosterFixOk:false}); }
+  }
+  // The recovery. This device's copy becomes the club's, replacing what is there.
+  rosterUseThisDevice(){
+    const v=this._loadJSON('vx_roster_edits', this.rosterEdits);
+    const n=this._rosterTotalFor(v);
+    if(!window.confirm('Make this device\u2019s roster the club\u2019s roster?\n\n'
+      +n+' swimmers. This replaces whatever is in the database now, on every device.')) return;
+    this.rosterEdits=v; this._saveJSON('vx_roster_edits', v); this.rebuildRoster(); this.forceUpdate();
+    this.setState({rosterFixMsg:'Sent \u2014 '+n+' swimmers is now the club\u2019s roster.', rosterFixOk:true});
+    try{ this.audit('roster.restore', 'from this device', {swimmers:n}); }catch(e){}
   }
   persistRosterEdits(){ this._saveJSON('vx_roster_edits', this.rosterEdits); this.rebuildRoster(); this.forceUpdate(); }
   EVENT_CATALOG(){ return ['50 Free','100 Free','200 Free','400 Free','800 Free','1500 Free','50 Back','100 Back','200 Back','50 Breast','100 Breast','200 Breast','50 Fly','100 Fly','200 Fly','100 IM','200 IM','400 IM']; }
@@ -13628,6 +13700,11 @@ class Component extends DCLogic {
       appBuildColor: S.updateReady ? '#B4690E' : '#0C7A4F',
       onUpdateNow: ()=>this._applyUpdate(),
       forceUpdateLabel: S.updateReady ? ('Update to '+(S.updateLatest||'the newest version')) : 'Get the latest version',
+      onRosterCheck: ()=>this.rosterInspect(),
+      onRosterUseDb: ()=>this.rosterUseDatabase(),
+      onRosterUseDevice: ()=>this.rosterUseThisDevice(),
+      rosterFixMsg: S.rosterFixMsg||'', rosterFixMsgShow: !!S.rosterFixMsg,
+      rosterFixColor: S.rosterFixOk ? '#0C7A4F' : '#B42318',
       onForceUpdate: ()=>{ this.setState({settingsMsg:'Fetching the newest version\u2026'}); this._applyUpdate(); },
       saveFailShow: (S.saveFailCount>0 || S.authDead) && !S.saveFailHidden,
       saveFailTitle: S.authDead
