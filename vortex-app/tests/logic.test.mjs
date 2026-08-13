@@ -2418,12 +2418,14 @@ describe("InBody sheet", () => {
       };
       c._glowFrom = bind("_glowFrom", c);
       c._rebuildSquads = bind("_rebuildSquads", c, ["_glowFrom"]);
+      c._loadJSON = () => null;   // nothing stored: fall back to the in-memory overlay
+      c._currentSquadEdits = bind("_currentSquadEdits", c, ["_loadJSON"]);
       c._saveSquads = bind("_saveSquads", c, ["_rebuildSquads", "rebuildRoster", "forceUpdate", "_saveJSON"]);
-      c.squadAdd = bind("squadAdd", c, ["_glowFrom", "_saveSquads", "audit"]);
-      c.squadDelete = bind("squadDelete", c, ["_saveSquads", "audit"]);
+      c.squadAdd = bind("squadAdd", c, ["_glowFrom", "_saveSquads", "audit", "_currentSquadEdits"]);
+      c.squadDelete = bind("squadDelete", c, ["_saveSquads", "audit", "_currentSquadEdits"]);
       c._squadSaveWatch = () => {};
-      c.squadFieldSave = bind("squadFieldSave", c, ["_saveSquads", "audit", "_squadSaveWatch"]);
-      c.squadMove = bind("squadMove", c, ["_saveSquads"]);
+      c.squadFieldSave = bind("squadFieldSave", c, ["_saveSquads", "audit", "_squadSaveWatch", "_currentSquadEdits"]);
+      c.squadMove = bind("squadMove", c, ["_saveSquads", "_currentSquadEdits"]);
       c._rebuildSquads();
       return c;
     };
@@ -2613,6 +2615,18 @@ describe("InBody sheet", () => {
     it("a successful blob write leaves nothing behind", () => {
       const retry = sourceBetween('if(it.op==="push"){', "var fn = it.op===");
       eq(/pushKey\(it\.table, pv\)/.test(retry), true, "only pushKey knows how to write one");
+    });
+    // An edit built on the copy loaded at start-up pushes that older overlay back over a newer
+    // one, losing a change that had already saved correctly.
+    it("an edit is built on the freshest overlay, not the one from start-up", () => {
+      for (const fn of ["squadFieldSave(id, patch){", "squadAdd(){", "squadDelete(id){", "squadMove(id, dir){"]) {
+        const at = SOURCE.indexOf("  " + fn);
+        eq(at > -1, true, fn + " must still be findable");
+        const body = SOURCE.slice(at, SOURCE.indexOf("\n  }", at));
+        eq(/_currentSquadEdits\(\)/.test(body), true, fn + " still builds on this.squadEdits");
+      }
+      const cur = sourceBetween("_currentSquadEdits(){", "\n  }");
+      eq(/this\._loadJSON\('vx_squads', null\)/.test(cur), true, "the sync refreshes that on every pull");
     });
     it("squad edits sync to the database like everything else", () =>
       eq(/var SYNC = \["vx_squads"/.test(SOURCE), true,

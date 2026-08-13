@@ -5541,7 +5541,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-10u';
+const VX_BUILD='2026-08-10v';
 // Roles that carry the run of the club: Club Administration, adding and editing anywhere.
 // Coach, Assistant Coach and Fitness Coach are deliberately absent — a fitness coach works
 // across every squad without being able to rewrite the club.
@@ -6433,6 +6433,15 @@ class Component extends DCLogic {
     const n=parseInt(h,16);
     return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+',.35)';
   }
+  // The overlay a change is built on must be the freshest one this device has, not whatever was
+  // loaded when the app started. The sync refreshes localStorage and the mirror on every pull;
+  // an in-memory copy from start-up can be older than both, and an edit built on that pushes
+  // the old overlay back over the new one — losing a change that had already saved correctly.
+  _currentSquadEdits(){
+    const stored=this._loadJSON('vx_squads', null);
+    if(stored && typeof stored==='object' && !Array.isArray(stored)) return stored;
+    return this.squadEdits||{ovr:{}, added:[], removed:{}, order:[]};
+  }
   _saveSquads(next){
     this.squadEdits=next;
     this._saveJSON('vx_squads', next);
@@ -6457,7 +6466,7 @@ class Component extends DCLogic {
     const sq={id, name, ages:(f.ages||'').trim(), count:0, coach:(f.coach||'').trim(),
       accent, glow:this._glowFrom(accent), photo:'',
       short:((f.short||name).trim().slice(0,3)||'SQ')};
-    const e=this.squadEdits;
+    const e=this._currentSquadEdits();
     this._saveSquads({...e, added:[...(e.added||[]), sq],
       order:(e.order&&e.order.length)? [...e.order, id] : this.squads.map(x=>x.id).concat([id])});
     this.setState({squadAddOpen:false, squadForm:{name:'',ages:'',accent:'#2733D6',short:'',coach:''},
@@ -6465,7 +6474,7 @@ class Component extends DCLogic {
     try{ this.audit('squad.add', name, {squad:id}); }catch(e){}
   }
   squadFieldSave(id, patch){
-    const e=this.squadEdits;
+    const e=this._currentSquadEdits();
     const cur=(e.ovr||{})[id]||{};
     this._saveSquads({...e, ovr:{...(e.ovr||{}), [id]:{...cur, ...patch}}});
     try{ this.audit('squad.edit', id, {squad:id, changed:Object.keys(patch).join(',')}); }catch(err){}
@@ -6502,7 +6511,7 @@ class Component extends DCLogic {
     if(this.squads.length<=1)
       return this.setState({squadMsg:'This is the only squad left. The club needs at least one.', squadOk:false});
     if(!window.confirm('Delete '+sq.name+'?\n\nIt has no swimmers. This can be undone by adding it again, but its name and colour would have to be set once more.')) return;
-    const e=this.squadEdits;
+    const e=this._currentSquadEdits();
     this._saveSquads({...e, removed:{...(e.removed||{}), [id]:true},
       added:(e.added||[]).filter(x=>x.id!==id),
       order:(e.order||[]).filter(x=>x!==id)});
@@ -6514,7 +6523,7 @@ class Component extends DCLogic {
     const i=ids.indexOf(id); const j=i+dir;
     if(i<0 || j<0 || j>=ids.length) return;
     ids.splice(j, 0, ids.splice(i, 1)[0]);
-    this._saveSquads({...this.squadEdits, order:ids});
+    this._saveSquads({...this._currentSquadEdits(), order:ids});
   }
   rebuildRoster(){
     const base = window.VX_ROSTER || {};
