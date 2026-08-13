@@ -5557,7 +5557,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-10x';
+const VX_BUILD='2026-08-10y';
 // Roles that carry the run of the club: Club Administration, adding and editing anywhere.
 // Coach, Assistant Coach and Fitness Coach are deliberately absent — a fitness coach works
 // across every squad without being able to rewrite the club.
@@ -6683,7 +6683,27 @@ class Component extends DCLogic {
     this.setState({rosterFixMsg:'Sent \u2014 '+n+' swimmers is now the club\u2019s roster.', rosterFixOk:true});
     try{ this.audit('roster.restore', 'from this device', {swimmers:n}); }catch(e){}
   }
-  persistRosterEdits(){ this._saveJSON('vx_roster_edits', this.rosterEdits); this.rebuildRoster(); this.forceUpdate(); }
+  // Writing the whole roster over a copy this device has never read is how 304 became 317.
+  // A stale device cannot be allowed to publish silently: it is stopped, told, and offered the
+  // shared copy. Settings → Roster copy is still there for the case where this device IS right.
+  _blobIsStale(key){
+    try{
+      const remote=(window.__vxRemoteTs||{})[key]||0;
+      const mine=parseInt(localStorage.getItem('__vxts_'+key)||'0',10)||0;
+      // A minute of slack: clocks differ, and a device that wrote seconds ago is not stale.
+      return !!(remote && remote > mine + 60000);
+    }catch(e){ return false; }
+  }
+  persistRosterEdits(){
+    if(this._blobIsStale('vx_roster_edits')){
+      this.rebuildRoster(); this.forceUpdate();
+      return this.setState({rosterFixOk:false, rosterFixMsg:
+        'Not saved. Another device changed the roster more recently than this one has read, and '
+        +'writing now would replace every swimmer they added or removed. Reload the app to take '
+        +'their copy, then make the change again \u2014 or Settings \u2192 Roster copy if this device is the right one.'});
+    }
+    this._saveJSON('vx_roster_edits', this.rosterEdits); this.rebuildRoster(); this.forceUpdate();
+  }
   EVENT_CATALOG(){ return ['50 Free','100 Free','200 Free','400 Free','800 Free','1500 Free','50 Back','100 Back','200 Back','50 Breast','100 Breast','200 Breast','50 Fly','100 Fly','200 Fly','100 IM','200 IM','400 IM']; }
   parseTimeStr(t){ t=(t||'').trim(); if(!t) return null; if(t.includes(':')){ const [m,s]=t.split(':'); const sec=parseInt(m,10)*60+parseFloat(s); return isNaN(sec)?null:sec; } const sec=parseFloat(t); return isNaN(sec)?null:sec; }
   _saveGoals(){ this._saveJSON('vx_swimmer_goals', this.swimmerGoals); }
@@ -11015,6 +11035,9 @@ class Component extends DCLogic {
         const persistTs=parseInt(localStorage.getItem('__vxts_'+r.key)||'0',10)||0;
         const localTs=Math.max(writeTs[r.key]||0, persistTs);
         if(localTs && remoteTs && remoteTs < localTs + 1500) return; // local wrote as-recently-or-newer → keep local
+        // Remember what the database said, even when this device's copy is kept — it is the only
+        // way a later write can tell it is about to overwrite something newer than what it read.
+        try{ window.__vxRemoteTs=window.__vxRemoteTs||{}; window.__vxRemoteTs[r.key]=remoteTs; }catch(e){}
         const s=JSON.stringify(r.value); if(localStorage.getItem(r.key)!==s){ setLocal(r.key, s); changed=true; }
       });
       if(changed) this._hydrateShared();

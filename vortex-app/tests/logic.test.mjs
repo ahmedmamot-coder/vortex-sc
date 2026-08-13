@@ -2651,6 +2651,22 @@ describe("InBody sheet", () => {
       eq(/typeof row\.value==='string'/.test(fn), true,
          "club_state.value can come back either way and one of them would read as no changes");
     });
+    // 304 swimmers became 317: a device holding an older roster changed something and published
+    // the lot, replacing every addition and removal every other device had made.
+    it("a stale device cannot publish the whole roster over a newer one", () => {
+      const fn = sourceBetween("  persistRosterEdits(){", "\n  }");
+      eq(/_blobIsStale\('vx_roster_edits'\)/.test(fn), true, "it has to check before writing");
+      const guard = fn.slice(0, fn.indexOf("this._saveJSON"));
+      eq(/return this\.setState/.test(guard), true, "and stop, not warn and write anyway");
+      eq(/replace every swimmer they added or removed/.test(fn), true,
+         "the person needs to know what was at stake, not just that it did not save");
+    });
+    it("staleness is judged against what the database actually said", () => {
+      eq(/window\.__vxRemoteTs\[r\.key\]=remoteTs/.test(SOURCE), true,
+         "recorded even when this device's copy is kept, or a later write cannot tell");
+      const fn = sourceBetween("_blobIsStale(key){", "\n  }");
+      eq(/remote > mine \+ 60000/.test(fn), true, "clocks differ; a device that just wrote is not stale");
+    });
     it("squad edits sync to the database like everything else", () =>
       eq(/var SYNC = \["vx_squads"/.test(SOURCE), true,
          "a squad added on one device has to exist on all of them"));
