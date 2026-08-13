@@ -203,6 +203,12 @@ if ('serviceWorker' in navigator) {
     var fixed=0;
     return a.reduce(function(p, it){
       return p.then(function(){
+        // A blob key is replayed through pushKey, which is the only thing that knows how to
+        // write one. Without this arm they would be recorded and then never retried.
+        if(it.op==="push"){
+          var pv=(it.payload&&it.payload.value); if(pv===undefined) return;
+          return Promise.resolve(pushKey(it.table, pv)).then(function(r){ if(r&&r.ok) fixed++; });
+        }
         var fn = it.op==="insert" ? window.__vxInsert : it.op==="upsert" ? window.__vxUpsert : null;
         if(!fn) return;
         return Promise.resolve(fn(it.table, it.payload)).then(function(ok){ if(ok) fixed++; });
@@ -299,11 +305,17 @@ if ('serviceWorker' in navigator) {
         if(r.ok) return {ok:true};
         if(r.status===401||r.status===403){ _vxQueue(function(){ pushKey(k, v); }); }
         return r.text().then(function(t){ try{ console.warn("vx sync HTTP "+r.status+" on "+k+": "+t); }catch(e){}
+          // Until now this went to a console nobody has open. Every OTHER write in the app
+          // surfaces a refusal in the red banner; the shared blob — squads, brand, goals, the
+          // meets calendar, notifications — failed in complete silence, so a change made
+          // yesterday was simply gone today with nothing said at any point.
+          _failAdd("push", k, {key:k, value:v}, r.status, t);
           return {ok:false, status:r.status, why:(r.status===401||r.status===403)
             ? "the database refused it — this account may not be allowed to make that change"
             : ("the database answered HTTP "+r.status)}; });
       })
       .catch(function(e){ window.__vxSyncOk=false; try{ console.warn("vx sync network error on "+k, e); }catch(x){}
+        _failAdd("push", k, {key:k, value:v}, 0, "network: "+((e&&e.message)||""));
         return {ok:false, why:"it could not be sent from this device"+((e&&e.message)?(" ("+e.message+")"):"")}; });
     } catch(e){ p = Promise.resolve({ok:false, why:"it could not be sent from this device"}); }
     window.__vxLastPush[k] = p;
@@ -5528,7 +5540,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-10s';
+const VX_BUILD='2026-08-10t';
 // Roles that carry the run of the club: Club Administration, adding and editing anywhere.
 // Coach, Assistant Coach and Fitness Coach are deliberately absent — a fitness coach works
 // across every squad without being able to rewrite the club.

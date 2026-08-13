@@ -957,7 +957,11 @@ describe("expired session", () => {
       setInterval: () => 0,
       CustomEvent: function (type, init) { return { type, detail: init && init.detail }; },
       console: { warn: () => {}, log: () => {} },
-      Date: { now: () => NOW },
+      // Constructible as well as callable: pushKey does `new Date().toISOString()`, and a
+      // bare { now } threw there — which silently routed every blob write down the catch arm,
+      // so no test had ever exercised it.
+      Date: Object.assign(function (...a) { return a.length ? new Date(...a) : new Date(NOW); },
+                          { now: () => NOW }),
     });
     const fire = (type) => (domListeners[type] || []).forEach((f) => f({}));
     const refreshes = () => requests.filter((r) => r.url.includes("grant_type=refresh_token")).length;
@@ -1172,6 +1176,28 @@ describe("expired session", () => {
       for (const ev of ["visibilitychange", "pageshow", "focus"])
         eq(mount.includes(ev), true,
            "an installed app can come back without a " + ev + " neighbour firing");
+    });
+    itAsync("a refused blob write reaches the banner instead of a console nobody has open", async () => {
+      const t = boot({ auth: LIVE, reply: (url) => (url.includes("/club_state") ? res(403, { message: "new row violates row-level security policy" }) : GOOD_TOKEN) });
+      await t.win.__vxpush("vx_squads", JSON.stringify({ ovr: { junior: { accent: "#FF0000" } } }));
+      await flush();
+      const held = t.win.__vxFailed();
+      eq(held.length, 1, "squads, brand, goals and the meets calendar all failed in silence");
+      eq(held[0].op, "push");
+      eq(/row-level security/.test(held[0].said || held[0].body || ""), true, "the reason has to travel with it");
+    });
+    // A 403 is permanent and is deliberately not retried — pushKey queues that one for when a
+    // token arrives. A server having a bad moment is the case the replay arm is for.
+    itAsync("and a recoverable one is replayed, not just recorded", async () => {
+      let calls = 0;
+      const t = boot({ auth: LIVE, reply: (url) => { if (!url.includes("/club_state")) return GOOD_TOKEN;
+        calls++; return calls === 1 ? res(503, { message: "upstream" }) : res(200, {}); } });
+      await t.win.__vxpush("vx_squads", JSON.stringify({ ovr: {} }));
+      await flush();
+      eq(t.win.__vxFailedCount(), 1);
+      await t.win.__vxRetryFailed();
+      await flush();
+      eq(t.win.__vxFailedCount(), 0, "a blob key has to be replayable through pushKey");
     });
     it("the repair does not undo the lockdown", () => {
       const sql = readFileSync(new URL("../supabase/family_accounts_repair.sql", import.meta.url), "utf8");
@@ -2563,6 +2589,10 @@ describe("InBody sheet", () => {
       eq(/r\.ok===false/.test(fn), true);
       eq(/it will be lost when the app is reopened/.test(fn), true,
          "a silent refusal looks exactly like a save until the next time the app is opened");
+    });
+    it("a successful blob write leaves nothing behind", () => {
+      const retry = sourceBetween('if(it.op==="push"){', "var fn = it.op===");
+      eq(/pushKey\(it\.table, pv\)/.test(retry), true, "only pushKey knows how to write one");
     });
     it("squad edits sync to the database like everything else", () =>
       eq(/var SYNC = \["vx_squads"/.test(SOURCE), true,
