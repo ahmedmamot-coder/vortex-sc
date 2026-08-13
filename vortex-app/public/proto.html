@@ -4620,6 +4620,10 @@ if ('serviceWorker' in navigator) {
                           <button onclick="{{ onSquadCreate }}" style="background:var(--vx-blue);color:#fff;border:none;border-radius:10px;padding:10px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer">Create squad</button>
                         </div>
                       </sc-if>
+                      <div style="display:flex;gap:7px">
+                        <button onclick="{{ onSquadDiagnose }}" style="flex:1;background:#fff;color:#2733D6;border:1px solid #D3E0FA;border-radius:9px;padding:8px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Check saving</button>
+                        <button onclick="{{ onSquadUseDb }}" style="flex:1;background:#fff;color:#3A4152;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Use the database copy</button>
+                      </div>
                       <sc-if value="{{ squadMsgShow }}" hint-placeholder-val="{{ false }}">
                         <p style="margin:0 2px;font-size:11.5px;font-weight:700;color:{{ squadMsgColor }};line-height:1.45">{{ squadMsg }}</p>
                       </sc-if>
@@ -5541,7 +5545,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-10v';
+const VX_BUILD='2026-08-10w';
 // Roles that carry the run of the club: Club Administration, adding and editing anywhere.
 // Coach, Assistant Coach and Fitness Coach are deliberately absent — a fitness coach works
 // across every squad without being able to rewrite the club.
@@ -6448,6 +6452,60 @@ class Component extends DCLogic {
     this._rebuildSquads();
     try{ this.rebuildRoster(); }catch(e){}
     this.forceUpdate();
+  }
+  // Where the squad overlay actually is, in the three places it can be, and which one the app is
+  // showing. Four theories about this have been wrong; the app knowing its own state is worth
+  // more than a fifth.
+  //
+  // It also fixes the one trap none of them covered: the sync keeps whichever copy was written
+  // most recently, and that is decided by a timestamp this device stores for itself. A device
+  // that wrote last is pinned to its own copy for good, so a correction made anywhere else —
+  // another phone, or the SQL editor — can never reach it.
+  async squadDiagnose(){
+    this.setState({squadMsg:'Checking\u2026', squadOk:true});
+    const local=this._loadJSON('vx_squads', null);
+    let markerTs=0; try{ markerTs=parseInt(localStorage.getItem('__vxts_vx_squads')||'0',10)||0; }catch(e){}
+    const nOvr=(o)=>o&&o.ovr ? Object.keys(o.ovr).length : 0;
+    let dbTxt='could not be read';
+    let dbOvr=-1, dbTs=0;
+    try{
+      const r=await window.__vxSelectRaw('club_state', 'select=value,updated_at&key=eq.vx_squads');
+      const row=(r&&r.rows&&r.rows[0])||null;
+      if(!row){ dbTxt='there is no squads row in the database yet'; }
+      else{
+        const v=(typeof row.value==='string') ? JSON.parse(row.value) : row.value;
+        dbOvr=nOvr(v); dbTs=row.updated_at?Date.parse(row.updated_at):0;
+        dbTxt=dbOvr+' squad'+(dbOvr===1?'':'s')+' changed, saved '+(dbTs?new Date(dbTs).toLocaleString():'at an unknown time');
+      }
+    }catch(e){ dbTxt='could not be read \u2014 '+((e&&e.message)||''); }
+    const showing=nOvr(this.squadEdits);
+    const pinned = markerTs && dbTs && markerTs > dbTs;
+    this.setState({squadOk:!pinned, squadMsg:
+      'Database: '+dbTxt+'. '
+      +'This device: '+nOvr(local)+' changed. '
+      +'On screen: '+showing+' changed. '
+      +(pinned
+        ? 'This device last wrote at '+new Date(markerTs).toLocaleString()+', which is newer than the database copy \u2014 so the sync is keeping this device\u2019s version and will not take the newer one. Tap "Use the database copy" to let it in.'
+        : 'These agree.')});
+  }
+  // The escape hatch for that. Drops this device's claim to be newest and takes what the
+  // database holds, which is the shared truth every other device is already using.
+  async squadUseDatabase(){
+    this.setState({squadMsg:'Fetching the shared copy\u2026', squadOk:true});
+    try{
+      const r=await window.__vxSelectRaw('club_state', 'select=value&key=eq.vx_squads');
+      const row=(r&&r.rows&&r.rows[0])||null;
+      if(!row) return this.setState({squadMsg:'There is no squads row in the database to take.', squadOk:false});
+      const v=(typeof row.value==='string') ? JSON.parse(row.value) : row.value;
+      if(!v || typeof v!=='object') return this.setState({squadMsg:'The database copy could not be read.', squadOk:false});
+      // Clear this device's newer-than claim BEFORE storing, or the next pull would undo it.
+      try{ localStorage.removeItem('__vxts_vx_squads'); }catch(e){}
+      try{ if(window.__VX_PULLED) window.__VX_PULLED['vx_squads']=v; }catch(e){}
+      try{ (window.__vxsetlocal||localStorage.setItem.bind(localStorage))('vx_squads', JSON.stringify(v)); }catch(e){}
+      this.squadEdits=v; this._rebuildSquads(); try{ this.rebuildRoster(); }catch(e){}
+      const n=v.ovr?Object.keys(v.ovr).length:0;
+      this.setState({squadMsg:'Taken from the database \u2014 '+n+' squad'+(n===1?'':'s')+' changed.', squadOk:true});
+    }catch(e){ this.setState({squadMsg:'Could not reach the database.', squadOk:false}); }
   }
   // ---- adding, renaming and removing a squad -------------------------------------------------
   squadAdd(){
@@ -13634,6 +13692,8 @@ class Component extends DCLogic {
       squadFormCoach: (S.squadForm||{}).coach||'', onSquadFormCoach:(e)=>this.setState({squadForm:{...(this.state.squadForm||{}), coach:e.target.value}}),
       squadFormAccent: (S.squadForm||{}).accent||'#2733D6', onSquadFormAccent:(e)=>this.setState({squadForm:{...(this.state.squadForm||{}), accent:e.target.value}}),
       onSquadCreate: ()=>this.squadAdd(),
+      onSquadDiagnose: ()=>this.squadDiagnose(),
+      onSquadUseDb: ()=>this.squadUseDatabase(),
       squadMsg: S.squadMsg||'', squadMsgShow: !!S.squadMsg,
       squadMsgColor: S.squadOk ? '#0C7A4F' : '#B42318',
       squadRows: this.squads.map((sq, i)=>{

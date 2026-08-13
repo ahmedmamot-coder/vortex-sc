@@ -2628,6 +2628,29 @@ describe("InBody sheet", () => {
       const cur = sourceBetween("_currentSquadEdits(){", "\n  }");
       eq(/this\._loadJSON\('vx_squads', null\)/.test(cur), true, "the sync refreshes that on every pull");
     });
+    // The sync keeps whichever copy was written most recently, decided by a timestamp the device
+    // stores for itself. A device that wrote last is pinned to its own copy for good — so a
+    // correction made on another phone, or in the SQL editor, can never reach it.
+    it("a device pinned to its own copy can be told to take the shared one", () => {
+      const fn = sourceBetween("async squadUseDatabase(){", "\n  // ---- adding");
+      eq(/localStorage\.removeItem\('__vxts_vx_squads'\)/.test(fn), true,
+         "the newer-than claim has to go first, or the next pull undoes it");
+      const clearAt = fn.indexOf("removeItem('__vxts_vx_squads')");
+      const storeAt = fn.indexOf("'vx_squads', JSON.stringify(v)");
+      eq(clearAt > -1 && clearAt < storeAt, true, "and before the value is stored, not after");
+      eq(/this\._rebuildSquads\(\)/.test(fn), true, "and the screen has to follow");
+    });
+    it("the check reports all three copies, not just one", () => {
+      const fn = sourceBetween("async squadDiagnose(){", "\n  // The escape hatch");
+      for (const w of ["Database:", "This device:", "On screen:"])
+        eq(fn.includes(w), true, "it has to say where they disagree, not just that they do");
+      eq(/pinned/.test(fn), true, "and name the pinning, which is the one cause nothing else shows");
+    });
+    it("a value stored as text is read as well as one stored as json", () => {
+      const fn = sourceBetween("async squadDiagnose(){", "\n  // The escape hatch");
+      eq(/typeof row\.value==='string'/.test(fn), true,
+         "club_state.value can come back either way and one of them would read as no changes");
+    });
     it("squad edits sync to the database like everything else", () =>
       eq(/var SYNC = \["vx_squads"/.test(SOURCE), true,
          "a squad added on one device has to exist on all of them"));
