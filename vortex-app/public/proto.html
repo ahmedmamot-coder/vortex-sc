@@ -4629,7 +4629,7 @@ if ('serviceWorker' in navigator) {
                               </div>
                               <div style="display:flex;align-items:center;gap:9px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:7px 11px">
                                 <span style="flex:1;font-size:12px;color:#3A4152">Squad colour</span>
-                                <input type="color" value="{{ sq.editAccent }}" oninput="{{ sq.onEditAccent }}" style="width:44px;height:28px;border:none;background:none;padding:0;cursor:pointer">
+                                <input type="color" value="{{ sq.editAccent }}" onchange="{{ sq.onEditAccent }}" style="width:44px;height:28px;border:none;background:none;padding:0;cursor:pointer">
                               </div>
                               <div style="display:flex;align-items:center;gap:9px">
                                 <span style="flex:1;font-size:10.5px;color:#7A8296;line-height:1.4">{{ sq.deleteHint }}</span>
@@ -5528,7 +5528,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-10r';
+const VX_BUILD='2026-08-10s';
 // Roles that carry the run of the club: Club Administration, adding and editing anywhere.
 // Coach, Assistant Coach and Fitness Coach are deliberately absent — a fitness coach works
 // across every squad without being able to rewrite the club.
@@ -6456,6 +6456,22 @@ class Component extends DCLogic {
     const cur=(e.ovr||{})[id]||{};
     this._saveSquads({...e, ovr:{...(e.ovr||{}), [id]:{...cur, ...patch}}});
     try{ this.audit('squad.edit', id, {squad:id, changed:Object.keys(patch).join(',')}); }catch(err){}
+    this._squadSaveWatch(patch);
+  }
+  // Did it actually reach the database? Every save here is silent, and a silent save that the
+  // database refused looks exactly like one that worked until the next time the app is opened —
+  // which is how a change made yesterday can be gone today with nothing said at the time.
+  async _squadSaveWatch(patch){
+    const what=Object.keys(patch||{}).join(', ')||'change';
+    try{
+      const p=(window.__vxLastPush||{})['vx_squads'];
+      const r=p ? await p : null;
+      if(r && r.ok===false){
+        return this.setState({squadMsg:'Saved on this device, but the database refused it: '
+          +(r.why||('HTTP '+(r.status||'?')))+' \u2014 it will be lost when the app is reopened.', squadOk:false});
+      }
+      this.setState({squadMsg:'Saved \u2713 ('+what+')', squadOk:true});
+    }catch(err){ this.setState({squadMsg:'Saved on this device, but it could not be sent \u2014 check the connection.', squadOk:false}); }
   }
   // A squad with swimmers in it is never deleted. Every register mark, plan, invoice and meet
   // entry for those children is keyed to this squad's id; removing it would leave the records
@@ -10890,6 +10906,9 @@ class Component extends DCLogic {
     this.relayOverrides=g('vx_relay_ovr', this.relayOverrides);
     this.planCustom=g('vx_plan_custom', this.planCustom); ['type','stroke','tools','zone','label'].forEach(k=>{ if(!Array.isArray((this.planCustom||{})[k])){ this.planCustom=this.planCustom||{}; this.planCustom[k]=[]; } });
     this.rosterEdits=g('vx_roster_edits', this.rosterEdits); try{ this.rebuildRoster(); }catch(e){}
+    // Squads were missing from this list, so a squad renamed or recoloured on one device did not
+    // reach any other until that device was reloaded — every other synced key is applied here.
+    this.squadEdits=g('vx_squads', this.squadEdits); try{ this._rebuildSquads(); this.rebuildRoster(); }catch(e){}
     try{ this.setState({family:this.family}); }catch(e){ this.forceUpdate(); }
   }
   _tickStatusBar(){

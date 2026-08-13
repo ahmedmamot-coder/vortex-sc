@@ -2395,7 +2395,8 @@ describe("InBody sheet", () => {
       c._saveSquads = bind("_saveSquads", c, ["_rebuildSquads", "rebuildRoster", "forceUpdate", "_saveJSON"]);
       c.squadAdd = bind("squadAdd", c, ["_glowFrom", "_saveSquads", "audit"]);
       c.squadDelete = bind("squadDelete", c, ["_saveSquads", "audit"]);
-      c.squadFieldSave = bind("squadFieldSave", c, ["_saveSquads", "audit"]);
+      c._squadSaveWatch = () => {};
+      c.squadFieldSave = bind("squadFieldSave", c, ["_saveSquads", "audit", "_squadSaveWatch"]);
       c.squadMove = bind("squadMove", c, ["_saveSquads"]);
       c._rebuildSquads();
       return c;
@@ -2540,6 +2541,28 @@ describe("InBody sheet", () => {
       eq(/_isAdmin\(\)\{ return this\._isFullAccess\(this\._me\(\)\); \}/.test(SOURCE), true,
          "two hardcoded ids locked every other manager out of the alerts and the data check");
       eq(/m\.id==='ahmed'\|\|m\.id==='sameh'/.test(SOURCE), false);
+    });
+    // Colours changed one day were gone the next. Two causes, and neither said anything at the
+    // time — which is the part that made it look like the panel simply did not work.
+    it("a colour is saved once, when the picker is done", () => {
+      const row = (SOURCE.match(/<input type="color" value="\{\{ sq\.editAccent \}\}"[^>]*>/) || [""])[0];
+      eq(/onchange=/.test(row), true,
+         "oninput fires on every step of a drag, and those pushes can land out of order — the "
+         + "database keeps whichever arrived last, which is a colour from the middle of the drag");
+      eq(/oninput=/.test(row), false);
+    });
+    it("a squad change reaches the other devices without a reload", () => {
+      eq(/this\.squadEdits=g\('vx_squads', this\.squadEdits\)/.test(SOURCE), true,
+         "every other synced key is applied here and this one was missing");
+      const line = (SOURCE.match(/this\.squadEdits=g\('vx_squads'[^\n]*/) || [""])[0];
+      eq(/this\._rebuildSquads\(\)/.test(line), true, "and the list has to be rebuilt from it");
+    });
+    it("a save the database refused says so, rather than looking fine until tomorrow", () => {
+      eq(/_squadSaveWatch/.test(SOURCE), true);
+      const fn = sourceBetween("async _squadSaveWatch(patch){", "\n  rebuildRoster(){");
+      eq(/r\.ok===false/.test(fn), true);
+      eq(/it will be lost when the app is reopened/.test(fn), true,
+         "a silent refusal looks exactly like a save until the next time the app is opened");
     });
     it("squad edits sync to the database like everything else", () =>
       eq(/var SYNC = \["vx_squads"/.test(SOURCE), true,
