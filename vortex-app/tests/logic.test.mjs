@@ -1150,14 +1150,19 @@ describe("expired session", () => {
       eq(/S\.saveFailLast\.status===403 \|\| S\.saveFailLast\.status===401\)\s*\n\s*\? ' · refused/.test(SOURCE), true,
          "they need different people, so they cannot share one message"));
     it("a banner that can never clear has a way out", () => {
-      eq(/saveFailDiscardShow: \(S\.saveRefused>0 && S\.saveRefused>=S\.saveFailCount && !S\.authDead\)/.test(SOURCE), true,
+      eq(/saveFailDiscardShow: \(S\.saveFailCount>0 && !S\.authDead\)/.test(SOURCE), true,
          "Retry cannot work and the x only hides it until the count moves");
       eq(/window\.__vxClearFailed\(\)/.test(SOURCE), true);
     });
-    it("discarding is never offered while a write could still succeed", () => {
-      const vm = (SOURCE.match(/saveFailDiscardShow: [^\n]*/) || [""])[0];
-      eq(/S\.saveRefused>=S\.saveFailCount/.test(vm), true,
-         "one retryable write in the queue means Discard would lose a coach's register");
+    // A database restored from a backup is the case that forced this open: everything queued was
+    // made against the copy the restore replaced, and replaying it puts the old data straight
+    // back. So Discard is always reachable, and the confirmation carries the weight.
+    it("discarding recoverable writes says they are recoverable", () => {
+      const fn = sourceBetween("onSaveFailDiscard: ()=>{", "updateBarBottom:");
+      eq(/These CAN still succeed/.test(fn), true, "or somebody throws away a coach's register");
+      eq(/restored from a backup/.test(fn), true, "and the one time it is the right thing to do");
+      eq(/const permanent=\(S\.saveRefused>0 && S\.saveRefused>=n\)/.test(fn), true,
+         "a refusal and an outage are different questions and get different words");
     });
     it("the update bar and the unsaved banner do not cover each other", () => {
       eq(/bottom:\{\{ updateBarBottom \}\}/.test(SOURCE), true);

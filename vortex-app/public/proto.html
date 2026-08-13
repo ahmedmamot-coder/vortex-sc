@@ -5557,7 +5557,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-10y';
+const VX_BUILD='2026-08-10z';
 // Roles that carry the run of the club: Club Administration, adding and editing anywhere.
 // Coach, Assistant Coach and Fitness Coach are deliberately absent — a fitness coach works
 // across every squad without being able to rewrite the club.
@@ -13766,14 +13766,25 @@ class Component extends DCLogic {
       onSaveFailDismiss: ()=>this.setState({saveFailHidden:true}),
       // Only when nothing held can ever succeed. While a single write is still retryable,
       // offering to throw the lot away is offering to lose a coach's register.
-      saveFailDiscardShow: (S.saveRefused>0 && S.saveRefused>=S.saveFailCount && !S.authDead),
+      // Available whenever anything is held, not only when it can never succeed. A database that
+      // has just been restored from a backup is the case that matters: everything queued was
+      // made against the copy the restore replaced, and letting it replay puts the old data
+      // straight back. The confirmation carries the weight instead.
+      saveFailDiscardShow: (S.saveFailCount>0 && !S.authDead),
       onSaveFailDiscard: ()=>{
         const n=S.saveFailCount||0;
         const what=(S.saveFailLast&&S.saveFailLast.table)||'these';
-        if(!window.confirm('Throw away '+n+' change'+(n===1?'':'s')+' the database has refused?\n\n'
-          +'They are writes to '+what+' that it will not accept, so they can never be saved as they are. '
-          +'Account rows are written again the next time that person signs in.\n\n'
-          +'The reason is still in Settings → Data check.')) return;
+        const permanent=(S.saveRefused>0 && S.saveRefused>=n);
+        const msg = permanent
+          ? ('Throw away '+n+' change'+(n===1?'':'s')+' the database has refused?\n\n'
+             +'They are writes to '+what+' that it will not accept, so they can never be saved as they are. '
+             +'Account rows are written again the next time that person signs in.')
+          : ('Throw away '+n+' change'+(n===1?'':'s')+' still waiting to be saved?\n\n'
+             +'These CAN still succeed \u2014 they are waiting because the database was unreachable. '
+             +'Discarding loses them for good.\n\n'
+             +'Do this only if the database has just been restored from a backup, where letting them '
+             +'replay would put the old data back over the restored copy.');
+        if(!window.confirm(msg)) return;
         try{ if(window.__vxClearFailed) window.__vxClearFailed(); }catch(e){}
         this._refreshFailState();
       },
