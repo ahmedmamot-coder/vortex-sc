@@ -2570,12 +2570,32 @@ describe("InBody sheet", () => {
     });
     // Colours changed one day were gone the next. Two causes, and neither said anything at the
     // time — which is the part that made it look like the panel simply did not work.
-    it("a colour is saved once, when the picker is done", () => {
+    // The editor holds a draft; nothing is written until Save. Writing on every keystroke meant
+    // a re-render between each letter, which fights whoever is typing, and left "Done" as a
+    // button that closed the panel without ever being the thing that saved.
+    it("editing a squad writes nothing until Save is pressed", () => {
+      const row = sourceBetween("squadRows: this.squads.map((sq, i)=>{", "dirty: editing");
+      for (const h of ["onEditName", "onEditAges", "onEditShort", "onEditAccent"])
+        eq(new RegExp(h + ":\\(e\\)=>setD\\(").test(row), true, h + " must only touch the draft");
+      eq(/squadFieldSave/.test(row.slice(0, row.indexOf("onSaveSquad"))), false,
+         "no field may save on its own any more");
+      eq(/onSaveSquad:\(\)=>\{ this\.squadFieldSave/.test(row), true, "Save is what writes");
+    });
+    it("the button that closes is not the button that saves", () => {
+      const row = sourceBetween("squadRows: this.squads.map((sq, i)=>{", "dirty: editing");
+      eq(/editLabel: editing\?'Close':'Edit'/.test(row), true,
+         "'Done' read as 'save and close' and did neither");
+      eq(/\{\{ sq\.onSaveSquad \}\}/.test(SOURCE), true, "and there is a real Save in the panel");
+    });
+    it("closing the editor throws the draft away rather than half-applying it", () => {
+      const row = sourceBetween("squadRows: this.squads.map((sq, i)=>{", "dirty: editing");
+      eq(/squadDraft: editing\?null:/.test(row), true);
+    });
+    it("a colour picked but never committed is still caught", () => {
       const row = (SOURCE.match(/<input type="color" value="\{\{ sq\.editAccent \}\}"[^>]*>/) || [""])[0];
-      eq(/onchange=/.test(row), true,
-         "oninput fires on every step of a drag, and those pushes can land out of order — the "
-         + "database keeps whichever arrived last, which is a colour from the middle of the drag");
-      eq(/oninput=/.test(row), false);
+      eq(/oninput=/.test(row) && /onchange=/.test(row), true,
+         "some pickers fire only one of the two, and both now cost nothing because they only "
+         + "touch the draft");
     });
     it("a squad change reaches the other devices without a reload", () => {
       eq(/this\.squadEdits=g\('vx_squads', this\.squadEdits\)/.test(SOURCE), true,

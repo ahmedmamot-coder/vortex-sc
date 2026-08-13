@@ -4641,8 +4641,9 @@ if ('serviceWorker' in navigator) {
                               </div>
                               <div style="display:flex;align-items:center;gap:9px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:7px 11px">
                                 <span style="flex:1;font-size:12px;color:#3A4152">Squad colour</span>
-                                <input type="color" value="{{ sq.editAccent }}" onchange="{{ sq.onEditAccent }}" style="width:44px;height:28px;border:none;background:none;padding:0;cursor:pointer">
+                                <input type="color" value="{{ sq.editAccent }}" oninput="{{ sq.onEditAccent }}" onchange="{{ sq.onEditAccent }}" style="width:44px;height:28px;border:none;background:none;padding:0;cursor:pointer">
                               </div>
+                              <button onclick="{{ sq.onSaveSquad }}" style="background:var(--vx-blue);color:#fff;border:none;border-radius:10px;padding:10px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer">{{ sq.saveLabel }}</button>
                               <div style="display:flex;align-items:center;gap:9px">
                                 <span style="flex:1;font-size:10.5px;color:#7A8296;line-height:1.4">{{ sq.deleteHint }}</span>
                                 <sc-if value="{{ sq.canDelete }}" hint-placeholder-val="{{ false }}">
@@ -5540,7 +5541,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-10t';
+const VX_BUILD='2026-08-10u';
 // Roles that carry the run of the club: Club Administration, adding and editing anywhere.
 // Coach, Assistant Coach and Fitness Coach are deliberately absent — a fitness coach works
 // across every squad without being able to rewrite the club.
@@ -5766,7 +5767,7 @@ class Component extends DCLogic {
       pwNew:'', pwNew2:'', pwMsg:'', pwOk:true, profileMsg:'', profileOk:true,
       staffPwDrafts:{}, staffPwMsg:'', staffPwOk:true,
       auditQuery:'', auditErr:'', auditLoaded:false, auditState:'idle', auditTestMsg:'',
-      squadAddOpen:false, squadForm:{name:'',ages:'',accent:'#2733D6',short:'',coach:''}, squadMsg:'', squadOk:false, squadEditId:null,
+      squadAddOpen:false, squadForm:{name:'',ages:'',accent:'#2733D6',short:'',coach:''}, squadMsg:'', squadOk:false, squadEditId:null, squadDraft:null,
       swQuery:'', swSquadFilter:'all', swDobFilter:false, swEditId:null, swAddOpen:false, swForm:{name:'',age:'',dob:'',gender:'Boys',squadId:'',pbs:[]},
       swPbEventSel:'50 Free', swPbTimeDraft:'', swPbCourse:'LCM', swPbMeet:'', swPbMeetDate:'',
       swEditPbs:[], swEditPbEventSel:'50 Free', swEditPbTimeDraft:'', swEditPbCourse:'LCM', swEditPbMeet:'', swEditPbMeetDate:'',
@@ -13629,16 +13630,29 @@ class Component extends DCLogic {
       squadRows: this.squads.map((sq, i)=>{
         const n=(this.roster[sq.id]||[]).length;
         const editing=S.squadEditId===sq.id;
+        // The editor holds a draft and Save commits it. Writing on every keystroke meant a
+        // re-render between each letter, which fights whoever is typing, and it left "Done"
+        // as a button that closed the panel without ever being the thing that saved.
+        const d=(editing && S.squadDraft) ? S.squadDraft
+              : {name:sq.name, ages:sq.ages||'', short:sq.short||'', accent:sq.accent};
+        const setD=(patch)=>this.setState({squadDraft:{...d, ...patch}, squadMsg:''});
         return {
           id:sq.id, name:sq.name, accent:sq.accent, short:sq.short||'', ages:sq.ages||'',
           // The count is the guard made visible, so nobody presses Delete and is surprised.
           meta:(n===1?'1 swimmer':n+' swimmers')+(sq.ages?(' · ages '+sq.ages):'')+' · id '+sq.id,
-          editing, editLabel: editing?'Done':'Edit',
-          onToggleEdit:()=>this.setState({squadEditId: editing?null:sq.id, squadMsg:''}),
-          editName:sq.name, onEditName:(e)=>this.squadFieldSave(sq.id, {name:e.target.value}),
-          editAges:sq.ages||'', onEditAges:(e)=>this.squadFieldSave(sq.id, {ages:e.target.value}),
-          editShort:sq.short||'', onEditShort:(e)=>this.squadFieldSave(sq.id, {short:e.target.value}),
-          editAccent:sq.accent, onEditAccent:(e)=>this.squadFieldSave(sq.id, {accent:e.target.value}),
+          editing, editLabel: editing?'Close':'Edit',
+          onToggleEdit:()=>this.setState({squadEditId: editing?null:sq.id, squadMsg:'',
+            squadDraft: editing?null:{name:sq.name, ages:sq.ages||'', short:sq.short||'', accent:sq.accent}}),
+          editName:d.name, onEditName:(e)=>setD({name:e.target.value}),
+          editAges:d.ages, onEditAges:(e)=>setD({ages:e.target.value}),
+          editShort:d.short, onEditShort:(e)=>setD({short:e.target.value}),
+          editAccent:d.accent, onEditAccent:(e)=>setD({accent:e.target.value}),
+          // Nothing is written until this is pressed, and it says what happened when it is.
+          onSaveSquad:()=>{ this.squadFieldSave(sq.id, {name:(d.name||'').trim()||sq.name,
+            ages:(d.ages||'').trim(), short:(d.short||'').trim().slice(0,3)||sq.short, accent:d.accent});
+            this.setState({squadEditId:null, squadDraft:null}); },
+          saveLabel: (editing && (d.name!==sq.name || d.ages!==(sq.ages||'') || d.short!==(sq.short||'') || d.accent!==sq.accent)) ? 'Save changes' : 'Save',
+          dirty: editing && (d.name!==sq.name || d.ages!==(sq.ages||'') || d.short!==(sq.short||'') || d.accent!==sq.accent),
           canDelete: n===0 && this.squads.length>1,
           deleteHint: n>0 ? ('Move its '+n+' swimmer'+(n===1?'':'s')+' out first') : (this.squads.length<=1?'The club needs at least one squad':'No swimmers \u2014 safe to delete'),
           onDelete:()=>this.squadDelete(sq.id),
