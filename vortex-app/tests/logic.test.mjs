@@ -2601,6 +2601,45 @@ describe("InBody sheet", () => {
     });
   });
 
+  // Fees are going to Odoo. Nothing is pushed yet — this is the part that has to be right first,
+  // because "it did not work" is a useless thing to be told about a month of fees.
+  describe("the Odoo connection", () => {
+    const lib = readFileSync(new URL("../src/lib/odoo.ts", import.meta.url), "utf8");
+    const status = readFileSync(new URL("../src/app/api/odoo/status/route.ts", import.meta.url), "utf8");
+
+    it("the key lives on the server and is never returned", () => {
+      eq(/process\.env\.ODOO_API_KEY/.test(lib), true);
+      eq(/ODOO_KEY/.test(status), false, "the status route must not even import the key");
+      eq(/process\.env\.ODOO_API_KEY/.test(status), false, "a status page reports configuration, never values");
+    });
+    // Odoo answers HTTP 200 with the reason inside the body, and returns `false` — not an error —
+    // for a bad login. Both read as success to anything checking the obvious thing.
+    it("an Odoo failure is not mistaken for success", () => {
+      eq(/if \(j\.error\)/.test(lib), true, "HTTP 200 with an error in the body is the normal failure");
+      eq(/typeof res === "number" && res > 0 \? res : null/.test(lib), true,
+         "login returns false for wrong credentials, which is truthy-adjacent enough to catch people out");
+    });
+    it("the address mistake it is easiest to make is named outright", () =>
+      eq(/no \/odoo on the end/.test(lib), true,
+         "the URL in the browser ends in /odoo and that is not the API root"));
+    it("the /odoo suffix is stripped rather than merely complained about", () =>
+      eq(/\.replace\(\/\\\/odoo\$\/i, ""\)/.test(lib), true));
+    it("a login that works but cannot bill is caught before the first invoice", () => {
+      eq(/odooCanBill/.test(lib), true);
+      eq(/account\.move/.test(lib), true, "invoices");
+      eq(/res\.partner/.test(lib), true, "customers");
+      eq(/is Accounting or Invoicing installed/.test(lib), true,
+         "a key with no accounting rights authenticates perfectly and fails on the first push");
+    });
+    it("it helps find the database name rather than just demanding it", () => {
+      eq(/odooDatabases/.test(lib), true);
+      eq(/will not list its databases, which is normal/.test(status), true,
+         "a disabled list is not a fault and must not read like one");
+    });
+    it("every call gives up rather than hanging", () =>
+      eq(/AbortSignal\.timeout\(timeoutMs\)/.test(lib), true));
+  });
+
   describe("the activity log", () => {
     // navigator is a getter-only global in Node, so it is replaced by descriptor and put back.
     const withNav = (ua, fn) => {
