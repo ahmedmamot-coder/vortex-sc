@@ -3434,6 +3434,53 @@ describe("InBody sheet", () => {
     });
   });
 
+  // 123 swimmers have no date of birth. They were never in the bundled roster — that file has
+  // ages and no dates at all — so they only ever lived in the overlay the abandoned migration
+  // disturbed. A full restore would bring them back and throw away everything the club has done
+  // since, which is a trade nobody should have to make for one field.
+  describe("putting the dates of birth back without rewinding the club", () => {
+    const store = readFileSync(new URL("../src/lib/backupStore.ts", import.meta.url), "utf8");
+    const repair = readFileSync(new URL("../src/app/api/backup/restore-dobs/route.ts", import.meta.url), "utf8");
+    const inspect = readFileSync(new URL("../src/app/api/backup/inspect/route.ts", import.meta.url), "utf8");
+
+    // The last repair run against this roster read a document the migration had disturbed and
+    // rewrote the whole thing from it: 344 swimmers became 272, with every date gone.
+    it("only ever writes a date of birth", () => {
+      eq(/dob: backupDobs\[id\]/.test(repair), true);
+      eq(/\bsquad\[id\] = \{ \.\.\.\(squad\[id\] \|\| \{\}\), dob:/.test(repair), true,
+         "the rest of a swimmer's record is spread through untouched");
+    });
+    it("never overwrites a date the club has since typed", () =>
+      eq(/toAdd = Object\.keys\(backupDobs\)\.filter\(\(id\) => !liveDobs\[id\]\)/.test(repair), true));
+    it("asserts the roster has not changed shape, and abandons the write if it has", () => {
+      eq(/after\.edited !== before\.edited/.test(repair), true);
+      eq(/abandoned without writing/.test(repair), true);
+    });
+    it("a swimmer the current roster does not mention is skipped, not invented a place for", () =>
+      eq(/if \(done\) placed\+\+; else skipped\.push\(id\)/.test(repair), true));
+    it("saves an undo first, and refuses to write at all if that failed", () => {
+      eq(/undo-roster-/.test(repair), true);
+      eq(/could not save an undo copy first, so nothing was changed/.test(repair), true);
+    });
+    it("refuses unless the caller passes the exact count they were just shown", () => {
+      eq(/toAdd\.length !== confirm/.test(repair), true);
+      eq(/the number changed since you looked/.test(repair), true);
+    });
+    it("looking is read-only, and says what it would and would not do", () => {
+      eq(/willNotDo/.test(inspect), true);
+      eq(/add, remove or move a single swimmer/.test(inspect), true);
+      eq(/\bPOST\b/.test(inspect) && !/method: "POST"/.test(inspect), true, "inspect itself writes nothing");
+    });
+    it("a backup name cannot reach outside the backups bucket", () =>
+      eq(/\^\[A-Za-z0-9\._-\]\+\\\.json\$/.test(store), true));
+    it("a date is read from either half of the overlay, because it can live in either", () => {
+      eq(/edits\.edits \|\| \{\}/.test(store), true);
+      eq(/edits\.added \|\| \{\}/.test(store), true);
+    });
+    it("an empty or missing date is not counted as one", () =>
+      eq(/typeof dob !== "string" \|\| !dob\.trim\(\)/.test(store), true));
+  });
+
   // A restore rewinds the database to a moment before the newer tables were created, so "is that
   // table still there" is a question the club has now had to ask twice. The data check answers
   // it without anyone opening the SQL editor.
