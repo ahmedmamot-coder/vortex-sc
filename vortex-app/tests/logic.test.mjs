@@ -2703,7 +2703,7 @@ describe("InBody sheet", () => {
         const c = rowCtx(ROWS.map((r) => ({ ...r })));
         try { c.squadFieldSave("junior", { accent: "#FF0000" }); } finally { globalThis.window = restore; }
         eq(sent.length, 1);
-        eq(sent[0].t, "squads");
+        eq(sent[0].t, "vx_squads_t");
         eq(sent[0].rows.length, 1, "one row — Senior A must not be in this write at all");
         eq(sent[0].rows[0].id, "junior");
         eq(sent[0].rows[0].accent, "#FF0000");
@@ -2732,7 +2732,7 @@ describe("InBody sheet", () => {
       });
       it("deleting removes one row rather than rewriting the set", () => {
         const del = sourceBetween("squadDelete(id){", "\n  squadMove(");
-        eq(/__vxDelete\('squads', 'id=eq\.'/.test(del), true);
+        eq(/__vxDelete\('vx_squads_t', 'id=eq\.'/.test(del), true);
       });
       it("an empty or missing table falls back rather than losing the squads", () => {
         const c = rowCtx([]);

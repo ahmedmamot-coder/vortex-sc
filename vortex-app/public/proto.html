@@ -5602,7 +5602,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-11f';
+const VX_BUILD='2026-08-11g';
 // Roles that carry the run of the club: Club Administration, adding and editing anywhere.
 // Coach, Assistant Coach and Fitness Coach are deliberately absent — a fitness coach works
 // across every squad without being able to rewrite the club.
@@ -6509,7 +6509,7 @@ class Component extends DCLogic {
   // a manager opens it with the table present, the club's squads are written into it.
   async _squadsFetch(){
     if(!window.__vxSelect) return;
-    const rows=await window.__vxSelect('squads', 'select=*&order=sort.asc&limit=200');
+    const rows=await window.__vxSelect('vx_squads_t', 'select=*&order=sort.asc&limit=200');
     if(rows==null) return;                    // table missing or unreadable: keep the fallback
     if(!rows.length){ try{ await this._squadsSeed(); }catch(e){} return; }
     this.squadRows=rows;
@@ -6522,7 +6522,7 @@ class Component extends DCLogic {
     if(!window.__vxUpsert || !this._isFullAccess()) return;
     const rows=(this.squads||[]).map((sq,i)=>this._squadRow(sq, i));
     if(!rows.length) return;
-    const ok=await window.__vxUpsert('squads', rows);
+    const ok=await window.__vxUpsert('vx_squads_t', rows);
     if(ok) this._squadsFetch();
   }
   _squadRow(sq, sort){
@@ -6660,7 +6660,7 @@ class Component extends DCLogic {
       const row=this._squadRow(sq, this.squadRows.length);
       this.squadRows=[...this.squadRows, row];
       this._rebuildSquads(); try{ this.rebuildRoster(); }catch(e){}
-      try{ if(window.__vxUpsert) window.__vxUpsert('squads', [row]); }catch(e){}
+      try{ if(window.__vxUpsert) window.__vxUpsert('vx_squads_t', [row]); }catch(e){}
     } else {
       const e=this._currentSquadEdits();
       this._saveSquads({...e, added:[...(e.added||[]), sq],
@@ -6681,7 +6681,7 @@ class Component extends DCLogic {
       this.squadRows=this.squadRows.map((r,k)=>k===i?next:r);
       this._rebuildSquads(); try{ this.rebuildRoster(); }catch(e){}
       this.forceUpdate();
-      return this._squadRowWatch(window.__vxUpsert && window.__vxUpsert('squads', [next]), patch);
+      return this._squadRowWatch(window.__vxUpsert && window.__vxUpsert('vx_squads_t', [next]), patch);
     }
     const e=this._currentSquadEdits();
     const cur=(e.ovr||{})[id]||{};
@@ -6734,7 +6734,7 @@ class Component extends DCLogic {
     if(Array.isArray(this.squadRows) && this.squadRows.length){
       this.squadRows=this.squadRows.filter(r=>r.id!==id);
       this._rebuildSquads(); try{ this.rebuildRoster(); }catch(e){}
-      try{ if(window.__vxDelete) window.__vxDelete('squads', 'id=eq.'+encodeURIComponent(id)); }catch(e){}
+      try{ if(window.__vxDelete) window.__vxDelete('vx_squads_t', 'id=eq.'+encodeURIComponent(id)); }catch(e){}
     } else {
       const e=this._currentSquadEdits();
       this._saveSquads({...e, removed:{...(e.removed||{}), [id]:true},
@@ -6757,7 +6757,7 @@ class Component extends DCLogic {
         .map(r=>({...r, sort:at(r.id), updated_at:new Date().toISOString()}));
       this.squadRows=this.squadRows.map(r=>({...r, sort:at(r.id)})).sort((a,b)=>a.sort-b.sort);
       this._rebuildSquads(); this.forceUpdate();
-      try{ if(window.__vxUpsert && moved.length) window.__vxUpsert('squads', moved); }catch(e){}
+      try{ if(window.__vxUpsert && moved.length) window.__vxUpsert('vx_squads_t', moved); }catch(e){}
       return;
     }
     this._saveSquads({...this._currentSquadEdits(), order:ids});
