@@ -5914,7 +5914,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-11p';
+const VX_BUILD='2026-08-11q';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -7100,19 +7100,55 @@ class Component extends DCLogic {
     }
     this._saveSquads({...this._currentSquadEdits(), order:ids});
   }
+  // Everything the club has ever typed about a swimmer, wherever it was filed.
+  //
+  // The overlay is keyed squad-then-swimmer, and a move is a removal from one squad and an
+  // addition to another — so a date of birth typed while a swimmer was in Junior stays filed
+  // under Junior after they move to Senior B, where nothing ever reads it again. The club had
+  // 304 dates in the database and a screen saying 123 were missing.
+  //
+  // Swimmer ids are unique across the whole club (checked against the bundled roster: 272
+  // swimmers, no id in two squads), so finding a swimmer by id alone cannot fetch the wrong
+  // person's record.
+  _patchAnywhere(ed){
+    const idx={};
+    Object.keys((ed&&ed.edits)||{}).forEach(sqid=>{
+      const squad=ed.edits[sqid]||{};
+      Object.keys(squad).forEach(id=>{
+        const p=squad[id];
+        if(!p || typeof p!=='object') return;
+        // Fields already found stay: this only ever fills gaps.
+        idx[id]=idx[id] ? {...p, ...idx[id]} : {...p};
+      });
+    });
+    return idx;
+  }
   rebuildRoster(){
     const base = window.VX_ROSTER || {};
     const ed = this.rosterEdits;
+    const anywhere = this._patchAnywhere(ed);
+    // The swimmer's current squad wins field by field; a squad they have left only fills what is
+    // still blank, so a date typed today is never replaced by one typed before the move.
+    const patchFor=(sqid, id)=>{
+      const here=(ed.edits[sqid]||{})[id];
+      const other=anywhere[id];
+      return (here&&other) ? {...other, ...here} : (here||other);
+    };
     const merged={};
     this.squads.forEach(sq=>{
       const arr=(base[sq.id]||[]).filter(sw=>!(ed.deleted[sq.id]||{})[sw.id]).map(sw=>{
-        const patch=(ed.edits[sq.id]||{})[sw.id];
+        const patch=patchFor(sq.id, sw.id);
         if(!patch) return sw;
         const nsw={...sw, ...patch};
         if(patch.name){ const np=patch.name.trim().split(/\s+/); nsw.first=np[0]; nsw.last=np.slice(1).join(' '); nsw.initials=((np[0][0]||'')+(np[1]?np[1][0]:(np[0][1]||''))).toUpperCase(); }
         return nsw;
       });
-      const extra=(ed.added[sq.id]||[]);
+      // A swimmer the club added carries their whole record here, but a date typed for them
+      // before a move is filed in `edits` under the squad they left — same gap, other half.
+      const extra=(ed.added[sq.id]||[]).map(sw=>{
+        const p=(sw&&sw.id)?patchFor(sq.id, sw.id):null;
+        return p ? {...p, ...sw} : sw;
+      });
       merged[sq.id]=[...arr, ...extra];
       // A stored age goes stale the moment a birthday passes, and it is read straight from the
       // swimmer in about twenty places — the talent board, the promotion checks, the relay age

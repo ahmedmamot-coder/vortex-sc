@@ -3434,6 +3434,88 @@ describe("InBody sheet", () => {
     });
   });
 
+  // The club had 304 dates of birth in the database and a screen saying 123 were missing.
+  //
+  // The overlay is keyed squad-then-swimmer, and a move is a removal from one squad plus an
+  // addition to another — so a date typed while a swimmer was in Junior stays filed under Junior
+  // after they move to Senior B, where rebuildRoster never looks again. Nothing was lost. It was
+  // filed under a squad the swimmer had left, and the club was one click from rewinding the
+  // whole database to get back what it already had.
+  describe("a date of birth filed under a squad the swimmer has left", () => {
+    const ctx = (edits) => {
+      const c = {
+        squads: [{ id: "junior" }, { id: "seniorb" }],
+        rosterEdits: edits,
+        _ageFromDob: () => null,
+      };
+      c._patchAnywhere = bind("_patchAnywhere", c);
+      c.rebuildRoster = bind("rebuildRoster", c, ["_patchAnywhere", "_ageFromDob"]);
+      return c;
+    };
+    const BASE = {
+      junior:  [{ id: "r1", name: "Hana", age: 12 }, { id: "r2", name: "Omar", age: 13 }],
+      seniorb: [{ id: "r3", name: "Yousef", age: 15 }],
+    };
+    const run = (c) => { window.VX_ROSTER = BASE; c.rebuildRoster(); return c.roster; };
+
+    it("is found after the swimmer moves squads", () => {
+      // Hana's date was typed while she was a Junior; she is now a Senior B.
+      const c = ctx({
+        edits: { junior: { r1: { dob: "2014-03-02" } } },
+        deleted: { junior: { r1: true } },
+        added: { seniorb: [{ id: "r1", name: "Hana", age: 12 }] },
+      });
+      const roster = run(c);
+      const hana = roster.seniorb.find((s) => s.id === "r1");
+      eq(hana.dob, "2014-03-02", "the club typed this date and still has it");
+    });
+    it("and after a move recorded as an edit rather than an addition", () => {
+      const c = ctx({
+        edits: { junior: { r3: { dob: "2011-07-19" } } },
+        deleted: {}, added: {},
+      });
+      eq(run(c).seniorb.find((s) => s.id === "r3").dob, "2011-07-19");
+    });
+    // A date typed today must not be replaced by one typed before the swimmer moved.
+    it("the swimmer's current squad still wins, field by field", () => {
+      const c = ctx({
+        edits: { junior: { r2: { dob: "2013-01-01", name: "Omar Old" } },
+                 seniorb: { r2: { dob: "2013-06-06" } } },
+        deleted: { junior: { r2: true } },
+        added: { seniorb: [{ id: "r2", name: "Omar" }] },
+      });
+      const omar = run(c).seniorb.find((s) => s.id === "r2");
+      eq(omar.dob, "2013-06-06", "the newer squad's date, not the one from before the move");
+      eq(omar.name, "Omar", "and the added record's own fields are not overwritten");
+    });
+    // This is the guarantee that matters. The last two repairs of this roster changed the
+    // swimmer count — 304 to 317, then 344 to 272 — and that is what actually hurt the club.
+    it("cannot change how many swimmers there are", () => {
+      const edits = {
+        edits: { junior: { r1: { dob: "2014-03-02" } }, seniorb: { r3: { dob: "2011-07-19" } } },
+        deleted: { junior: { r2: true } },
+        added: { seniorb: [{ id: "rX", name: "New Swimmer" }] },
+      };
+      const roster = run(ctx(edits));
+      const total = Object.values(roster).reduce((n, list) => n + list.length, 0);
+      // 2 juniors − 1 removed = 1, plus 1 senior + 1 added = 2.
+      eq(total, 3, "one removed, one added, and nothing else moved");
+      eq(roster.junior.length, 1);
+      eq(roster.seniorb.length, 2);
+    });
+    it("a swimmer nobody has ever edited is left exactly as they were", () => {
+      const roster = run(ctx({ edits: {}, deleted: {}, added: {} }));
+      eq(roster.junior.length, 2);
+      eq(roster.junior[0].dob, undefined);
+      eq(roster.junior[0].name, "Hana");
+    });
+    it("an empty overlay is not a crash", () => {
+      const c = ctx({ edits: {}, deleted: {}, added: {} });
+      eq(Object.keys(c._patchAnywhere(c.rosterEdits)).length, 0);
+      eq(Object.keys(c._patchAnywhere(null)).length, 0);
+    });
+  });
+
   // 123 swimmers have no date of birth. They were never in the bundled roster — that file has
   // ages and no dates at all — so they only ever lived in the overlay the abandoned migration
   // disturbed. A full restore would bring them back and throw away everything the club has done
@@ -4234,7 +4316,7 @@ describe("editing a swimmer", () => {
       { id: "s1", name: "Tamara Aly", dob: "17/04/2017", age: 8 },   // stale stored age
       { id: "s2", name: "No Dob", age: 11 },                          // nothing to derive from
     ] } };
-    bind("rebuildRoster", c, ["_ageFromDob", "_dobParts"])();
+    bind("rebuildRoster", c, ["_ageFromDob", "_dobParts", "_patchAnywhere"])();
     const now = new Date();
     let expected = now.getFullYear() - 2017;
     if (now.getMonth() + 1 < 4 || (now.getMonth() + 1 === 4 && now.getDate() < 17)) expected--;
