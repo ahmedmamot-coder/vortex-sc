@@ -3078,6 +3078,16 @@ describe("InBody sheet", () => {
       eq(/gone=Object\.keys\(was\)\.filter\(k=>!\(k in now\)\)/.test(fn), true,
          "and an undone change has to remove its row, or it comes back");
     });
+    it("the migration is off, and cannot be reached by accident", () => {
+      eq(/const VX_ROSTER_ROWS=false;/.test(SOURCE), true,
+         "it lost data twice — it goes back on only after a rehearsal against a copy");
+      const fetchFn = sourceBetween("async _rosterFetch(){", "\n  async _rosterSeed");
+      eq(/if\(!VX_ROSTER_ROWS\) return;/.test(fetchFn), true, "no fetch means no rows means no row writes");
+      const at = SOURCE.indexOf("  persistRosterEdits(){");
+      const persist = SOURCE.slice(at, SOURCE.indexOf("\n  }", at));
+      eq(/if\(VX_ROSTER_ROWS && Array\.isArray\(this\.rosterRows\)\)/.test(persist), true,
+         "and the write path is gated on the same flag, not just the fetch");
+    });
     it("the stale-device guard is not applied to rows", () => {
       const at = SOURCE.indexOf("  persistRosterEdits(){");
       const fn = SOURCE.slice(at, SOURCE.indexOf("\n  }", at));

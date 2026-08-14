@@ -5603,7 +5603,11 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-11i';
+const VX_BUILD='2026-08-11j';
+// The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
+// and the repair for that read a document the migration had already disturbed. It goes back on
+// only after being run against a copy of the database, never again against the club itself.
+const VX_ROSTER_ROWS=false;
 // Roles that carry the run of the club: Club Administration, adding and editing anywhere.
 // Coach, Assistant Coach and Fitness Coach are deliberately absent — a fitness coach works
 // across every squad without being able to rewrite the club.
@@ -6911,7 +6915,19 @@ class Component extends DCLogic {
     (rows||[]).forEach(r=>{ if(!r||!r.id||seen[r.id]) return; seen[r.id]=1; out.push(r); });
     return out;
   }
+  // ---- ROSTER ROW MIGRATION: OFF -------------------------------------------------------------
+  // Turned off after it lost data twice in one hour. The first shape produced one key twice for
+  // any swimmer who had moved, which made Postgres reject whole batches and cost 301 dates of
+  // birth. The rebuild meant to repair that read a document that the migration itself had
+  // already disturbed, and took the club from 317 swimmers to 272.
+  //
+  // The single document is not good — the last device to write wins, which is its own kind of
+  // loss — but it is the behaviour the club had all day, and a known bad state is better than an
+  // unknown one. The migration needs doing against a copy of the database, not against the club.
+  //
+  // Leaving the code in place, unreachable, so what it did can be read rather than guessed at.
   async _rosterFetch(){
+    if(!VX_ROSTER_ROWS) return;
     if(!window.__vxSelect) return;
     const rows=await window.__vxSelect('vx_roster', 'select=*&limit=5000');
     if(rows==null) return;                     // table missing: keep the single-document fallback
@@ -6985,7 +7001,7 @@ class Component extends DCLogic {
   persistRosterEdits(){
     // One row per change once the table exists. The stale-device guard below is only needed by
     // the single-document fallback: rows cannot clobber each other, so there is nothing to guard.
-    if(Array.isArray(this.rosterRows)){
+    if(VX_ROSTER_ROWS && Array.isArray(this.rosterRows)){
       this._rosterPersistRows();
       this.rebuildRoster(); this.forceUpdate();
       return;
