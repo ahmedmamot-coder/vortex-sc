@@ -361,7 +361,7 @@ describe("shipped source", () => {
   // attached to it.
   it("a video is only kept once it has a URL that outlives the tab", () => {
     const fn = SOURCE.slice(SOURCE.indexOf("async videoUploadFile"), SOURCE.indexOf("videoSplitLabels"));
-    const saveAt = fn.indexOf("_saveJSON('vx_videos'");
+    const saveAt = fn.indexOf("_videosPersist(");
     const clearAt = fn.indexOf("_isBlob:false");
     eq(saveAt > -1 && clearAt > -1 && clearAt < saveAt, true, "it must be uploaded before it is saved");
   });
@@ -3179,13 +3179,15 @@ describe("InBody sheet", () => {
       const c = { videoLib: [clip], state: { videoActiveId: "v1" },
                   setState(p) { Object.assign(this.state, p); },
                   _saveJSON() { this.saved = true; },
+                  _videosPersist(id) { this.persisted = id; },
                   videoSeekPaused(t) { this.seeked = t; } };
       c._activeVideo = bind("_activeVideo", c);
       c.videoSplitLabels = bind("videoSplitLabels", c);
       c._splitMetres = bind("_splitMetres", c);
       c.videoRaceMetrics = bind("videoRaceMetrics", c, ["_splitMetres"]);
       c.videoStartZero = bind("videoStartZero", c, ["_activeVideo"]);
-      c.videoSetStartAt = bind("videoSetStartAt", c, ["_activeVideo", "videoSplitLabels"]);
+      c.videoSetStartAt = bind("videoSetStartAt", c, ["_activeVideo", "videoSplitLabels", "_videoStartLimit"]);
+      c._videoStartLimit = bind("_videoStartLimit", c);
       return c;
     };
     it("a start moved by the detector moves every split with it", () => {
@@ -3218,6 +3220,29 @@ describe("InBody sheet", () => {
       c.videoSetStartAt("nonsense");
       eq(c.videoStartZero(), 4.5, "still the start it already had");
     });
+    // The club was shown a 50 that took −33.18 seconds, with its 15 m row missing: the start had
+    // been set after marks that were already captured, so every time measured from it went
+    // negative and the first split was dropped for having no duration.
+    it("a start after the marks is refused, not saved", () => {
+      const c = ctx();
+      c.videoSetStartAt(20);                      // after the 15 m mark at 11.12
+      eq(c.videoStartZero(), 4.5, "the start it already had is left alone");
+      eq(/race clock would run backwards/.test(c.state.videoStartMsg), true);
+    });
+    it("and an analysis already saved that way withholds the total instead of printing it", () => {
+      const c = ctx();
+      const M = c.videoRaceMetrics({ laps: [
+        { label: "Start", t: 50 }, { label: "15m", t: 4.5 },
+        { label: "25m", t: 8.78 }, { label: "50m", t: 16.3 }], strokes: {} });
+      eq(M.startWrong, true);
+      eq(M.total, null, "−33.18s is not a race time");
+      eq(M.rows.length > 0, true, "but the split times between the marks are still true");
+      eq(M.rows[0].split, "4.28", "and still right");
+    });
+    it("a healthy analysis is not flagged", () =>
+      eq(ctx().videoRaceMetrics({ laps: [
+        { label: "Start", t: 0 }, { label: "15m", t: 6.62 }, { label: "50m", t: 26.63 }],
+        strokes: {} }).startWrong, false));
     it("an old analysis marked with Reaction has that replaced, not doubled", () => {
       const c = ctx();
       c.videoLib = [{ ...clip, laps: [{ label: "Reaction", t: 1.1 }, { label: "15m", t: 8.0 }] }];
@@ -3243,6 +3268,105 @@ describe("InBody sheet", () => {
       eq((src.match(/ctx\.close\(\)/g) || []).length >= 2, true,
          "a leaked AudioContext per attempt is how a browser tab runs out of them");
     });
+  });
+
+  // The analyses were one row of club_state holding every clip the club had, so the last device
+  // to touch anything replaced everyone else's. That shape has already cost this club a set of
+  // squad colours and a roster.
+  describe("analyses as one row each", () => {
+    const clip = { id: "vid1", title: "Sara 50 back", tag: "Doha Open", url: "https://x/a.mp4",
+      kind: "mp4", vid: "https://x/a.mp4", raceType: "50",
+      laps: [{ label: "Start", t: 0 }, { label: "15m", t: 6.62 }],
+      strokes: { "15m": 6 }, notes: [{ t: 3, text: "late breath" }],
+      breakoutM: "", savedAt: "2026-08-14T10:00:00.000Z" };
+    const ctx = (lib) => {
+      const c = { videoLib: lib || [clip], _videoRowsOn: true, saved: [], deleted: [],
+                  _saveJSON(k, v) { this.blob = v; },
+                  _isFullAccess: () => true, forceUpdate() {} };
+      c._videoRow = bind("_videoRow", c);
+      c._videoFromRow = bind("_videoFromRow", c);
+      c._videosPersist = bind("_videosPersist", c, ["_videoRow"]);
+      c._videosForget = bind("_videosForget", c);
+      return c;
+    };
+    const withSync = (c) => {
+      window.__vxUpsert = (t, rows) => { c.saved.push([t, rows]); return Promise.resolve(true); };
+      window.__vxDelete = (t, qs) => { c.deleted.push([t, qs]); return Promise.resolve(true); };
+      return c;
+    };
+
+    it("saving one analysis writes one row, keyed on that clip", () => {
+      const c = withSync(ctx());
+      c._videosPersist("vid1");
+      eq(c.saved.length, 1);
+      eq(c.saved[0][0], "vx_video_analyses");
+      eq(c.saved[0][1].length, 1, "one row — not the whole library over the top of everyone else");
+      eq(c.saved[0][1][0].id, "vid1");
+    });
+    it("the marks, strokes and notes all survive the trip out and back", () => {
+      const c = ctx();
+      const back = c._videoFromRow(c._videoRow(clip));
+      eq(back.laps.length, 2);
+      eq(back.laps[1].t, 6.62);
+      eq(back.strokes["15m"], 6);
+      eq(back.notes[0].text, "late breath");
+      eq(back.raceType, "50", "race_type in the database, raceType in the app");
+      eq(back.title, "Sara 50 back");
+    });
+    it("a clip still uploading has no row and is not sent as one", () => {
+      const c = withSync(ctx([{ ...clip, _isBlob: true }]));
+      c._videosPersist("vid1");
+      eq(c.saved.length, 0, "a blob: URL points at something only this tab can see");
+    });
+    // The old document is still written, so a device that has not run the SQL is never stranded.
+    it("the old shared document is still kept as the fallback", () => {
+      const c = withSync(ctx());
+      c._videosPersist("vid1");
+      eq(Array.isArray(c.blob), true);
+      eq(c.blob[0].id, "vid1");
+    });
+    it("with no table yet, nothing is sent and the document alone carries it", () => {
+      const c = withSync(ctx());
+      c._videoRowsOn = false;
+      c._videosPersist("vid1");
+      eq(c.saved.length, 0);
+      eq(c.blob[0].id, "vid1", "but it is still saved");
+    });
+    it("deleting an analysis deletes its row rather than orphaning it", () => {
+      const c = withSync(ctx());
+      c._videosForget("vid1");
+      eq(c.deleted[0][0], "vx_video_analyses");
+      eq(c.deleted[0][1], "id=eq.vid1");
+    });
+    // The roster migration failed because a moved swimmer produced the same key twice in one
+    // batch, and Postgres rejects an upsert that names one row twice — taking the whole batch,
+    // and the club's data, with it.
+    it("the first fill can never name the same row twice", () => {
+      const seed = methodSource("_videosSeed").body;
+      eq(/seen\[v\.id\]/.test(seed), true, "ids are de-duplicated before the batch is sent");
+      eq(/_isFullAccess\(\)/.test(seed), true, "and a parent's device does not decide the library");
+    });
+    it("a missing table leaves the club on the old document rather than emptying the folder", () => {
+      const fetchSrc = methodSource("_videosFetch").body;
+      eq(/rows==null\) return;/.test(fetchSrc), true);
+      eq(/_videoRowsOn=true/.test(fetchSrc), true, "rows only become the truth once they answer");
+    });
+  });
+
+  describe("the SQL that turns the analyses table on", () => {
+    const sql = readFileSync(new URL("../supabase/video_analyses.sql", import.meta.url), "utf8");
+    it("is safe to run twice", () => {
+      eq(/create table if not exists vx_video_analyses/.test(sql), true);
+      eq(/drop policy if exists/.test(sql), true);
+    });
+    it("lets families read an analysis and only staff write one", () => {
+      eq(/for select to authenticated using \(true\)/.test(sql), true);
+      eq(/vx_is_staff\(\)/.test(sql), true);
+    });
+    it("says out loud when it could not narrow writing to staff", () =>
+      eq(/writable by ANY signed-in user/.test(sql), true));
+    it("reloads PostgREST, or the app sees a table that is not there yet", () =>
+      eq(/notify pgrst, 'reload schema'/.test(sql), true));
   });
 
   // "i need a folder to save all the videos analysis to back it" — the clips were only ever a

@@ -772,6 +772,106 @@ if ('serviceWorker' in navigator) {
   #vx-print-sheet{display:none}
   .vx-pattern-bg{background-color:#fff;background-repeat:repeat-y;background-position:right top;background-size:280px 316px;
     background-image:url("assets/pattern-transparent.png")}
+
+  /* ---------------------------------------------------------------- Race analysis
+     The club's own sheet, not a dark panel that could belong to any app: white paper, the
+     Vortex mark, the club's blue, the club's pattern washed into the corner, and the wave
+     rule that runs under every heading on the website. Written as classes rather than inline
+     styles so the next branded surface inherits the same look by reusing them. */
+  .vx-analysis{position:relative;overflow:hidden;background:var(--surface-card);
+    border:1px solid var(--border-subtle);border-radius:20px;padding:17px 16px 15px;
+    box-shadow:0 10px 30px rgba(11,20,40,.07), 0 1px 2px rgba(11,20,40,.04)}
+  /* The pattern, at the weight of a watermark. Loud enough to be the club's, quiet enough to
+     read a table of times through. */
+  .vx-analysis::before{content:"";position:absolute;top:-24px;right:-58px;width:230px;height:280px;
+    background:url("assets/pattern-transparent.png") right top/contain no-repeat;
+    opacity:.06;pointer-events:none}
+  /* The blue edge down the left is the club's rule on its letterhead. */
+  .vx-analysis::after{content:"";position:absolute;left:0;top:18px;bottom:18px;width:3px;
+    border-radius:0 3px 3px 0;background:var(--brand-gradient);pointer-events:none}
+  .vx-analysis-head{position:relative;display:flex;align-items:center;gap:10px;margin-bottom:13px}
+  .vx-analysis-mark{width:30px;height:30px;flex:none;object-fit:contain}
+  .vx-analysis-titles{flex:1;min-width:0;display:flex;flex-direction:column}
+  .vx-analysis-kicker{font-size:9px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;
+    color:var(--color-brand)}
+  .vx-analysis-title{font-family:var(--font-display);font-size:17px;font-weight:800;
+    letter-spacing:-.015em;color:var(--vx-ink);line-height:1.15}
+  .vx-analysis-total{flex:none;text-align:right;display:flex;flex-direction:column}
+  .vx-analysis-total-num{font-family:var(--font-mono);font-size:21px;font-weight:800;
+    letter-spacing:-.02em;color:var(--color-brand);line-height:1}
+  .vx-analysis-total-cap{font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--vx-slate-300);margin-top:3px}
+  .vx-analysis-warn{position:relative;display:flex;gap:9px;align-items:flex-start;
+    background:#FEF6E7;border:1px solid #F3DCA8;border-radius:12px;padding:10px 12px;
+    margin-bottom:13px;font-size:11.5px;line-height:1.5;color:#7A5A0C}
+  .vx-analysis-stats{position:relative;display:flex;gap:8px;flex-wrap:wrap;margin-bottom:15px}
+  .vx-stat{flex:1;min-width:92px;background:var(--vx-slate-50);border:1px solid var(--border-subtle);
+    border-left:3px solid var(--stat,var(--color-brand));border-radius:11px;padding:9px 11px}
+  .vx-stat-label{display:block;font-size:9px;font-weight:700;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--vx-slate-500)}
+  .vx-stat-value{display:block;font-family:var(--font-mono);font-size:19px;font-weight:800;
+    letter-spacing:-.02em;color:var(--vx-ink);margin-top:3px;line-height:1}
+  .vx-stat-sub{display:block;font-size:10px;color:var(--vx-slate-500);margin-top:3px;line-height:1.35}
+  /* The wave rule: a hairline that fades out to the right, the way the website's section
+     headings sit on the water line. */
+  .vx-analysis-section{position:relative;display:flex;align-items:baseline;justify-content:space-between;
+    gap:10px;padding-bottom:6px;margin-bottom:10px;
+    border-bottom:1px solid transparent;
+    border-image:linear-gradient(90deg, var(--color-brand) 0%, var(--border-subtle) 42%, transparent 100%) 1}
+  .vx-analysis-legend{font-size:11.5px;font-weight:800;color:var(--vx-ink);letter-spacing:-.01em}
+  .vx-analysis-legend-unit{font-size:9.5px;font-weight:600;color:var(--vx-slate-300);
+    letter-spacing:.04em;text-align:right}
+  .vx-speedchart{position:relative;display:flex;align-items:stretch;gap:7px;height:112px;margin-bottom:16px}
+  .vx-speedcol{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:5px}
+  .vx-speedval{font-family:var(--font-mono);font-size:10.5px;font-weight:800;flex:none}
+  /* The bars grow from a visible track, so a slow split reads as a short bar in a lane rather
+     than as a missing one. */
+  .vx-speedtrack{flex:1;width:100%;min-height:0;background:var(--vx-slate-50);
+    border-radius:7px;display:flex;align-items:flex-end;overflow:hidden}
+  .vx-speedbar{width:100%;border-radius:7px;transition:height .35s cubic-bezier(.22,1,.36,1)}
+  .vx-speedlab{font-size:9.5px;font-weight:700;color:var(--vx-slate-500);flex:none}
+  .vx-tablehead{position:relative;display:flex;font-size:9px;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--vx-slate-300);font-weight:700;padding:0 8px 7px}
+  .vx-tablerow{position:relative;display:flex;align-items:center;gap:2px;padding:8px;
+    border-radius:10px;margin-bottom:2px}
+  .vx-strokebox{flex:.9;min-width:0;text-align:right;background:var(--vx-white);
+    border:1px solid var(--border-default);border-radius:7px;padding:4px 6px;color:var(--vx-ink);
+    font-family:var(--font-mono);font-size:12px;font-weight:700;outline:none}
+  .vx-strokebox:focus{border-color:var(--color-brand);box-shadow:0 0 0 3px var(--brand-tint)}
+  .vx-analysis-breakout{position:relative;display:flex;align-items:center;gap:10px;margin-top:12px;
+    background:var(--vx-slate-50);border:1px solid var(--border-subtle);border-radius:12px;padding:10px 12px}
+  .vx-breakoutbox{flex:none;width:70px;text-align:right;background:var(--vx-white);
+    border:1px solid var(--border-default);border-radius:8px;padding:6px 8px;color:var(--vx-ink);
+    font-family:var(--font-mono);font-size:12.5px;font-weight:700;outline:none}
+  .vx-analysis-foot{position:relative;margin:13px 0 0;padding-top:11px;
+    border-top:1px solid var(--border-subtle);
+    font-size:10.5px;color:var(--vx-slate-500);line-height:1.6}
+  .vx-analysis-clear{flex:none;background:none;border:none;padding:0;cursor:pointer;
+    font-family:inherit;font-size:11px;font-weight:700;color:var(--vx-slate-500)}
+  /* Head to head — the same sheet, so the two read as one system rather than two apps. */
+  .vx-h2h-cols{position:relative;display:flex;align-items:flex-end;gap:6px;padding:0 4px 8px;
+    border-bottom:1px solid transparent;margin-bottom:6px;
+    border-image:linear-gradient(90deg, var(--color-brand) 0%, var(--border-subtle) 42%, transparent 100%) 1}
+  .vx-h2h-name{display:block;font-size:11.5px;font-weight:800;color:var(--vx-ink);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .vx-h2h-sub{display:block;font-size:9px;color:var(--vx-slate-300);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .vx-h2h-row{position:relative;display:flex;align-items:center;gap:6px;padding:5px 4px}
+  .vx-h2h-row + .vx-h2h-row{border-top:1px solid var(--border-subtle)}
+  .vx-h2h-cell{flex:1;min-width:0;text-align:center;border:1px solid transparent;
+    border-radius:9px;padding:5px 2px}
+  .vx-h2h-total{margin-top:4px;border-top:1px solid var(--border-default)}
+  /* The race clock stays dark — it is read at arm's length on a wet poolside, and dark digits
+     on white lose to the sun. It carries the same pattern and wordmark so it is plainly the
+     club's instrument and not a stock stopwatch. */
+  .vx-clockcard{position:relative;overflow:hidden;background:#0A0F1A;border-radius:20px;
+    padding:15px 16px 16px;color:#fff;box-shadow:0 10px 30px rgba(11,20,40,.18)}
+  .vx-clockcard::before{content:"";position:absolute;top:-30px;right:-56px;width:210px;height:250px;
+    background:url("assets/pattern-transparent.png") right top/contain no-repeat;
+    opacity:.10;pointer-events:none}
+  .vx-clockcard::after{content:"";position:absolute;left:0;top:0;right:0;height:3px;
+    background:linear-gradient(90deg, var(--ac-cyan) 0%, var(--color-brand) 55%, transparent 100%);
+    pointer-events:none}
   @media print{
     /* Print the sheet EXACTLY as it looks in the on-screen preview — same fonts,
        colours, badges and pattern (no shrinking, no background stripping).
@@ -3353,12 +3453,14 @@ if ('serviceWorker' in navigator) {
                             <button onclick="{{ onVideoDeleteActive }}" style="width:30px;height:30px;border-radius:9px;border:none;background:#F4F6F8;color:#9AA2B4;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="trash-2" style="width:15px;height:15px"></i></button>
                           </span>
                         </div>
-                        <div style="background:#0A0F1A;border-radius:16px;padding:15px;color:#fff">
-                          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:3px">
-                            <p style="margin:0;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">Race clock</p>
-                            <span style="font-size:10.5px;color:rgba(255,255,255,.45)">{{ stopwatchZeroLabel }}</span>
+                        <div class="vx-clockcard">
+                          <div style="position:relative;display:flex;align-items:center;gap:9px;margin-bottom:6px">
+                            <img src="assets/9b59d9a2.png" alt="Vortex SC" style="height:13px;flex:none;opacity:.9">
+                            <span style="flex:1"></span>
+                            <span style="font-size:10.5px;color:rgba(255,255,255,.45);text-align:right">{{ stopwatchZeroLabel }}</span>
                           </div>
-                          <div ref="{{ onStopwatchMount }}" style="font-family:var(--font-mono);font-size:44px;line-height:1.1;font-weight:800;letter-spacing:-.02em;color:#9AA2B4">0.00</div>
+                          <p style="position:relative;margin:0;font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ac-cyan);font-weight:700">Race clock</p>
+                          <div ref="{{ onStopwatchMount }}" style="position:relative;font-family:var(--font-mono);font-size:46px;line-height:1.05;font-weight:800;letter-spacing:-.03em;color:#9AA2B4">0.00</div>
                           <div style="display:flex;gap:7px;margin-top:11px">
                             <button onclick="{{ onVideoFindStart }}" style="flex:1.4;display:flex;align-items:center;justify-content:center;gap:7px;background:#22D7D7;color:#04222A;border:none;border-radius:11px;padding:12px 8px;font-family:inherit;font-weight:800;font-size:12.5px;cursor:pointer"><i data-lucide="{{ videoStartFindIcon }}" class="{{ videoStartFindSpin }}" style="width:16px;height:16px"></i> {{ videoStartFindLabel }}</button>
                             <button onclick="{{ onVideoSetStartHere }}" style="flex:1;background:rgba(255,255,255,.1);color:#fff;border:none;border-radius:11px;padding:12px 8px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer">Set start here</button>
@@ -3412,50 +3514,79 @@ if ('serviceWorker' in navigator) {
                         </div>
 
                         <sc-if value="{{ raceHasMetrics }}" hint-placeholder-val="{{ false }}">
-                          <div style="background:#0A0F1A;border-radius:16px;padding:15px;color:#fff">
-                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:11px">
-                              <p style="margin:0;font-size:13px;font-weight:800">Race analysis</p>
-                              <span style="font-family:var(--font-mono);font-size:13px;font-weight:800;color:#22D7D7">{{ raceTotal }}</span>
+                          <div class="vx-analysis">
+                            <div class="vx-analysis-head">
+                              <img src="assets/b798adf9.png" alt="" class="vx-analysis-mark">
+                              <span class="vx-analysis-titles">
+                                <span class="vx-analysis-kicker">Vortex Swimming Club</span>
+                                <span class="vx-analysis-title">Race analysis</span>
+                              </span>
+                              <sc-if value="{{ raceTotalShow }}" hint-placeholder-val="{{ true }}">
+                                <span class="vx-analysis-total">
+                                  <span class="vx-analysis-total-num">{{ raceTotal }}</span>
+                                  <span class="vx-analysis-total-cap">{{ raceEventCap }}</span>
+                                </span>
+                              </sc-if>
                             </div>
-                            <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:11px">
-                              <sc-for list="{{ raceHeadline }}" as="h" hint-placeholder-count="4">
-                                <div style="flex:1;min-width:76px;background:rgba(255,255,255,.06);border-radius:10px;padding:8px 9px">
-                                  <span style="display:block;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">{{ h.label }}</span>
-                                  <span style="display:block;font-family:var(--font-mono);font-size:15px;font-weight:800;color:{{ h.color }};margin-top:2px">{{ h.value }}</span>
-                                  <span style="display:block;font-size:9.5px;color:rgba(255,255,255,.45);margin-top:1px">{{ h.sub }}</span>
+
+                            <sc-if value="{{ raceStartWrong }}" hint-placeholder-val="{{ false }}">
+                              <div class="vx-analysis-warn">
+                                <i data-lucide="alert-triangle" style="width:15px;height:15px;flex:none"></i>
+                                <span>The start is set after splits that were already marked, so the race time cannot be worked out. The split times below are still right. Use <b>Hear the start</b> again, or clear the splits and mark them from the start.</span>
+                              </div>
+                            </sc-if>
+
+                            <div class="vx-analysis-stats">
+                              <sc-for list="{{ raceHeadline }}" as="h" hint-placeholder-count="3">
+                                <div class="vx-stat" style="--stat:{{ h.color }}">
+                                  <span class="vx-stat-label">{{ h.label }}</span>
+                                  <span class="vx-stat-value">{{ h.value }}</span>
+                                  <span class="vx-stat-sub">{{ h.sub }}</span>
                                 </div>
                               </sc-for>
                             </div>
-                            <div style="display:flex;align-items:flex-end;gap:5px;height:64px;margin-bottom:10px">
+
+                            <div class="vx-analysis-section">
+                              <span class="vx-analysis-legend">Speed through the race</span>
+                              <span class="vx-analysis-legend-unit">metres per second</span>
+                            </div>
+                            <div class="vx-speedchart">
                               <sc-for list="{{ raceSpeedBars }}" as="b" hint-placeholder-count="5">
-                                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px">
-                                  <span style="font-family:var(--font-mono);font-size:9px;color:rgba(255,255,255,.75)">{{ b.vel }}</span>
-                                  <div style="width:100%;height:{{ b.h }}px;background:{{ b.fill }};border-radius:4px"></div>
-                                  <span style="font-size:9px;color:rgba(255,255,255,.5)">{{ b.label }}</span>
+                                <div class="vx-speedcol">
+                                  <span class="vx-speedval" style="color:{{ b.ink }}">{{ b.vel }}</span>
+                                  <div class="vx-speedtrack">
+                                    <div class="vx-speedbar" style="height:{{ b.h }}%;background:{{ b.fill }}"></div>
+                                  </div>
+                                  <span class="vx-speedlab">{{ b.label }}</span>
                                 </div>
                               </sc-for>
                             </div>
-                            <div style="display:flex;font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.45);font-weight:700;padding:0 2px 5px">
+
+                            <div class="vx-analysis-section">
+                              <span class="vx-analysis-legend">Every split</span>
+                              <span class="vx-analysis-legend-unit">tap in the strokes, the rest follows</span>
+                            </div>
+                            <div class="vx-tablehead">
                               <span style="flex:1.1">Split</span><span style="flex:1;text-align:right">Time</span><span style="flex:1;text-align:right">m/s</span><span style="flex:.9;text-align:right">Str</span><span style="flex:1;text-align:right">SR</span><span style="flex:1;text-align:right">DPS</span><span style="flex:1;text-align:right">SI</span>
                             </div>
                             <sc-for list="{{ raceRows }}" as="r" hint-placeholder-count="5">
-                              <div style="display:flex;align-items:center;border-top:1px solid rgba(255,255,255,.08);padding:6px 2px">
-                                <span style="flex:1.1;font-size:11.5px;font-weight:700">{{ r.label }}</span>
-                                <span style="flex:1;text-align:right;font-family:var(--font-mono);font-size:11.5px">{{ r.split }}</span>
-                                <span style="flex:1;text-align:right;font-family:var(--font-mono);font-size:11.5px;color:#22D7D7">{{ r.vel }}</span>
-                                <input value="{{ r.strokes }}" onchange="{{ r.onStrokes }}" inputmode="numeric" placeholder="–" style="flex:.9;min-width:0;text-align:right;background:rgba(255,255,255,.08);border:none;border-radius:6px;padding:3px 5px;color:#fff;font-family:var(--font-mono);font-size:11.5px;outline:none">
-                                <span style="flex:1;text-align:right;font-family:var(--font-mono);font-size:11.5px;color:rgba(255,255,255,.8)">{{ r.sr }}</span>
-                                <span style="flex:1;text-align:right;font-family:var(--font-mono);font-size:11.5px;color:rgba(255,255,255,.8)">{{ r.dps }}</span>
-                                <span style="flex:1;text-align:right;font-family:var(--font-mono);font-size:11.5px;color:rgba(255,255,255,.8)">{{ r.si }}</span>
+                              <div class="vx-tablerow" style="background:{{ r.rowBg }}">
+                                <span style="flex:1.1;font-size:12px;font-weight:800;color:var(--vx-ink)">{{ r.label }}</span>
+                                <span style="flex:1;text-align:right;font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--vx-ink)">{{ r.split }}</span>
+                                <span style="flex:1;text-align:right;font-family:var(--font-mono);font-size:12px;font-weight:800;color:{{ r.velInk }}">{{ r.vel }}</span>
+                                <input value="{{ r.strokes }}" onchange="{{ r.onStrokes }}" inputmode="numeric" placeholder="–" class="vx-strokebox">
+                                <span style="flex:1;text-align:right;font-family:var(--font-mono);font-size:12px;color:var(--vx-slate-500)">{{ r.sr }}</span>
+                                <span style="flex:1;text-align:right;font-family:var(--font-mono);font-size:12px;color:var(--vx-slate-500)">{{ r.dps }}</span>
+                                <span style="flex:1;text-align:right;font-family:var(--font-mono);font-size:12px;color:var(--vx-slate-500)">{{ r.si }}</span>
                               </div>
                             </sc-for>
                             <sc-if value="{{ raceHasBreakout }}" hint-placeholder-val="{{ false }}">
-                              <div style="display:flex;align-items:center;gap:9px;margin-top:11px;background:rgba(255,255,255,.06);border-radius:10px;padding:8px 10px">
-                                <span style="flex:1;font-size:11px;color:rgba(255,255,255,.7);line-height:1.4">Breakout distance, in metres from the wall</span>
-                                <input value="{{ raceBreakoutM }}" onchange="{{ onRaceBreakout }}" inputmode="decimal" placeholder="14.1" style="flex:none;width:64px;text-align:right;background:rgba(255,255,255,.1);border:none;border-radius:7px;padding:5px 7px;color:#fff;font-family:var(--font-mono);font-size:12px;outline:none">
+                              <div class="vx-analysis-breakout">
+                                <span style="flex:1;font-size:11.5px;color:var(--vx-slate-500);line-height:1.4">Breakout distance, in metres from the wall</span>
+                                <input value="{{ raceBreakoutM }}" onchange="{{ onRaceBreakout }}" inputmode="decimal" placeholder="14.1" class="vx-breakoutbox">
                               </div>
                             </sc-if>
-                            <p style="margin:9px 0 0;font-size:10.5px;color:rgba(255,255,255,.5);line-height:1.5">{{ raceReadout }}</p>
+                            <p class="vx-analysis-foot">{{ raceReadout }}</p>
                           </div>
                         </sc-if>
                         <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:15px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
@@ -3536,40 +3667,45 @@ if ('serviceWorker' in navigator) {
                       </sc-if>
 
                       <sc-if value="{{ videoCompareHas }}" hint-placeholder-val="{{ false }}">
-                        <div style="background:#0A0F1A;border-radius:16px;padding:15px;color:#fff">
-                          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:11px">
-                            <p style="margin:0;font-size:13px;font-weight:800">Head to head</p>
-                            <button onclick="{{ onVideoCompareClear }}" style="background:none;border:none;color:rgba(255,255,255,.55);font-family:inherit;font-size:11px;font-weight:700;cursor:pointer">Clear</button>
+                        <div class="vx-analysis">
+                          <div class="vx-analysis-head">
+                            <img src="assets/b798adf9.png" alt="" class="vx-analysis-mark">
+                            <span class="vx-analysis-titles">
+                              <span class="vx-analysis-kicker">Vortex Swimming Club</span>
+                              <span class="vx-analysis-title">Head to head</span>
+                            </span>
+                            <button onclick="{{ onVideoCompareClear }}" class="vx-analysis-clear">Clear</button>
                           </div>
-                          <div style="display:flex;align-items:flex-end;gap:6px;padding:0 2px 7px">
-                            <span style="flex:.9"></span>
+                          <div class="vx-h2h-cols">
+                            <span style="flex:.85"></span>
                             <sc-for list="{{ videoCompareCols }}" as="cc" hint-placeholder-count="3">
                               <span style="flex:1;min-width:0;text-align:center">
-                                <span style="display:block;font-size:11px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ cc.title }}</span>
-                                <span style="display:block;font-size:9px;color:rgba(255,255,255,.5);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ cc.sub }}</span>
+                                <span class="vx-h2h-name">{{ cc.title }}</span>
+                                <span class="vx-h2h-sub">{{ cc.sub }}</span>
                               </span>
                             </sc-for>
                           </div>
                           <sc-for list="{{ videoCompareRows }}" as="cr" hint-placeholder-count="6">
-                            <div style="display:flex;align-items:center;gap:6px;border-top:1px solid rgba(255,255,255,.08);padding:5px 2px">
-                              <span style="flex:.9;font-size:11px;font-weight:700;color:rgba(255,255,255,.75)">{{ cr.label }}</span>
+                            <div class="vx-h2h-row">
+                              <span style="flex:.85;font-size:11.5px;font-weight:800;color:var(--vx-ink)">{{ cr.label }}</span>
                               <sc-for list="{{ cr.cells }}" as="cx" hint-placeholder-count="3">
-                                <span style="flex:1;min-width:0;text-align:center;background:{{ cx.bg }};color:{{ cx.fg }};border-radius:7px;padding:4px 2px">
-                                  <span style="display:block;font-family:var(--font-mono);font-size:12px;font-weight:800">{{ cx.value }}</span>
-                                  <span style="display:block;font-family:var(--font-mono);font-size:9px;opacity:.75">{{ cx.gap }}</span>
+                                <span class="vx-h2h-cell" style="background:{{ cx.bg }};color:{{ cx.fg }};border-color:{{ cx.edge }}">
+                                  <span style="display:block;font-family:var(--font-mono);font-size:12.5px;font-weight:800">{{ cx.value }}</span>
+                                  <span style="display:block;font-family:var(--font-mono);font-size:9px;opacity:.7">{{ cx.gap }}</span>
                                 </span>
                               </sc-for>
                             </div>
                           </sc-for>
-                          <div style="display:flex;align-items:center;gap:6px;margin-top:9px;padding:2px">
-                            <span style="flex:.9;font-size:11px;font-weight:800">{{ videoCompareTotal.label }}</span>
+                          <div class="vx-h2h-row vx-h2h-total">
+                            <span style="flex:.85;font-size:11.5px;font-weight:800;color:var(--vx-ink)">{{ videoCompareTotal.label }}</span>
                             <sc-for list="{{ videoCompareTotal.cells }}" as="ct" hint-placeholder-count="3">
-                              <span style="flex:1;min-width:0;text-align:center;background:{{ ct.bg }};color:{{ ct.fg }};border-radius:8px;padding:6px 2px">
-                                <span style="display:block;font-family:var(--font-mono);font-size:13px;font-weight:800">{{ ct.value }}</span>
-                                <span style="display:block;font-family:var(--font-mono);font-size:9px;opacity:.75">{{ ct.gap }}</span>
+                              <span class="vx-h2h-cell" style="background:{{ ct.bg }};color:{{ ct.fg }};border-color:{{ ct.edge }}">
+                                <span style="display:block;font-family:var(--font-mono);font-size:14px;font-weight:800">{{ ct.value }}</span>
+                                <span style="display:block;font-family:var(--font-mono);font-size:9px;opacity:.7">{{ ct.gap }}</span>
                               </span>
                             </sc-for>
                           </div>
+                          <p class="vx-analysis-foot">The fastest swimmer at each mark is filled in; the small figure under the others is how far behind they were. Marks line up by distance, so two clips marked in a different order still compare.</p>
                         </div>
                       </sc-if>
                     </div>
@@ -5702,7 +5838,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-11l';
+const VX_BUILD='2026-08-11m';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -9650,7 +9786,7 @@ class Component extends DCLogic {
     if(!/^https?:\/\//i.test(url)){ this.setState({videoUrlErr:'Enter a full link starting with http:// or https://'}); return; }
     const p=this.parseVideoUrl(url);
     const rec={id:this._uid('vid'), url, kind:p.kind, vid:p.vid, title:S.videoTitleDraft.trim()||'Untitled clip', tag:S.videoTagDraft.trim(), laps:[], notes:[], raceType:'100', savedAt:new Date().toISOString()};
-    this.videoLib=[rec, ...this.videoLib]; this._saveJSON('vx_videos', this.videoLib);
+    this.videoLib=[rec, ...this.videoLib]; this._videosPersist(rec.id);
     this.setState({videoAddOpen:false, videoUrlDraft:'', videoTitleDraft:'', videoTagDraft:'', videoActiveId:rec.id, videoRate:1, videoUrlErr:''});
   }
   // An uploaded video used to become a blob: URL — a pointer that lives only in the tab that
@@ -9679,7 +9815,7 @@ class Component extends DCLogic {
       return;
     }
     this.videoLib=this.videoLib.map(v=>v.id===id?{...v, url, vid:url, tag:'Uploaded from device', _isBlob:false}:v);
-    this._saveJSON('vx_videos', this.videoLib);   // only now is it safe to keep — the URL outlives the tab
+    this._videosPersist(id);   // only now is it safe to keep — the URL outlives the tab
     this.setState({videoUploadMsg:'Uploaded ✓ — saved to the club, and the splits will keep.'});
   }
   // The marks a coach taps, in the order they happen. The first is Start — the start signal in
@@ -9768,6 +9904,17 @@ class Component extends DCLogic {
     const slow=Math.min(...swim.map(r=>r.velNum));
     const drop=fast>0 ? ((fast-slow)/fast*100) : 0;
     const total=rows[rows.length-1].cumNum;
+    // A start set after marks that were already captured makes every time measured from it
+    // negative, and the club was shown a 50 that took −33.18 seconds with its 15 m missing.
+    // The splits between marks are still true — only their distance from the gun is not — so
+    // they are kept and the total is withheld rather than printed as nonsense.
+    if(rows.some(r=>r.cumNum<0)){
+      return { rows, firstFifteen:null, underwater:null, hasBreakout: breakoutT!=null,
+        drop:drop.toFixed(1), dropBad: drop>12,
+        out:null, back:null, total:null, totalNum:null,
+        fastest:fast.toFixed(2), slowest:slow.toFixed(2),
+        startWrong:true };
+    }
     // Out and back, for anything longer than one length.
     let out=null, back=null;
     const half=rows.find(r=>r.metres===lapLen);
@@ -9775,7 +9922,7 @@ class Component extends DCLogic {
     return { rows, firstFifteen, underwater, hasBreakout: breakoutT!=null,
       drop:drop.toFixed(1), dropBad: drop>12,
       out, back, total:total.toFixed(2), totalNum:total,
-      fastest:fast.toFixed(2), slowest:slow.toFixed(2) };
+      fastest:fast.toFixed(2), slowest:slow.toFixed(2), startWrong:false };
   }
   videoSetStrokes(label, n){
     const v=this._activeVideo(); if(!v) return;
@@ -9783,15 +9930,83 @@ class Component extends DCLogic {
     const strokes={...(v.strokes||{})};
     if(k>0) strokes[label]=k; else delete strokes[label];
     this.videoLib=this.videoLib.map(x=>x.id===v.id?{...x, strokes}:x);
-    if(!v._isBlob) this._saveJSON('vx_videos', this.videoLib);
+    if(!v._isBlob) this._videosPersist(v.id);
     this.forceUpdate();
   }
   videoSetBreakout(m){
     const v=this._activeVideo(); if(!v) return;
     this.videoLib=this.videoLib.map(x=>x.id===v.id?{...x, breakoutM:m}:x);
-    if(!v._isBlob) this._saveJSON('vx_videos', this.videoLib);
+    if(!v._isBlob) this._videosPersist(v.id);
     this.forceUpdate();
   }
+  // ---- Where the analyses live ----
+  //
+  // They were one row of club_state holding every clip the club had ever marked, so the last
+  // device to touch anything replaced everyone else's work. That shape has already cost this
+  // club a set of squad colours and a roster, and three people mark videos here.
+  //
+  // One row per analysis. Mary marking a Senior A and Sameh marking a Junior now write different
+  // rows, and neither can revert the other. The key is the clip's own id, minted from the clock
+  // and unique — there is no composite key here that could name the same row twice, which is
+  // exactly what took the roster down.
+  //
+  // The old document is still written and still read when the table is missing, so running the
+  // SQL is what turns this on and nothing is stranded before it is run.
+  _videoRow(v){
+    return { id:v.id, title:v.title||'', tag:v.tag||'', url:v.url||'', kind:v.kind||'mp4',
+      vid:v.vid||'', race_type:String(v.raceType||'100'),
+      laps:v.laps||[], strokes:v.strokes||{}, notes:v.notes||[],
+      breakout_m:(v.breakoutM===''||v.breakoutM==null)?null:String(v.breakoutM),
+      saved_at:v.savedAt||new Date().toISOString(), updated_at:new Date().toISOString() };
+  }
+  _videoFromRow(r){
+    return { id:r.id, title:r.title||'Untitled clip', tag:r.tag||'', url:r.url||'',
+      kind:r.kind||'mp4', vid:r.vid||r.url||'', raceType:String(r.race_type||'100'),
+      laps:Array.isArray(r.laps)?r.laps:[], strokes:r.strokes||{},
+      notes:Array.isArray(r.notes)?r.notes:[],
+      breakoutM:r.breakout_m==null?'':String(r.breakout_m),
+      savedAt:r.saved_at||'' };
+  }
+  async _videosFetch(){
+    if(!window.__vxSelect) return;
+    const rows=await window.__vxSelect('vx_video_analyses', 'select=*&order=saved_at.desc&limit=500');
+    if(rows==null) return;                 // no table yet: the old document stays the truth
+    this._videoRowsOn=true;
+    if(!rows.length){ try{ await this._videosSeed(); }catch(e){} return; }
+    // A clip still uploading lives only in this tab and has no row yet; dropping it here would
+    // take the coach's video off the screen mid-upload.
+    const pending=(this.videoLib||[]).filter(v=>v && v._isBlob);
+    this.videoLib=[...pending, ...rows.map(r=>this._videoFromRow(r))];
+    this.forceUpdate();
+  }
+  // Fill the table once from whatever the club already has. Staff with full access only — a
+  // parent's device must not be the one that decides what the club's library is.
+  async _videosSeed(){
+    if(!window.__vxUpsert || !this._isFullAccess()) return;
+    const seen={}, rows=[];
+    (this.videoLib||[]).forEach(v=>{
+      if(!v || !v.id || v._isBlob || seen[v.id]) return;    // never the same id twice in one batch
+      seen[v.id]=1; rows.push(this._videoRow(v));
+    });
+    if(!rows.length) return;
+    const ok=await window.__vxUpsert('vx_video_analyses', rows);
+    if(ok) this._videosFetch();
+  }
+  // One analysis saved: its own row, and the old document kept as the fallback for devices that
+  // have not run the SQL yet. Writing one row cannot touch another clip's work.
+  _videosPersist(id){
+    this._saveJSON('vx_videos', this.videoLib);
+    if(!this._videoRowsOn || !window.__vxUpsert) return;
+    const v=(this.videoLib||[]).find(x=>x.id===id);
+    if(!v || v._isBlob) return;
+    try{ window.__vxUpsert('vx_video_analyses', [this._videoRow(v)]); }catch(e){}
+  }
+  _videosForget(id){
+    this._saveJSON('vx_videos', this.videoLib);
+    if(!this._videoRowsOn || !window.__vxDelete) return;
+    try{ window.__vxDelete('vx_video_analyses', 'id=eq.'+encodeURIComponent(id)); }catch(e){}
+  }
+
   // ---- Comparing swimmers, up to three at a time ----
   //
   // A split table for one swimmer says how the swim went. Three side by side say why one of them
@@ -9847,7 +10062,7 @@ class Component extends DCLogic {
       if(ms>1500000000000 && ms<4000000000000) return new Date(ms).toISOString().slice(0,10); }
     return '';
   }
-  videoDelete(id){ this.videoLib=this.videoLib.filter(v=>v.id!==id); this._saveJSON('vx_videos', this.videoLib);
+  videoDelete(id){ this.videoLib=this.videoLib.filter(v=>v.id!==id); this._videosForget(id);
     const keep=(this.state.videoCompareIds||[]).filter(x=>x!==id);
     if(this.state.videoActiveId===id) this.setState({videoActiveId:null, videoCompareIds:keep});
     else this.setState({videoCompareIds:keep});
@@ -9868,20 +10083,20 @@ class Component extends DCLogic {
     const nextIdx=(v.laps||[]).length;
     if(nextIdx>=labels.length) return;
     const laps=[...(v.laps||[]), {label:labels[nextIdx], t:+t.toFixed(2)}];
-    this.videoLib=this.videoLib.map(x=>x.id===v.id?{...x, laps}:x); if(!v._isBlob) this._saveJSON('vx_videos', this.videoLib); this.forceUpdate();
+    this.videoLib=this.videoLib.map(x=>x.id===v.id?{...x, laps}:x); if(!v._isBlob) this._videosPersist(v.id); this.forceUpdate();
   }
   videoSetRaceType(raceType){ const v=this._activeVideo(); if(!v) return;
-    this.videoLib=this.videoLib.map(x=>x.id===v.id?{...x, raceType, laps:[]}:x); if(!v._isBlob) this._saveJSON('vx_videos', this.videoLib); this.forceUpdate();
+    this.videoLib=this.videoLib.map(x=>x.id===v.id?{...x, raceType, laps:[]}:x); if(!v._isBlob) this._videosPersist(v.id); this.forceUpdate();
   }
-  videoDeleteLap(id, idx){ this.videoLib=this.videoLib.map(x=>{ if(x.id!==id) return x; const laps=x.laps.slice(); laps.splice(idx,1); return {...x, laps}; }); this._saveJSON('vx_videos', this.videoLib); this.forceUpdate(); }
-  videoClearLaps(id){ this.videoLib=this.videoLib.map(x=>x.id===id?{...x, laps:[]}:x); this._saveJSON('vx_videos', this.videoLib); this.forceUpdate(); }
+  videoDeleteLap(id, idx){ this.videoLib=this.videoLib.map(x=>{ if(x.id!==id) return x; const laps=x.laps.slice(); laps.splice(idx,1); return {...x, laps}; }); this._videosPersist(id); this.forceUpdate(); }
+  videoClearLaps(id){ this.videoLib=this.videoLib.map(x=>x.id===id?{...x, laps:[]}:x); this._videosPersist(id); this.forceUpdate(); }
   videoAddNote(){ const v=this._activeVideo(); const txt=(this.state.videoNoteDraft||'').trim(); if(!v||!txt) return;
     const t=this._getCurrentTime();
     const notes=[...v.notes, {t:+t.toFixed(2), text:txt}].sort((a,b)=>a.t-b.t);
-    this.videoLib=this.videoLib.map(x=>x.id===v.id?{...x, notes}:x); this._saveJSON('vx_videos', this.videoLib);
+    this.videoLib=this.videoLib.map(x=>x.id===v.id?{...x, notes}:x); this._videosPersist(v.id);
     this.setState({videoNoteDraft:''});
   }
-  videoDeleteNote(id, idx){ this.videoLib=this.videoLib.map(x=>{ if(x.id!==id) return x; const notes=x.notes.slice(); notes.splice(idx,1); return {...x, notes}; }); this._saveJSON('vx_videos', this.videoLib); this.forceUpdate(); }
+  videoDeleteNote(id, idx){ this.videoLib=this.videoLib.map(x=>{ if(x.id!==id) return x; const notes=x.notes.slice(); notes.splice(idx,1); return {...x, notes}; }); this._videosPersist(id); this.forceUpdate(); }
   videoSeek(t){
     const v=this._activeVideo(); if(!v) return;
     try{
@@ -10047,8 +10262,15 @@ class Component extends DCLogic {
             ? 'Nothing in this clip stands out as a start signal — the sound may be missing, or the beep may be before the clip begins. Tap "Set start here" at the beep instead.'
             : 'Could not pick out a start signal. Tap "Set start here" at the beep instead.'});
       }
-      this.setState({videoStartBusy:false, videoStartCands:found.candidates, videoStartPick:0});
-      this.videoSetStartAt(found.best.t);
+      // If splits are already marked, the start has to come before them — so the best answer is
+      // the best candidate that could actually be the start of this race, not simply the loudest
+      // thing in the clip. Without this the app offered a start it would then refuse.
+      const limit=this._videoStartLimit(v);
+      const usable=limit==null ? found.candidates : found.candidates.filter(c=>c.t<limit);
+      const pick=usable.length ? found.candidates.indexOf(usable[0]) : 0;
+      this.setState({videoStartBusy:false, videoStartCands:found.candidates, videoStartPick:pick,
+        videoStartMsg: usable.length ? '' : 'Every sound it found is after splits you have already marked. Clear the splits and mark them again from the start.'});
+      if(usable.length) this.videoSetStartAt(found.candidates[pick].t);
     }catch(err){
       try{ if(ctx) ctx.close(); }catch(e){}
       const why=(err&&err.message)||'';
@@ -10066,14 +10288,26 @@ class Component extends DCLogic {
   }
   // The start is the zero of the race, so setting it re-bases every split already marked — the
   // marks keep their own place in the clip and only their distance from the gun changes.
+  // The earliest mark the start has to come before. Past it, the race runs backwards.
+  _videoStartLimit(v){
+    const others=((v&&v.laps)||[]).filter(l=>!/^\s*(start|reaction)/i.test(String((l&&l.label)||'')));
+    if(!others.length) return null;
+    return Math.min.apply(null, others.map(l=>+l.t).filter(x=>isFinite(x)));
+  }
   videoSetStartAt(t){
     const v=this._activeVideo(); if(!v) return;
     const sec=+t; if(!isFinite(sec) || sec<0) return;
     const label=(this.videoSplitLabels(v.raceType||'100')[0])||'Start';
     const rest=(v.laps||[]).filter(l=>!/^\s*(start|reaction)/i.test(String((l&&l.label)||'')));
+    // Refused rather than saved. A start after the marks does not make a slightly wrong
+    // analysis, it makes an impossible one, and the club has already been shown the result.
+    const limit=this._videoStartLimit(v);
+    if(limit!=null && sec>=limit){
+      return this.setState({videoStartMsg:'That moment is after splits you have already marked, so the race clock would run backwards. Pick an earlier sound, or clear the splits and mark them again from the start.'});
+    }
     const laps=[{label, t:+sec.toFixed(3)}, ...rest];
     this.videoLib=this.videoLib.map(x=>x.id===v.id?{...x, laps}:x);
-    if(!v._isBlob) this._saveJSON('vx_videos', this.videoLib);
+    if(!v._isBlob) this._videosPersist(v.id);
     this.setState({videoStartMsg:''});
     this.videoSeekPaused(sec);
   }
@@ -11860,6 +12094,7 @@ class Component extends DCLogic {
     } catch(e){} finally { this._syncBusy=false; }
     try{ this._squadPlansFetch(); }catch(e){}
     try{ this._squadsFetch(); }catch(e){}
+    try{ this._videosFetch(); }catch(e){}
     try{ this._rosterFetch(); }catch(e){}
     try{ this._planCustomFetch(); }catch(e){}
     try{ this._famMsgFetch(); }catch(e){}
@@ -15199,21 +15434,36 @@ class Component extends DCLogic {
       ...(()=>{
         const M=this.videoRaceMetrics(activeVid);
         if(!M) return {raceHasMetrics:false};
-        const vs=M.rows.map(r=>r.velNum); const top=Math.max(...vs, 0.1);
+        const vs=M.rows.map(r=>r.velNum);
+        const top=Math.max(...vs, 0.1), floor=Math.min(...vs, top);
         const head=[];
-        if(M.firstFifteen) head.push({label:'First 15m', value:M.firstFifteen.sec, sub:M.firstFifteen.vel+' m/s · start & underwater', color:'#fff'});
-        if(M.underwater) head.push({label:'Underwater', value:M.underwater.vel, sub:M.underwater.metres+' m · '+M.underwater.sec+' s', color:'#22D7D7'});
-        if(M.out) head.push({label:'Out / back', value:M.out+' / '+M.back, sub:'first & second length', color:'#fff'});
+        if(M.firstFifteen) head.push({label:'First 15m', value:M.firstFifteen.sec, sub:M.firstFifteen.vel+' m/s · start & underwater', color:'var(--color-brand)'});
+        if(M.underwater) head.push({label:'Underwater', value:M.underwater.vel, sub:M.underwater.metres+' m · '+M.underwater.sec+' s', color:'var(--ac-cyan)'});
+        if(M.out) head.push({label:'Out / back', value:M.out+' / '+M.back, sub:'first & second length', color:'var(--color-brand)'});
         // The number a highlight of one good length never shows: how much speed was lost by
         // the end. Anything past a tenth of the peak is where the race was actually decided.
         head.push({label:'Speed drop', value:M.drop+'%', sub:M.fastest+' → '+M.slowest+' m/s',
-                   color: M.dropBad?'#FF8A8D':'#7CE7C6'});
+                   color: M.dropBad?'var(--vx-danger)':'var(--vx-success)'});
+        // The bars are scaled between the slowest split and the fastest rather than from zero.
+        // Every split of a race sits between about 1.6 and 2.4 m/s, so a chart from zero is
+        // four bars of the same height and says nothing about where the race was lost.
+        const span=Math.max(0.15, top-floor);
         return {
-          raceHasMetrics:true, raceTotal:M.total+'s', raceHeadline:head,
-          raceSpeedBars: M.rows.map(r=>({ label:r.label.replace(/^L\d+\s/,''), vel:r.vel,
-            h: Math.max(6, Math.round((r.velNum/top)*52)),
-            fill: r.velNum>=top*0.98 ? '#22D7D7' : 'rgba(255,255,255,.35)' })),
-          raceRows: M.rows.map(r=>({ ...r, onStrokes:(e)=>this.videoSetStrokes(r.label, e.target.value) })),
+          raceHasMetrics:true, raceTotal:M.total!=null?(M.total+'s'):'', raceTotalShow:M.total!=null,
+          raceStartWrong: !!M.startWrong,
+          raceEventCap: (activeVid&&activeVid.raceType?activeVid.raceType+'m':'race')+' · total',
+          raceHeadline:head,
+          raceSpeedBars: M.rows.map(r=>{
+            const fastest=r.velNum>=top-1e-9, slowest=r.velNum<=floor+1e-9 && M.rows.length>1;
+            return { label:r.label.replace(/^L\d+\s/,''), vel:r.vel,
+              h: Math.round(22+((r.velNum-floor)/span)*78),
+              fill: fastest ? 'var(--ac-cyan)' : (slowest ? 'var(--vx-slate-200)' : 'var(--color-brand)'),
+              ink:  fastest ? 'var(--cyan-dark)' : (slowest ? 'var(--vx-slate-500)' : 'var(--color-brand)') };
+          }),
+          raceRows: M.rows.map((r,i)=>({ ...r,
+            rowBg: i%2 ? 'var(--vx-slate-50)' : 'transparent',
+            velInk: r.velNum>=top-1e-9 ? 'var(--cyan-dark)' : 'var(--color-brand)',
+            onStrokes:(e)=>this.videoSetStrokes(r.label, e.target.value) })),
           // The breakout box only belongs to analyses captured with a breakout mark. On the
           // marks the club uses now there is nothing to measure it against, and a box that
           // cannot change a number is a box that reads as broken.
@@ -15244,9 +15494,13 @@ class Component extends DCLogic {
       videoCompareHas: !!videoCompare,
       videoCompareCols: videoCompare?videoCompare.cols.map(c=>({title:c.title, sub:[c.raceType, c.tag].filter(Boolean).join(' · ')})):[],
       videoCompareRows: videoCompare?videoCompare.rows.map(r=>({label:r.label, cells:r.cells.map(c=>({
-        value:c.value, gap:c.gap, bg:c.best?'#DCF5EA':'transparent', fg:c.best?'#0C7A4F':'#3A4152' }))})):[],
+        value:c.value, gap:c.gap,
+        bg:c.best?'var(--brand-tint)':'transparent', fg:c.best?'var(--color-brand-ink)':'var(--vx-slate-500)',
+        edge:c.best?'var(--color-brand)':'transparent' }))})):[],
       videoCompareTotal: videoCompare?{label:videoCompare.totalRow.label, cells:videoCompare.totalRow.cells.map(c=>({
-        value:c.value, gap:c.gap, bg:c.best?'#0C7A4F':'#F4F6F8', fg:c.best?'#fff':'#3A4152' }))}:{label:'Total', cells:[]},
+        value:c.value, gap:c.gap,
+        bg:c.best?'var(--color-brand)':'var(--vx-slate-50)', fg:c.best?'var(--on-brand)':'var(--vx-slate-500)',
+        edge:c.best?'var(--color-brand)':'var(--border-subtle)' }))}:{label:'Total', cells:[]},
       videoCompareHint: videoCompareCount>=2 ? 'Green is the fastest at that mark; the small figure is how far behind.'
                                              : 'Tick two or three saved analyses to compare them mark for mark.',
       composeText:S.compose, onComposeChange:(e)=>this.setState({compose:e.target.value}), composeTags, onPost, feed,
