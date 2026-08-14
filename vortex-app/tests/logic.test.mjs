@@ -3434,6 +3434,24 @@ describe("InBody sheet", () => {
     });
   });
 
+  // A restore rewinds the database to a moment before the newer tables were created, so "is that
+  // table still there" is a question the club has now had to ask twice. The data check answers
+  // it without anyone opening the SQL editor.
+  describe("the data check covers the tables that a restore can undo", () => {
+    const fn = methodSource("runDataCheck").body;
+    it("asks about the per-row tables, not only the original ones", () => {
+      eq(/'vx_squads_t'/.test(fn), true);
+      eq(/'vx_video_analyses'/.test(fn), true);
+    });
+    it("a table that is not there says which file creates it", () => {
+      eq(/run '\+file/.test(fn), true);
+      eq(/video_analyses\.sql/.test(fn), true);
+      eq(/squads\.sql/.test(fn), true);
+    });
+    it("and is flagged rather than shown as a quiet zero", () =>
+      eq(/warn: missing/.test(fn), true));
+  });
+
   describe("the SQL that turns the analyses table on", () => {
     const sql = readFileSync(new URL("../supabase/video_analyses.sql", import.meta.url), "utf8");
     it("is safe to run twice", () => {

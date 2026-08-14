@@ -5914,7 +5914,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-11o';
+const VX_BUILD='2026-08-11p';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -10728,7 +10728,10 @@ class Component extends DCLogic {
     };
     let db = {};
     if(C){
-      const tables = ['attendance_marks','plan_sessions','fitness_sessions','squad_plans','season_plans','fitness_plans','family_accounts','staff_accounts','swimmer_docs','push_subscriptions','announcements','family_messages','lounge_posts','lounge_comments','signup_alerts'];
+      // The tables added since the club started splitting single documents into rows. A restore
+      // rewinds the database to a moment before they were created, so "does this table exist"
+      // is a question the club has had to ask twice now, and it should not need me to answer it.
+      const tables = ['attendance_marks','plan_sessions','fitness_sessions','squad_plans','season_plans','fitness_plans','family_accounts','staff_accounts','swimmer_docs','push_subscriptions','announcements','family_messages','lounge_posts','lounge_comments','signup_alerts','vx_squads_t','vx_video_analyses'];
       try{
         const res = await Promise.all(tables.map(t=>C(t)));
         tables.forEach((t,i)=>{ db[t]=res[i]; });
@@ -10755,6 +10758,16 @@ class Component extends DCLogic {
       ['Announcements', db.announcements],
       ['Push subscriptions', db.push_subscriptions],
     ].map(r=>({ label:r[0], value:num(r[1]), warn:(r[1]===-1) }));
+    // A count of -1 is "the table would not answer", which for these two means it is not there
+    // — either the SQL has not been run, or a restore rewound past the day it was.
+    const perRow=[
+      ['Squads table (one row each)', db.vx_squads_t, 'squads.sql'],
+      ['Video analyses table (one row each)', db.vx_video_analyses, 'video_analyses.sql'],
+    ];
+    perRow.forEach(([label, n, file])=>{
+      const missing = (n==null || n<0);
+      rows.push({ label, value: missing ? ('not there — run '+file) : String(n), warn: missing });
+    });
     // Secure cloud sign-in status — confirms this admin carries a Supabase JWT (needed before
     // the RLS lockdown; if this shows "not signed in", do NOT apply the lockdown yet).
     const _a=window.__VX_AUTH; const _signed=!!(_a && _a.token && _a.exp && Date.now()<_a.exp);
