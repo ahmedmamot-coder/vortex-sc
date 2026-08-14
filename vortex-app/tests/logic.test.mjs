@@ -2988,6 +2988,7 @@ describe("InBody sheet", () => {
       c._rosterRowsFrom = bind("_rosterRowsFrom", c);
       c._rosterEditsFrom = bind("_rosterEditsFrom", c);
       c._rowKeyMap = bind("_rowKeyMap", c);
+      c._dedupeRows = bind("_dedupeRows", c);
       return c;
     };
     const EDITS = {
@@ -2996,33 +2997,68 @@ describe("InBody sheet", () => {
       added:   { seniora: [{ id: "sw_new", name: "New Swimmer", age: 14 }] },
     };
 
-    it("every kind of change becomes its own row", () => {
+    it("one row per swimmer per squad, carrying every fact at once", () => {
       const rows = ctx()._rosterRowsFrom(EDITS);
       eq(rows.length, 3);
       const by = Object.fromEntries(rows.map((r) => [r.id, r]));
-      eq(by["junior::sw1"].state, "edit");
-      eq(by["junior::sw9"].state, "deleted");
-      eq(by["seniora::sw_new"].state, "added");
+      eq(by["junior::sw1"].patch.name, "Aria Baker");
+      eq(by["junior::sw9"].deleted, true);
+      eq(by["seniora::sw_new"].added, true);
       eq(by["seniora::sw_new"].patch.name, "New Swimmer", "an added swimmer carries their whole record");
     });
     // A move is a removal from one squad and an addition to another, at the same time.
     it("a swimmer can be deleted from one squad and added to another at once", () => {
       const rows = ctx()._rosterRowsFrom({
         edits: {}, deleted: { junior: { sw1: true } }, added: { seniora: [{ id: "sw1", name: "A" }] } });
-      eq(rows.length, 2, "keying on the swimmer alone would collapse a move into one row");
+      eq(rows.length, 2, "two squads, two rows");
       eq(rows.filter((r) => r.sw_id === "sw1").length, 2);
+    });
+    // What cost the club 301 dates of birth: a moved swimmer is edited AND deleted in the same
+    // squad, so a row per KIND of change produced the same key twice. Postgres refuses an upsert
+    // that names one row twice and rejects the entire batch — five hundred swimmers' edits lost
+    // for every one that had moved.
+    it("an edited AND deleted swimmer is one row, not two with the same key", () => {
+      const rows = ctx()._rosterRowsFrom({
+        edits: { junior: { sw1: { dob: "2014-03-02" } } },
+        deleted: { junior: { sw1: true } },
+        added: { seniora: [{ id: "sw1", name: "A", dob: "2014-03-02" }] },
+      });
+      const junior = rows.filter((r) => r.id === "junior::sw1");
+      eq(junior.length, 1, "two rows with one key take the whole batch down with them");
+      eq(junior[0].deleted, true);
+      eq(junior[0].patch.dob, "2014-03-02", "and the date of birth must survive the move");
+    });
+    it("a duplicate key can never be sent, whatever builds the rows", () => {
+      const c = ctx();
+      const out = c._dedupeRows([{ id: "a" }, { id: "a" }, { id: "b" }, null]);
+      eq(out.length, 2);
+      eq(/this\._dedupeRows\(/.test(SOURCE), true);
+      eq((SOURCE.match(/this\._dedupeRows\(/g) || []).length >= 3, true,
+         "the seed, the incremental write and the rebuild all have to be guarded");
+    });
+    it("the roster can be rebuilt from the document that still holds it", () => {
+      const fn = sourceBetween("async rosterRebuildFromDocument(){", "\n  _rowKeyMap");
+      eq(/key=eq\.vx_roster_edits/.test(fn), true, "the single document was never deleted");
+      eq(/__vxDelete\('vx_roster'/.test(fn), true, "a half-written table plus a rebuild makes duplicates");
+      const clearAt = fn.indexOf("__vxDelete('vx_roster'");
+      const writeAt = fn.indexOf("__vxUpsert('vx_roster'");
+      eq(clearAt > -1 && clearAt < writeAt, true, "clear before writing, not after");
+      eq(/this\._isFullAccess\(\)/.test(fn), true);
+      eq(/Rebuild stopped/.test(fn), true, "a failed batch must stop, not carry on writing half a club");
     });
     it("rows read back as the same roster", () => {
       const c = ctx();
       const back = c._rosterEditsFrom(c._rosterRowsFrom(EDITS));
       eq(back.edits.junior.sw1.name, "Aria Baker");
       eq(back.deleted.junior.sw9, true);
+      eq(back.edits.junior.sw9, undefined, "a deletion is not also an edit");
       eq(back.added.seniora.length, 1);
       eq(back.added.seniora[0].id, "sw_new");
     });
-    it("a row for a swimmer nobody recognises is ignored, not crashed on", () => {
-      const back = ctx()._rosterEditsFrom([{ state: "edit" }, null, { squad_id: "j", sw_id: "s", state: "edit", patch: null }]);
-      eq(back.edits.j.s !== undefined, true);
+    it("a malformed row is ignored rather than crashed on", () => {
+      const back = ctx()._rosterEditsFrom([{ patch: {} }, null, { squad_id: "j", sw_id: "s", patch: { age: 12 } }]);
+      eq(back.edits.j.s.age, 12);
+      eq(Object.keys(back.deleted).length, 0);
     });
 
     // The point of the whole migration.

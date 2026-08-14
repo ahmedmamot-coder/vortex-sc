@@ -5021,6 +5021,7 @@ if ('serviceWorker' in navigator) {
                           <button onclick="{{ onRosterCheck }}" style="flex:1;min-width:120px;background:#fff;color:#2733D6;border:1px solid #D3E0FA;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Compare copies</button>
                           <button onclick="{{ onRosterUseDb }}" style="flex:1;min-width:120px;background:#fff;color:#3A4152;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Use the database copy</button>
                           <button onclick="{{ onRosterUseDevice }}" style="flex:1;min-width:120px;background:#0A0F1A;color:#fff;border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Use this device's copy</button>
+                          <button onclick="{{ onRosterRebuild }}" style="flex:1;min-width:120px;background:#B42318;color:#fff;border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Rebuild from the saved roster</button>
                         </div>
                         <sc-if value="{{ rosterFixMsgShow }}" hint-placeholder-val="{{ false }}">
                           <p style="margin:9px 0 0;font-size:11.5px;font-weight:700;color:{{ rosterFixColor }};line-height:1.45">{{ rosterFixMsg }}</p>
@@ -5602,7 +5603,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-11h';
+const VX_BUILD='2026-08-11i';
 // Roles that carry the run of the club: Club Administration, adding and editing anywhere.
 // Coach, Assistant Coach and Fitness Coach are deliberately absent — a fitness coach works
 // across every squad without being able to rewrite the club.
@@ -6869,29 +6870,46 @@ class Component extends DCLogic {
   //
   // Keyed on squad AND swimmer because a move is a removal from one squad and an addition to
   // another, and both halves exist at the same time.
+  // ONE row per (squad, swimmer), carrying every fact about that swimmer in that squad at once.
+  //
+  // The first version had a row per KIND of change, so a moved swimmer — who is edited and
+  // deleted in the same squad in the same breath — produced two rows with the same key. Postgres
+  // refuses an upsert that names one row twice and rejects the WHOLE batch, so five hundred
+  // swimmers' edits were lost for every one that had moved. That is where 301 dates of birth
+  // went, and where the duplicates came from: the deletion half of a move never landed.
   _rosterRowsFrom(ed){
     const e=ed||{edits:{}, deleted:{}, added:{}};
-    const rows=[];
+    const by={};
+    const row=(sq, sw)=>{ const k=sq+'::'+sw;
+      return (by[k] = by[k] || { id:k, squad_id:sq, sw_id:sw, patch:{}, deleted:false, added:false }); };
     Object.keys(e.edits||{}).forEach(sq=>Object.keys(e.edits[sq]||{}).forEach(sw=>{
-      rows.push({ id:sq+'::'+sw, squad_id:sq, sw_id:sw, state:'edit', patch:e.edits[sq][sw]||{} });
+      row(sq, sw).patch = e.edits[sq][sw]||{};
     }));
     Object.keys(e.deleted||{}).forEach(sq=>Object.keys(e.deleted[sq]||{}).forEach(sw=>{
-      if((e.deleted[sq]||{})[sw]) rows.push({ id:sq+'::'+sw, squad_id:sq, sw_id:sw, state:'deleted', patch:{} });
+      if((e.deleted[sq]||{})[sw]) row(sq, sw).deleted = true;
     }));
     Object.keys(e.added||{}).forEach(sq=>((e.added[sq])||[]).forEach(sw=>{
-      if(sw && sw.id) rows.push({ id:sq+'::'+sw.id, squad_id:sq, sw_id:sw.id, state:'added', patch:sw });
+      if(sw && sw.id){ const r=row(sq, sw.id); r.added=true; r.patch=sw; }
     }));
-    return rows;
+    return Object.keys(by).map(k=>by[k]);
   }
   _rosterEditsFrom(rows){
     const e={edits:{}, deleted:{}, added:{}};
     (rows||[]).forEach(r=>{
       if(!r || !r.squad_id || !r.sw_id) return;
-      if(r.state==='deleted'){ (e.deleted[r.squad_id]=e.deleted[r.squad_id]||{})[r.sw_id]=true; }
-      else if(r.state==='added'){ (e.added[r.squad_id]=e.added[r.squad_id]||[]).push(r.patch||{}); }
-      else { (e.edits[r.squad_id]=e.edits[r.squad_id]||{})[r.sw_id]=r.patch||{}; }
+      if(r.deleted) (e.deleted[r.squad_id]=e.deleted[r.squad_id]||{})[r.sw_id]=true;
+      if(r.added){ (e.added[r.squad_id]=e.added[r.squad_id]||[]).push(r.patch||{}); }
+      else if(r.patch && Object.keys(r.patch).length){
+        (e.edits[r.squad_id]=e.edits[r.squad_id]||{})[r.sw_id]=r.patch;
+      }
     });
     return e;
+  }
+  // A batch may never name one row twice — that is what cost the club its dates of birth.
+  _dedupeRows(rows){
+    const seen={}, out=[];
+    (rows||[]).forEach(r=>{ if(!r||!r.id||seen[r.id]) return; seen[r.id]=1; out.push(r); });
+    return out;
   }
   async _rosterFetch(){
     if(!window.__vxSelect) return;
@@ -6908,18 +6926,53 @@ class Component extends DCLogic {
     if(!window.__vxUpsert || !this._isFullAccess()) return;
     const rows=this._rosterRowsFrom(this.rosterEdits);
     if(!rows.length){ this.rosterRows=[]; return; }   // nothing to move across
-    const stamped=rows.map(r=>({...r, updated_at:new Date().toISOString()}));
+    const stamped=this._dedupeRows(rows).map(r=>({...r, updated_at:new Date().toISOString()}));
     for(let i=0;i<stamped.length;i+=500){ await window.__vxUpsert('vx_roster', stamped.slice(i,i+500)); }
     this._rosterFetch();
   }
-  _rowKeyMap(rows){ const m={}; (rows||[]).forEach(r=>{ try{ m[r.id]=JSON.stringify(r.patch)+'|'+r.state; }catch(e){ m[r.id]='?'; } }); return m; }
+  // Recovery. The single document in club_state was never deleted — it still holds every date of
+  // birth and every edit the club has made. This reads it, throws away the half-written rows, and
+  // rebuilds the table from it. Safe to run more than once.
+  async rosterRebuildFromDocument(){
+    this.setState({rosterFixMsg:'Reading the saved roster\u2026', rosterFixOk:true});
+    if(!this._isFullAccess()) return this.setState({rosterFixMsg:'Only a manager can rebuild the roster.', rosterFixOk:false});
+    let doc=null;
+    try{
+      const r=await window.__vxSelectRaw('club_state', 'select=value&key=eq.vx_roster_edits');
+      const row=(r&&r.rows&&r.rows[0])||null;
+      if(row) doc=(typeof row.value==='string') ? JSON.parse(row.value) : row.value;
+    }catch(e){}
+    if(!doc || typeof doc!=='object') doc=this._loadJSON('vx_roster_edits', null);
+    if(!doc || typeof doc!=='object')
+      return this.setState({rosterFixMsg:'The saved roster could not be read, on the database or on this device. Nothing has been changed.', rosterFixOk:false});
+    const rows=this._dedupeRows(this._rosterRowsFrom(doc)).map(r=>({...r, updated_at:new Date().toISOString()}));
+    const n=this._rosterTotalFor(doc);
+    if(!window.confirm('Rebuild the roster from the saved copy?\n\n'
+      +n+' swimmers, '+rows.length+' change'+(rows.length===1?'':'s')+'.\n\n'
+      +'This replaces the rows written since the migration, which are the ones missing the dates of birth.')) return;
+    try{
+      // Clear first: a half-written table plus a rebuild is how duplicates appear.
+      if(window.__vxDelete) await window.__vxDelete('vx_roster', 'sw_id=neq.__none__');
+      for(let i=0;i<rows.length;i+=200){
+        const ok=await window.__vxUpsert('vx_roster', rows.slice(i,i+200));
+        if(!ok){ const e=window.__vxLastWriteErr||{};
+          return this.setState({rosterFixOk:false, rosterFixMsg:'Rebuild stopped: '+(e.said||('HTTP '+(e.status||'?')))+'. Nothing further was written.'}); }
+      }
+      this.rosterRows=rows; this.rosterEdits=doc;
+      this._rosterSent=this._rowKeyMap(rows);
+      this.rebuildRoster(); this.forceUpdate();
+      this.setState({rosterFixOk:true, rosterFixMsg:'Rebuilt \u2014 '+n+' swimmers, from the saved copy.'});
+      try{ this.audit('roster.rebuild', 'from the saved document', {swimmers:n, rows:rows.length}); }catch(e){}
+    }catch(e){ this.setState({rosterFixOk:false, rosterFixMsg:'Could not reach the database.'}); }
+  }
+  _rowKeyMap(rows){ const m={}; (rows||[]).forEach(r=>{ try{ m[r.id]=JSON.stringify(r.patch)+'|'+(r.deleted?'d':'')+(r.added?'a':''); }catch(e){ m[r.id]='?'; } }); return m; }
   // Write only what actually changed. A coach marking one swimmer's date of birth sends one row,
   // not the club.
   _rosterPersistRows(){
     const rows=this._rosterRowsFrom(this.rosterEdits);
     const now=this._rowKeyMap(rows);
     const was=this._rosterSent||{};
-    const changed=rows.filter(r=>now[r.id]!==was[r.id]).map(r=>({...r, updated_at:new Date().toISOString()}));
+    const changed=this._dedupeRows(rows.filter(r=>now[r.id]!==was[r.id])).map(r=>({...r, updated_at:new Date().toISOString()}));
     const gone=Object.keys(was).filter(k=>!(k in now));
     this._rosterSent=now;
     try{
@@ -14062,6 +14115,7 @@ class Component extends DCLogic {
       onRosterCheck: ()=>this.rosterInspect(),
       onRosterUseDb: ()=>this.rosterUseDatabase(),
       onRosterUseDevice: ()=>this.rosterUseThisDevice(),
+      onRosterRebuild: ()=>this.rosterRebuildFromDocument(),
       rosterFixMsg: S.rosterFixMsg||'', rosterFixMsgShow: !!S.rosterFixMsg,
       rosterFixColor: S.rosterFixOk ? '#0C7A4F' : '#B42318',
       onForceUpdate: ()=>{ this.setState({settingsMsg:'Fetching the newest version\u2026'}); this._applyUpdate(); },
