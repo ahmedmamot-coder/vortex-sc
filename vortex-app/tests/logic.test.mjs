@@ -3270,6 +3270,47 @@ describe("InBody sheet", () => {
     });
   });
 
+  // "2 changes have not been saved · family_accounts · HTTP 409 · violates foreign key constraint",
+  // in red, with a Retry button, on every device, for ever. The row's id has to be a real login
+  // and the restore changed which logins exist, so no retry could ever work — and the backfill
+  // re-queued it on every fetch, so Discard brought it straight back.
+  describe("a write the database refuses outright", () => {
+    const sync = sourceBetween("var BLOCKK=", "window.__vxSelect =");
+
+    it("is not counted as a change waiting to be saved", () => {
+      eq(/if\(_blocking\(said, body\)\)\{/.test(sync), true);
+      eq(/_blockAdd\(sig, table, payload, said\);[\s\S]{0,400}?return;/.test(sync), true,
+         "it returns before joining the retry queue");
+    });
+    it("is recognised by what the database said, not by the status code alone", () =>
+      eq(/foreign key/i.test(sync), true));
+    // __vxLastWriteErr is one global that the next write overwrites, and the ids were being read
+    // from it inside a promise that resolved later.
+    it("remembers the ids where the error text is actually in hand", () => {
+      eq(/vx_fam_refused/.test(sync), true);
+      eq(/table==="family_accounts"/.test(sync), true);
+    });
+    it("sweeps the entries already stuck on the club's devices, without anyone pressing Discard", () => {
+      eq(/_failLoad\(\), keep=\[\]/.test(sync), true);
+      eq(/if\(x && _blocking\(x\.said, x\.body\)\) _blockAdd/.test(sync), true);
+    });
+    it("is still visible — set aside is not the same as hidden", () => {
+      eq(/window\.__vxBlocked = function/.test(sync), true);
+      eq(/window\.__vxClearBlocked = function/.test(sync), true);
+    });
+    it("and is never retried, because retrying is the thing that cannot work", () => {
+      const retry = sourceBetween("window.__vxRetryFailed", "window.__vxBlocked");
+      eq(/_blockLoad\(\)/.test(retry), false, "the retry path does not touch the blocked list");
+    });
+    it("the notice says what happened rather than 'not saved'", () => {
+      eq(/point at logins which no longer exist/.test(SOURCE), true);
+      eq(/Nothing is lost/.test(SOURCE), true);
+      eq(/blockedShow: \(S\.saveBlocked\|\|\[\]\)\.length>0/.test(SOURCE), true);
+    });
+    it("and never sits on top of a real unsaved-work banner", () =>
+      eq(/blockedShow:[^\n]*!\(\(S\.saveFailCount>0 \|\| S\.authDead\) && !S\.saveFailHidden\)/.test(SOURCE), true));
+  });
+
   // The analyses were one row of club_state holding every clip the club had, so the last device
   // to touch anything replaced everyone else's. That shape has already cost this club a set of
   // squad colours and a roster.

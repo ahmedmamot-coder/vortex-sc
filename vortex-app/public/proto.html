@@ -135,6 +135,31 @@ if ('serviceWorker' in navigator) {
     if(status===401 || status===408 || status===425 || status===429) return false;
     return status>=400 && status<500;
   }
+  // Writes that are blocked rather than pending: the database is refusing the row itself, and no
+  // number of retries changes that. Kept apart from the retry queue so the count of unsaved work
+  // stays a count of work that can still be saved.
+  var BLOCKK="vx_write_blocked";
+  function _blockLoad(){ try{ var v=JSON.parse(localStorage.getItem(BLOCKK)||"[]"); return Array.isArray(v)?v:[]; }catch(e){ return []; } }
+  function _blockSave(a){ try{ localStorage.setItem(BLOCKK, JSON.stringify(a.slice(-50))); }catch(e){} }
+  function _blocking(said, body){
+    return /foreign key/i.test(String(said||"")) || /foreign key/i.test(String(body||""));
+  }
+  function _blockAdd(sig, table, payload, said){
+    try{
+      var a=_blockLoad().filter(function(x){ return x && x.sig!==sig; });
+      a.push({sig:sig, table:table, said:said||"", ts:Date.now()});
+      _blockSave(a);
+      // The account row points at a login that is gone, so the app must stop offering it. This
+      // is the same list _famRefusedIds reads.
+      if(table==="family_accounts"){
+        var r=[]; try{ var v=JSON.parse(localStorage.getItem("vx_fam_refused")||"[]"); if(Array.isArray(v)) r=v; }catch(e){}
+        (Array.isArray(payload)?payload:[payload]).forEach(function(row){
+          if(row && row.id && r.indexOf(row.id)<0) r.push(row.id);
+        });
+        localStorage.setItem("vx_fam_refused", JSON.stringify(r.slice(-200)));
+      }
+    }catch(e){}
+  }
   function _failAdd(op, table, payload, status, body){
     var a=_failLoad();
     // What the database said, kept in a form a person can act on. For a rejected shape this is
@@ -159,6 +184,22 @@ if ('serviceWorker' in navigator) {
         ? (op+"|"+table+"|"+_ids.join(","))
         : (op+"|"+table+"|"+JSON.stringify(payload));
     }catch(e){ sig=op+"|"+table; }
+    // A foreign-key refusal is not a change waiting to be saved. It is a row the database will
+    // never take, however many times it is sent: family_accounts.id has to be a real login, and
+    // after the restore some account rows on a device point at logins that no longer exist.
+    // Queuing those put a permanent red banner on every device, with a Retry button that could
+    // not work — and the backfill re-queued them on every fetch of the family list, so
+    // discarding the banner brought it straight back.
+    //
+    // It is set aside instead, and the ids are remembered here rather than in the caller's
+    // promise: the error text is in hand at this point, whereas __vxLastWriteErr is one global
+    // that the next write overwrites.
+    if(_blocking(said, body)){
+      _blockAdd(sig, table, payload, said);
+      window.__vxLastError = { table:table, status:status, body:String(body||"").slice(0,300), ts:Date.now() };
+      try{ window.dispatchEvent(new CustomEvent("vx-write-failed")); }catch(e){}
+      return;
+    }
     a=a.filter(function(x){ return x && x.sig !== sig; });
     a.push({ id:Date.now()+"_"+Math.random().toString(36).slice(2,7), op:op, table:table, payload:payload,
              sig:sig, status:status||0, refused:_permanent(status), said:said||"",
@@ -186,8 +227,24 @@ if ('serviceWorker' in navigator) {
     try{ window.dispatchEvent(new CustomEvent("vx-write-failed", {detail:{table:table, status:status}})); }catch(e){}
   }
   window.__vxFailed = function(){ return _failLoad(); };
+  // Entries that were queued before the rule above existed are already on the club's devices,
+  // sitting behind a Retry button that cannot work. Move them across once, on start-up, so the
+  // banner clears itself rather than waiting for someone to press Discard on every phone.
+  (function(){
+    try{
+      var a=_failLoad(), keep=[];
+      a.forEach(function(x){
+        if(x && _blocking(x.said, x.body)) _blockAdd(x.sig, x.table, x.payload, x.said);
+        else keep.push(x);
+      });
+      if(keep.length!==a.length) _failSave(keep);
+    }catch(e){}
+  })();
   window.__vxFailedCount = function(){ return _failLoad().length; };
   window.__vxClearFailed = function(){ _failSave([]); try{ window.dispatchEvent(new CustomEvent("vx-write-failed")); }catch(e){} };
+  // What the database is refusing outright, for the screen that says so. Never retried.
+  window.__vxBlocked = function(){ return _blockLoad(); };
+  window.__vxClearBlocked = function(){ _blockSave([]); try{ window.dispatchEvent(new CustomEvent("vx-write-failed")); }catch(e){} };
   // Replay everything still pending. Anything that succeeds is dropped from the log.
   window.__vxRetryFailed = function(){
     if(!_failLoad().length) return Promise.resolve({tried:0, fixed:0});
@@ -3434,6 +3491,16 @@ if ('serviceWorker' in navigator) {
                       <sc-if value="{{ videoLibEmpty }}" hint-placeholder-val="{{ false }}">
                         <div style="text-align:center;padding:34px 20px;color:#9AA2B4"><i data-lucide="video" style="width:30px;height:30px"></i><p style="font-size:12.5px;margin-top:10px;line-height:1.5">No clips yet. Add a race by YouTube, Vimeo, or direct .mp4 link.</p></div>
                       </sc-if>
+                      <sc-if value="{{ videoFolderHas }}" hint-placeholder-val="{{ true }}">
+                        <button onclick="{{ onVideoFolderToggle }}" style="display:flex;align-items:center;gap:9px;width:100%;background:#fff;border:1.5px solid #E5E9F0;border-radius:13px;padding:11px 13px;cursor:pointer;font-family:inherit;text-align:left;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                          <span style="flex:none;width:30px;height:30px;border-radius:9px;background:var(--brand-tint);color:var(--color-brand);display:flex;align-items:center;justify-content:center"><i data-lucide="{{ videoFolderIcon }}" style="width:16px;height:16px"></i></span>
+                          <span style="flex:1;min-width:0">
+                            <span style="display:block;font-size:13px;font-weight:800;color:#0C1116">Saved analyses</span>
+                            <span style="display:block;font-size:10.5px;color:#9AA2B4">{{ videoFolderBtnSub }}</span>
+                          </span>
+                          <i data-lucide="{{ videoFolderChevron }}" style="width:16px;height:16px;color:#9AA2B4;flex:none"></i>
+                        </button>
+                      </sc-if>
                       <sc-if value="{{ videoChips }}" hint-placeholder-val="{{ true }}">
                         <div class="vx-scroll" style="display:flex;gap:6px;overflow-x:auto">
                           <sc-for list="{{ videoChips }}" as="vc" hint-placeholder-count="3">
@@ -3632,14 +3699,14 @@ if ('serviceWorker' in navigator) {
                         <button onclick="{{ onVideoAddOpen }}" style="display:flex;align-items:center;justify-content:center;gap:8px;background:none;border:1.5px dashed #CDD3E0;border-radius:12px;padding:13px;cursor:pointer;color:#3A4152;font-family:inherit;font-size:13px;font-weight:700"><i data-lucide="plus" style="width:16px;height:16px"></i> Add video (other link)</button>
                       </sc-if>
 
-                      <sc-if value="{{ videoFolderHas }}" hint-placeholder-val="{{ true }}">
-                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:15px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                      <sc-if value="{{ videoFolderShow }}" hint-placeholder-val="{{ true }}">
+                        <div id="vx-video-folder" style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:15px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
                           <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-                            <i data-lucide="folder" style="width:16px;height:16px;color:#7A8296"></i>
+                            <i data-lucide="folder-open" style="width:16px;height:16px;color:var(--color-brand)"></i>
                             <p style="margin:0;flex:1;font-size:13px;font-weight:700;color:#0C1116">Saved analyses</p>
                             <span style="font-size:11px;font-weight:700;color:#9AA2B4">{{ videoFolderCount }}</span>
                           </div>
-                          <p style="margin:0 0 11px;font-size:11px;color:#9AA2B4;line-height:1.5">Every clip, with its splits, stroke counts and notes — kept for the club, on every device. Tap a line to open it; tick to compare.</p>
+                          <p style="margin:0 0 11px;font-size:11px;color:#9AA2B4;line-height:1.5">{{ videoFolderWhere }}</p>
                           <div style="display:flex;flex-direction:column;gap:7px">
                             <sc-for list="{{ videoSavedRows }}" as="sv" hint-placeholder-count="3">
                               <div style="display:flex;align-items:center;gap:9px;background:{{ sv.rowBg }};border:1px solid #EEF1F5;border-radius:11px;padding:9px 10px">
@@ -3647,9 +3714,7 @@ if ('serviceWorker' in navigator) {
                                 <button onclick="{{ sv.onOpen }}" style="flex:1;min-width:0;text-align:left;background:none;border:none;padding:0;cursor:pointer;font-family:inherit">
                                   <span style="display:block;font-size:12.5px;font-weight:700;color:#0C1116;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ sv.title }}</span>
                                   <span style="display:block;font-size:10.5px;color:#9AA2B4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ sv.meta }}</span>
-                                  <sc-if value="{{ sv.deviceOnly }}" hint-placeholder-val="{{ false }}">
-                                    <span style="display:block;font-size:10px;font-weight:700;color:#B4820C">On this device only</span>
-                                  </sc-if>
+                                  <span style="display:block;font-size:10px;font-weight:700;color:{{ sv.whereFg }}">{{ sv.where }}</span>
                                 </button>
                                 <span style="flex:none;text-align:right">
                                   <span style="display:block;font-family:var(--font-mono);font-size:12.5px;font-weight:800;color:#0C1116">{{ sv.total }}</span>
@@ -5761,6 +5826,13 @@ if ('serviceWorker' in navigator) {
       <button onclick="{{ onSaveFailDismiss }}" style="flex:none;width:28px;height:28px;border-radius:8px;border:none;background:rgba(255,255,255,.15);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:14px;height:14px"></i></button>
     </div>
   </sc-if>
+  <sc-if value="{{ blockedShow }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;left:0;right:0;bottom:0;z-index:119;background:#7A5A0C;color:#fff;padding:10px 14px calc(10px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:10px;box-shadow:0 -6px 20px rgba(0,0,0,.22)">
+      <i data-lucide="info" style="width:18px;height:18px;flex:none"></i>
+      <span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;font-weight:800">{{ blockedTitle }}</span><span style="display:block;font-size:11px;color:rgba(255,255,255,.85);margin-top:1px;line-height:1.4">{{ blockedDetail }}</span></span>
+      <button onclick="{{ onBlockedDismiss }}" style="flex:none;background:#fff;color:#7A5A0C;border:none;border-radius:9px;padding:7px 13px;font-family:inherit;font-weight:800;font-size:11.5px;cursor:pointer">Got it</button>
+    </div>
+  </sc-if>
   <div id="vx-print-sheet" class="vx-pattern-bg" style="padding:20px">
     <sc-if value="{{ printIsPlan }}" hint-placeholder-val="{{ true }}">
     <div style="display:flex;align-items:center;gap:12px;border-bottom:3px solid {{ printSheet.accent }};padding-bottom:14px;margin-bottom:18px">
@@ -5838,7 +5910,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-11m';
+const VX_BUILD='2026-08-11n';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -6063,7 +6135,7 @@ class Component extends DCLogic {
       famVerify:null, famVerifyInput:'', famVerifyErr:'',
       adminSection:null, famAdminQuery:'', famAdminAddFor:null, famAdminSwQuery:'', famAdminMsg:'', famAdminProblems:false,
       attDayISO:null, attDayStatus:'all', attDayOpenSquad:null,
-      saveFailCount:0, saveFailLast:null, saveFailHidden:false, authDead:false,
+      saveFailCount:0, saveFailLast:null, saveFailHidden:false, authDead:false, saveBlocked:[], saveBlockedHidden:false,
       updateReady:false, updateLatest:'',
       pwNew:'', pwNew2:'', pwMsg:'', pwOk:true, profileMsg:'', profileOk:true,
       staffPwDrafts:{}, staffPwMsg:'', staffPwOk:true,
@@ -6463,6 +6535,11 @@ class Component extends DCLogic {
       const refused = list.filter(x=>x && x.refused).length;
       const last = list.length ? list[list.length-1] : null;
       const dead = !!window.__vxAuthDead;
+      // Blocked writes are not unsaved work — the database is refusing the row itself. They are
+      // counted separately so they cannot put "changes have not been saved" and a Retry button
+      // on every device for ever.
+      const blocked = (window.__vxBlocked ? window.__vxBlocked() : []) || [];
+      if(blocked.length!==(this.state.saveBlocked||[]).length) this.setState({saveBlocked:blocked});
       if(n!==this.state.saveFailCount || dead!==this.state.authDead || refused!==this.state.saveRefused) this.setState({saveFailCount:n, saveFailLast:last, authDead:dead, saveRefused:refused, saveFailHidden: n>this.state.saveFailCount ? false : this.state.saveFailHidden});
       // Only un-hide once there is genuinely nothing wrong. Bringing a dismissed banner back
       // every 20 seconds while the session is still dead just makes it noise to swipe away.
@@ -13383,8 +13460,12 @@ class Component extends DCLogic {
         splits: done+'/'+tot,
         isActive: activeVid && activeVid.id===v.id,
         rowBg: activeVid && activeVid.id===v.id ? '#F3F7FF' : '#fff',
-        pickBg: picked?'#0A0F1A':'#F4F6F8', pickFg: picked?'#fff':'#9AA2B4', pickIcon: picked?'check':'plus',
+        pickBg: picked?'var(--color-brand)':'#F4F6F8', pickFg: picked?'#fff':'#9AA2B4', pickIcon: picked?'check':'plus',
         deviceOnly: !!v._isBlob,
+        // Where this one actually is, said on the line rather than left to be assumed. A coach
+        // who cannot tell a saved analysis from a device-only one will find out by losing one.
+        where: v._isBlob ? 'On this device only' : (this._videoRowsOn ? 'Saved to the club ✓' : 'Saved ✓'),
+        whereFg: v._isBlob ? '#B4820C' : '#0C7A4F',
         onOpen:()=>this.setState({videoActiveId:v.id, videoRate:1}),
         onCompare:()=>this.videoCompareToggle(v.id),
         onDelete:()=>this.videoDelete(v.id) };
@@ -14813,6 +14894,18 @@ class Component extends DCLogic {
       rosterFixMsg: S.rosterFixMsg||'', rosterFixMsgShow: !!S.rosterFixMsg,
       rosterFixColor: S.rosterFixOk ? '#0C7A4F' : '#B42318',
       onForceUpdate: ()=>{ this.setState({settingsMsg:'Fetching the newest version\u2026'}); this._applyUpdate(); },
+      // Not red, and not "unsaved": these rows are refused by the database itself, so there is
+      // nothing to retry and nothing being lost from the app's own list. It says what happened
+      // and clears for good, instead of reappearing on the next fetch.
+      blockedShow: (S.saveBlocked||[]).length>0 && !S.saveBlockedHidden && !((S.saveFailCount>0 || S.authDead) && !S.saveFailHidden),
+      blockedTitle: ((S.saveBlocked||[]).length===1 ? '1 record cannot go into the database' : (S.saveBlocked||[]).length+' records cannot go into the database'),
+      blockedDetail: (()=>{
+        const b=(S.saveBlocked||[]);
+        const fam=b.filter(x=>x&&x.table==='family_accounts').length;
+        if(fam===b.length && fam>0) return 'They are family accounts that point at logins which no longer exist — the restore changed which logins there are. Nothing is lost: they are still listed in the app, and they will save themselves the next time those people sign in.';
+        return 'The database is refusing the rows themselves, so retrying cannot help. Show this to whoever looks after the database: '+((b[0]&&b[0].said)||'');
+      })(),
+      onBlockedDismiss: ()=>{ try{ if(window.__vxClearBlocked) window.__vxClearBlocked(); }catch(e){} this.setState({saveBlocked:[], saveBlockedHidden:true}); },
       saveFailShow: (S.saveFailCount>0 || S.authDead) && !S.saveFailHidden,
       saveFailTitle: S.authDead
         ? (S.saveFailCount>0
@@ -15489,6 +15582,21 @@ class Component extends DCLogic {
       onVideoAddSave:()=>this.videoAdd(), onVideoDeleteActive: activeVid?()=>this.videoDelete(activeVid.id):null,
       videoLibEmpty: this.videoLib.length===0,
       videoSavedRows, videoFolderHas: videoSavedRows.length>0, videoFolderCount: videoSavedRows.length+' saved',
+      videoFolderShow: videoSavedRows.length>0 && S.videoFolderOpen!==false,
+      videoFolderIcon: S.videoFolderOpen!==false ? 'folder-open' : 'folder',
+      videoFolderChevron: S.videoFolderOpen!==false ? 'chevron-up' : 'chevron-down',
+      videoFolderBtnSub: videoSavedRows.length+(videoSavedRows.length===1?' analysis':' analyses')
+        +(S.videoFolderOpen!==false ? '' : ' — tap to open'),
+      // Which of the two places it is actually kept, said plainly. Before the table exists the
+      // club is still on the one shared document, and that is worth knowing rather than assuming.
+      videoFolderWhere: this._videoRowsOn
+        ? 'Every clip with its splits, stroke counts and notes — one record each in the club database, so two coaches marking two clips cannot overwrite each other. Tap a line to open it; tick to compare.'
+        : 'Every clip with its splits, stroke counts and notes. These are still kept in the club’s shared document — run video_analyses.sql to give each one its own record. Tap a line to open it; tick to compare.',
+      onVideoFolderToggle: ()=>{
+        const open = S.videoFolderOpen===false;
+        this.setState({videoFolderOpen: open});
+        if(open) setTimeout(()=>{ try{ const el=document.getElementById('vx-video-folder'); if(el) el.scrollIntoView({behavior:'smooth', block:'center'}); }catch(e){} }, 60);
+      },
       videoCompareMsg:S.videoCompareMsg||'', videoCompareMsgShow: !!S.videoCompareMsg,
       videoCompareCount, onVideoCompareClear:()=>this.videoCompareClear(),
       videoCompareHas: !!videoCompare,
