@@ -2856,17 +2856,34 @@ describe("InBody sheet", () => {
       const c = {};
       c._splitMetres = bind("_splitMetres", c);
       c.videoRaceMetrics = bind("videoRaceMetrics", c, ["_splitMetres"]);
+      c.videoSplitLabels = bind("videoSplitLabels", c);
       return c;
     };
+    // The coach taps Start at the gun and then at each mark. Here the clip's zero is the gun,
+    // so the marks read the same as the broadcast's times.
     const CURTIS = {
       laps: [
-        { label: "Reaction", t: 0.62 }, { label: "Breakout", t: 5.9 },
+        { label: "Start", t: 0 },
         { label: "15m", t: 6.62 }, { label: "25m", t: 12.13 },
         { label: "35m", t: 17.75 }, { label: "45m", t: 23.58 }, { label: "50m", t: 26.63 },
       ],
       strokes: { "25m": 9, "35m": 9, "45m": 9 },
-      breakoutM: "14.1",
     };
+
+    // What the club asked for, in the club's words: "for 50m make start then 15m, 25m, 35m 45m
+    // and 50m only". Breakout and 20m were two extra taps at the poolside and two rows no
+    // televised analysis shows.
+    it("a 50 is Start, 15, 25, 35, 45, 50 — and nothing else", () => {
+      eq(ctx().videoSplitLabels("50").join(" "), "Start 15m 25m 35m 45m 50m");
+    });
+    it("a 100 carries the same marks on each length", () => {
+      eq(ctx().videoSplitLabels("100").join(" "),
+         "Start L1 15m L1 25m L1 35m L1 45m L1 50m L2 15m L2 25m L2 35m L2 45m L2 50m");
+    });
+    it("past 200 m the wall is the only mark, because nobody taps five a length for sixteen", () => {
+      eq(ctx().videoSplitLabels("800").length, 17, "Start plus one per length");
+      eq(ctx().videoSplitLabels("800")[1], "L1 50m");
+    });
 
     it("the splits produce the same segment times the broadcast showed", () => {
       const M = ctx().videoRaceMetrics(CURTIS);
@@ -2876,6 +2893,16 @@ describe("InBody sheet", () => {
       eq(by["45m"].split, "5.83");   // 23.58 - 17.75
       eq(by["50m"].split, "3.05");   // 26.63 - 23.58
       eq(M.total, "26.63");
+    });
+    // A coach filmed a race four minutes into a stream. Every mark carried the clip's clock, so
+    // the app showed a 269-second 50 back and an 81% speed drop. The Start mark is the zero of
+    // the race, and nothing may be reported against the clip's clock.
+    it("a race filmed part-way into a long clip still reports the swimmer's time", () => {
+      const shifted = { ...CURTIS, laps: CURTIS.laps.map((l) => ({ ...l, t: +(l.t + 248.01).toFixed(2) })) };
+      const M = ctx().videoRaceMetrics(shifted);
+      eq(M.total, "26.63", "not 274.64 — the clip's clock is not the swimmer's time");
+      eq(M.rows[M.rows.length - 1].cum, "26.63");
+      eq(M.drop, ctx().videoRaceMetrics(CURTIS).drop, "and the speed drop is the same race");
     });
     it("speed is worked out per segment, over the right distance", () => {
       const by = Object.fromEntries(ctx().videoRaceMetrics(CURTIS).rows.map((r) => [r.label, r]));
@@ -2892,22 +2919,21 @@ describe("InBody sheet", () => {
     });
     it("a segment with no stroke count still reports its speed", () => {
       const by = Object.fromEntries(ctx().videoRaceMetrics(CURTIS).rows.map((r) => [r.label, r]));
-      eq(by["15m"].vel, "2.50", "the first 15 m includes the dive");
+      eq(by["15m"].vel, "2.27", "15 m in 6.62 s, dive included");
       eq(by["15m"].sr, "—", "and must not invent a stroke rate it was never given");
     });
-    // The underwater is its own race: a fast breakout otherwise flatters a slow swim, and a slow
-    // one hides a good swim.
-    it("the underwater is measured separately from the swimming", () => {
+    // The first 15 m is the start, the underwater and the breakout in one number, which is what
+    // every televised analysis leads with — and it costs no extra tap.
+    it("the first 15 m is reported on its own", () => {
       const M = ctx().videoRaceMetrics(CURTIS);
-      eq(M.underwater.metres, "14.1");
-      eq(M.underwater.sec, "5.28", "from the start signal, not from zero");
-      eq(M.underwater.vel, "2.67");
+      eq(M.firstFifteen.sec, "6.62");
+      eq(M.firstFifteen.vel, "2.27");
     });
     it("speed drop across the race is reported, and flagged when it is large", () => {
       const M = ctx().videoRaceMetrics(CURTIS);
-      eq(M.fastest, "2.50");
+      eq(M.fastest, "2.27");
       eq(M.slowest, "1.64", "45–50 m");
-      eq(M.drop, "34.4");
+      eq(M.drop, "27.7");
       eq(M.dropBad, true);
     });
     it("a race with nothing marked yet reports nothing rather than zeroes", () => {
@@ -2919,12 +2945,136 @@ describe("InBody sheet", () => {
       eq(c._splitMetres("L2 25m", 50), 75, "second length, 25 m in");
       eq(c._splitMetres("15m", 50), 15);
       eq(c._splitMetres("Breakout", 50), null, "not a distance");
+      eq(c._splitMetres("Start", 50), null, "nor is the gun");
     });
     it("out and back are split at the wall", () => {
       const M = ctx().videoRaceMetrics({
         laps: [{ label: "L1 50m", t: 26.63 }, { label: "L2 50m", t: 55.1 }], strokes: {} });
       eq(M.out, "26.63");
       eq(M.back, "28.47");
+    });
+    // Analyses captured before the marks changed still have Reaction and Breakout in them. A
+    // coach who opens a swim from last season must not find its numbers gone.
+    describe("analyses captured under the old marks", () => {
+      const OLD = {
+        laps: [
+          { label: "Reaction", t: 0.62 }, { label: "Breakout", t: 5.9 },
+          { label: "15m", t: 6.62 }, { label: "25m", t: 12.13 },
+          { label: "35m", t: 17.75 }, { label: "45m", t: 23.58 }, { label: "50m", t: 26.63 },
+        ],
+        strokes: { "25m": 9 },
+        breakoutM: "14.1",
+      };
+      it("still read, with Reaction taken as the start of the race", () => {
+        const M = ctx().videoRaceMetrics(OLD);
+        const by = Object.fromEntries(M.rows.map((r) => [r.label, r]));
+        eq(by["25m"].split, "5.51");
+        eq(M.total, "26.01", "26.63 on the clip, from a gun at 0.62");
+      });
+      it("and their underwater is still measured", () => {
+        const M = ctx().videoRaceMetrics(OLD);
+        eq(M.underwater.metres, "14.1");
+        eq(M.underwater.sec, "5.28", "from the start signal, not from zero");
+        eq(M.underwater.vel, "2.67");
+        eq(M.hasBreakout, true);
+      });
+      it("a swim marked without a breakout says so, rather than offering a box that does nothing", () => {
+        eq(ctx().videoRaceMetrics(CURTIS).hasBreakout, false);
+        eq(ctx().videoRaceMetrics(CURTIS).underwater, null);
+      });
+    });
+  });
+
+  // "they can analysis to 3 swimmers one time" — the club watching a televised analysis of three
+  // finalists side by side, wanting the same for its own swimmers.
+  describe("comparing swimmers", () => {
+    const clip = (id, title, laps) => ({ id, title, tag: "Doha Open", raceType: "50", laps, strokes: {} });
+    const A = clip("a", "Sara", [
+      { label: "Start", t: 0 }, { label: "15m", t: 6.62 }, { label: "25m", t: 12.13 },
+      { label: "35m", t: 17.75 }, { label: "45m", t: 23.58 }, { label: "50m", t: 26.63 }]);
+    const B = clip("b", "Lina", [
+      { label: "Start", t: 0 }, { label: "15m", t: 6.40 }, { label: "25m", t: 12.20 },
+      { label: "35m", t: 18.10 }, { label: "45m", t: 24.00 }, { label: "50m", t: 27.10 }]);
+    const C = clip("c", "Maya", [
+      { label: "Start", t: 0 }, { label: "15m", t: 6.90 }, { label: "25m", t: 12.50 },
+      { label: "35m", t: 18.00 }, { label: "45m", t: 23.50 }, { label: "50m", t: 26.40 }]);
+
+    const ctx = (ids, lib) => {
+      const c = { videoLib: lib || [A, B, C], state: { videoCompareIds: ids },
+                  setState(p) { Object.assign(this.state, p); } };
+      c._splitMetres = bind("_splitMetres", c);
+      c.videoRaceMetrics = bind("videoRaceMetrics", c, ["_splitMetres"]);
+      c.videoCompareTable = bind("videoCompareTable", c, ["videoRaceMetrics"]);
+      c.videoCompareToggle = bind("videoCompareToggle", c);
+      return c;
+    };
+
+    it("one swimmer is not a comparison", () => eq(ctx(["a"]).videoCompareTable(), null));
+    it("three swimmers make three columns", () => {
+      const T = ctx(["a", "b", "c"]).videoCompareTable();
+      eq(T.cols.map((c) => c.title).join(", "), "Sara, Lina, Maya");
+    });
+    it("the fastest at each mark is the one picked out", () => {
+      const T = ctx(["a", "b", "c"]).videoCompareTable();
+      const by = Object.fromEntries(T.rows.map((r) => [r.label, r]));
+      // 0–15: 6.40 (Lina) is quickest off the start.
+      eq(by["15m"].cells.map((c) => c.best).join(","), "false,true,false");
+      // 45–50: Sara 3.05, Lina 3.10, Maya 2.90 — the finish belongs to Maya.
+      eq(by["50m"].cells.map((c) => c.best).join(","), "false,false,true");
+    });
+    it("and how far behind the others were, so a coach need not subtract", () => {
+      const T = ctx(["a", "b", "c"]).videoCompareTable();
+      const by = Object.fromEntries(T.rows.map((r) => [r.label, r]));
+      eq(by["15m"].cells[0].gap, "+0.22", "Sara, against Lina's 6.40");
+      eq(by["15m"].cells[1].gap, "", "the fastest is not behind itself");
+    });
+    it("the total is compared as well as the marks", () => {
+      const T = ctx(["a", "b", "c"]).videoCompareTable();
+      eq(T.totalRow.cells.map((c) => c.value).join(" "), "26.63 27.10 26.40");
+      eq(T.totalRow.cells[2].best, true, "26.40 wins the race");
+    });
+    // Two coaches marking two clips need not have tapped them in the same order.
+    it("marks line up by distance, not by the order somebody tapped them", () => {
+      const jumbled = { ...B, laps: [B.laps[0], B.laps[3], B.laps[1], B.laps[2], B.laps[4], B.laps[5]] };
+      const T = ctx(["a", "b"], [A, jumbled]).videoCompareTable();
+      eq(T.rows.map((r) => r.label).join(" "), "15m 25m 35m 45m 50m");
+    });
+    it("a fourth swimmer is refused rather than silently dropped", () => {
+      const c = ctx(["a", "b", "c"]);
+      c.videoCompareToggle("d");
+      eq(c.state.videoCompareIds.length, 3);
+      eq(/Three at a time/.test(c.state.videoCompareMsg), true);
+    });
+    it("ticking a swimmer twice takes them out again", () => {
+      const c = ctx(["a", "b"]);
+      c.videoCompareToggle("a");
+      eq(c.state.videoCompareIds.join(","), "b");
+    });
+    it("a clip with no marks yet cannot be compared against", () => {
+      const empty = clip("d", "Nour", []);
+      eq(ctx(["a", "d"], [A, empty]).videoCompareTable(), null);
+    });
+  });
+
+  // "i need a folder to save all the videos analysis to back it" — the clips were only ever a
+  // row of chips, so an analysis from a month ago was hard to find and easy to think lost.
+  describe("the saved analyses folder", () => {
+    const ctx = () => {
+      const c = {};
+      c._videoSavedAt = bind("_videoSavedAt", c);
+      return c;
+    };
+    it("shows the date an analysis was filed", () => {
+      eq(ctx()._videoSavedAt({ savedAt: "2026-08-11T18:04:00.000Z" }), "2026-08-11");
+    });
+    // Clips saved before the folder existed carry no date, but the id was minted from the clock.
+    it("recovers the date of a clip saved before dates were kept", () => {
+      const when = Date.UTC(2026, 6, 3, 9, 0, 0);
+      eq(ctx()._videoSavedAt({ id: "vid" + when.toString(36) + "_4" }), "2026-07-03");
+    });
+    it("says nothing rather than guessing when there is nothing to read", () => {
+      eq(ctx()._videoSavedAt({ id: "vid-imported" }), "");
+      eq(ctx()._videoSavedAt({}), "");
     });
   });
 

@@ -3424,10 +3424,12 @@ if ('serviceWorker' in navigator) {
                                 <span style="flex:1;text-align:right;font-family:var(--font-mono);font-size:11.5px;color:rgba(255,255,255,.8)">{{ r.si }}</span>
                               </div>
                             </sc-for>
-                            <div style="display:flex;align-items:center;gap:9px;margin-top:11px;background:rgba(255,255,255,.06);border-radius:10px;padding:8px 10px">
-                              <span style="flex:1;font-size:11px;color:rgba(255,255,255,.7);line-height:1.4">Breakout distance, in metres from the wall</span>
-                              <input value="{{ raceBreakoutM }}" onchange="{{ onRaceBreakout }}" inputmode="decimal" placeholder="14.1" style="flex:none;width:64px;text-align:right;background:rgba(255,255,255,.1);border:none;border-radius:7px;padding:5px 7px;color:#fff;font-family:var(--font-mono);font-size:12px;outline:none">
-                            </div>
+                            <sc-if value="{{ raceHasBreakout }}" hint-placeholder-val="{{ false }}">
+                              <div style="display:flex;align-items:center;gap:9px;margin-top:11px;background:rgba(255,255,255,.06);border-radius:10px;padding:8px 10px">
+                                <span style="flex:1;font-size:11px;color:rgba(255,255,255,.7);line-height:1.4">Breakout distance, in metres from the wall</span>
+                                <input value="{{ raceBreakoutM }}" onchange="{{ onRaceBreakout }}" inputmode="decimal" placeholder="14.1" style="flex:none;width:64px;text-align:right;background:rgba(255,255,255,.1);border:none;border-radius:7px;padding:5px 7px;color:#fff;font-family:var(--font-mono);font-size:12px;outline:none">
+                              </div>
+                            </sc-if>
                             <p style="margin:9px 0 0;font-size:10.5px;color:rgba(255,255,255,.5);line-height:1.5">{{ raceReadout }}</p>
                           </div>
                         </sc-if>
@@ -3472,6 +3474,78 @@ if ('serviceWorker' in navigator) {
                           <button onclick="{{ onYoutubeQuickOpen }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:7px;background:#fff;border:1.5px solid #E5E9F0;border-radius:12px;padding:13px;cursor:pointer;color:#3A4152;font-family:inherit;font-size:12.5px;font-weight:700"><i data-lucide="play-circle" style="width:15px;height:15px;color:#FF0000"></i> YouTube link</button>
                         </div>
                         <button onclick="{{ onVideoAddOpen }}" style="display:flex;align-items:center;justify-content:center;gap:8px;background:none;border:1.5px dashed #CDD3E0;border-radius:12px;padding:13px;cursor:pointer;color:#3A4152;font-family:inherit;font-size:13px;font-weight:700"><i data-lucide="plus" style="width:16px;height:16px"></i> Add video (other link)</button>
+                      </sc-if>
+
+                      <sc-if value="{{ videoFolderHas }}" hint-placeholder-val="{{ true }}">
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:15px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+                            <i data-lucide="folder" style="width:16px;height:16px;color:#7A8296"></i>
+                            <p style="margin:0;flex:1;font-size:13px;font-weight:700;color:#0C1116">Saved analyses</p>
+                            <span style="font-size:11px;font-weight:700;color:#9AA2B4">{{ videoFolderCount }}</span>
+                          </div>
+                          <p style="margin:0 0 11px;font-size:11px;color:#9AA2B4;line-height:1.5">Every clip, with its splits, stroke counts and notes — kept for the club, on every device. Tap a line to open it; tick to compare.</p>
+                          <div style="display:flex;flex-direction:column;gap:7px">
+                            <sc-for list="{{ videoSavedRows }}" as="sv" hint-placeholder-count="3">
+                              <div style="display:flex;align-items:center;gap:9px;background:{{ sv.rowBg }};border:1px solid #EEF1F5;border-radius:11px;padding:9px 10px">
+                                <button onclick="{{ sv.onCompare }}" style="flex:none;width:26px;height:26px;border-radius:8px;border:none;background:{{ sv.pickBg }};color:{{ sv.pickFg }};cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="{{ sv.pickIcon }}" style="width:13px;height:13px"></i></button>
+                                <button onclick="{{ sv.onOpen }}" style="flex:1;min-width:0;text-align:left;background:none;border:none;padding:0;cursor:pointer;font-family:inherit">
+                                  <span style="display:block;font-size:12.5px;font-weight:700;color:#0C1116;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ sv.title }}</span>
+                                  <span style="display:block;font-size:10.5px;color:#9AA2B4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ sv.meta }}</span>
+                                  <sc-if value="{{ sv.deviceOnly }}" hint-placeholder-val="{{ false }}">
+                                    <span style="display:block;font-size:10px;font-weight:700;color:#B4820C">On this device only</span>
+                                  </sc-if>
+                                </button>
+                                <span style="flex:none;text-align:right">
+                                  <span style="display:block;font-family:var(--font-mono);font-size:12.5px;font-weight:800;color:#0C1116">{{ sv.total }}</span>
+                                  <span style="display:block;font-size:10px;color:#9AA2B4">{{ sv.splits }} marks</span>
+                                </span>
+                                <button onclick="{{ sv.onDelete }}" style="flex:none;width:24px;height:24px;border-radius:7px;border:none;background:#F4F6F8;color:#9AA2B4;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="trash-2" style="width:12px;height:12px"></i></button>
+                              </div>
+                            </sc-for>
+                          </div>
+                          <sc-if value="{{ videoCompareMsgShow }}" hint-placeholder-val="{{ false }}">
+                            <p style="margin:9px 0 0;background:#FBF0DD;border:1px solid #F0D9A8;border-radius:9px;padding:7px 10px;font-size:11.5px;color:#7A5A0C">{{ videoCompareMsg }}</p>
+                          </sc-if>
+                          <p style="margin:10px 0 0;font-size:10.5px;color:#9AA2B4;line-height:1.5">{{ videoCompareHint }}</p>
+                        </div>
+                      </sc-if>
+
+                      <sc-if value="{{ videoCompareHas }}" hint-placeholder-val="{{ false }}">
+                        <div style="background:#0A0F1A;border-radius:16px;padding:15px;color:#fff">
+                          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:11px">
+                            <p style="margin:0;font-size:13px;font-weight:800">Head to head</p>
+                            <button onclick="{{ onVideoCompareClear }}" style="background:none;border:none;color:rgba(255,255,255,.55);font-family:inherit;font-size:11px;font-weight:700;cursor:pointer">Clear</button>
+                          </div>
+                          <div style="display:flex;align-items:flex-end;gap:6px;padding:0 2px 7px">
+                            <span style="flex:.9"></span>
+                            <sc-for list="{{ videoCompareCols }}" as="cc" hint-placeholder-count="3">
+                              <span style="flex:1;min-width:0;text-align:center">
+                                <span style="display:block;font-size:11px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ cc.title }}</span>
+                                <span style="display:block;font-size:9px;color:rgba(255,255,255,.5);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ cc.sub }}</span>
+                              </span>
+                            </sc-for>
+                          </div>
+                          <sc-for list="{{ videoCompareRows }}" as="cr" hint-placeholder-count="6">
+                            <div style="display:flex;align-items:center;gap:6px;border-top:1px solid rgba(255,255,255,.08);padding:5px 2px">
+                              <span style="flex:.9;font-size:11px;font-weight:700;color:rgba(255,255,255,.75)">{{ cr.label }}</span>
+                              <sc-for list="{{ cr.cells }}" as="cx" hint-placeholder-count="3">
+                                <span style="flex:1;min-width:0;text-align:center;background:{{ cx.bg }};color:{{ cx.fg }};border-radius:7px;padding:4px 2px">
+                                  <span style="display:block;font-family:var(--font-mono);font-size:12px;font-weight:800">{{ cx.value }}</span>
+                                  <span style="display:block;font-family:var(--font-mono);font-size:9px;opacity:.75">{{ cx.gap }}</span>
+                                </span>
+                              </sc-for>
+                            </div>
+                          </sc-for>
+                          <div style="display:flex;align-items:center;gap:6px;margin-top:9px;padding:2px">
+                            <span style="flex:.9;font-size:11px;font-weight:800">{{ videoCompareTotal.label }}</span>
+                            <sc-for list="{{ videoCompareTotal.cells }}" as="ct" hint-placeholder-count="3">
+                              <span style="flex:1;min-width:0;text-align:center;background:{{ ct.bg }};color:{{ ct.fg }};border-radius:8px;padding:6px 2px">
+                                <span style="display:block;font-family:var(--font-mono);font-size:13px;font-weight:800">{{ ct.value }}</span>
+                                <span style="display:block;font-family:var(--font-mono);font-size:9px;opacity:.75">{{ ct.gap }}</span>
+                              </span>
+                            </sc-for>
+                          </div>
+                        </div>
                       </sc-if>
                     </div>
                   </sc-if>
@@ -5603,7 +5677,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-11j';
+const VX_BUILD='2026-08-11k';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -5871,6 +5945,7 @@ class Component extends DCLogic {
       planSessDate:null, planSessSlot:'AM', planSessTime:'', planCalY:null, planCalM:null, planCalDay:null,
       fitSessDate:null, fitSessSlot:'AM', fitSessTime:'', fitCalY:null, fitCalM:null, fitCalDay:null, fitSavedMsg:'',
       videoActiveId:null, videoUrlDraft:'', videoTitleDraft:'', videoTagDraft:'', videoAddOpen:false, videoRate:1, videoNoteDraft:'', videoCurT:0, videoDur:0,
+      videoCompareIds:[], videoCompareMsg:'', videoFolderOpen:true,
       fitAddOpen:false, fitBusy:null, fitMediaMsg:'', inbodyMode:'pdf', inbodySwId:'', inbodyQuery:'', inbodyPdfBusy:false, inbodyPdfMsg:'', inbodyQrOpen:false, inbodyQrMsg:'', inbodyDraft:null,
       shareNote:'',
       moveOverride:{}, moveQuery:'', sponsorQuery:'',
@@ -9548,7 +9623,7 @@ class Component extends DCLogic {
   videoAdd(){ const S=this.state; const url=S.videoUrlDraft.trim(); if(!url) return;
     if(!/^https?:\/\//i.test(url)){ this.setState({videoUrlErr:'Enter a full link starting with http:// or https://'}); return; }
     const p=this.parseVideoUrl(url);
-    const rec={id:this._uid('vid'), url, kind:p.kind, vid:p.vid, title:S.videoTitleDraft.trim()||'Untitled clip', tag:S.videoTagDraft.trim(), laps:[], notes:[], raceType:'100'};
+    const rec={id:this._uid('vid'), url, kind:p.kind, vid:p.vid, title:S.videoTitleDraft.trim()||'Untitled clip', tag:S.videoTagDraft.trim(), laps:[], notes:[], raceType:'100', savedAt:new Date().toISOString()};
     this.videoLib=[rec, ...this.videoLib]; this._saveJSON('vx_videos', this.videoLib);
     this.setState({videoAddOpen:false, videoUrlDraft:'', videoTitleDraft:'', videoTagDraft:'', videoActiveId:rec.id, videoRate:1, videoUrlErr:''});
   }
@@ -9561,7 +9636,7 @@ class Component extends DCLogic {
     const id=this._uid('vid');
     const local=URL.createObjectURL(file);
     const rec={id, url:local, kind:'mp4', vid:local, title:file.name.replace(/\.[^.]+$/,''),
-      tag:'Uploading…', laps:[], notes:[], raceType:'100', _isBlob:true};
+      tag:'Uploading…', laps:[], notes:[], raceType:'100', savedAt:new Date().toISOString(), _isBlob:true};
     this.videoLib=[rec, ...this.videoLib];
     // Play it from the device straight away — the upload runs behind, so nobody waits at the
     // poolside for a hundred megabytes before they can look at the swim.
@@ -9581,20 +9656,27 @@ class Component extends DCLogic {
     this._saveJSON('vx_videos', this.videoLib);   // only now is it safe to keep — the URL outlives the tab
     this.setState({videoUploadMsg:'Uploaded ✓ — saved to the club, and the splits will keep.'});
   }
+  // The marks a coach taps, in the order they happen. The first is Start — the start signal in
+  // the clip — and every time in the analysis is measured from it.
+  //
+  // It used to begin with 'Reaction' and carry 'Breakout' and '20m' as well. Two of those are not
+  // distances, which made the tap sequence fussy at the poolside and put two rows in the table
+  // that no broadcast analysis shows. A 50 is now Start · 15 · 25 · 35 · 45 · 50, which is what
+  // the televised analyses use and what the club asked for.
   videoSplitLabels(raceType){
     const lengths=Math.max(1, Math.round((parseInt(raceType,10)||100)/50));
-    const full=['15m','Breakout','20m','25m','35m','45m','50m'];
-    const labels=[];
+    const marks=['15m','25m','35m','45m','50m'];
+    const labels=['Start'];
     for(let L=1; L<=lengths; L++){
       const prefix = lengths>1 ? ('L'+L+' ') : '';
-      if(L===1) labels.push('Reaction');
-      if(L===1 || lengths<=4){ full.forEach(m=>labels.push(prefix+m)); }
+      // Past 200 m nobody taps five marks a length for sixteen lengths — the wall is the mark.
+      if(lengths<=4){ marks.forEach(m=>labels.push(prefix+m)); }
       else { labels.push(prefix+'50m'); }
     }
     return labels;
   }
   // How far into the race each marker is. Labels carry a lap prefix on longer events ('L2 25m'),
-  // and the two that are not distances — Reaction and Breakout — are handled by the caller.
+  // and the ones that are not distances — Start, and Breakout on older analyses — return null.
   _splitMetres(label, lapLen){
     const t=String(label||'');
     const lap=(t.match(/^L(\d+)\s/)||[])[1];
@@ -9612,51 +9694,61 @@ class Component extends DCLogic {
     if(!laps.length) return null;
     const strokes=v.strokes||{};
     const lapLen=50;
-    const rows=[]; let prevT=0, prevM=0, reaction=null, breakoutT=null;
+    // Every mark is a video timestamp, so the first one — the start signal — is the zero of the
+    // race. Without subtracting it, a race filmed four minutes into a stream reported a 269-second
+    // 50 back and an 81% speed drop: the clip's clock was being read as the swimmer's time.
+    const startLap=laps.find(l=>/^\s*(start|reaction)/i.test(String(l.label||'')));
+    const start=startLap ? (+startLap.t||0) : 0;
+    const rows=[]; let prevT=0, prevM=0, breakoutT=null;
     laps.forEach(l=>{
       const lab=String(l.label||'');
-      if(/reaction/i.test(lab)){ reaction=+l.t; prevT=+l.t; return; }
-      if(/breakout/i.test(lab)){ breakoutT=+l.t; return; }
+      if(/^\s*(start|reaction)/i.test(lab)) return;
+      // Older analyses were captured with a Breakout mark. They keep working.
+      if(/breakout/i.test(lab)){ breakoutT=(+l.t)-start; return; }
       const m=this._splitMetres(lab, lapLen);
       if(m==null) return;
-      const dist=m-prevM, split=(+l.t)-prevT;
-      if(!(dist>0) || !(split>0)){ prevM=m; prevT=+l.t; return; }
+      const t=(+l.t)-start;
+      const dist=m-prevM, split=t-prevT;
+      if(!(dist>0) || !(split>0)){ prevM=m; prevT=t; return; }
       const n=parseInt(strokes[lab],10);
       const vel=dist/split;
       const dps=(n>0)?(dist/n):null;
       const sr=(n>0)?(n/(split/60)):null;
       rows.push({ label:lab, metres:m, dist,
-        split:split.toFixed(2), cum:(+l.t).toFixed(2),
+        split:split.toFixed(2), splitNum:split, cum:t.toFixed(2), cumNum:t,
         vel:vel.toFixed(2), velNum:vel,
         strokes:(n>0?String(n):''),
         sr: sr!=null?sr.toFixed(1):'—',
         dps: dps!=null?dps.toFixed(2):'—',
         si: (dps!=null)?(dps*vel).toFixed(2):'—' });
-      prevM=m; prevT=+l.t;
+      prevM=m; prevT=t;
     });
     if(!rows.length) return null;
     // The underwater is its own race. Separating it stops a fast breakout flattering a slow
     // swim, and a slow breakout hiding a good one.
     const bo=parseFloat(v.breakoutM);
     let underwater=null;
-    if(breakoutT!=null && !isNaN(bo) && bo>0){
-      const t=breakoutT-(reaction||0);
-      if(t>0) underwater={metres:bo.toFixed(1), sec:t.toFixed(2), vel:(bo/t).toFixed(2)};
+    if(breakoutT!=null && !isNaN(bo) && bo>0 && breakoutT>0){
+      underwater={metres:bo.toFixed(1), sec:breakoutT.toFixed(2), vel:(bo/breakoutT).toFixed(2)};
     }
+    // The first 15 m is the start, the underwater and the breakout in one number — it is what
+    // every televised analysis leads with, and unlike a breakout mark it needs no second tap.
+    const f15=rows.find(r=>r.metres===15 && r.dist===15);
+    const firstFifteen = f15 ? {sec:f15.split, vel:f15.vel} : null;
     // Swimming speed at its best against its worst — the number a coach acts on, and the one
     // a highlight reel of a single good length never shows.
     const swim=rows.filter(r=>r.dist>=5);
     const fast=Math.max(...swim.map(r=>r.velNum));
     const slow=Math.min(...swim.map(r=>r.velNum));
     const drop=fast>0 ? ((fast-slow)/fast*100) : 0;
-    const total=+laps[laps.length-1].t;
+    const total=rows[rows.length-1].cumNum;
     // Out and back, for anything longer than one length.
     let out=null, back=null;
     const half=rows.find(r=>r.metres===lapLen);
-    if(half && total>half.cum){ out=(+half.cum).toFixed(2); back=(total-(+half.cum)).toFixed(2); }
-    return { rows, reaction: reaction!=null?reaction.toFixed(2):null, underwater,
+    if(half && total>half.cumNum){ out=half.cumNum.toFixed(2); back=(total-half.cumNum).toFixed(2); }
+    return { rows, firstFifteen, underwater, hasBreakout: breakoutT!=null,
       drop:drop.toFixed(1), dropBad: drop>12,
-      out, back, total:total.toFixed(2),
+      out, back, total:total.toFixed(2), totalNum:total,
       fastest:fast.toFixed(2), slowest:slow.toFixed(2) };
   }
   videoSetStrokes(label, n){
@@ -9674,7 +9766,66 @@ class Component extends DCLogic {
     if(!v._isBlob) this._saveJSON('vx_videos', this.videoLib);
     this.forceUpdate();
   }
-  videoDelete(id){ this.videoLib=this.videoLib.filter(v=>v.id!==id); this._saveJSON('vx_videos', this.videoLib); if(this.state.videoActiveId===id) this.setState({videoActiveId:null}); else this.forceUpdate(); }
+  // ---- Comparing swimmers, up to three at a time ----
+  //
+  // A split table for one swimmer says how the swim went. Three side by side say why one of them
+  // won it: the same table the televised analyses show, with the fastest swimmer at each mark
+  // picked out. Three is the limit because a fourth column does not fit a phone held at the
+  // poolside, and this is read at the poolside.
+  videoCompareToggle(id){
+    const cur=(this.state.videoCompareIds||[]).slice();
+    const at=cur.indexOf(id);
+    if(at>=0){ cur.splice(at,1); return this.setState({videoCompareIds:cur, videoCompareMsg:''}); }
+    if(cur.length>=3) return this.setState({videoCompareMsg:'Three at a time — untick one first.'});
+    cur.push(id);
+    this.setState({videoCompareIds:cur, videoCompareMsg:''});
+  }
+  videoCompareClear(){ this.setState({videoCompareIds:[], videoCompareMsg:''}); }
+  videoCompareTable(){
+    const ids=(this.state.videoCompareIds||[]);
+    const picked=ids.map(id=>this.videoLib.find(v=>v.id===id)).filter(Boolean);
+    if(picked.length<2) return null;
+    const cols=picked.map(v=>({ id:v.id, title:v.title||'Untitled', tag:v.tag||'',
+                                raceType:(v.raceType||'100')+'m', M:this.videoRaceMetrics(v) }));
+    if(cols.filter(c=>c.M).length<2) return null;
+    // The marks in distance order, not in the order each coach happened to tap them — two clips
+    // captured in a different order still line up mark for mark.
+    const seen={}; const marks=[];
+    cols.forEach(c=>(c.M?c.M.rows:[]).forEach(r=>{ if(!seen[r.label]){ seen[r.label]={label:r.label, metres:r.metres}; marks.push(seen[r.label]); } }));
+    marks.sort((a,b)=>a.metres-b.metres);
+    const rowFor=(label, pick)=>{
+      const cells=cols.map(c=>{
+        const n=c.M?pick(c):null;
+        return (n!=null && isFinite(n)) ? {num:n, value:n.toFixed(2)} : {num:null, value:'—'};
+      });
+      const nums=cells.map(c=>c.num).filter(n=>n!=null);
+      const best=nums.length>1?Math.min(...nums):null;
+      cells.forEach(c=>{
+        c.best = best!=null && c.num===best;
+        c.gap  = (best!=null && c.num!=null && !c.best) ? ('+'+(c.num-best).toFixed(2)) : '';
+      });
+      return {label, cells};
+    };
+    const rows=marks.map(mk=>rowFor(mk.label, c=>{
+      const r=c.M.rows.find(x=>x.label===mk.label); return r?r.splitNum:null;
+    }));
+    const totalRow=rowFor('Total', c=>c.M.totalNum);
+    return {cols, rows, totalRow};
+  }
+  // The date an analysis was filed. Clips saved before this carried no date, but the id was
+  // minted from the clock, so their date is still in there rather than lost.
+  _videoSavedAt(v){
+    if(v && v.savedAt) return String(v.savedAt).slice(0,10);
+    const m=String((v&&v.id)||'').match(/^vid([0-9a-z]+)_/);
+    if(m){ const ms=parseInt(m[1],36);
+      if(ms>1500000000000 && ms<4000000000000) return new Date(ms).toISOString().slice(0,10); }
+    return '';
+  }
+  videoDelete(id){ this.videoLib=this.videoLib.filter(v=>v.id!==id); this._saveJSON('vx_videos', this.videoLib);
+    const keep=(this.state.videoCompareIds||[]).filter(x=>x!==id);
+    if(this.state.videoActiveId===id) this.setState({videoActiveId:null, videoCompareIds:keep});
+    else this.setState({videoCompareIds:keep});
+  }
   _activeVideo(){ return this.videoLib.find(v=>v.id===this.state.videoActiveId) || this.videoLib[0] || null; }
   _getCurrentTime(){
     try{
@@ -12705,14 +12856,38 @@ class Component extends DCLogic {
     const onPlayerMount=this._playerMountRef || (this._playerMountRef=(el)=>this.onPlayerMount(el));
     const raceTypeOptions = activeVid ? ['50','100','200','400','800','1500'].map(rt=>({label:rt, onClick:()=>this.videoSetRaceType(rt), on:(activeVid.raceType||'100')===rt, bg:(activeVid.raceType||'100')===rt?squad.accent:'#fff', fg:(activeVid.raceType||'100')===rt?'#fff':'#3A4152'})) : [];
     const nextSplitLabel = activeVid ? (()=>{ const labels=this.videoSplitLabels(activeVid.raceType||'100'); const done=(activeVid.laps||[]).length; return done<labels.length ? labels[done] : null; })() : null;
-    const videoSplitsDone = activeVid ? (activeVid.laps||[]).length : 0;
     const videoSplitsTotal = activeVid ? this.videoSplitLabels(activeVid.raceType||'100').length : 0;
+    // An analysis captured under the old marks holds more of them than the club now taps, and
+    // "8/6 captured" reads as a fault rather than as an older swim.
+    const videoSplitsDone = activeVid ? Math.min((activeVid.laps||[]).length, videoSplitsTotal) : 0;
     const videoAllSplitsDone = activeVid ? videoSplitsDone>=videoSplitsTotal : false;
     // _isBlob means it lives only in this tab, so it is the opposite of uploaded. Read the
     // wrong way round, this told a coach a device-only clip was safely stored.
     const videoIsUploaded = activeVid ? !activeVid._isBlob : false;
     const videoDeviceOnly = activeVid ? !!activeVid._isBlob : false;
     const videoCanDownload = activeVid && activeVid.kind==='mp4';
+    // The folder. Every analysis the club has ever filed, newest first, with enough on each line
+    // to recognise a swim months later — and the tick that puts it into the comparison.
+    const videoCompareIds = S.videoCompareIds||[];
+    const videoSavedRows = this.videoLib.map(v=>{
+      const M=this.videoRaceMetrics(v);
+      const tot=this.videoSplitLabels(v.raceType||'100').length;
+      const done=Math.min((v.laps||[]).length, tot);
+      const picked=videoCompareIds.indexOf(v.id)>=0;
+      return { id:v.id, title:v.title||'Untitled clip',
+        meta:[(v.raceType||'100')+'m', this._videoSavedAt(v), v.tag].filter(Boolean).join(' · '),
+        total: M?(M.total+'s'):'—',
+        splits: done+'/'+tot,
+        isActive: activeVid && activeVid.id===v.id,
+        rowBg: activeVid && activeVid.id===v.id ? '#F3F7FF' : '#fff',
+        pickBg: picked?'#0A0F1A':'#F4F6F8', pickFg: picked?'#fff':'#9AA2B4', pickIcon: picked?'check':'plus',
+        deviceOnly: !!v._isBlob,
+        onOpen:()=>this.setState({videoActiveId:v.id, videoRate:1}),
+        onCompare:()=>this.videoCompareToggle(v.id),
+        onDelete:()=>this.videoDelete(v.id) };
+    });
+    const videoCompare = this.videoCompareTable();
+    const videoCompareCount = videoCompareIds.length;
 
     // ---- Fitness Plan ----
     const fitPlan = this.getFitPlan(S.squadId);
@@ -14736,7 +14911,7 @@ class Component extends DCLogic {
         if(!M) return {raceHasMetrics:false};
         const vs=M.rows.map(r=>r.velNum); const top=Math.max(...vs, 0.1);
         const head=[];
-        if(M.reaction) head.push({label:'Reaction', value:M.reaction, sub:'to first mark', color:'#fff'});
+        if(M.firstFifteen) head.push({label:'First 15m', value:M.firstFifteen.sec, sub:M.firstFifteen.vel+' m/s · start & underwater', color:'#fff'});
         if(M.underwater) head.push({label:'Underwater', value:M.underwater.vel, sub:M.underwater.metres+' m · '+M.underwater.sec+' s', color:'#22D7D7'});
         if(M.out) head.push({label:'Out / back', value:M.out+' / '+M.back, sub:'first & second length', color:'#fff'});
         // The number a highlight of one good length never shows: how much speed was lost by
@@ -14749,6 +14924,10 @@ class Component extends DCLogic {
             h: Math.max(6, Math.round((r.velNum/top)*52)),
             fill: r.velNum>=top*0.98 ? '#22D7D7' : 'rgba(255,255,255,.35)' })),
           raceRows: M.rows.map(r=>({ ...r, onStrokes:(e)=>this.videoSetStrokes(r.label, e.target.value) })),
+          // The breakout box only belongs to analyses captured with a breakout mark. On the
+          // marks the club uses now there is nothing to measure it against, and a box that
+          // cannot change a number is a box that reads as broken.
+          raceHasBreakout: M.hasBreakout,
           raceBreakoutM: (activeVid&&activeVid.breakoutM)||'',
           onRaceBreakout:(e)=>this.videoSetBreakout(e.target.value),
           raceReadout: 'Speed, stroke rate, distance per stroke and stroke index are all worked out from the split times and the stroke counts — type the strokes for a length and the rest follows. Stroke index is distance per stroke times speed: it rises only when a longer stroke has not cost you speed.'
@@ -14769,6 +14948,17 @@ class Component extends DCLogic {
       videoTagDraft:S.videoTagDraft, onVideoTagDraft:(e)=>this.setState({videoTagDraft:e.target.value}),
       onVideoAddSave:()=>this.videoAdd(), onVideoDeleteActive: activeVid?()=>this.videoDelete(activeVid.id):null,
       videoLibEmpty: this.videoLib.length===0,
+      videoSavedRows, videoFolderHas: videoSavedRows.length>0, videoFolderCount: videoSavedRows.length+' saved',
+      videoCompareMsg:S.videoCompareMsg||'', videoCompareMsgShow: !!S.videoCompareMsg,
+      videoCompareCount, onVideoCompareClear:()=>this.videoCompareClear(),
+      videoCompareHas: !!videoCompare,
+      videoCompareCols: videoCompare?videoCompare.cols.map(c=>({title:c.title, sub:[c.raceType, c.tag].filter(Boolean).join(' · ')})):[],
+      videoCompareRows: videoCompare?videoCompare.rows.map(r=>({label:r.label, cells:r.cells.map(c=>({
+        value:c.value, gap:c.gap, bg:c.best?'#DCF5EA':'transparent', fg:c.best?'#0C7A4F':'#3A4152' }))})):[],
+      videoCompareTotal: videoCompare?{label:videoCompare.totalRow.label, cells:videoCompare.totalRow.cells.map(c=>({
+        value:c.value, gap:c.gap, bg:c.best?'#0C7A4F':'#F4F6F8', fg:c.best?'#fff':'#3A4152' }))}:{label:'Total', cells:[]},
+      videoCompareHint: videoCompareCount>=2 ? 'Green is the fastest at that mark; the small figure is how far behind.'
+                                             : 'Tick two or three saved analyses to compare them mark for mark.',
       composeText:S.compose, onComposeChange:(e)=>this.setState({compose:e.target.value}), composeTags, onPost, feed,
       composeEmojiChips, composeEmojiOpen:!!S.composeEmojiOpen, onComposeEmojiToggle, onComposePickPhoto, onComposePhoto, onComposeRemovePhoto,
       composeHasImage:!!S.composeImage, composeImageEl: S.composeImage? window.React.createElement('img',{src:S.composeImage, alt:'', style:{width:'100%',maxHeight:180,objectFit:'cover',borderRadius:10,marginTop:8}}) : null,
