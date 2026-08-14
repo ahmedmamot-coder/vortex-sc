@@ -2853,6 +2853,36 @@ describe("InBody sheet", () => {
     });
   });
 
+  // The backfill runs on every fetch of the family list, so a row the database will never accept
+  // is re-sent every time. After a restore that is exactly what happens: the row's id must match
+  // a real login, the restore changed which logins exist, and Discard does not help because the
+  // next fetch queues it again.
+  describe("a family row the database can never accept", () => {
+    const fn = sourceBetween("const _refused=this._famRefusedIds();", "const list=[...fromTable");
+
+    it("is not offered again", () => {
+      eq(/_refused\.indexOf\(f\.id\)>=0\) return;/.test(fn), true,
+         "otherwise the same refusal is counted again for as long as the app is open");
+    });
+    it("only a foreign-key refusal counts as permanent", () => {
+      eq(/\/foreign key\/i\.test\(e\.said\|\|''\)/.test(fn), true,
+         "a permission problem or an outage must still be retried");
+    });
+    it("signing in makes the row worth offering again", () =>
+      eq(/this\._famClearRefused\(rec\.id\)/.test(SOURCE), true,
+         "signing in proves the login exists, which is the thing that was missing"));
+    it("the list is kept on the device, not in the database", () => {
+      const g = sourceBetween("_famRefusedIds(){", "\n  }");
+      eq(/localStorage\.getItem\('vx_fam_refused'\)/.test(g), true,
+         "the whole point is that the database will not take these rows");
+    });
+    it("a bad list cannot break the fetch", () => {
+      const g = sourceBetween("_famRefusedIds(){", "\n  }");
+      eq(/Array\.isArray\(v\)\?v:\[\]/.test(g), true);
+      eq(/catch\(e\)\{ return \[\]; \}/.test(g), true);
+    });
+  });
+
   describe("the activity log", () => {
     // navigator is a getter-only global in Node, so it is replaced by descriptor and put back.
     const withNav = (ua, fn) => {
