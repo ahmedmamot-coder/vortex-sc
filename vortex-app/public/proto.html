@@ -2455,7 +2455,7 @@ if ('serviceWorker' in navigator) {
                         </label>
                         <span style="position:absolute;bottom:-4px;right:-4px;width:24px;height:24px;border-radius:50%;background:{{ swimmer.genBg }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;line-height:1;border:2.5px solid {{ profileHeaderBg }}">{{ swimmer.genIcon }}</span>
                       </span>
-                      <div style="flex:1"><span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><h1 style="font-size:23px;font-weight:700;letter-spacing:-.02em;margin:0">{{ swimmer.name }}</h1><sc-if value="{{ swimmer.inactive }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:4px;background:rgba(180,105,14,.9);color:#fff;font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:3px 8px;border-radius:999px"><i data-lucide="pause" style="width:11px;height:11px"></i>{{ swimmer.statusText }}</span></sc-if></span><p style="margin:3px 0 0;font-size:12.5px;color:{{ profileHeaderSubFg }}">Age {{ swimmer.age }} · DOB {{ swimmer.dob }} · {{ squad.name }} · {{ swimmer.gender }}</p></div>
+                      <div style="flex:1"><span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><h1 style="font-size:23px;font-weight:700;letter-spacing:-.02em;margin:0">{{ swimmer.name }}</h1><sc-if value="{{ swimmer.inactive }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:4px;background:rgba(180,105,14,.9);color:#fff;font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:3px 8px;border-radius:999px"><i data-lucide="pause" style="width:11px;height:11px"></i>{{ swimmer.statusText }}</span></sc-if></span><p style="margin:3px 0 0;font-size:12.5px;color:{{ profileHeaderSubFg }}">{{ swimmer.ageLabel }} · DOB {{ swimmer.dob }} · {{ squad.name }} · {{ swimmer.gender }}</p></div>
                     </div>
                     <div style="position:relative;display:flex;gap:8px;margin-top:15px">
                       <sc-for list="{{ swimmerKpis }}" as="k" hint-placeholder-count="3">
@@ -4772,7 +4772,7 @@ if ('serviceWorker' in navigator) {
                           <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:11px 12px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
                             <div style="display:flex;align-items:center;gap:10px">
                               <span style="position:relative;flex:none"><span style="width:36px;height:36px;border-radius:10px;background:{{ r.accent }};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px">{{ r.initials }}</span><span style="position:absolute;bottom:-3px;right:-3px;width:16px;height:16px;border-radius:50%;background:{{ r.genBg }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;border:2px solid #fff">{{ r.genIcon }}</span></span>
-                              <span style="flex:1;min-width:0"><span style="display:block;font-weight:600;font-size:13px;color:#0C1116">{{ r.name }}</span><span style="display:block;font-size:11px;color:#7A8296">Age {{ r.age }} · {{ r.squadName }}</span></span>
+                              <span style="flex:1;min-width:0"><span style="display:block;font-weight:600;font-size:13px;color:#0C1116">{{ r.name }}</span><span style="display:block;font-size:11px;color:#7A8296">{{ r.ageLabel }} · {{ r.squadName }}</span></span>
                               <sc-if value="{{ r.inactive }}" hint-placeholder-val="{{ false }}"><span style="flex:none;background:#FCEFDD;color:#B4690E;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;padding:3px 7px;border-radius:999px">{{ r.statusText }}</span></sc-if>
                               <button onclick="{{ r.onEdit }}" style="flex:none;width:30px;height:30px;border-radius:8px;border:none;background:#F4F6F8;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="pencil" style="width:14px;height:14px"></i></button>
                               <button onclick="{{ r.onDelete }}" style="flex:none;width:30px;height:30px;border-radius:8px;border:none;background:#FBE4E4;color:#B42318;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="trash-2" style="width:14px;height:14px"></i></button>
@@ -5914,7 +5914,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-11q';
+const VX_BUILD='2026-08-11r';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -6298,6 +6298,15 @@ class Component extends DCLogic {
   }
   // Age that reflects the DOB when present, else the stored age. DOB display, likewise.
   _swAge(sw){ const a=this._ageFromDob(sw&&sw.dob); return a!=null? a : ((sw&&sw.age)||0); }
+  // For reading, not for arithmetic. _swAge falls back to 0 so that every age band, promotion
+  // check and relay calculation has a number to work with — but printing that 0 on a swimmer's
+  // line states an age nobody gave, and "Age 0" beside a name is worse than saying nothing.
+  _swAgeLabel(sw){
+    const a=this._ageFromDob(sw&&sw.dob);
+    if(a!=null) return 'Age '+a;
+    const typed=sw&&sw.age;
+    return (typed>0) ? ('Age '+typed) : 'Age not set';
+  }
   // Was: fall back to a date invented from the swimmer's age, which a profile then printed
   // as though somebody had checked it. A date nobody has given us is shown as missing.
   _swDob(sw){ const p=this._dobParts(sw&&sw.dob); return p ? p.label : '—'; }
@@ -13752,7 +13761,7 @@ class Component extends DCLogic {
       const editDraftGender = editing ? (S.swEditDraft?.gender ?? sw.gender) : sw.gender;
       const editDraftSquad = editing ? (S.swEditDraft?.squadId ?? sw.squadId) : sw.squadId;
       const genderBEdit = editDraftGender!=='Girls';
-      return { editing, name:sw.name, age:this._swAge(sw), squadName:sq.name, initials:sw.initials, genIcon:gm.icon, genBg:gm.bg, accent:sq.accent, inactive:!this._swStatus(sw.id).active, statusText:this._statusLabel(this._swStatus(sw.id).reason),
+      return { editing, name:sw.name, age:this._swAge(sw), ageLabel:this._swAgeLabel(sw), squadName:sq.name, initials:sw.initials, genIcon:gm.icon, genBg:gm.bg, accent:sq.accent, inactive:!this._swStatus(sw.id).active, statusText:this._statusLabel(this._swStatus(sw.id).reason),
         editName: editing? (S.swEditDraft?.name ?? sw.name) : sw.name,
         // Follows the date of birth when there is one — it read 8 beside 17/04/2017.
         editAge: editing? (S.swEditDraft?.age ?? this._swAge(sw)) : this._swAge(sw),
@@ -14402,7 +14411,7 @@ class Component extends DCLogic {
       shareNote:S.shareNote, shareNoteColor: S.shareNote?'#0C7A4F':'transparent',
       attendSummary, attendList,
       meetChips, selMeet, resultRows,
-      swimmer:{name:swObj.name, age:this._swAge(swObj), dob:this._swDob(swObj), gender:swObj.gender, initials:swObj.initials, inactive:!this._swStatus(swObj.id).active, statusText:this._statusLabel(this._swStatus(swObj.id).reason), genIcon:this.genMeta(swObj.gender).icon, genBg:this.genMeta(swObj.gender).bg, progressBest,
+      swimmer:{name:swObj.name, age:this._swAge(swObj), ageLabel:this._swAgeLabel(swObj), dob:this._swDob(swObj), gender:swObj.gender, initials:swObj.initials, inactive:!this._swStatus(swObj.id).active, statusText:this._statusLabel(this._swStatus(swObj.id).reason), genIcon:this.genMeta(swObj.gender).icon, genBg:this.genMeta(swObj.gender).bg, progressBest,
         avatarEl: this.av(this.swimmerPhotos[swObj.id]||null, swObj.initials, 60, 17, 'rgba(255,255,255,.18)', '#fff', 20, 'rgba(255,255,255,.18)')},
       onPhotoChange:(e)=>this.handlePhotoUpload(e, swObj.id),
       showVortexId:S.showVortexId, onCloseVortexId:()=>this.setState({showVortexId:false, vortexIdFlipped:false}),

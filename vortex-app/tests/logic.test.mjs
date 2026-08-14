@@ -3434,6 +3434,27 @@ describe("InBody sheet", () => {
     });
   });
 
+  // Four of the six swimmers still without a date read "Age 0" on their line. The fallback that
+  // keeps every age band and relay calculation working with a number was being printed as though
+  // somebody had given it.
+  describe("an age nobody has given", () => {
+    const c = {};
+    c._ageFromDob = bind("_ageFromDob", c, ["_dobParts"]);
+    c._swAge = bind("_swAge", c, ["_ageFromDob", "_dobParts"]);
+    c._swAgeLabel = bind("_swAgeLabel", c, ["_ageFromDob", "_dobParts"]);
+
+    it("is not printed as zero", () => eq(c._swAgeLabel({ id: "x" }), "Age not set"));
+    it("nor when the age is there but empty", () => eq(c._swAgeLabel({ age: 0 }), "Age not set"));
+    it("an age the club typed is shown", () => eq(c._swAgeLabel({ age: 22 }), "Age 22"));
+    it("and a date of birth still beats a typed age", () =>
+      eq(c._swAgeLabel({ age: 8, dob: "2010-04-17" }), "Age " + c._swAge({ dob: "2010-04-17" })));
+    // The arithmetic everywhere else still needs a number, so the fallback stays where it was.
+    it("the number used for age bands is untouched", () => {
+      eq(c._swAge({ id: "x" }), 0);
+      eq(c._swAge({ age: 22 }), 22);
+    });
+  });
+
   // The club had 304 dates of birth in the database and a screen saying 123 were missing.
   //
   // The overlay is keyed squad-then-swimmer, and a move is a removal from one squad plus an
