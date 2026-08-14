@@ -44,6 +44,23 @@ create table if not exists vx_video_analyses (
   updated_at  timestamptz not null default now()
 );
 
+-- The columns above are only created on a database that does not have this table yet, because
+-- `create table if not exists` does nothing at all to a table that is already there. A club that
+-- ran this file before the lanes and the dolphin kicks existed would re-run it, be told it
+-- succeeded, and still have no column to save them in — so the app would keep falling back to
+-- the older shape for ever. These add them, and do nothing on a database that already has them.
+alter table vx_video_analyses
+  -- The dolphin kicks in each streamline, keyed by the mark that follows the wall: {'15m': 8}.
+  -- Lane one's, mirroring laps and strokes.
+  add column if not exists kicks    jsonb not null default '{}'::jsonb,
+  -- One recording of a heat holds two or three lanes, all measured from the same gun:
+  -- [{id, name, laps, strokes, kicks}]. Empty on an analysis saved before lanes existed, which
+  -- is read as one lane from laps/strokes/kicks rather than as no swim at all.
+  add column if not exists swimmers jsonb not null default '[]'::jsonb,
+  -- Free | Back | Breast | Fly | IM. It changes what a stroke count means, and it is what the
+  -- assistant is told the swim was.
+  add column if not exists stroke   text;
+
 create index if not exists vx_video_analyses_saved on vx_video_analyses (saved_at desc);
 
 alter table vx_video_analyses enable row level security;
@@ -70,5 +87,8 @@ notify pgrst, 'reload schema';
 
 -- After running it, open the app once as a manager: it fills the table from the analyses the
 -- club already has, and every device reads from it after that. Check with:
---   select id, title, race_type, jsonb_array_length(laps) as marks, saved_at
+--   select id, title, race_type, stroke,
+--          jsonb_array_length(laps) as marks,
+--          greatest(jsonb_array_length(swimmers), 1) as lanes,
+--          saved_at
 --     from vx_video_analyses order by saved_at desc;

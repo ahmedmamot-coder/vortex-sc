@@ -3288,6 +3288,71 @@ describe("InBody sheet", () => {
     });
   });
 
+  // The club's colours, pattern and mark are a guideline, not a suggestion. Everything added to
+  // the video screen reads a token, so re-theming the club re-themes these too — and a colour
+  // picked by hand because a third lane needed one would show up here.
+  describe("the video screen keeps to the brand", () => {
+    const videoSection = (() => {
+      const start = SOURCE.indexOf('<sc-if value="{{ toolVideo }}"');
+      let depth = 0, i = start;
+      const tag = /<\/?sc-(if|for)\b/g;
+      for (tag.lastIndex = start; ;) {
+        const m = tag.exec(SOURCE);
+        if (!m) break;
+        depth += m[0].startsWith("</") ? -1 : 1;
+        i = tag.lastIndex;
+        if (depth === 0) break;
+      }
+      return SOURCE.slice(start, i);
+    })();
+
+    // Each surface added for lanes, kicks and the assistant, bounded by the markup that follows
+    // it. The rest of the video screen predates the guidelines being written down and still has
+    // colours spelled out; what is added from here on does not.
+    const REGIONS = [
+      ["the lane picker", "Swimmers in this clip", '<div class="vx-clockcard">'],
+      ["the tap counter", "Count by tapping", "{{ videoClipCompareHas }}"],
+      ["the in-clip head to head", "{{ videoClipCompareHas }}", "{{ videoClipCompareFoot }}"],
+      ["the assistant card", "Coach's read", "{{ videoAiFoot }}"],
+      ["the folder search", "Find a swim —", "{{ videoFolderNoHitsMsg }}"],
+    ];
+    for (const [what, from, to] of REGIONS) {
+      it(what + " carries no colour of its own", () => {
+        const a = videoSection.indexOf(from);
+        const b = videoSection.indexOf(to, a + from.length);
+        eq(a >= 0 && b > a, true, "the region must still be findable: " + what);
+        const hexes = [...new Set(videoSection.slice(a, b).match(/#[0-9A-Fa-f]{3,6}\b/g) || [])];
+        eq(hexes.join(", "), "", "every colour must come from a token, so the club can re-theme");
+      });
+    }
+    it("the tokens they read are the ones the guidelines define", () => {
+      for (const token of ["--color-brand", "--ac-cyan", "--surface-ink", "--vx-slate-700",
+                           "--vx-danger-dark-bg", "--brand-tint", "--on-brand"])
+        eq(new RegExp("\\" + token + ":").test(SOURCE), true, token + " must be defined, not just used");
+    });
+    // A lane needs a third accent. The palette has one; inventing a fourth colour for it is how
+    // a brand becomes a rainbow.
+    it("a third lane takes its colour from the palette, not from nowhere", () => {
+      const inks = (SOURCE.match(/const LANE_INK = \[([^\]]+)\]/) || [])[1] || "";
+      eq(/#[0-9A-Fa-f]{3,6}/.test(inks), false, "no hand-picked colour for the third lane");
+      eq(inks.split(",").length, 3);
+    });
+    it("the club's mark is on the sheet and its wordmark on the dark cards", () => {
+      // b798adf9 is the logo mark, 9b59d9a2 the wordmark reversed out for dark surfaces.
+      eq(videoSection.split("vx-analysis-mark").length - 1 >= 2, true,
+         "both the race analysis and the head-to-head carry the mark");
+      eq(videoSection.split('src="assets/9b59d9a2.png"').length - 1 >= 2, true,
+         "the race clock and the assistant card both carry the wordmark");
+    });
+    it("the working cards carry the club's rule and pattern rather than a plain border", () => {
+      const css = (SOURCE.match(/\.vx-toolcard\{[\s\S]*?\.vx-toolcard-note\{[^}]*\}/) || [""])[0];
+      eq(/pattern-transparent\.png/.test(css), true, "the watermark");
+      eq(/var\(--brand-gradient\)/.test(css), true, "and the brand rule down the left");
+      eq(videoSection.split('class="vx-toolcard"').length - 1, 2,
+         "both new cards use it rather than each inventing a card");
+    });
+  });
+
   // What is sent when a coach asks Claude to read a swim. A name typed on a lane is the one
   // field in this payload a child's name could ride out on.
   describe("asking Claude to read a race", () => {
@@ -3750,9 +3815,22 @@ describe("InBody sheet", () => {
     it("and it only drops them once a write has actually said the column is missing", () => {
       const c = withSync(ctx());
       eq("swimmers" in c._videoRow(clip), true, "the columns are assumed present until proven otherwise");
-      const persist = methodSource("_videosPersist").body;
-      eq(/schema cache/.test(persist), true, "and what proves it is the database's own answer");
-      eq(/_videoLanesCol=false/.test(persist), true);
+      c._videoColsRefused = bind("_videoColsRefused", c);
+      window.__vxLastWriteErr = { said: "network: it could not be sent" };
+      eq(c._videoColsRefused(), false, "a network failure is not a missing column");
+      window.__vxLastWriteErr = { said: "Could not find the 'kicks' column of 'vx_video_analyses' in the schema cache" };
+      eq(c._videoColsRefused(), true, "the database's own answer is what proves it");
+      eq(c._videoColsRefused(), false, "and it is only acted on once");
+      eq("swimmers" in c._videoRow(clip), false);
+      window.__vxLastWriteErr = null;
+    });
+    // The first fill is often the first write this club's table ever takes, so it is where a
+    // missing column shows up first — and it is the write that puts the library in the database
+    // at all. Left refused, nothing would reach the club until somebody marked a new clip.
+    it("the first fill falls back too, rather than waiting for the next clip", () => {
+      const seed = methodSource("_videosSeed").body;
+      eq(/_videoColsRefused\(\)/.test(seed), true);
+      eq(/return this\._videosSeed\(\)/.test(seed), true, "and tries again in the shape that fits");
     });
     it("a clip still uploading has no row and is not sent as one", () => {
       const c = withSync(ctx([{ ...clip, _isBlob: true }]));
@@ -4001,6 +4079,16 @@ describe("InBody sheet", () => {
       eq(/writable by ANY signed-in user/.test(sql), true));
     it("reloads PostgREST, or the app sees a table that is not there yet", () =>
       eq(/notify pgrst, 'reload schema'/.test(sql), true));
+    // `create table if not exists` does nothing at all to a table that is already there. A club
+    // that ran this before the lanes existed would re-run it, be told it succeeded, and still
+    // have nowhere to save them — so the app would fall back to the older shape for ever.
+    it("brings a table that already exists up to date, not only a new one", () => {
+      eq(/create table if not exists vx_video_analyses[\s\S]*alter table vx_video_analyses/.test(sql), true,
+         "the alter must come after the create, so one run does both");
+      for (const col of ["kicks", "swimmers", "stroke"])
+        eq(new RegExp("add column if not exists\\s+" + col + "\\b").test(sql), true,
+           "the " + col + " column is added to an existing table too");
+    });
   });
 
   // "i need a folder to save all the videos analysis to back it" — the clips were only ever a

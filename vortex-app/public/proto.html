@@ -614,6 +614,9 @@ if ('serviceWorker' in navigator) {
   --vx-border-dark: rgba(255,255,255,0.10);
   /* extra cool slates for UI chrome */
   --vx-slate-900: #1A2236;
+  /* The ink on an unselected control sitting on white — the label in a segmented row of
+     buttons. It was written out as #3A4152 in a few dozen places before it had a name. */
+  --vx-slate-700: #3A4152;
   --vx-slate-500: #6A748F;
   --vx-slate-300: #ADB5CB;
   --vx-slate-200: #CDD3E2;
@@ -632,6 +635,9 @@ if ('serviceWorker' in navigator) {
   --vx-success: #1CB87A;
   --vx-warning: #F5A623;
   --vx-danger:  #E5484D;
+  /* Danger on a dark surface. The red above goes muddy on the near-black cards — the race
+     clock, the assistant panels — so those carry the same red lifted to stay legible. */
+  --vx-danger-dark-bg: #FF9A8B;
   --vx-info:    var(--vx-blue);
 
   /* =====================================================================
@@ -650,6 +656,9 @@ if ('serviceWorker' in navigator) {
   --surface-sunken:  var(--vx-slate-100);
   --surface-card:    var(--vx-white);
   --surface-page-dark: var(--vx-black);
+  /* The club's ink-black surface: the login screen, the race clock, the assistant panels, and
+     any chip that reads as selected against white. Not the same as --vx-ink, which is text. */
+  --surface-ink:     #0A0F1A;
 
   --text-strong:  var(--vx-ink);
   --text-body:    var(--vx-ink);
@@ -899,8 +908,27 @@ if ('serviceWorker' in navigator) {
      sheet — the headline stat, the speed bar for the fastest segment. One colour, one meaning. */
   .vx-kickbox{color:var(--cyan-dark);border-color:rgba(34,215,215,.45)}
   .vx-kickbox:focus{border-color:var(--ac-cyan);box-shadow:0 0 0 3px rgba(34,215,215,.16)}
+  /* The working cards on the video screen — the lanes and the counter. They are instruments,
+     not the sheet, so they carry the club's rule and mark quietly: the same left-hand brand
+     edge as the analysis sheet, the same pattern at watermark weight, and no second logo
+     competing with the one on the sheet below them. */
+  .vx-toolcard{position:relative;overflow:hidden;background:var(--surface-card);
+    border:1px solid var(--border-subtle);border-radius:16px;padding:14px 15px;
+    box-shadow:0 2px 7px rgba(11,20,40,.05)}
+  .vx-toolcard::before{content:"";position:absolute;top:-18px;right:-46px;width:170px;height:210px;
+    background:url("assets/pattern-transparent.png") right top/contain no-repeat;
+    opacity:.05;pointer-events:none}
+  .vx-toolcard::after{content:"";position:absolute;left:0;top:14px;bottom:14px;width:3px;
+    border-radius:0 3px 3px 0;background:var(--brand-gradient);pointer-events:none}
+  .vx-toolcard-head{position:relative;display:flex;align-items:center;gap:8px;margin-bottom:9px}
+  .vx-toolcard-chip{flex:none;width:26px;height:26px;border-radius:8px;background:var(--brand-tint);
+    color:var(--color-brand);display:flex;align-items:center;justify-content:center}
+  .vx-toolcard-title{flex:1;min-width:0;margin:0;font-size:11px;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--vx-slate-500);font-weight:700}
+  .vx-toolcard-note{position:relative;margin:9px 0 0;font-size:10.5px;color:var(--vx-slate-500);
+    line-height:1.5}
   /* Counting by thumb: two targets big enough to hit without looking away from the swim. */
-  .vx-countpad{display:flex;gap:8px;margin-top:10px}
+  .vx-countpad{position:relative;display:flex;gap:8px;margin-top:10px}
   .vx-counttile{flex:1;min-width:0;display:flex;align-items:center;gap:9px;
     background:var(--vx-slate-50);border:1px solid var(--border-subtle);border-radius:13px;padding:9px 10px}
   .vx-countnum{flex:1;min-width:0;font-family:var(--font-mono);font-size:23px;font-weight:800;
@@ -937,7 +965,7 @@ if ('serviceWorker' in navigator) {
   /* The race clock stays dark — it is read at arm's length on a wet poolside, and dark digits
      on white lose to the sun. It carries the same pattern and wordmark so it is plainly the
      club's instrument and not a stock stopwatch. */
-  .vx-clockcard{position:relative;overflow:hidden;background:#0A0F1A;border-radius:20px;
+  .vx-clockcard{position:relative;overflow:hidden;background:var(--surface-ink);border-radius:20px;
     padding:15px 16px 16px;color:#fff;box-shadow:0 10px 30px rgba(11,20,40,.18)}
   .vx-clockcard::before{content:"";position:absolute;top:-30px;right:-56px;width:210px;height:250px;
     background:url("assets/pattern-transparent.png") right top/contain no-repeat;
@@ -2994,7 +3022,7 @@ if ('serviceWorker' in navigator) {
                           <div style="border-top:1px solid rgba(255,255,255,.12);padding-top:11px">
                             <button onclick="{{ onSwAiAsk }}" style="width:100%;display:flex;align-items:center;justify-content:center;gap:7px;background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.22);border-radius:11px;padding:10px;cursor:pointer;font-family:inherit;font-weight:700;font-size:12px"><i data-lucide="{{ swAiBtnIcon }}" style="width:15px;height:15px" class="{{ swAiSpin }}"></i>{{ swAiBtnLabel }}</button>
                             <p style="margin:7px 2px 0;font-size:10.5px;color:rgba(255,255,255,.45);line-height:1.4">Everything above is worked out on this device from their own times, load and attendance. This asks Claude to read the same numbers — no name or date of birth is sent.</p>
-                            <sc-if value="{{ swAiErrShow }}" hint-placeholder-val="{{ false }}"><p style="margin:8px 2px 0;font-size:11.5px;font-weight:600;color:#FF9A8B;line-height:1.45">{{ swAiErr }}</p></sc-if>
+                            <sc-if value="{{ swAiErrShow }}" hint-placeholder-val="{{ false }}"><p style="margin:8px 2px 0;font-size:11.5px;font-weight:600;color:var(--vx-danger-dark-bg);line-height:1.45">{{ swAiErr }}</p></sc-if>
                             <sc-if value="{{ swAiHasOut }}" hint-placeholder-val="{{ false }}">
                               <div style="margin-top:11px;background:rgba(255,255,255,.06);border-radius:12px;padding:12px">
                                 <p style="margin:0 0 9px;font-size:12.5px;font-weight:700;color:#22D7D7">{{ swAiOut.title }}</p>
@@ -3536,14 +3564,14 @@ if ('serviceWorker' in navigator) {
                             <button onclick="{{ onVideoDeleteActive }}" style="width:30px;height:30px;border-radius:9px;border:none;background:#F4F6F8;color:#9AA2B4;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="trash-2" style="width:15px;height:15px"></i></button>
                           </span>
                         </div>
-                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
-                          <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
-                            <i data-lucide="users" style="width:15px;height:15px;color:var(--color-brand)"></i>
-                            <p style="margin:0;flex:1;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#9AA2B4;font-weight:700">Swimmers in this clip</p>
+                        <div class="vx-toolcard">
+                          <div class="vx-toolcard-head">
+                            <span class="vx-toolcard-chip"><i data-lucide="users" style="width:14px;height:14px"></i></span>
+                            <p class="vx-toolcard-title">Swimmers in this clip</p>
                           </div>
-                          <div class="vx-scroll" style="display:flex;gap:6px;overflow-x:auto;margin-bottom:9px">
+                          <div class="vx-scroll" style="position:relative;display:flex;gap:6px;overflow-x:auto;margin-bottom:9px">
                             <sc-for list="{{ videoSwTabs }}" as="sw" hint-placeholder-count="2">
-                              <button onclick="{{ sw.onClick }}" style="flex:none;display:flex;align-items:center;gap:7px;background:{{ sw.bg }};color:{{ sw.fg }};border:1px solid #E5E9F0;border-radius:12px;padding:8px 12px;font-family:inherit;cursor:pointer;text-align:left">
+                              <button onclick="{{ sw.onClick }}" style="flex:none;display:flex;align-items:center;gap:7px;background:{{ sw.bg }};color:{{ sw.fg }};border:1px solid {{ sw.edge }};border-radius:12px;padding:8px 12px;font-family:inherit;cursor:pointer;text-align:left">
                                 <span style="flex:none;width:8px;height:8px;border-radius:999px;background:{{ sw.dot }}"></span>
                                 <span>
                                   <span style="display:block;font-size:12px;font-weight:800">{{ sw.name }}</span>
@@ -3552,19 +3580,19 @@ if ('serviceWorker' in navigator) {
                               </button>
                             </sc-for>
                           </div>
-                          <div style="display:flex;gap:7px;align-items:center">
-                            <input value="{{ videoSwName }}" onchange="{{ onVideoSwName }}" placeholder="Name this lane e.g. Sara · lane 4" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                          <div style="position:relative;display:flex;gap:7px;align-items:center">
+                            <input value="{{ videoSwName }}" onchange="{{ onVideoSwName }}" placeholder="Name this lane e.g. Sara · lane 4" style="flex:1;min-width:0;background:var(--vx-slate-50);border:1px solid var(--border-subtle);border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:var(--vx-ink);outline:none">
                             <sc-if value="{{ videoSwCanRemove }}" hint-placeholder-val="{{ false }}">
-                              <button onclick="{{ onVideoSwRemove }}" style="flex:none;width:34px;height:34px;border-radius:9px;border:none;background:#F4F6F8;color:#9AA2B4;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="user-minus" style="width:15px;height:15px"></i></button>
+                              <button onclick="{{ onVideoSwRemove }}" style="flex:none;width:34px;height:34px;border-radius:9px;border:none;background:var(--vx-light-2);color:var(--vx-slate-300);cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="user-minus" style="width:15px;height:15px"></i></button>
                             </sc-if>
                           </div>
                           <sc-if value="{{ videoSwCanAdd }}" hint-placeholder-val="{{ true }}">
-                            <button onclick="{{ onVideoSwAdd }}" style="width:100%;margin-top:7px;display:flex;align-items:center;justify-content:center;gap:7px;background:none;border:1.5px dashed #CDD3E0;border-radius:11px;padding:10px;cursor:pointer;color:#3A4152;font-family:inherit;font-size:12.5px;font-weight:700"><i data-lucide="user-plus" style="width:15px;height:15px"></i> {{ videoSwAddLabel }}</button>
+                            <button onclick="{{ onVideoSwAdd }}" style="position:relative;width:100%;margin-top:7px;display:flex;align-items:center;justify-content:center;gap:7px;background:var(--brand-tint);border:1.5px dashed var(--color-brand);border-radius:11px;padding:10px;cursor:pointer;color:var(--color-brand-ink);font-family:inherit;font-size:12.5px;font-weight:700"><i data-lucide="user-plus" style="width:15px;height:15px"></i> {{ videoSwAddLabel }}</button>
                           </sc-if>
                           <sc-if value="{{ videoSwMsgShow }}" hint-placeholder-val="{{ false }}">
-                            <p style="margin:8px 0 0;background:#FBF0DD;border:1px solid #F0D9A8;border-radius:9px;padding:7px 10px;font-size:11.5px;color:#7A5A0C;line-height:1.5">{{ videoSwMsg }}</p>
+                            <p class="vx-analysis-warn" style="margin:8px 0 0">{{ videoSwMsg }}</p>
                           </sc-if>
-                          <p style="margin:9px 0 0;font-size:10.5px;color:#9AA2B4;line-height:1.5">{{ videoSwHint }}</p>
+                          <p class="vx-toolcard-note">{{ videoSwHint }}</p>
                         </div>
 
                         <div class="vx-clockcard">
@@ -3607,7 +3635,7 @@ if ('serviceWorker' in navigator) {
                               <button onclick="{{ rt.onClick }}" style="flex:1;min-width:44px;padding:8px 4px;border-radius:9px;border:1px solid {{ rt.bg }};background:{{ rt.bg }};color:{{ rt.fg }};font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">{{ rt.label }}</button>
                             </sc-for>
                           </div>
-                          <p style="margin:9px 0 8px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#9AA2B4;font-weight:700">Stroke <span style="text-transform:none;letter-spacing:0;font-weight:500">— what the advice is about</span></p>
+                          <p style="margin:9px 0 8px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--vx-slate-500);font-weight:700">Stroke <span style="text-transform:none;letter-spacing:0;font-weight:500">— what the advice is about</span></p>
                           <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
                             <sc-for list="{{ videoStrokeOptions }}" as="st" hint-placeholder-count="5">
                               <button onclick="{{ st.onClick }}" style="flex:1;min-width:44px;padding:8px 4px;border-radius:9px;border:1px solid {{ st.bg }};background:{{ st.bg }};color:{{ st.fg }};font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">{{ st.label }}</button>
@@ -3717,16 +3745,16 @@ if ('serviceWorker' in navigator) {
                         </sc-if>
 
                         <sc-if value="{{ raceCountHas }}" hint-placeholder-val="{{ false }}">
-                          <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:15px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
-                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-                              <i data-lucide="hand" style="width:15px;height:15px;color:var(--color-brand)"></i>
-                              <p style="margin:0;flex:1;font-size:13px;font-weight:700;color:#0C1116">Count by tapping</p>
-                              <span style="font-family:var(--font-mono);font-size:11px;font-weight:800;color:var(--color-brand)">{{ raceCountMark }}</span>
+                          <div class="vx-toolcard">
+                            <div class="vx-toolcard-head" style="margin-bottom:4px">
+                              <span class="vx-toolcard-chip"><i data-lucide="hand" style="width:14px;height:14px"></i></span>
+                              <p class="vx-toolcard-title">Count by tapping</p>
+                              <span style="flex:none;font-family:var(--font-mono);font-size:11px;font-weight:800;color:var(--color-brand)">{{ raceCountMark }}</span>
                             </div>
-                            <p style="margin:0 0 9px;font-size:11px;color:#9AA2B4;line-height:1.5">Pick the mark, play the clip slowly, and tap. One tap is one stroke or one kick — no hand needed for the keyboard.</p>
-                            <div class="vx-scroll" style="display:flex;gap:6px;overflow-x:auto;margin-bottom:4px">
+                            <p style="position:relative;margin:0 0 9px;font-size:11px;color:var(--vx-slate-500);line-height:1.5">Pick the mark, play the clip slowly, and tap. One tap is one stroke or one kick — no hand needed for the keyboard.</p>
+                            <div class="vx-scroll" style="position:relative;display:flex;gap:6px;overflow-x:auto;margin-bottom:4px">
                               <sc-for list="{{ raceCountChips }}" as="cm" hint-placeholder-count="5">
-                                <button onclick="{{ cm.onClick }}" style="flex:none;background:{{ cm.bg }};color:{{ cm.fg }};border:1px solid #E5E9F0;border-radius:999px;padding:7px 12px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer">{{ cm.label }}</button>
+                                <button onclick="{{ cm.onClick }}" style="flex:none;background:{{ cm.bg }};color:{{ cm.fg }};border:1px solid {{ cm.edge }};border-radius:999px;padding:7px 12px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer">{{ cm.label }}</button>
                               </sc-for>
                             </div>
                             <div class="vx-countpad">
@@ -3736,18 +3764,18 @@ if ('serviceWorker' in navigator) {
                                   <span class="vx-countnum">{{ raceCountStrokes }}</span>
                                 </span>
                                 <button onclick="{{ onCountStrokeBack }}" class="vx-countundo"><i data-lucide="minus" style="width:13px;height:13px"></i></button>
-                                <button onclick="{{ onCountStroke }}" class="vx-countbtn" style="background:{{ squad.accent }}"><i data-lucide="plus" style="width:19px;height:19px"></i></button>
+                                <button onclick="{{ onCountStroke }}" class="vx-countbtn" style="background:var(--color-brand);color:var(--on-brand)"><i data-lucide="plus" style="width:19px;height:19px"></i></button>
                               </div>
                               <div class="vx-counttile" style="opacity:{{ raceCountKickOpacity }}">
                                 <span style="flex:1;min-width:0">
                                   <span class="vx-countcap">Dolphin kicks</span>
-                                  <span class="vx-countnum">{{ raceCountKicks }}</span>
+                                  <span class="vx-countnum" style="color:var(--cyan-dark)">{{ raceCountKicks }}</span>
                                 </span>
                                 <button onclick="{{ onCountKickBack }}" class="vx-countundo"><i data-lucide="minus" style="width:13px;height:13px"></i></button>
-                                <button onclick="{{ onCountKick }}" class="vx-countbtn" style="background:#22D7D7;color:#04222A"><i data-lucide="plus" style="width:19px;height:19px"></i></button>
+                                <button onclick="{{ onCountKick }}" class="vx-countbtn" style="background:var(--ac-cyan);color:var(--teal-ink)"><i data-lucide="plus" style="width:19px;height:19px"></i></button>
                               </div>
                             </div>
-                            <p style="margin:9px 0 0;font-size:10.5px;color:#9AA2B4;line-height:1.5">{{ raceCountKickNote }}</p>
+                            <p class="vx-toolcard-note">{{ raceCountKickNote }}</p>
                           </div>
                         </sc-if>
 
@@ -3794,17 +3822,19 @@ if ('serviceWorker' in navigator) {
                         </sc-if>
 
                         <div class="vx-clockcard">
-                          <div style="position:relative;display:flex;align-items:center;gap:8px;margin-bottom:9px">
-                            <i data-lucide="sparkles" style="width:16px;height:16px;color:#22D7D7;flex:none"></i>
-                            <p style="margin:0;flex:1;font-size:13px;font-weight:800;color:#fff">What Claude makes of this swim</p>
+                          <div style="position:relative;display:flex;align-items:center;gap:9px;margin-bottom:6px">
+                            <img src="assets/9b59d9a2.png" alt="Vortex SC" style="height:13px;flex:none;opacity:.9">
+                            <span style="flex:1"></span>
+                            <span style="font-size:10.5px;color:rgba(255,255,255,.45);text-align:right">{{ videoAiLane }}</span>
                           </div>
-                          <button onclick="{{ onVideoAiAsk }}" style="position:relative;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:#22D7D7;color:#04222A;border:none;border-radius:12px;padding:12px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer"><i data-lucide="{{ videoAiBtnIcon }}" class="{{ videoAiSpin }}" style="width:16px;height:16px"></i> {{ videoAiBtnLabel }}</button>
+                          <p style="position:relative;margin:0 0 10px;font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ac-cyan);font-weight:700">Coach's read</p>
+                          <button onclick="{{ onVideoAiAsk }}" style="position:relative;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--ac-cyan);color:var(--teal-ink);border:none;border-radius:12px;padding:12px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer"><i data-lucide="{{ videoAiBtnIcon }}" class="{{ videoAiSpin }}" style="width:16px;height:16px"></i> {{ videoAiBtnLabel }}</button>
                           <sc-if value="{{ videoAiErrShow }}" hint-placeholder-val="{{ false }}">
-                            <p style="position:relative;margin:9px 0 0;font-size:11.5px;font-weight:600;color:#FF9A8B;line-height:1.45">{{ videoAiErr }}</p>
+                            <p style="position:relative;margin:9px 0 0;font-size:11.5px;font-weight:600;color:var(--vx-danger-dark-bg);line-height:1.45">{{ videoAiErr }}</p>
                           </sc-if>
                           <sc-if value="{{ videoAiHasOut }}" hint-placeholder-val="{{ false }}">
                             <div style="position:relative;margin-top:11px;background:rgba(255,255,255,.06);border-radius:12px;padding:12px">
-                              <p style="margin:0 0 9px;font-size:12.5px;font-weight:700;color:#22D7D7">{{ videoAiOut.title }}</p>
+                              <p style="margin:0 0 9px;font-size:12.5px;font-weight:700;color:var(--ac-cyan)">{{ videoAiOut.title }}</p>
                               <sc-for list="{{ videoAiOut.blocks }}" as="vb" hint-placeholder-count="3">
                                 <div style="margin-bottom:9px"><p style="margin:0 0 4px;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:rgba(255,255,255,.5)">{{ vb.label }}</p><sc-for list="{{ vb.lines }}" as="vl" hint-placeholder-count="3"><p style="margin:0 0 3px;font-size:11.5px;color:rgba(255,255,255,.82);line-height:1.45">{{ vl }}</p></sc-for></div>
                               </sc-for>
@@ -3863,12 +3893,12 @@ if ('serviceWorker' in navigator) {
                             <span style="font-size:11px;font-weight:700;color:#9AA2B4">{{ videoFolderCount }}</span>
                           </div>
                           <p style="margin:0 0 11px;font-size:11px;color:#9AA2B4;line-height:1.5">{{ videoFolderWhere }}</p>
-                          <div style="display:flex;align-items:center;gap:8px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:11px;padding:8px 11px;margin-bottom:9px">
-                            <i data-lucide="search" style="width:14px;height:14px;color:#9AA2B4;flex:none"></i>
-                            <input value="{{ videoFolderQ }}" oninput="{{ onVideoFolderQ }}" placeholder="Find a swim — name, meet, stroke, distance" style="flex:1;min-width:0;background:none;border:none;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                          <div style="display:flex;align-items:center;gap:8px;background:var(--vx-slate-50);border:1px solid var(--border-subtle);border-radius:11px;padding:8px 11px;margin-bottom:9px">
+                            <i data-lucide="search" style="width:14px;height:14px;color:var(--vx-slate-300);flex:none"></i>
+                            <input value="{{ videoFolderQ }}" oninput="{{ onVideoFolderQ }}" placeholder="Find a swim — name, meet, stroke, distance" style="flex:1;min-width:0;background:none;border:none;font-family:inherit;font-size:12.5px;color:var(--vx-ink);outline:none">
                           </div>
                           <sc-if value="{{ videoFolderNoHits }}" hint-placeholder-val="{{ false }}">
-                            <p style="margin:0 0 9px;font-size:11.5px;color:#9AA2B4;line-height:1.5">{{ videoFolderNoHitsMsg }}</p>
+                            <p style="margin:0 0 9px;font-size:11.5px;color:var(--vx-slate-500);line-height:1.5">{{ videoFolderNoHitsMsg }}</p>
                           </sc-if>
                           <div style="display:flex;flex-direction:column;gap:7px">
                             <sc-for list="{{ videoSavedRows }}" as="sv" hint-placeholder-count="3">
@@ -10453,7 +10483,21 @@ class Component extends DCLogic {
     });
     if(!rows.length) return;
     const ok=await window.__vxUpsert('vx_video_analyses', rows);
-    if(ok) this._videosFetch();
+    if(ok) return this._videosFetch();
+    // The first fill is often the first write this club's table has ever taken, so it is also
+    // where a missing column shows up first. Filling in the older shape is what puts the club's
+    // library in the database at all; without this it would sit here refused until somebody
+    // happened to mark a new clip.
+    if(this._videoColsRefused()) return this._videosSeed();
+  }
+  // Did that write come back refused because the table has no column for what was in it? Said
+  // once, and remembered — see _videoRow, which then writes the shape the older table can hold.
+  _videoColsRefused(){
+    if(this._videoLanesCol===false) return false;
+    const said=String((window.__vxLastWriteErr||{}).said||'');
+    if(!/column|schema cache/i.test(said)) return false;
+    this._videoLanesCol=false;
+    return true;
   }
   // One analysis saved: its own row, and the old document kept as the fallback for devices that
   // have not run the SQL yet. Writing one row cannot touch another clip's work.
@@ -10468,11 +10512,7 @@ class Component extends DCLogic {
       // hold and say so once — see _videoRow. Anything else is a real failure and is reported
       // by the write layer rather than swallowed here.
       if(sent && sent.then) sent.then(ok=>{
-        if(ok || this._videoLanesCol===false) return;
-        const said=String((window.__vxLastWriteErr||{}).said||'');
-        if(!/column|schema cache/i.test(said)) return;
-        this._videoLanesCol=false;
-        this._videosPersist(id);
+        if(!ok && this._videoColsRefused()) this._videosPersist(id);
       }).catch(()=>{});
     }catch(e){}
   }
@@ -11186,10 +11226,11 @@ class Component extends DCLogic {
     // The lanes and the dolphin kicks are columns, not a table, so a count cannot find them.
     // This is said only once the database has actually refused a write for one — a check that
     // guessed would send a manager to run SQL they may not need, and the analyses are still
-    // saving in the older shape meanwhile.
+    // saving in the older shape meanwhile. video_analyses.sql adds the columns to a table that
+    // already exists, so running it a second time is the whole fix.
     if(this._videoLanesCol===false)
       rows.push({ label:'Video analyses: lanes & dolphin kicks',
-                  value:'not there — run video_analyses_lanes.sql', warn:true });
+                  value:'not there — run video_analyses.sql again', warn:true });
     // Secure cloud sign-in status — confirms this admin carries a Supabase JWT (needed before
     // the RLS lockdown; if this shows "not signed in", do NOT apply the lockdown yet).
     const _a=window.__VX_AUTH; const _signed=!!(_a && _a.token && _a.exp && Date.now()<_a.exp);
@@ -13916,17 +13957,22 @@ class Component extends DCLogic {
     // one — an answer about somebody else's swim left on the screen reads as an answer about this
     // one, which is the whole failure the canned assistants used to have.
     const openClip=(id)=>this.setState({videoActiveId:id, videoRate:1, videoSwIdx:0, videoCountMark:null, videoAiOut:null, videoAiErr:''});
-    const videoChips = this.videoLib.map(v=>({id:v.id, label:v.title, onClick:()=>openClip(v.id), bg:activeVid&&activeVid.id===v.id?'#0A0F1A':'#fff', fg:activeVid&&activeVid.id===v.id?'#fff':'#3A4152'}));
+    const videoChips = this.videoLib.map(v=>({id:v.id, label:v.title, onClick:()=>openClip(v.id), bg:activeVid&&activeVid.id===v.id?'var(--surface-ink)':'var(--surface-card)', fg:activeVid&&activeVid.id===v.id?'var(--text-inverse)':'var(--vx-slate-700)'}));
     // ---- The lanes in this clip ----
     const vidSwimmers = activeVid ? this._vidSwimmers(activeVid) : [];
     const vidSwIdx = activeVid ? this._vidSwIdx(activeVid) : 0;
     const vidTrack = activeVid ? this._vidTrack(activeVid, vidSwIdx) : {laps:[], strokes:{}, kicks:{}, name:''};
-    const LANE_INK = ['var(--color-brand)', '#22D7D7', '#F5A623'];
+    // Lane one is the club's own blue; the other two are the palette's cyan and amber. Three
+    // flat, distinct accents from the same family — never a rainbow, and never a colour picked
+    // outside the guidelines because a third lane needed one.
+    const LANE_INK = ['var(--color-brand)', 'var(--ac-cyan)', 'var(--vx-warning)'];
     const videoSwTabs = vidSwimmers.map((s,i)=>{
       const M=this.videoRaceMetrics(activeVid, i);
       return { name:s.name||('Swimmer '+(i+1)), on:i===vidSwIdx,
         sub: M && M.total!=null ? (M.total+'s') : ((s.laps||[]).length ? ((s.laps||[]).length+' marks') : 'not marked'),
-        bg: i===vidSwIdx?'#0A0F1A':'#fff', fg: i===vidSwIdx?'#fff':'#3A4152',
+        bg: i===vidSwIdx?'var(--surface-ink)':'var(--surface-card)',
+        fg: i===vidSwIdx?'var(--text-inverse)':'var(--vx-slate-700)',
+        edge: i===vidSwIdx?'var(--surface-ink)':'var(--border-subtle)',
         dot: LANE_INK[i%LANE_INK.length],
         onClick:()=>this.videoSwimmerPick(i) };
     });
@@ -16071,7 +16117,8 @@ class Component extends DCLogic {
         : 'One recording can hold two or three lanes of the same heat. Add a swimmer and mark their splits against the same start.',
       videoStrokeOptions: activeVid ? ['Free','Back','Breast','Fly','IM'].map(st=>({label:st, on:(activeVid.stroke||'')===st,
         onClick:()=>this.videoSetStroke((activeVid.stroke||'')===st?'':st),
-        bg:(activeVid.stroke||'')===st?squad.accent:'#fff', fg:(activeVid.stroke||'')===st?'#fff':'#3A4152'})) : [],
+        bg:(activeVid.stroke||'')===st?squad.accent:'var(--surface-card)',
+        fg:(activeVid.stroke||'')===st?'var(--on-brand)':'var(--vx-slate-700)'})) : [],
       onStopwatchMount,
       stopwatchZeroSet: videoStartZero!=null,
       stopwatchZeroLabel: videoStartZero!=null ? ('start at '+videoStartZero.toFixed(2)+'s in the clip') : 'no start set — this is the clip’s own clock',
@@ -16167,8 +16214,9 @@ class Component extends DCLogic {
             return {
               raceCountChips: M.rows.map(r=>({ label:r.label,
                 on:row.label===r.label,
-                bg:row.label===r.label?squad.accent:'#fff',
-                fg:row.label===r.label?'#fff':'#3A4152',
+                bg:row.label===r.label?squad.accent:'var(--surface-card)',
+                fg:row.label===r.label?'var(--on-brand)':'var(--vx-slate-500)',
+                edge:row.label===r.label?squad.accent:'var(--border-subtle)',
                 onClick:()=>this.setState({videoCountMark:r.label}) })),
               raceCountMark:row.label,
               raceCountStrokes:String(row.strokesNum||0),
@@ -16189,6 +16237,9 @@ class Component extends DCLogic {
         };
       })(),
       // ---- What Claude makes of it ----
+      // Which lane it read, said on the card. With three swimmers in one clip, advice about the
+      // wrong one is worse than no advice, and the card is dark and far from the lane picker.
+      videoAiLane: vidSwimmers.length>1 ? ('reading '+(vidTrack.name||'this lane')) : '',
       onVideoAiAsk: activeVid?()=>this.videoAiAsk():null,
       videoAiBtnLabel: S.videoAiLoading ? 'Reading the race…' : (S.videoAiOut ? 'Read it again' : 'Ask Claude to read this race'),
       videoAiBtnIcon: S.videoAiLoading ? 'loader-2' : 'sparkles',
