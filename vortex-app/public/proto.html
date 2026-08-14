@@ -633,6 +633,10 @@ if ('serviceWorker' in navigator) {
 
   /* ---- Status ---- */
   --vx-success: #1CB87A;
+  /* Success as a filled panel rather than a dot: the pale ground and the dark ink that go
+     together on "all splits captured", "saved to the club ✓" and every other done state. */
+  --vx-success-tint: #DCF5EA;
+  --vx-success-ink:  #0C7A4F;
   --vx-warning: #F5A623;
   --vx-danger:  #E5484D;
   /* Danger on a dark surface. The red above goes muddy on the near-black cards — the race
@@ -927,6 +931,16 @@ if ('serviceWorker' in navigator) {
     text-transform:uppercase;color:var(--vx-slate-500);font-weight:700}
   .vx-toolcard-note{position:relative;margin:9px 0 0;font-size:10.5px;color:var(--vx-slate-500);
     line-height:1.5}
+  /* The marker: speed and the tap target, and nothing else. It sits immediately under the
+     player because both are used with eyes on the swim, and every row put between them is a row
+     that scrolls the video off the screen at the moment it has to be watched. */
+  .vx-marker{background:var(--surface-card);border:1px solid var(--border-subtle);
+    border-radius:16px;padding:11px 12px 12px;box-shadow:0 2px 7px rgba(11,20,40,.05)}
+  .vx-marker-speed{display:flex;align-items:center;gap:6px;margin-bottom:10px}
+  .vx-marker-cap{flex:none;font-size:9px;font-weight:700;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--vx-slate-300);padding-right:2px}
+  .vx-marker-lane{margin:8px 0 0;text-align:center;font-size:10.5px;font-weight:700;
+    color:var(--vx-slate-500)}
   /* Counting by thumb: two targets big enough to hit without looking away from the swim. */
   .vx-countpad{position:relative;display:flex;gap:8px;margin-top:10px}
   .vx-counttile{flex:1;min-width:0;display:flex;align-items:center;gap:9px;
@@ -3564,6 +3578,57 @@ if ('serviceWorker' in navigator) {
                             <button onclick="{{ onVideoDeleteActive }}" style="width:30px;height:30px;border-radius:9px;border:none;background:#F4F6F8;color:#9AA2B4;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="trash-2" style="width:15px;height:15px"></i></button>
                           </span>
                         </div>
+
+                        <!-- Marking the splits happens WHILE the clip is playing, so it sits
+                             directly under the player. It used to be the last thing in a card
+                             that began with three rows of settings, which pushed the video off
+                             the top of the screen at the one moment a coach has to watch it and
+                             hit the mark. Only the two controls used at speed are here; the
+                             distance and the stroke are set once and live further down. -->
+                        <div class="vx-marker">
+                          <div class="vx-marker-speed">
+                            <span class="vx-marker-cap">Speed</span>
+                            <sc-for list="{{ videoRateOptions }}" as="r" hint-placeholder-count="4">
+                              <button onclick="{{ r.onClick }}" style="flex:1;padding:8px 4px;border-radius:9px;border:1px solid {{ r.bg }};background:{{ r.bg }};color:{{ r.fg }};font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">{{ r.label }}</button>
+                            </sc-for>
+                          </div>
+                          <sc-if value="{{ videoAllSplitsDone }}" hint-placeholder-val="{{ false }}">
+                            <div style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--vx-success-tint);color:var(--vx-success-ink);border-radius:12px;padding:13px;font-weight:700;font-size:13px"><i data-lucide="check-circle-2" style="width:18px;height:18px"></i> All splits captured ({{ videoSplitsDone }}/{{ videoSplitsTotal }})</div>
+                          </sc-if>
+                          <sc-if value="{{ videoSplitsRemaining }}" hint-placeholder-val="{{ true }}">
+                            <button onclick="{{ onVideoAddLap }}" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:{{ squad.accent }};color:var(--on-brand);border:none;border-radius:12px;padding:14px;font-family:inherit;font-weight:700;font-size:15px;cursor:pointer;box-shadow:0 8px 20px {{ squad.glow }}"><i data-lucide="flag" style="width:18px;height:18px"></i> Tap: {{ nextSplitLabel }} ({{ videoSplitsDone }}/{{ videoSplitsTotal }})</button>
+                          </sc-if>
+                          <sc-if value="{{ videoMarkingLaneShow }}" hint-placeholder-val="{{ false }}">
+                            <p class="vx-marker-lane">{{ videoMarkingLane }}</p>
+                          </sc-if>
+                        </div>
+                        <div class="vx-clockcard">
+                          <div style="position:relative;display:flex;align-items:center;gap:9px;margin-bottom:6px">
+                            <img src="assets/9b59d9a2.png" alt="Vortex SC" style="height:13px;flex:none;opacity:.9">
+                            <span style="flex:1"></span>
+                            <span style="font-size:10.5px;color:rgba(255,255,255,.45);text-align:right">{{ stopwatchZeroLabel }}</span>
+                          </div>
+                          <p style="position:relative;margin:0;font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ac-cyan);font-weight:700">Race clock</p>
+                          <div ref="{{ onStopwatchMount }}" style="position:relative;font-family:var(--font-mono);font-size:46px;line-height:1.05;font-weight:800;letter-spacing:-.03em;color:#9AA2B4">0.00</div>
+                          <div style="display:flex;gap:7px;margin-top:11px">
+                            <button onclick="{{ onVideoFindStart }}" style="flex:1.4;display:flex;align-items:center;justify-content:center;gap:7px;background:#22D7D7;color:#04222A;border:none;border-radius:11px;padding:12px 8px;font-family:inherit;font-weight:800;font-size:12.5px;cursor:pointer"><i data-lucide="{{ videoStartFindIcon }}" class="{{ videoStartFindSpin }}" style="width:16px;height:16px"></i> {{ videoStartFindLabel }}</button>
+                            <button onclick="{{ onVideoSetStartHere }}" style="flex:1;background:rgba(255,255,255,.1);color:#fff;border:none;border-radius:11px;padding:12px 8px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer">Set start here</button>
+                          </div>
+                          <sc-if value="{{ videoStartFound }}" hint-placeholder-val="{{ false }}">
+                            <div style="margin-top:10px;background:rgba(34,215,215,.12);border:1px solid rgba(34,215,215,.3);border-radius:11px;padding:9px 11px">
+                              <span style="display:block;font-size:12px;font-weight:800;color:#22D7D7">{{ videoStartFoundLabel }}</span>
+                              <span style="display:block;font-size:10.5px;color:rgba(255,255,255,.6);margin-top:2px;line-height:1.45">{{ videoStartFoundSub }}</span>
+                              <sc-if value="{{ videoStartAltShow }}" hint-placeholder-val="{{ false }}">
+                                <button onclick="{{ onVideoNextStartCand }}" style="margin-top:7px;background:none;border:none;padding:0;color:#22D7D7;font-family:inherit;font-size:11px;font-weight:700;cursor:pointer;text-decoration:underline">{{ videoStartAltLabel }}</button>
+                              </sc-if>
+                            </div>
+                          </sc-if>
+                          <sc-if value="{{ videoStartMsgShow }}" hint-placeholder-val="{{ false }}">
+                            <p style="margin:10px 0 0;background:rgba(255,255,255,.07);border-radius:10px;padding:9px 11px;font-size:11.5px;color:rgba(255,255,255,.72);line-height:1.5">{{ videoStartMsg }}</p>
+                          </sc-if>
+                          <p style="margin:9px 0 0;font-size:10.5px;color:rgba(255,255,255,.4);line-height:1.5">The clock counts from the start signal, so it reads the swimmer's time and not the clip's. Hear the start finds the beep after "take your marks" in the recording itself — check the frame it stops on before you trust it.</p>
+                        </div>
+
                         <div class="vx-toolcard">
                           <div class="vx-toolcard-head">
                             <span class="vx-toolcard-chip"><i data-lucide="users" style="width:14px;height:14px"></i></span>
@@ -3595,58 +3660,24 @@ if ('serviceWorker' in navigator) {
                           <p class="vx-toolcard-note">{{ videoSwHint }}</p>
                         </div>
 
-                        <div class="vx-clockcard">
-                          <div style="position:relative;display:flex;align-items:center;gap:9px;margin-bottom:6px">
-                            <img src="assets/9b59d9a2.png" alt="Vortex SC" style="height:13px;flex:none;opacity:.9">
-                            <span style="flex:1"></span>
-                            <span style="font-size:10.5px;color:rgba(255,255,255,.45);text-align:right">{{ stopwatchZeroLabel }}</span>
+                        <div class="vx-toolcard">
+                          <div class="vx-toolcard-head">
+                            <span class="vx-toolcard-chip"><i data-lucide="ruler" style="width:14px;height:14px"></i></span>
+                            <p class="vx-toolcard-title">Race setup</p>
                           </div>
-                          <p style="position:relative;margin:0;font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ac-cyan);font-weight:700">Race clock</p>
-                          <div ref="{{ onStopwatchMount }}" style="position:relative;font-family:var(--font-mono);font-size:46px;line-height:1.05;font-weight:800;letter-spacing:-.03em;color:#9AA2B4">0.00</div>
-                          <div style="display:flex;gap:7px;margin-top:11px">
-                            <button onclick="{{ onVideoFindStart }}" style="flex:1.4;display:flex;align-items:center;justify-content:center;gap:7px;background:#22D7D7;color:#04222A;border:none;border-radius:11px;padding:12px 8px;font-family:inherit;font-weight:800;font-size:12.5px;cursor:pointer"><i data-lucide="{{ videoStartFindIcon }}" class="{{ videoStartFindSpin }}" style="width:16px;height:16px"></i> {{ videoStartFindLabel }}</button>
-                            <button onclick="{{ onVideoSetStartHere }}" style="flex:1;background:rgba(255,255,255,.1);color:#fff;border:none;border-radius:11px;padding:12px 8px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer">Set start here</button>
-                          </div>
-                          <sc-if value="{{ videoStartFound }}" hint-placeholder-val="{{ false }}">
-                            <div style="margin-top:10px;background:rgba(34,215,215,.12);border:1px solid rgba(34,215,215,.3);border-radius:11px;padding:9px 11px">
-                              <span style="display:block;font-size:12px;font-weight:800;color:#22D7D7">{{ videoStartFoundLabel }}</span>
-                              <span style="display:block;font-size:10.5px;color:rgba(255,255,255,.6);margin-top:2px;line-height:1.45">{{ videoStartFoundSub }}</span>
-                              <sc-if value="{{ videoStartAltShow }}" hint-placeholder-val="{{ false }}">
-                                <button onclick="{{ onVideoNextStartCand }}" style="margin-top:7px;background:none;border:none;padding:0;color:#22D7D7;font-family:inherit;font-size:11px;font-weight:700;cursor:pointer;text-decoration:underline">{{ videoStartAltLabel }}</button>
-                              </sc-if>
-                            </div>
-                          </sc-if>
-                          <sc-if value="{{ videoStartMsgShow }}" hint-placeholder-val="{{ false }}">
-                            <p style="margin:10px 0 0;background:rgba(255,255,255,.07);border-radius:10px;padding:9px 11px;font-size:11.5px;color:rgba(255,255,255,.72);line-height:1.5">{{ videoStartMsg }}</p>
-                          </sc-if>
-                          <p style="margin:9px 0 0;font-size:10.5px;color:rgba(255,255,255,.4);line-height:1.5">The clock counts from the start signal, so it reads the swimmer's time and not the clip's. Hear the start finds the beep after "take your marks" in the recording itself — check the frame it stops on before you trust it.</p>
-                        </div>
-
-                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
-                          <p style="margin:0 0 8px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#9AA2B4;font-weight:700">Playback speed — slow motion</p>
-                          <div style="display:flex;gap:6px;margin-bottom:12px">
-                            <sc-for list="{{ videoRateOptions }}" as="r" hint-placeholder-count="4">
-                              <button onclick="{{ r.onClick }}" style="flex:1;padding:9px 4px;border-radius:9px;border:1px solid {{ r.bg }};background:{{ r.bg }};color:{{ r.fg }};font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">{{ r.label }}</button>
-                            </sc-for>
-                          </div>
-                          <p style="margin:9px 0 8px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#9AA2B4;font-weight:700">Race type</p>
-                          <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+                          <p style="position:relative;margin:0 0 8px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--vx-slate-500);font-weight:700">Race type</p>
+                          <div style="position:relative;display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
                             <sc-for list="{{ raceTypeOptions }}" as="rt" hint-placeholder-count="6">
                               <button onclick="{{ rt.onClick }}" style="flex:1;min-width:44px;padding:8px 4px;border-radius:9px;border:1px solid {{ rt.bg }};background:{{ rt.bg }};color:{{ rt.fg }};font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">{{ rt.label }}</button>
                             </sc-for>
                           </div>
-                          <p style="margin:9px 0 8px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--vx-slate-500);font-weight:700">Stroke <span style="text-transform:none;letter-spacing:0;font-weight:500">— what the advice is about</span></p>
-                          <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+                          <p style="position:relative;margin:9px 0 8px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--vx-slate-500);font-weight:700">Stroke <span style="text-transform:none;letter-spacing:0;font-weight:500">— what the advice is about</span></p>
+                          <div style="position:relative;display:flex;gap:6px;flex-wrap:wrap">
                             <sc-for list="{{ videoStrokeOptions }}" as="st" hint-placeholder-count="5">
                               <button onclick="{{ st.onClick }}" style="flex:1;min-width:44px;padding:8px 4px;border-radius:9px;border:1px solid {{ st.bg }};background:{{ st.bg }};color:{{ st.fg }};font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">{{ st.label }}</button>
                             </sc-for>
                           </div>
-                          <sc-if value="{{ videoAllSplitsDone }}" hint-placeholder-val="{{ false }}">
-                            <div style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:#DCF5EA;color:#0C7A4F;border-radius:12px;padding:13px;font-weight:700;font-size:13px"><i data-lucide="check-circle-2" style="width:18px;height:18px"></i> All splits captured ({{ videoSplitsDone }}/{{ videoSplitsTotal }})</div>
-                          </sc-if>
-                          <sc-if value="{{ videoSplitsRemaining }}" hint-placeholder-val="{{ true }}">
-                            <button onclick="{{ onVideoAddLap }}" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:{{ squad.accent }};color:#fff;border:none;border-radius:12px;padding:13px;font-family:inherit;font-weight:700;font-size:14px;cursor:pointer;box-shadow:0 8px 20px {{ squad.glow }}"><i data-lucide="flag" style="width:18px;height:18px"></i> Tap: {{ nextSplitLabel }} ({{ videoSplitsDone }}/{{ videoSplitsTotal }})</button>
-                          </sc-if>
+                          <p class="vx-toolcard-note">Set once for the clip. Changing the distance clears the marks on every lane, because marks captured for a 50 mean nothing on a 200.</p>
                         </div>
 
                         <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:15px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
@@ -16105,6 +16136,11 @@ class Component extends DCLogic {
       onPlayerMount,
       videoRateOptions, onVideoAddLap:()=>this.videoAddLap(), videoHasLaps, videoNoLaps: !videoHasLaps, onVideoClearLaps: activeVid?()=>this.videoClearLaps(activeVid.id, vidSwIdx):null,
       // ---- The lanes in this recording ----
+      // Which lane the tap will land on. The lane picker is now below the marker rather than
+      // above it, so with two or three swimmers in the clip the button has to say who it is
+      // marking — a split tapped onto the wrong lane is not a mistake you notice at the time.
+      videoMarkingLane: vidSwimmers.length>1 ? ('marking '+(vidTrack.name||'this lane')) : '',
+      videoMarkingLaneShow: vidSwimmers.length>1,
       videoSwTabs, videoSwHasMany: vidSwimmers.length>1,
       videoSwName: vidTrack.name||'', onVideoSwName:(e)=>this.videoSwimmerRename(vidSwIdx, e.target.value),
       videoSwCanAdd: vidSwimmers.length<3,

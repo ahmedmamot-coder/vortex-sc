@@ -3310,7 +3310,9 @@ describe("InBody sheet", () => {
     // it. The rest of the video screen predates the guidelines being written down and still has
     // colours spelled out; what is added from here on does not.
     const REGIONS = [
-      ["the lane picker", "Swimmers in this clip", '<div class="vx-clockcard">'],
+      ["the split marker", '<div class="vx-marker">', "{{ videoMarkingLane }}"],
+      ["the lane picker", "Swimmers in this clip", "Race setup"],
+      ["the race setup card", "Race setup", "Set once for the clip"],
       ["the tap counter", "Count by tapping", "{{ videoClipCompareHas }}"],
       ["the in-clip head to head", "{{ videoClipCompareHas }}", "{{ videoClipCompareFoot }}"],
       ["the assistant card", "Coach's read", "{{ videoAiFoot }}"],
@@ -3348,8 +3350,8 @@ describe("InBody sheet", () => {
       const css = (SOURCE.match(/\.vx-toolcard\{[\s\S]*?\.vx-toolcard-note\{[^}]*\}/) || [""])[0];
       eq(/pattern-transparent\.png/.test(css), true, "the watermark");
       eq(/var\(--brand-gradient\)/.test(css), true, "and the brand rule down the left");
-      eq(videoSection.split('class="vx-toolcard"').length - 1, 2,
-         "both new cards use it rather than each inventing a card");
+      eq(videoSection.split('class="vx-toolcard"').length - 1, 3,
+         "every new card uses it rather than each inventing a card");
     });
   });
 
