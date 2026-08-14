@@ -2883,6 +2883,27 @@ describe("InBody sheet", () => {
     });
   });
 
+  // The connection test sent the anonymous key and nothing else, so once the club was locked
+  // down it could only ever fail — it was measuring a visitor's permissions and reporting them
+  // as the app's. Two rounds of diagnosis went at a key that was never wrong.
+  describe("the database connection test", () => {
+    const fn = sourceBetween("async dbSelfTest(){", "forceSyncNow(){");
+
+    it("tests as the person using the app, not as a visitor", () => {
+      eq(/window\.__VX_AUTH && window\.__VX_AUTH\.token/.test(fn), true);
+      eq(/sb\.head/.test(fn.replace(/\/\/[^\n]*/g, "")), false,
+         "the anon-only headers must not be used for either half of the test");
+    });
+    it("says which identity it used, because that changes what the result means", () => {
+      eq(/NOT signed in to the database/.test(fn), true);
+      eq(/WRITE blocked \('\+who\+'\)/.test(fn), true);
+    });
+    it("a policy refusal is not reported as a bad key", () => {
+      eq(/\/42501\/\.test\(t\)/.test(fn), true);
+      eq(/row-level security refused it\. The key is fine/.test(fn), true);
+    });
+  });
+
   describe("the activity log", () => {
     // navigator is a getter-only global in Node, so it is replaced by descriptor and put back.
     const withNav = (ua, fn) => {

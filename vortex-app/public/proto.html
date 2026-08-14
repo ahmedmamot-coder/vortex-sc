@@ -5602,7 +5602,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-11c';
+const VX_BUILD='2026-08-11d';
 // Roles that carry the run of the club: Club Administration, adding and editing anywhere.
 // Coach, Assistant Coach and Fitness Coach are deliberately absent — a fitness coach works
 // across every squad without being able to rewrite the club.
@@ -7893,10 +7893,17 @@ class Component extends DCLogic {
     if(!sb){ this.setState({dbTestMsg:'Sync layer not loaded — hard-refresh the app and try again.', dbTestColor:'#B42318'}); return; }
     this.setState({dbTestMsg:'Testing database connection…', dbTestColor:'#7A8296'});
     const REST=sb.url+'/rest/v1/club_state';
+    // As the person using the app, not as an anonymous visitor. sb.head carries the anon key and
+    // nothing else, so once the club was locked down this test could only ever fail — it was
+    // testing a visitor's permissions and reporting them as the app's. It sent two rounds of
+    // diagnosis at a key that was never wrong.
+    let _tok=null; try{ _tok=(window.__VX_AUTH && window.__VX_AUTH.token)||null; }catch(e){}
+    const head={ apikey: sb.anon, Authorization: 'Bearer '+(_tok||sb.anon), 'Content-Type':'application/json' };
+    const who = _tok ? 'signed in' : 'NOT signed in to the database — that alone will block every write';
     try {
-      const wr=await fetch(REST, { method:'POST', headers:Object.assign({}, sb.head, {'Prefer':'resolution=merge-duplicates,return=minimal'}), body:JSON.stringify([{key:'vx_selftest', value:{t:Date.now()}, updated_at:new Date().toISOString()}]) });
-      if(!wr.ok){ const t=await wr.text(); this.setState({dbTestMsg:'✗ WRITE blocked — HTTP '+wr.status+': '+(t||'(no message)').slice(0,180)+(/42501/.test(t) ? '  → row-level security refused it. The key is fine: this account is not recognised as staff by the database, so vx_is_staff() is false. Check the email you sign in with is in vx_staff_emails.' : (wr.status===401?'  → the API key is wrong or expired.':(wr.status===403?'  → run the GRANT + policy SQL.':(wr.status===404?'  → the club_state table is missing.':'')))), dbTestColor:'#B42318'}); return; }
-      const rd=await fetch(REST+'?select=value,updated_at&key=eq.vx_selftest', { headers: sb.head });
+      const wr=await fetch(REST, { method:'POST', headers:Object.assign({}, head, {'Prefer':'resolution=merge-duplicates,return=minimal'}), body:JSON.stringify([{key:'vx_selftest', value:{t:Date.now()}, updated_at:new Date().toISOString()}]) });
+      if(!wr.ok){ const t=await wr.text(); this.setState({dbTestMsg:'✗ WRITE blocked ('+who+') — HTTP '+wr.status+': '+(t||'(no message)').slice(0,180)+(/42501/.test(t) ? '  → row-level security refused it. The key is fine: this account is not recognised as staff by the database, so vx_is_staff() is false. Check the email you sign in with is in vx_staff_emails.' : (wr.status===401?'  → the API key is wrong or expired.':(wr.status===403?'  → run the GRANT + policy SQL.':(wr.status===404?'  → the club_state table is missing.':'')))), dbTestColor:'#B42318'}); return; }
+      const rd=await fetch(REST+'?select=value,updated_at&key=eq.vx_selftest', { headers: head });
       if(!rd.ok){ const t=await rd.text(); this.setState({dbTestMsg:'Write OK but READ blocked — HTTP '+rd.status+': '+(t||'').slice(0,150), dbTestColor:'#9A6206'}); return; }
       const rows=await rd.json();
       if(rows && rows.length){ this.setState({dbTestMsg:'✓ Connected — read & write both work. Sync is live. (updated_at '+((rows[0].updated_at||'').replace('T',' ').slice(0,19))+')', dbTestColor:'#0C7A4F'}); }
