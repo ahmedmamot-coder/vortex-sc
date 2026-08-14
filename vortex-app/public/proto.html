@@ -5602,7 +5602,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-11d';
+const VX_BUILD='2026-08-11e';
 // Roles that carry the run of the club: Club Administration, adding and editing anywhere.
 // Coach, Assistant Coach and Fitness Coach are deliberately absent — a fitness coach works
 // across every squad without being able to rewrite the club.
@@ -7906,6 +7906,10 @@ class Component extends DCLogic {
       const rd=await fetch(REST+'?select=value,updated_at&key=eq.vx_selftest', { headers: head });
       if(!rd.ok){ const t=await rd.text(); this.setState({dbTestMsg:'Write OK but READ blocked — HTTP '+rd.status+': '+(t||'').slice(0,150), dbTestColor:'#9A6206'}); return; }
       const rows=await rd.json();
+      // Proving a write works is the moment to replay anything held from when it did not. The
+      // queue otherwise waits for the 45-second sweep while somebody stares at a red banner
+      // under a green tick, which reads as the app disagreeing with itself.
+      try{ if(window.__vxRetryFailed){ window.__vxRetryFailed().then(()=>this._refreshFailState()); } }catch(e){}
       if(rows && rows.length){ this.setState({dbTestMsg:'✓ Connected — read & write both work. Sync is live. (updated_at '+((rows[0].updated_at||'').replace('T',' ').slice(0,19))+')', dbTestColor:'#0C7A4F'}); }
       else { this.setState({dbTestMsg:'Wrote a row but read back nothing — the SELECT policy is blocking reads. Re-run the club_state policy SQL.', dbTestColor:'#9A6206'}); }
     } catch(e){
