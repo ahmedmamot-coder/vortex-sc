@@ -2979,6 +2979,88 @@ describe("InBody sheet", () => {
     });
   });
 
+  // Three people edit this club every day. One shared document could not hold that: the last
+  // device to change anything replaced the other two, silently, which is how 304 swimmers became
+  // 317 overnight. A row per change is the fix.
+  describe("the roster, one row per change", () => {
+    const ctx = () => {
+      const c = {};
+      c._rosterRowsFrom = bind("_rosterRowsFrom", c);
+      c._rosterEditsFrom = bind("_rosterEditsFrom", c);
+      c._rowKeyMap = bind("_rowKeyMap", c);
+      return c;
+    };
+    const EDITS = {
+      edits:   { junior: { sw1: { name: "Aria Baker" } } },
+      deleted: { junior: { sw9: true } },
+      added:   { seniora: [{ id: "sw_new", name: "New Swimmer", age: 14 }] },
+    };
+
+    it("every kind of change becomes its own row", () => {
+      const rows = ctx()._rosterRowsFrom(EDITS);
+      eq(rows.length, 3);
+      const by = Object.fromEntries(rows.map((r) => [r.id, r]));
+      eq(by["junior::sw1"].state, "edit");
+      eq(by["junior::sw9"].state, "deleted");
+      eq(by["seniora::sw_new"].state, "added");
+      eq(by["seniora::sw_new"].patch.name, "New Swimmer", "an added swimmer carries their whole record");
+    });
+    // A move is a removal from one squad and an addition to another, at the same time.
+    it("a swimmer can be deleted from one squad and added to another at once", () => {
+      const rows = ctx()._rosterRowsFrom({
+        edits: {}, deleted: { junior: { sw1: true } }, added: { seniora: [{ id: "sw1", name: "A" }] } });
+      eq(rows.length, 2, "keying on the swimmer alone would collapse a move into one row");
+      eq(rows.filter((r) => r.sw_id === "sw1").length, 2);
+    });
+    it("rows read back as the same roster", () => {
+      const c = ctx();
+      const back = c._rosterEditsFrom(c._rosterRowsFrom(EDITS));
+      eq(back.edits.junior.sw1.name, "Aria Baker");
+      eq(back.deleted.junior.sw9, true);
+      eq(back.added.seniora.length, 1);
+      eq(back.added.seniora[0].id, "sw_new");
+    });
+    it("a row for a swimmer nobody recognises is ignored, not crashed on", () => {
+      const back = ctx()._rosterEditsFrom([{ state: "edit" }, null, { squad_id: "j", sw_id: "s", state: "edit", patch: null }]);
+      eq(back.edits.j.s !== undefined, true);
+    });
+
+    // The point of the whole migration.
+    it("two people editing two swimmers write two different rows", () => {
+      const c = ctx();
+      const sameh = c._rowKeyMap(c._rosterRowsFrom({ edits: { junior: { sw1: { age: 12 } } }, deleted: {}, added: {} }));
+      const mary  = c._rowKeyMap(c._rosterRowsFrom({ edits: { seniora: { sw2: { age: 14 } } }, deleted: {}, added: {} }));
+      eq(Object.keys(sameh)[0], "junior::sw1");
+      eq(Object.keys(mary)[0], "seniora::sw2");
+      eq(Object.keys(sameh).some((k) => k in mary), false,
+         "no shared key means neither write can touch the other's swimmer");
+    });
+    it("only what changed is written", () => {
+      const fn = sourceBetween("_rosterPersistRows(){", "\n  persistRosterEdits(){");
+      eq(/rows\.filter\(r=>now\[r\.id\]!==was\[r\.id\]\)/.test(fn), true,
+         "one date of birth must send one row, not the club");
+      eq(/gone=Object\.keys\(was\)\.filter\(k=>!\(k in now\)\)/.test(fn), true,
+         "and an undone change has to remove its row, or it comes back");
+    });
+    it("the stale-device guard is not applied to rows", () => {
+      const at = SOURCE.indexOf("  persistRosterEdits(){");
+      const fn = SOURCE.slice(at, SOURCE.indexOf("\n  }", at));
+      const rowsAt = fn.indexOf("this._rosterPersistRows()");
+      const guardAt = fn.indexOf("_blobIsStale");
+      eq(rowsAt > -1 && rowsAt < guardAt, true,
+         "rows cannot clobber each other, so there is nothing left to guard against");
+    });
+    it("a missing table keeps the old behaviour rather than losing the roster", () => {
+      const fn = sourceBetween("async _rosterFetch(){", "\n  async _rosterSeed");
+      eq(/if\(rows==null\) return;/.test(fn), true);
+    });
+    it("only a manager moves the club across", () => {
+      const fn = sourceBetween("async _rosterSeed(){", "\n  _rowKeyMap");
+      eq(/this\._isFullAccess\(\)/.test(fn), true);
+      eq(/i\+=500/.test(fn), true, "317 swimmers will not go in one request");
+    });
+  });
+
   describe("the activity log", () => {
     // navigator is a getter-only global in Node, so it is replaced by descriptor and put back.
     const withNav = (ua, fn) => {

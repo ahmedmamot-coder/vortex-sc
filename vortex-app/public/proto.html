@@ -5602,7 +5602,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-11g';
+const VX_BUILD='2026-08-11h';
 // Roles that carry the run of the club: Club Administration, adding and editing anywhere.
 // Coach, Assistant Coach and Fitness Coach are deliberately absent — a fitness coach works
 // across every squad without being able to rewrite the club.
@@ -6861,7 +6861,82 @@ class Component extends DCLogic {
       return !!(remote && remote > mine + 60000);
     }catch(e){ return false; }
   }
+  // ---- the roster, one row per change ----------------------------------------------------------
+  // The mutation logic above is untouched: it still builds {edits, deleted, added} in memory,
+  // which every screen already understands. What changed is how that reaches the database —
+  // as one row per (squad, swimmer) rather than one document for all 317. Two people editing
+  // two swimmers now write two different rows and cannot overwrite each other.
+  //
+  // Keyed on squad AND swimmer because a move is a removal from one squad and an addition to
+  // another, and both halves exist at the same time.
+  _rosterRowsFrom(ed){
+    const e=ed||{edits:{}, deleted:{}, added:{}};
+    const rows=[];
+    Object.keys(e.edits||{}).forEach(sq=>Object.keys(e.edits[sq]||{}).forEach(sw=>{
+      rows.push({ id:sq+'::'+sw, squad_id:sq, sw_id:sw, state:'edit', patch:e.edits[sq][sw]||{} });
+    }));
+    Object.keys(e.deleted||{}).forEach(sq=>Object.keys(e.deleted[sq]||{}).forEach(sw=>{
+      if((e.deleted[sq]||{})[sw]) rows.push({ id:sq+'::'+sw, squad_id:sq, sw_id:sw, state:'deleted', patch:{} });
+    }));
+    Object.keys(e.added||{}).forEach(sq=>((e.added[sq])||[]).forEach(sw=>{
+      if(sw && sw.id) rows.push({ id:sq+'::'+sw.id, squad_id:sq, sw_id:sw.id, state:'added', patch:sw });
+    }));
+    return rows;
+  }
+  _rosterEditsFrom(rows){
+    const e={edits:{}, deleted:{}, added:{}};
+    (rows||[]).forEach(r=>{
+      if(!r || !r.squad_id || !r.sw_id) return;
+      if(r.state==='deleted'){ (e.deleted[r.squad_id]=e.deleted[r.squad_id]||{})[r.sw_id]=true; }
+      else if(r.state==='added'){ (e.added[r.squad_id]=e.added[r.squad_id]||[]).push(r.patch||{}); }
+      else { (e.edits[r.squad_id]=e.edits[r.squad_id]||{})[r.sw_id]=r.patch||{}; }
+    });
+    return e;
+  }
+  async _rosterFetch(){
+    if(!window.__vxSelect) return;
+    const rows=await window.__vxSelect('vx_roster', 'select=*&limit=5000');
+    if(rows==null) return;                     // table missing: keep the single-document fallback
+    if(!rows.length){ try{ await this._rosterSeed(); }catch(e){} return; }
+    this.rosterRows=rows;
+    this._rosterSent=this._rowKeyMap(this._rosterRowsFrom(this._rosterEditsFrom(rows)));
+    this.rosterEdits=this._rosterEditsFrom(rows);
+    try{ this.rebuildRoster(); }catch(e){}
+    this.forceUpdate();
+  }
+  async _rosterSeed(){
+    if(!window.__vxUpsert || !this._isFullAccess()) return;
+    const rows=this._rosterRowsFrom(this.rosterEdits);
+    if(!rows.length){ this.rosterRows=[]; return; }   // nothing to move across
+    const stamped=rows.map(r=>({...r, updated_at:new Date().toISOString()}));
+    for(let i=0;i<stamped.length;i+=500){ await window.__vxUpsert('vx_roster', stamped.slice(i,i+500)); }
+    this._rosterFetch();
+  }
+  _rowKeyMap(rows){ const m={}; (rows||[]).forEach(r=>{ try{ m[r.id]=JSON.stringify(r.patch)+'|'+r.state; }catch(e){ m[r.id]='?'; } }); return m; }
+  // Write only what actually changed. A coach marking one swimmer's date of birth sends one row,
+  // not the club.
+  _rosterPersistRows(){
+    const rows=this._rosterRowsFrom(this.rosterEdits);
+    const now=this._rowKeyMap(rows);
+    const was=this._rosterSent||{};
+    const changed=rows.filter(r=>now[r.id]!==was[r.id]).map(r=>({...r, updated_at:new Date().toISOString()}));
+    const gone=Object.keys(was).filter(k=>!(k in now));
+    this._rosterSent=now;
+    try{
+      if(changed.length && window.__vxUpsert)
+        for(let i=0;i<changed.length;i+=500) window.__vxUpsert('vx_roster', changed.slice(i,i+500));
+      if(gone.length && window.__vxDelete)
+        gone.forEach(k=>window.__vxDelete('vx_roster', 'id=eq.'+encodeURIComponent(k)));
+    }catch(e){}
+  }
   persistRosterEdits(){
+    // One row per change once the table exists. The stale-device guard below is only needed by
+    // the single-document fallback: rows cannot clobber each other, so there is nothing to guard.
+    if(Array.isArray(this.rosterRows)){
+      this._rosterPersistRows();
+      this.rebuildRoster(); this.forceUpdate();
+      return;
+    }
     if(this._blobIsStale('vx_roster_edits')){
       this.rebuildRoster(); this.forceUpdate();
       return this.setState({rosterFixOk:false, rosterFixMsg:
@@ -11303,6 +11378,7 @@ class Component extends DCLogic {
     } catch(e){} finally { this._syncBusy=false; }
     try{ this._squadPlansFetch(); }catch(e){}
     try{ this._squadsFetch(); }catch(e){}
+    try{ this._rosterFetch(); }catch(e){}
     try{ this._planCustomFetch(); }catch(e){}
     try{ this._famMsgFetch(); }catch(e){}
     try{ this._alertsFetch(); }catch(e){}
