@@ -3270,6 +3270,46 @@ describe("InBody sheet", () => {
     });
   });
 
+  // "why all the email we add it and the password not saving again" — they were saving. The
+  // answer was printed once, above a list of eleven coaches: press Set password on the ninth and
+  // the tick appears off the top of the screen while the box you are looking at goes empty. A
+  // password is never shown back, so a set one and an unset one looked identical.
+  describe("telling a manager whether a staff account actually saved", () => {
+    const fn = methodSource("staffSetPassword").body;
+
+    it("every answer says which account it is about", () => {
+      eq(/staffPwFor:acct\.id/.test(fn), true);
+      eq(/staffPwMsg:'Setting password/.test(fn), false, "no message that forgets its account");
+    });
+    it("the row that was pressed is the row that answers", () => {
+      eq(/pwMsgShow: S\.staffPwFor===a\.id/.test(SOURCE), true);
+      eq(/pwMsg: S\.staffPwFor===a\.id/.test(SOURCE), true);
+    });
+    it("and the old message above the whole list is gone, not merely duplicated", () =>
+      eq(/staffPwMsgShow/.test(SOURCE), false));
+    // The empty box was the whole misunderstanding: it means "a password is never shown back",
+    // and it was read as "nothing was saved".
+    it("a password that was set is recorded, so the row can say so afterwards", () => {
+      eq(/vx_staff_pw_set/.test(fn), true);
+      eq(/staffPwSet=set/.test(fn), true);
+    });
+    it("that record reaches the club's other phones rather than one device", () =>
+      eq(/"vx_bday_sent","vx_staff_pw_set"\]/.test(SOURCE), true));
+    it("an account with no email is told it cannot sign in, not told to try again", () => {
+      eq(/No email — cannot sign in/.test(SOURCE), true);
+      eq(/has no email address, so there is nothing to sign in with/.test(fn), true);
+    });
+    it("an account with an email but no password says which of the two is missing", () =>
+      eq(/set a password below so they can sign in/.test(SOURCE), true));
+    // Editing a coach's email saved it and said nothing: profileMsg renders on the Profile
+    // screen, which is not the screen the button was on.
+    it("saving a staff profile answers on the staff screen too", () => {
+      const save = methodSource("staffAccSave").body;
+      eq(/staffPwFor:id/.test(save), true);
+      eq(/staffPwMsg:'Saved/.test(save), true);
+    });
+  });
+
   // "2 changes have not been saved · family_accounts · HTTP 409 · violates foreign key constraint",
   // in red, with a Retry button, on every device, for ever. The row's id has to be a real login
   // and the restore changed which logins exist, so no retry could ever work — and the backfill

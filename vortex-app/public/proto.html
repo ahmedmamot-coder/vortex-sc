@@ -102,7 +102,7 @@ if ('serviceWorker' in navigator) {
   var HEAD = { "apikey": SB_ANON, "Authorization": "Bearer " + SB_ANON, "Content-Type": "application/json" };
   // Every shared data type the club edits. No secret is kept per-device: the Anthropic key
   // lives on the server, and any copy an earlier build left on a phone is deleted on start-up.
-  var SYNC = ["vx_squads","vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_meet_events","vx_meet_cuts","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_sw_status","vx_memberships","vx_fee_plans","vx_billing","vx_race_splits","vx_bday_sent"];
+  var SYNC = ["vx_squads","vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_meet_events","vx_meet_cuts","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_sw_status","vx_memberships","vx_fee_plans","vx_billing","vx_race_splits","vx_bday_sent","vx_staff_pw_set"];
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
   // Auth-retry queue: if a write is rejected because we weren't signed in yet (401/403 under the
@@ -5058,15 +5058,19 @@ if ('serviceWorker' in navigator) {
                         <i data-lucide="key-round" style="width:15px;height:15px;color:#B4690E;flex:none;margin-top:1px"></i>
                         <span style="font-size:11.5px;color:#7A5A18;line-height:1.45">Staff now sign in with a <b>password</b>, checked by the server. Set one for each coach below — they cannot sign in until you do.</span>
                       </div>
-                      <sc-if value="{{ staffPwMsgShow }}" hint-placeholder-val="{{ false }}">
-                        <p style="margin:0;font-size:11.5px;font-weight:700;color:{{ staffPwMsgColor }}">{{ staffPwMsg }}</p>
-                      </sc-if>
                       <sc-for list="{{ staffAllRows }}" as="s" hint-placeholder-count="11">
                         <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:12px 13px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
+                          <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+                            <i data-lucide="{{ s.signInIcon }}" style="width:13px;height:13px;flex:none;color:{{ s.signInFg }}"></i>
+                            <span style="font-size:11px;font-weight:700;color:{{ s.signInFg }}">{{ s.signInText }}</span>
+                          </div>
                           <div style="display:flex;gap:7px;margin-bottom:9px">
                             <input value="{{ s.pwDraft }}" oninput="{{ s.onPwDraft }}" type="text" autocomplete="off" placeholder="New password (min 8)" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:var(--font-mono);font-size:12px;color:#0C1116;outline:none">
                             <button onclick="{{ s.onSetPw }}" style="flex:none;background:#0C1116;color:#fff;border:none;border-radius:9px;padding:8px 12px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Set password</button>
                           </div>
+                          <sc-if value="{{ s.pwMsgShow }}" hint-placeholder-val="{{ false }}">
+                            <p style="margin:-4px 0 9px;font-size:11.5px;font-weight:700;color:{{ s.pwMsgFg }};line-height:1.45">{{ s.pwMsg }}</p>
+                          </sc-if>
                           <div style="display:flex;align-items:center;gap:11px">
                             {{ s.avatar }}
                             <span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:13px;color:#0C1116">{{ s.name }}</span><span style="display:block;font-size:11px;color:#7A8296">{{ s.sub }}</span></span>
@@ -5910,7 +5914,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-11n';
+const VX_BUILD='2026-08-11o';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -6097,6 +6101,11 @@ class Component extends DCLogic {
     this.billing=this._loadJSON('vx_billing', null);   // normalised (and migrated once) by _billing()
     this.raceSplitLog=this._loadJSON('vx_race_splits', {});   // actual 50s a coach timed, per swimmer per event
     this.bdaySent=this._loadJSON('vx_bday_sent', {});        // {swimmerId: 'YYYY'} — one greeting per swimmer per year
+    // When each staff account last had a password set. A password is never shown back, so
+    // without this a set one and an unset one look identical — which is how "the password is
+    // not saving" gets reported about a password that saved. Shared, so a manager on another
+    // phone sees it too.
+    this.staffPwSet=this._loadJSON('vx_staff_pw_set', {});    // {accountId: ISO date}
     this.academySchedule={preteam:'Mon/Wed/Fri · 4:00–5:00pm', advb:'Mon/Wed/Fri · 4:00–5:30pm', adva:'Mon–Fri · 4:00–5:30pm', junior:'Mon–Fri · 4:00–6:00pm', seniorb:'Mon–Sat · 4:00–6:00pm', seniora:'Mon–Sat · 4:00–6:30pm', vortexb:'Mon–Sat · 5:00–7:00pm', vortexa:'Mon–Sat · 5:00–7:30pm', legend:'Mon–Sat · 5:30–8:00pm'};
     this.videoLib=this._loadJSON('vx_videos', []).filter(v=>v && v.url && /^https?:\/\//i.test(v.url)).map(v=>({
       ...v,
@@ -6138,7 +6147,7 @@ class Component extends DCLogic {
       saveFailCount:0, saveFailLast:null, saveFailHidden:false, authDead:false, saveBlocked:[], saveBlockedHidden:false,
       updateReady:false, updateLatest:'',
       pwNew:'', pwNew2:'', pwMsg:'', pwOk:true, profileMsg:'', profileOk:true,
-      staffPwDrafts:{}, staffPwMsg:'', staffPwOk:true,
+      staffPwDrafts:{}, staffPwMsg:'', staffPwOk:true, staffPwFor:'',
       auditQuery:'', auditErr:'', auditLoaded:false, auditState:'idle', auditTestMsg:'',
       squadAddOpen:false, squadForm:{name:'',ages:'',accent:'#2733D6',short:'',coach:''}, squadMsg:'', squadOk:false, squadEditId:null, squadDraft:null, rosterFixMsg:'', rosterFixOk:true,
       swQuery:'', swSquadFilter:'all', swDobFilter:false, swEditId:null, swAddOpen:false, swForm:{name:'',age:'',dob:'',gender:'Boys',squadId:'',pbs:[]},
@@ -6512,21 +6521,31 @@ class Component extends DCLogic {
   async staffSetPassword(acct, pw){
     if(!acct) return;
     const email=(''+(acct.email||'')).trim().toLowerCase();
-    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return this.setState({staffPwMsg:'That account needs an email address first.', staffPwOk:false});
-    if((pw||'').length<8) return this.setState({staffPwMsg:'Password must be at least 8 characters.', staffPwOk:false});
-    this.setState({staffPwMsg:'Setting password for '+(acct.label||email)+'\u2026', staffPwOk:true});
+    // Every one of these carries the account it is about. The answer used to be printed once,
+    // above the whole list: press Set password on the eleventh coach and the tick appeared off
+    // the top of the screen while the box you were looking at went empty — which reads exactly
+    // like nothing happened, and was reported as "the password is not saving".
+    const say=(m, ok)=>this.setState({staffPwMsg:m, staffPwOk:ok!==false, staffPwFor:acct.id});
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return say('This account has no email address, so there is nothing to sign in with. Add one with the pencil first.', false);
+    if((pw||'').length<8) return say('Password must be at least 8 characters.', false);
+    say('Setting password\u2026');
     const tok=(window.__VX_AUTH && window.__VX_AUTH.token)||'';
-    if(!tok) return this.setState({staffPwMsg:'You are not signed in to the database \u2014 sign out and back in, then try again.', staffPwOk:false});
+    if(!tok) return say('You are not signed in to the database \u2014 sign out and back in, then try again.', false);
     try{
       const r=await fetch('/api/staff/set-password', {method:'POST',
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok},
         body:JSON.stringify({email, password:pw, name:acct.label||''})});
       const j=await r.json().catch(()=>({}));
-      if(!r.ok) return this.setState({staffPwMsg:(j&&j.error)||('Failed (HTTP '+r.status+')'), staffPwOk:false});
+      if(!r.ok) return say((j&&j.error)||('Failed (HTTP '+r.status+')'), false);
       try{ this.audit('staff.password', acct.label||email, {account:acct.id||'', email:email}); }catch(e){}
-      this.setState({staffPwMsg:(acct.label||email)+' can now sign in with that password \u2713', staffPwOk:true,
+      // Recorded so the row can say so afterwards. The password box is empty again by design —
+      // a password is never shown back — and without this the row looked exactly as it did
+      // before it was set.
+      const set={...(this.staffPwSet||{})}; set[acct.id]=new Date().toISOString();
+      this.staffPwSet=set; try{ this._saveJSON('vx_staff_pw_set', set); }catch(e){}
+      this.setState({staffPwMsg:'Saved \u2713 '+email+' can sign in with that password now.', staffPwOk:true, staffPwFor:acct.id,
         staffPwDrafts:{...(this.state.staffPwDrafts||{}), [acct.id]:''}});
-    }catch(e){ this.setState({staffPwMsg:'Could not reach the server.', staffPwOk:false}); }
+    }catch(e){ return say('Could not reach the server.', false); }
   }
   _refreshFailState(){
     try{
@@ -7992,7 +8011,11 @@ class Component extends DCLogic {
     this.accountOvr[id]=o;
     const isCustom=(''+id).indexOf('st_')===0;
     if(isCustom){ this.customStaff=this.customStaff.map(function(c){ return c.id===id? {...c, name:label, user:user, pin:pin, role:role, squadId:squadId, phone:phone, email:email, bio:bio}:c; }); }
-    this._rebuildAccounts(); this.setState({staffEditId:null, staffAccDraft:null, profileMsg:'Profile saved \u2713', profileOk:true});
+    // profileMsg renders on the Profile screen, which is not the screen this was pressed on —
+    // so editing a coach's email in Staff saved it and said nothing at all.
+    this._rebuildAccounts(); this.setState({staffEditId:null, staffAccDraft:null,
+      profileMsg:'Profile saved \u2713', profileOk:true,
+      staffPwMsg:'Saved \u2713'+(email?(' \u00b7 '+email):''), staffPwOk:true, staffPwFor:id});
     // One row per account (id = account id) — upsert never clobbers other accounts.
     if(window.__vxUpsert){ window.__vxUpsert('staff_accounts', [this._staffRow(id, o, isCustom)]).then(ok=>{ if(ok) this._staffFetch(); }); }
   }
@@ -12204,7 +12227,7 @@ class Component extends DCLogic {
     this.academyTrials=g('vx_academy_trials', this.academyTrials); this.academyFees=g('vx_academy_fees', this.academyFees);
     this.feePlans=g('vx_fee_plans', this.feePlans); this.memberships=g('vx_memberships', this.memberships); this.invoices=g('vx_invoices', this.invoices);
     this.billing=g('vx_billing', this.billing); this.raceSplitLog=g('vx_race_splits', this.raceSplitLog);
-    this.bdaySent=g('vx_bday_sent', this.bdaySent);
+    this.bdaySent=g('vx_bday_sent', this.bdaySent); this.staffPwSet=g('vx_staff_pw_set', this.staffPwSet);
     this.brandConfig=g('vx_brand', this.brandConfig); this.notifications=g('vx_notifications', this.notifications);
     this.tpaceTests=g('vx_tpace', this.tpaceTests); this.fitnessTests=g('vx_fitness_tests', this.fitnessTests);
     this.fitnessPlans=g('vx_fitness_plans', this.fitnessPlans); this.fitnessMedia=g('vx_fitness_media', this.fitnessMedia); this.waTargets=g('vx_wa_targets', this.waTargets); this.promoStore=g('vx_promo', this.promoStore); this.aiSuggOverrides=g('vx_ai_sugg_ovr', this.aiSuggOverrides);
@@ -13779,12 +13802,26 @@ class Component extends DCLogic {
       const pwDraft=staffPw[a.id]||'';
       const onPwDraft=(e)=>this.setState({staffPwDrafts:{...(this.state.staffPwDrafts||{}), [a.id]:e.target.value}});
       const onSetPw=()=>this.staffSetPassword(a, pwDraft);
+      // What this account can actually do, on the line rather than left to be worked out. An
+      // empty password box means only that a password is never shown back, and it was being
+      // read as "nothing was saved" — while an account with no email cannot sign in at all and
+      // said nothing about it.
+      const _hasEmail=/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(a.email||'').trim());
+      const _pwAt=(this.staffPwSet||{})[a.id];
+      const signIn = !_hasEmail
+        ? {text:'No email — cannot sign in', fg:'#B42318', icon:'alert-circle'}
+        : (_pwAt ? {text:'Password set '+this.shortDateISO(String(_pwAt).slice(0,10))+' · can sign in', fg:'#0C7A4F', icon:'check-circle-2'}
+                 : {text:'Email ready · set a password below so they can sign in', fg:'#B4690E', icon:'key-round'});
       const isCustom=(''+a.id).indexOf('st_')===0; const isAdminAcc=(a.id==='ahmed'||a.id==='sameh');
       const badge = sq? sq.short : (a.initials||'?'); const accent = sq? sq.accent : (a.accent||'#2733D6');
       const primary = this._roleLabel(a) || (sq? sq.name : ''); const contactBits=[a.phone, a.email, _accessLine].filter(Boolean).join(' · ');
       const sub = primary + (sq?(' · '+sq.name):'') + ' · @' + (a.user||'') + (contactBits?(' · '+contactBits):'');
       const d=S.staffAccDraft||{}; const draftPhoto = editing? (d.photo ?? a.photo ?? '') : (a.photo||'');
       return { id:a.id, name:a.label||'', sub:sub, isCustom, isAdminAcc, editing, pwDraft, onPwDraft, onSetPw,
+        signInText:signIn.text, signInFg:signIn.fg, signInIcon:signIn.icon,
+        pwMsgShow: S.staffPwFor===a.id && !!S.staffPwMsg,
+        pwMsg: S.staffPwFor===a.id ? (S.staffPwMsg||'') : '',
+        pwMsgFg: S.staffPwOk===false ? '#B42318' : '#0C7A4F',
         avatar:this.av(a.photo||null, badge, 38, 11, accent, '#fff', 12),
         editPhotoAvatar:this.av(draftPhoto||null, badge, 56, 14, accent, '#fff', 18), hasEditPhoto:!!draftPhoto,
         photoInputId:'vx-staff-photo-'+a.id,
@@ -15205,7 +15242,6 @@ class Component extends DCLogic {
       onMeetImportPreview:()=>this.meetImportPreview(), meetImportHasPreview, meetImportSummary, onMeetImportConfirm:()=>this.meetImportConfirm(),
       meetRows,
       staffRows, staffAllRows,
-      staffPwMsg:S.staffPwMsg||'', staffPwMsgShow:!!S.staffPwMsg, staffPwMsgColor:(S.staffPwOk===false?'#B42318':'#0C7A4F'),
       staffAddOpen: S.staffAddOpen,
       staffForm: S.staffAddForm||{name:'',user:'',pass:'',email:'',pin:'',role:'Coach',phone:''},
       onStaffAddToggle:()=>this.setState({staffAddOpen:!S.staffAddOpen, staffAddMsg:''}),
