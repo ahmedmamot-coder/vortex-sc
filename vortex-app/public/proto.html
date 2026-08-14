@@ -891,10 +891,26 @@ if ('serviceWorker' in navigator) {
     text-transform:uppercase;color:var(--vx-slate-300);font-weight:700;padding:0 8px 7px}
   .vx-tablerow{position:relative;display:flex;align-items:center;gap:2px;padding:8px;
     border-radius:10px;margin-bottom:2px}
-  .vx-strokebox{flex:.9;min-width:0;text-align:right;background:var(--vx-white);
+  .vx-strokebox{flex:.8;min-width:0;text-align:right;background:var(--vx-white);
     border:1px solid var(--border-default);border-radius:7px;padding:4px 6px;color:var(--vx-ink);
     font-family:var(--font-mono);font-size:12px;font-weight:700;outline:none}
   .vx-strokebox:focus{border-color:var(--color-brand);box-shadow:0 0 0 3px var(--brand-tint)}
+  /* The dolphin kicks are the underwater, and the underwater is cyan everywhere else on this
+     sheet — the headline stat, the speed bar for the fastest segment. One colour, one meaning. */
+  .vx-kickbox{color:var(--cyan-dark);border-color:rgba(34,215,215,.45)}
+  .vx-kickbox:focus{border-color:var(--ac-cyan);box-shadow:0 0 0 3px rgba(34,215,215,.16)}
+  /* Counting by thumb: two targets big enough to hit without looking away from the swim. */
+  .vx-countpad{display:flex;gap:8px;margin-top:10px}
+  .vx-counttile{flex:1;min-width:0;display:flex;align-items:center;gap:9px;
+    background:var(--vx-slate-50);border:1px solid var(--border-subtle);border-radius:13px;padding:9px 10px}
+  .vx-countnum{flex:1;min-width:0;font-family:var(--font-mono);font-size:23px;font-weight:800;
+    line-height:1.1;color:var(--vx-ink)}
+  .vx-countcap{display:block;font-size:9px;font-weight:700;letter-spacing:.09em;
+    text-transform:uppercase;color:var(--vx-slate-300)}
+  .vx-countbtn{flex:none;width:40px;height:40px;border:none;border-radius:12px;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;color:#fff}
+  .vx-countundo{flex:none;width:26px;height:26px;border:none;border-radius:8px;cursor:pointer;
+    background:var(--vx-white);color:var(--vx-slate-300);display:flex;align-items:center;justify-content:center}
   .vx-analysis-breakout{position:relative;display:flex;align-items:center;gap:10px;margin-top:12px;
     background:var(--vx-slate-50);border:1px solid var(--border-subtle);border-radius:12px;padding:10px 12px}
   .vx-breakoutbox{flex:none;width:70px;text-align:right;background:var(--vx-white);
@@ -3520,6 +3536,37 @@ if ('serviceWorker' in navigator) {
                             <button onclick="{{ onVideoDeleteActive }}" style="width:30px;height:30px;border-radius:9px;border:none;background:#F4F6F8;color:#9AA2B4;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="trash-2" style="width:15px;height:15px"></i></button>
                           </span>
                         </div>
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                          <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+                            <i data-lucide="users" style="width:15px;height:15px;color:var(--color-brand)"></i>
+                            <p style="margin:0;flex:1;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#9AA2B4;font-weight:700">Swimmers in this clip</p>
+                          </div>
+                          <div class="vx-scroll" style="display:flex;gap:6px;overflow-x:auto;margin-bottom:9px">
+                            <sc-for list="{{ videoSwTabs }}" as="sw" hint-placeholder-count="2">
+                              <button onclick="{{ sw.onClick }}" style="flex:none;display:flex;align-items:center;gap:7px;background:{{ sw.bg }};color:{{ sw.fg }};border:1px solid #E5E9F0;border-radius:12px;padding:8px 12px;font-family:inherit;cursor:pointer;text-align:left">
+                                <span style="flex:none;width:8px;height:8px;border-radius:999px;background:{{ sw.dot }}"></span>
+                                <span>
+                                  <span style="display:block;font-size:12px;font-weight:800">{{ sw.name }}</span>
+                                  <span style="display:block;font-family:var(--font-mono);font-size:10px;opacity:.65">{{ sw.sub }}</span>
+                                </span>
+                              </button>
+                            </sc-for>
+                          </div>
+                          <div style="display:flex;gap:7px;align-items:center">
+                            <input value="{{ videoSwName }}" onchange="{{ onVideoSwName }}" placeholder="Name this lane e.g. Sara · lane 4" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                            <sc-if value="{{ videoSwCanRemove }}" hint-placeholder-val="{{ false }}">
+                              <button onclick="{{ onVideoSwRemove }}" style="flex:none;width:34px;height:34px;border-radius:9px;border:none;background:#F4F6F8;color:#9AA2B4;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="user-minus" style="width:15px;height:15px"></i></button>
+                            </sc-if>
+                          </div>
+                          <sc-if value="{{ videoSwCanAdd }}" hint-placeholder-val="{{ true }}">
+                            <button onclick="{{ onVideoSwAdd }}" style="width:100%;margin-top:7px;display:flex;align-items:center;justify-content:center;gap:7px;background:none;border:1.5px dashed #CDD3E0;border-radius:11px;padding:10px;cursor:pointer;color:#3A4152;font-family:inherit;font-size:12.5px;font-weight:700"><i data-lucide="user-plus" style="width:15px;height:15px"></i> {{ videoSwAddLabel }}</button>
+                          </sc-if>
+                          <sc-if value="{{ videoSwMsgShow }}" hint-placeholder-val="{{ false }}">
+                            <p style="margin:8px 0 0;background:#FBF0DD;border:1px solid #F0D9A8;border-radius:9px;padding:7px 10px;font-size:11.5px;color:#7A5A0C;line-height:1.5">{{ videoSwMsg }}</p>
+                          </sc-if>
+                          <p style="margin:9px 0 0;font-size:10.5px;color:#9AA2B4;line-height:1.5">{{ videoSwHint }}</p>
+                        </div>
+
                         <div class="vx-clockcard">
                           <div style="position:relative;display:flex;align-items:center;gap:9px;margin-bottom:6px">
                             <img src="assets/9b59d9a2.png" alt="Vortex SC" style="height:13px;flex:none;opacity:.9">
@@ -3558,6 +3605,12 @@ if ('serviceWorker' in navigator) {
                           <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
                             <sc-for list="{{ raceTypeOptions }}" as="rt" hint-placeholder-count="6">
                               <button onclick="{{ rt.onClick }}" style="flex:1;min-width:44px;padding:8px 4px;border-radius:9px;border:1px solid {{ rt.bg }};background:{{ rt.bg }};color:{{ rt.fg }};font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">{{ rt.label }}</button>
+                            </sc-for>
+                          </div>
+                          <p style="margin:9px 0 8px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#9AA2B4;font-weight:700">Stroke <span style="text-transform:none;letter-spacing:0;font-weight:500">— what the advice is about</span></p>
+                          <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+                            <sc-for list="{{ videoStrokeOptions }}" as="st" hint-placeholder-count="5">
+                              <button onclick="{{ st.onClick }}" style="flex:1;min-width:44px;padding:8px 4px;border-radius:9px;border:1px solid {{ st.bg }};background:{{ st.bg }};color:{{ st.fg }};font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">{{ st.label }}</button>
                             </sc-for>
                           </div>
                           <sc-if value="{{ videoAllSplitsDone }}" hint-placeholder-val="{{ false }}">
@@ -3634,17 +3687,23 @@ if ('serviceWorker' in navigator) {
                               <span class="vx-analysis-legend-unit">tap in the strokes, the rest follows</span>
                             </div>
                             <div class="vx-tablehead">
-                              <span style="flex:1.1">Split</span><span style="flex:1;text-align:right">Time</span><span style="flex:1;text-align:right">m/s</span><span style="flex:.9;text-align:right">Str</span><span style="flex:1;text-align:right">SR</span><span style="flex:1;text-align:right">DPS</span><span style="flex:1;text-align:right">SI</span>
+                              <span style="flex:1.05">Split</span><span style="flex:.95;text-align:right">Time</span><span style="flex:.9;text-align:right">m/s</span><span style="flex:.8;text-align:right">Str</span><span style="flex:.8;text-align:right">Kick</span><span style="flex:.85;text-align:right">SR</span><span style="flex:.85;text-align:right">DPS</span><span style="flex:.85;text-align:right">SI</span>
                             </div>
                             <sc-for list="{{ raceRows }}" as="r" hint-placeholder-count="5">
                               <div class="vx-tablerow" style="background:{{ r.rowBg }}">
-                                <span style="flex:1.1;font-size:12px;font-weight:800;color:var(--vx-ink)">{{ r.label }}</span>
-                                <span style="flex:1;text-align:right;font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--vx-ink)">{{ r.split }}</span>
-                                <span style="flex:1;text-align:right;font-family:var(--font-mono);font-size:12px;font-weight:800;color:{{ r.velInk }}">{{ r.vel }}</span>
+                                <span style="flex:1.05;font-size:12px;font-weight:800;color:var(--vx-ink)">{{ r.label }}</span>
+                                <span style="flex:.95;text-align:right;font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--vx-ink)">{{ r.split }}</span>
+                                <span style="flex:.9;text-align:right;font-family:var(--font-mono);font-size:12px;font-weight:800;color:{{ r.velInk }}">{{ r.vel }}</span>
                                 <input value="{{ r.strokes }}" onchange="{{ r.onStrokes }}" inputmode="numeric" placeholder="–" class="vx-strokebox">
-                                <span style="flex:1;text-align:right;font-family:var(--font-mono);font-size:12px;color:var(--vx-slate-500)">{{ r.sr }}</span>
-                                <span style="flex:1;text-align:right;font-family:var(--font-mono);font-size:12px;color:var(--vx-slate-500)">{{ r.dps }}</span>
-                                <span style="flex:1;text-align:right;font-family:var(--font-mono);font-size:12px;color:var(--vx-slate-500)">{{ r.si }}</span>
+                                <sc-if value="{{ r.kickable }}" hint-placeholder-val="{{ true }}">
+                                  <input value="{{ r.kicksShown }}" onchange="{{ r.onKicks }}" inputmode="numeric" placeholder="–" class="vx-strokebox vx-kickbox">
+                                </sc-if>
+                                <sc-if value="{{ r.notKickable }}" hint-placeholder-val="{{ false }}">
+                                  <span style="flex:.8;text-align:right;font-family:var(--font-mono);font-size:12px;color:var(--vx-slate-300)">·</span>
+                                </sc-if>
+                                <span style="flex:.85;text-align:right;font-family:var(--font-mono);font-size:12px;color:var(--vx-slate-500)">{{ r.sr }}</span>
+                                <span style="flex:.85;text-align:right;font-family:var(--font-mono);font-size:12px;color:var(--vx-slate-500)">{{ r.dps }}</span>
+                                <span style="flex:.85;text-align:right;font-family:var(--font-mono);font-size:12px;color:var(--vx-slate-500)">{{ r.si }}</span>
                               </div>
                             </sc-for>
                             <sc-if value="{{ raceHasBreakout }}" hint-placeholder-val="{{ false }}">
@@ -3656,6 +3715,103 @@ if ('serviceWorker' in navigator) {
                             <p class="vx-analysis-foot">{{ raceReadout }}</p>
                           </div>
                         </sc-if>
+
+                        <sc-if value="{{ raceCountHas }}" hint-placeholder-val="{{ false }}">
+                          <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:15px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+                              <i data-lucide="hand" style="width:15px;height:15px;color:var(--color-brand)"></i>
+                              <p style="margin:0;flex:1;font-size:13px;font-weight:700;color:#0C1116">Count by tapping</p>
+                              <span style="font-family:var(--font-mono);font-size:11px;font-weight:800;color:var(--color-brand)">{{ raceCountMark }}</span>
+                            </div>
+                            <p style="margin:0 0 9px;font-size:11px;color:#9AA2B4;line-height:1.5">Pick the mark, play the clip slowly, and tap. One tap is one stroke or one kick — no hand needed for the keyboard.</p>
+                            <div class="vx-scroll" style="display:flex;gap:6px;overflow-x:auto;margin-bottom:4px">
+                              <sc-for list="{{ raceCountChips }}" as="cm" hint-placeholder-count="5">
+                                <button onclick="{{ cm.onClick }}" style="flex:none;background:{{ cm.bg }};color:{{ cm.fg }};border:1px solid #E5E9F0;border-radius:999px;padding:7px 12px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer">{{ cm.label }}</button>
+                              </sc-for>
+                            </div>
+                            <div class="vx-countpad">
+                              <div class="vx-counttile">
+                                <span style="flex:1;min-width:0">
+                                  <span class="vx-countcap">Strokes</span>
+                                  <span class="vx-countnum">{{ raceCountStrokes }}</span>
+                                </span>
+                                <button onclick="{{ onCountStrokeBack }}" class="vx-countundo"><i data-lucide="minus" style="width:13px;height:13px"></i></button>
+                                <button onclick="{{ onCountStroke }}" class="vx-countbtn" style="background:{{ squad.accent }}"><i data-lucide="plus" style="width:19px;height:19px"></i></button>
+                              </div>
+                              <div class="vx-counttile" style="opacity:{{ raceCountKickOpacity }}">
+                                <span style="flex:1;min-width:0">
+                                  <span class="vx-countcap">Dolphin kicks</span>
+                                  <span class="vx-countnum">{{ raceCountKicks }}</span>
+                                </span>
+                                <button onclick="{{ onCountKickBack }}" class="vx-countundo"><i data-lucide="minus" style="width:13px;height:13px"></i></button>
+                                <button onclick="{{ onCountKick }}" class="vx-countbtn" style="background:#22D7D7;color:#04222A"><i data-lucide="plus" style="width:19px;height:19px"></i></button>
+                              </div>
+                            </div>
+                            <p style="margin:9px 0 0;font-size:10.5px;color:#9AA2B4;line-height:1.5">{{ raceCountKickNote }}</p>
+                          </div>
+                        </sc-if>
+
+                        <sc-if value="{{ videoClipCompareHas }}" hint-placeholder-val="{{ false }}">
+                          <div class="vx-analysis">
+                            <div class="vx-analysis-head">
+                              <img src="assets/b798adf9.png" alt="" class="vx-analysis-mark">
+                              <span class="vx-analysis-titles">
+                                <span class="vx-analysis-kicker">Vortex Swimming Club</span>
+                                <span class="vx-analysis-title">{{ videoClipCompareTitle }}</span>
+                              </span>
+                            </div>
+                            <div class="vx-h2h-cols">
+                              <span style="flex:.85"></span>
+                              <sc-for list="{{ videoClipCompareCols }}" as="lc" hint-placeholder-count="3">
+                                <span style="flex:1;min-width:0;text-align:center">
+                                  <span class="vx-h2h-name">{{ lc.title }}</span>
+                                  <span class="vx-h2h-sub">{{ lc.sub }}</span>
+                                </span>
+                              </sc-for>
+                            </div>
+                            <sc-for list="{{ videoClipCompareRows }}" as="lr" hint-placeholder-count="6">
+                              <div class="vx-h2h-row">
+                                <span style="flex:.85;font-size:11.5px;font-weight:800;color:var(--vx-ink)">{{ lr.label }}</span>
+                                <sc-for list="{{ lr.cells }}" as="lx" hint-placeholder-count="3">
+                                  <span class="vx-h2h-cell" style="background:{{ lx.bg }};color:{{ lx.fg }};border-color:{{ lx.edge }}">
+                                    <span style="display:block;font-family:var(--font-mono);font-size:12.5px;font-weight:800">{{ lx.value }}</span>
+                                    <span style="display:block;font-family:var(--font-mono);font-size:9px;opacity:.7">{{ lx.gap }}</span>
+                                  </span>
+                                </sc-for>
+                              </div>
+                            </sc-for>
+                            <div class="vx-h2h-row vx-h2h-total">
+                              <span style="flex:.85;font-size:11.5px;font-weight:800;color:var(--vx-ink)">{{ videoClipCompareTotal.label }}</span>
+                              <sc-for list="{{ videoClipCompareTotal.cells }}" as="lt" hint-placeholder-count="3">
+                                <span class="vx-h2h-cell" style="background:{{ lt.bg }};color:{{ lt.fg }};border-color:{{ lt.edge }}">
+                                  <span style="display:block;font-family:var(--font-mono);font-size:14px;font-weight:800">{{ lt.value }}</span>
+                                  <span style="display:block;font-family:var(--font-mono);font-size:9px;opacity:.7">{{ lt.gap }}</span>
+                                </span>
+                              </sc-for>
+                            </div>
+                            <p class="vx-analysis-foot">{{ videoClipCompareFoot }}</p>
+                          </div>
+                        </sc-if>
+
+                        <div class="vx-clockcard">
+                          <div style="position:relative;display:flex;align-items:center;gap:8px;margin-bottom:9px">
+                            <i data-lucide="sparkles" style="width:16px;height:16px;color:#22D7D7;flex:none"></i>
+                            <p style="margin:0;flex:1;font-size:13px;font-weight:800;color:#fff">What Claude makes of this swim</p>
+                          </div>
+                          <button onclick="{{ onVideoAiAsk }}" style="position:relative;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:#22D7D7;color:#04222A;border:none;border-radius:12px;padding:12px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer"><i data-lucide="{{ videoAiBtnIcon }}" class="{{ videoAiSpin }}" style="width:16px;height:16px"></i> {{ videoAiBtnLabel }}</button>
+                          <sc-if value="{{ videoAiErrShow }}" hint-placeholder-val="{{ false }}">
+                            <p style="position:relative;margin:9px 0 0;font-size:11.5px;font-weight:600;color:#FF9A8B;line-height:1.45">{{ videoAiErr }}</p>
+                          </sc-if>
+                          <sc-if value="{{ videoAiHasOut }}" hint-placeholder-val="{{ false }}">
+                            <div style="position:relative;margin-top:11px;background:rgba(255,255,255,.06);border-radius:12px;padding:12px">
+                              <p style="margin:0 0 9px;font-size:12.5px;font-weight:700;color:#22D7D7">{{ videoAiOut.title }}</p>
+                              <sc-for list="{{ videoAiOut.blocks }}" as="vb" hint-placeholder-count="3">
+                                <div style="margin-bottom:9px"><p style="margin:0 0 4px;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:rgba(255,255,255,.5)">{{ vb.label }}</p><sc-for list="{{ vb.lines }}" as="vl" hint-placeholder-count="3"><p style="margin:0 0 3px;font-size:11.5px;color:rgba(255,255,255,.82);line-height:1.45">{{ vl }}</p></sc-for></div>
+                              </sc-for>
+                            </div>
+                          </sc-if>
+                          <p style="position:relative;margin:9px 0 0;font-size:10.5px;color:rgba(255,255,255,.4);line-height:1.5">{{ videoAiFoot }}</p>
+                        </div>
                         <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:15px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
                           <p style="margin:0 0 9px;font-size:13px;font-weight:700;color:#0C1116">Notes</p>
                           <div style="display:flex;gap:7px;margin-bottom:10px">
@@ -3707,6 +3863,13 @@ if ('serviceWorker' in navigator) {
                             <span style="font-size:11px;font-weight:700;color:#9AA2B4">{{ videoFolderCount }}</span>
                           </div>
                           <p style="margin:0 0 11px;font-size:11px;color:#9AA2B4;line-height:1.5">{{ videoFolderWhere }}</p>
+                          <div style="display:flex;align-items:center;gap:8px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:11px;padding:8px 11px;margin-bottom:9px">
+                            <i data-lucide="search" style="width:14px;height:14px;color:#9AA2B4;flex:none"></i>
+                            <input value="{{ videoFolderQ }}" oninput="{{ onVideoFolderQ }}" placeholder="Find a swim — name, meet, stroke, distance" style="flex:1;min-width:0;background:none;border:none;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                          </div>
+                          <sc-if value="{{ videoFolderNoHits }}" hint-placeholder-val="{{ false }}">
+                            <p style="margin:0 0 9px;font-size:11.5px;color:#9AA2B4;line-height:1.5">{{ videoFolderNoHitsMsg }}</p>
+                          </sc-if>
                           <div style="display:flex;flex-direction:column;gap:7px">
                             <sc-for list="{{ videoSavedRows }}" as="sv" hint-placeholder-count="3">
                               <div style="display:flex;align-items:center;gap:9px;background:{{ sv.rowBg }};border:1px solid #EEF1F5;border-radius:11px;padding:9px 10px">
@@ -6187,8 +6350,10 @@ class Component extends DCLogic {
       planSessDate:null, planSessSlot:'AM', planSessTime:'', planCalY:null, planCalM:null, planCalDay:null,
       fitSessDate:null, fitSessSlot:'AM', fitSessTime:'', fitCalY:null, fitCalM:null, fitCalDay:null, fitSavedMsg:'',
       videoActiveId:null, videoUrlDraft:'', videoTitleDraft:'', videoTagDraft:'', videoAddOpen:false, videoRate:1, videoNoteDraft:'', videoCurT:0, videoDur:0,
-      videoCompareIds:[], videoCompareMsg:'', videoFolderOpen:true,
+      videoCompareIds:[], videoCompareMsg:'', videoFolderOpen:true, videoFolderQ:'',
       videoStartBusy:false, videoStartMsg:'', videoStartCands:[], videoStartPick:0,
+      videoSwIdx:0, videoSwMsg:'', videoCountMark:null,
+      videoAiOut:null, videoAiLoading:false, videoAiErr:'',
       fitAddOpen:false, fitBusy:null, fitMediaMsg:'', inbodyMode:'pdf', inbodySwId:'', inbodyQuery:'', inbodyPdfBusy:false, inbodyPdfMsg:'', inbodyQrOpen:false, inbodyQrMsg:'', inbodyDraft:null,
       shareNote:'',
       moveOverride:{}, moveQuery:'', sponsorQuery:'',
@@ -9930,9 +10095,12 @@ class Component extends DCLogic {
   videoAdd(){ const S=this.state; const url=S.videoUrlDraft.trim(); if(!url) return;
     if(!/^https?:\/\//i.test(url)){ this.setState({videoUrlErr:'Enter a full link starting with http:// or https://'}); return; }
     const p=this.parseVideoUrl(url);
-    const rec={id:this._uid('vid'), url, kind:p.kind, vid:p.vid, title:S.videoTitleDraft.trim()||'Untitled clip', tag:S.videoTagDraft.trim(), laps:[], notes:[], raceType:'100', savedAt:new Date().toISOString()};
+    const rec={id:this._uid('vid'), url, kind:p.kind, vid:p.vid, title:S.videoTitleDraft.trim()||'Untitled clip', tag:S.videoTagDraft.trim(),
+      laps:[], strokes:{}, kicks:{}, notes:[], raceType:'100', stroke:'',
+      swimmers:[{id:'lane1', name:'Swimmer 1', laps:[], strokes:{}, kicks:{}}],
+      savedAt:new Date().toISOString()};
     this.videoLib=[rec, ...this.videoLib]; this._videosPersist(rec.id);
-    this.setState({videoAddOpen:false, videoUrlDraft:'', videoTitleDraft:'', videoTagDraft:'', videoActiveId:rec.id, videoRate:1, videoUrlErr:''});
+    this.setState({videoAddOpen:false, videoUrlDraft:'', videoTitleDraft:'', videoTagDraft:'', videoActiveId:rec.id, videoRate:1, videoUrlErr:'', videoSwIdx:0, videoCountMark:null, videoAiOut:null, videoAiErr:''});
   }
   // An uploaded video used to become a blob: URL — a pointer that lives only in the tab that
   // made it. The coach analysed the race, captured the splits, wrote the notes, closed the app,
@@ -9943,12 +10111,14 @@ class Component extends DCLogic {
     const id=this._uid('vid');
     const local=URL.createObjectURL(file);
     const rec={id, url:local, kind:'mp4', vid:local, title:file.name.replace(/\.[^.]+$/,''),
-      tag:'Uploading…', laps:[], notes:[], raceType:'100', savedAt:new Date().toISOString(), _isBlob:true};
+      tag:'Uploading…', laps:[], strokes:{}, kicks:{}, notes:[], raceType:'100', stroke:'',
+      swimmers:[{id:'lane1', name:'Swimmer 1', laps:[], strokes:{}, kicks:{}}],
+      savedAt:new Date().toISOString(), _isBlob:true};
     this.videoLib=[rec, ...this.videoLib];
     // Play it from the device straight away — the upload runs behind, so nobody waits at the
     // poolside for a hundred megabytes before they can look at the swim.
     const mb=Math.round((file.size||0)/104857.6)/10;
-    this.setState({videoActiveId:id, videoRate:1, videoUploadMsg:'Uploading '+mb+'MB — you can start marking splits now.'});
+    this.setState({videoActiveId:id, videoRate:1, videoSwIdx:0, videoCountMark:null, videoAiOut:null, videoAiErr:'', videoUploadMsg:'Uploading '+mb+'MB — you can start marking splits now.'});
     if(!window.__vxUploadFile) return this.setState({videoUploadMsg:'Saved on this device only — it will be gone when the app closes.'});
     const ext=((file.name.match(/\.([a-z0-9]+)$/i)||[])[1]||'mp4').toLowerCase();
     let url=null; try{ url=await window.__vxUploadFile('videos/'+id+'.'+ext, file); }catch(err){ url=null; }
@@ -9991,22 +10161,111 @@ class Component extends DCLogic {
     if(!m) return null;
     return ((parseInt(lap||'1',10)-1)*(lapLen||50)) + parseInt(m,10);
   }
-  // Everything the analysis shows is worked out from the split times and the stroke counts —
-  // nothing is typed twice. Velocity is distance over time; distance per stroke is distance
-  // over strokes; stroke rate is strokes per minute; and the stroke index is DPS times velocity,
-  // which is the number that says whether a longer stroke is actually costing speed.
-  videoRaceMetrics(v){
+  // ---- Two or three swimmers inside the one clip ----
+  //
+  // A heat is one recording with eight lanes in it. Marking it as a single swimmer meant the
+  // club either filmed the same race once per swimmer, or marked three separate clips of one
+  // swim and compared them as though they were three races — against three different starts.
+  // The marks belong to a lane inside the clip now, so one recording of one heat carries every
+  // swimmer the coach cares about and they are all measured from the same gun.
+  //
+  // An analysis saved before lanes existed keeps its marks at the top of the record and has no
+  // swimmers at all. It is read as one unnamed lane rather than rewritten, so a swim from last
+  // season opens without anything having to be migrated first.
+  _vidSwimmers(v){
+    if(!v) return [];
+    const list=Array.isArray(v.swimmers) ? v.swimmers.filter(s=>s && typeof s==='object') : [];
+    if(list.length) return list.slice(0,3).map((s,i)=>({
+      id:s.id||('lane'+(i+1)), name:s.name||('Swimmer '+(i+1)),
+      laps:Array.isArray(s.laps)?s.laps:[], strokes:s.strokes||{}, kicks:s.kicks||{} }));
+    return [{ id:'lane1', name:'Swimmer 1', laps:Array.isArray(v.laps)?v.laps:[],
+              strokes:v.strokes||{}, kicks:v.kicks||{} }];
+  }
+  _vidTrack(v, idx){
+    const list=this._vidSwimmers(v);
+    if(!list.length) return {id:'lane1', name:'Swimmer 1', laps:[], strokes:{}, kicks:{}};
+    const i=parseInt(idx,10);
+    return list[Math.max(0, Math.min(list.length-1, isFinite(i)?i:0))];
+  }
+  // Which lane the coach is marking. Clamped against this clip rather than remembered blindly:
+  // leaving a three-lane clip on lane 3 and opening a one-lane one would otherwise mark a lane
+  // that is not there.
+  _vidSwIdx(v){
+    const n=this._vidSwimmers(v).length||1;
+    const i=parseInt(this.state.videoSwIdx,10)||0;
+    return Math.max(0, Math.min(n-1, i));
+  }
+  // One lane's marks changed. Lane one is written back to the top of the record as well, because
+  // that is where every analysis saved before lanes existed keeps its marks, and where a device
+  // still running the old app will look for them.
+  _vidPatchTrack(v, idx, patch){
+    const list=this._vidSwimmers(v).map((s,i)=> i===idx ? {...s, ...patch} : s);
+    const first=list[0]||{laps:[], strokes:{}, kicks:{}};
+    return {...v, swimmers:list, laps:first.laps, strokes:first.strokes, kicks:first.kicks};
+  }
+  _vidApply(id, idx, patch){
+    this.videoLib=this.videoLib.map(x=>x.id===id ? this._vidPatchTrack(x, idx, patch) : x);
+    const v=this.videoLib.find(x=>x.id===id);
+    if(v && !v._isBlob) this._videosPersist(id);
+    this.forceUpdate();
+  }
+  videoSwimmerPick(i){ this.setState({videoSwIdx:i, videoCountMark:null}); }
+  videoSwimmerAdd(){
+    const v=this._activeVideo(); if(!v) return;
+    const list=this._vidSwimmers(v);
+    if(list.length>=3) return this.setState({videoSwMsg:'Three lanes at a time — a fourth column does not fit a phone held at the poolside.'});
+    // The start is the gun, and the gun is the same for everyone in the heat. A new lane begins
+    // from it rather than from nothing, so its splits are comparable the moment they are marked.
+    const zero=this.videoStartZero();
+    const startLabel=(this.videoSplitLabels(v.raceType||'100')[0])||'Start';
+    const laps = zero!=null ? [{label:startLabel, t:+zero.toFixed(3)}] : [];
+    const next=[...list, {id:'lane'+(list.length+1)+'_'+Date.now().toString(36), name:'Swimmer '+(list.length+1), laps, strokes:{}, kicks:{}}];
+    this.videoLib=this.videoLib.map(x=>x.id===v.id?{...x, swimmers:next}:x);
+    if(!v._isBlob) this._videosPersist(v.id);
+    this.setState({videoSwIdx:next.length-1, videoSwMsg:'', videoCountMark:null});
+  }
+  videoSwimmerRename(idx, name){
+    const v=this._activeVideo(); if(!v) return;
+    this._vidApply(v.id, idx, {name:String(name||'').slice(0,40)});
+  }
+  videoSwimmerRemove(idx){
+    const v=this._activeVideo(); if(!v) return;
+    const list=this._vidSwimmers(v);
+    if(list.length<2) return;                      // a clip always has one lane
+    const next=list.filter((s,i)=>i!==idx);
+    const first=next[0];
+    this.videoLib=this.videoLib.map(x=>x.id===v.id?{...x, swimmers:next, laps:first.laps, strokes:first.strokes, kicks:first.kicks}:x);
+    if(!v._isBlob) this._videosPersist(v.id);
+    this.setState({videoSwIdx:Math.max(0, Math.min(next.length-1, idx)), videoSwMsg:'', videoCountMark:null});
+  }
+  videoSetStroke(stroke){
+    const v=this._activeVideo(); if(!v) return;
+    this.videoLib=this.videoLib.map(x=>x.id===v.id?{...x, stroke}:x);
+    if(!v._isBlob) this._videosPersist(v.id);
+    this.forceUpdate();
+  }
+  // Everything the analysis shows is worked out from the split times and the counts a coach
+  // tapped in — nothing is typed twice. Velocity is distance over time; distance per stroke is
+  // distance over strokes; stroke rate is strokes per minute; and the stroke index is DPS times
+  // velocity, which is the number that says whether a longer stroke is actually costing speed.
+  //
+  // The dolphin kicks belong to the underwater a mark opens, not to the whole segment: the count
+  // off the start sits on the first mark of the first length, the count off each turn on the
+  // first mark of that length. Kicks are counted, never derived — nobody can read a kick out of
+  // a split time — so a swim with no counts simply has none, and says so.
+  videoRaceMetrics(v, idx){
     if(!v) return null;
-    const laps=(v.laps||[]).filter(l=>l&&typeof l==='object');
+    const tr=this._vidTrack(v, idx);
+    const laps=(tr.laps||[]).filter(l=>l&&typeof l==='object');
     if(!laps.length) return null;
-    const strokes=v.strokes||{};
+    const strokes=tr.strokes||{}, kickCounts=tr.kicks||{};
     const lapLen=50;
     // Every mark is a video timestamp, so the first one — the start signal — is the zero of the
     // race. Without subtracting it, a race filmed four minutes into a stream reported a 269-second
     // 50 back and an 81% speed drop: the clip's clock was being read as the swimmer's time.
     const startLap=laps.find(l=>/^\s*(start|reaction)/i.test(String(l.label||'')));
     const start=startLap ? (+startLap.t||0) : 0;
-    const rows=[]; let prevT=0, prevM=0, breakoutT=null;
+    const rows=[]; let prevT=0, prevM=0, breakoutT=null, prevLap=0;
     laps.forEach(l=>{
       const lab=String(l.label||'');
       if(/^\s*(start|reaction)/i.test(lab)) return;
@@ -10021,16 +10280,36 @@ class Component extends DCLogic {
       const vel=dist/split;
       const dps=(n>0)?(dist/n):null;
       const sr=(n>0)?(n/(split/60)):null;
-      rows.push({ label:lab, metres:m, dist,
+      // The first mark of a length is the one that follows a wall, so it is the one that owns
+      // that length's underwater. On a 50 that is the 15; on an 800, where the wall is the only
+      // mark, every row follows a wall and every row owns one.
+      const lapNo=Math.ceil(m/lapLen);
+      const opensLength = lapNo!==prevLap;
+      prevLap=lapNo;
+      const k=opensLength ? parseInt(kickCounts[lab],10) : NaN;
+      rows.push({ label:lab, metres:m, dist, lapNo, underwater:opensLength,
         split:split.toFixed(2), splitNum:split, cum:t.toFixed(2), cumNum:t,
         vel:vel.toFixed(2), velNum:vel,
-        strokes:(n>0?String(n):''),
+        strokes:(n>0?String(n):''), strokesNum:(n>0?n:null),
+        kicks:(k>0?String(k):''), kicksNum:(k>0?k:null),
         sr: sr!=null?sr.toFixed(1):'—',
         dps: dps!=null?dps.toFixed(2):'—',
         si: (dps!=null)?(dps*vel).toFixed(2):'—' });
       prevM=m; prevT=t;
     });
     if(!rows.length) return null;
+    // The underwaters, as their own line of the analysis. Off the start and off the walls are
+    // two different skills — a swimmer who kicks eight off the block and three off every turn
+    // is losing the race at the turns, and one figure averaged over both hides exactly that.
+    const kickRows=rows.filter(r=>r.underwater && r.kicksNum!=null);
+    const kicksTotal=kickRows.reduce((a,r)=>a+r.kicksNum, 0);
+    const offStart=kickRows.length && kickRows[0].lapNo===1 ? kickRows[0].kicksNum : null;
+    const turnRows=kickRows.filter(r=>r.lapNo>1);
+    const offTurns=turnRows.length ? +(turnRows.reduce((a,r)=>a+r.kicksNum,0)/turnRows.length).toFixed(1) : null;
+    const kicks = kickRows.length
+      ? { total:kicksTotal, counted:kickRows.length, offStart, offTurns,
+          perLength:+(kicksTotal/kickRows.length).toFixed(1) }
+      : null;
     // The underwater is its own race. Separating it stops a fast breakout flattering a slow
     // swim, and a slow breakout hiding a good one.
     const bo=parseFloat(v.breakoutM);
@@ -10054,7 +10333,7 @@ class Component extends DCLogic {
     // The splits between marks are still true — only their distance from the gun is not — so
     // they are kept and the total is withheld rather than printed as nonsense.
     if(rows.some(r=>r.cumNum<0)){
-      return { rows, firstFifteen:null, underwater:null, hasBreakout: breakoutT!=null,
+      return { rows, firstFifteen:null, underwater:null, hasBreakout: breakoutT!=null, kicks,
         drop:drop.toFixed(1), dropBad: drop>12,
         out:null, back:null, total:null, totalNum:null,
         fastest:fast.toFixed(2), slowest:slow.toFixed(2),
@@ -10064,19 +10343,38 @@ class Component extends DCLogic {
     let out=null, back=null;
     const half=rows.find(r=>r.metres===lapLen);
     if(half && total>half.cumNum){ out=half.cumNum.toFixed(2); back=(total-half.cumNum).toFixed(2); }
-    return { rows, firstFifteen, underwater, hasBreakout: breakoutT!=null,
+    return { rows, firstFifteen, underwater, hasBreakout: breakoutT!=null, kicks,
       drop:drop.toFixed(1), dropBad: drop>12,
       out, back, total:total.toFixed(2), totalNum:total,
       fastest:fast.toFixed(2), slowest:slow.toFixed(2), startWrong:false };
   }
   videoSetStrokes(label, n){
     const v=this._activeVideo(); if(!v) return;
+    const idx=this._vidSwIdx(v);
     const k=parseInt(n,10);
-    const strokes={...(v.strokes||{})};
+    const strokes={...(this._vidTrack(v, idx).strokes||{})};
     if(k>0) strokes[label]=k; else delete strokes[label];
-    this.videoLib=this.videoLib.map(x=>x.id===v.id?{...x, strokes}:x);
-    if(!v._isBlob) this._videosPersist(v.id);
-    this.forceUpdate();
+    this._vidApply(v.id, idx, {strokes});
+  }
+  // The dolphin kicks in one streamline, off the block or off a wall. Counted, not derived.
+  videoSetKicks(label, n){
+    const v=this._activeVideo(); if(!v) return;
+    const idx=this._vidSwIdx(v);
+    const k=parseInt(n,10);
+    const kicks={...(this._vidTrack(v, idx).kicks||{})};
+    if(k>0) kicks[label]=k; else delete kicks[label];
+    this._vidApply(v.id, idx, {kicks});
+  }
+  // Counting by tapping, because a coach watching an underwater at quarter speed has one thumb
+  // and no hand free for a number pad. Each tap is one stroke or one kick on the mark being
+  // counted; the number box in the table holds the same figure and either may be used.
+  videoBumpCount(kind, label, by){
+    const v=this._activeVideo(); if(!v) return;
+    const idx=this._vidSwIdx(v), field=(kind==='kicks'?'kicks':'strokes');
+    const counts={...(this._vidTrack(v, idx)[field]||{})};
+    const next=Math.max(0, (parseInt(counts[label],10)||0) + by);
+    if(next>0) counts[label]=next; else delete counts[label];
+    this._vidApply(v.id, idx, {[field]:counts});
   }
   videoSetBreakout(m){
     const v=this._activeVideo(); if(!v) return;
@@ -10097,20 +10395,40 @@ class Component extends DCLogic {
   //
   // The old document is still written and still read when the table is missing, so running the
   // SQL is what turns this on and nothing is stranded before it is run.
+  // The lanes are written as their own column AND lane one is written to laps/strokes/kicks at
+  // the top of the row, exactly as before. A device still running the old app reads the top of
+  // the row and finds the swim it has always found; a device running this one reads the lanes.
+  // Neither has to know about the other, and no analysis has to be migrated to be opened.
   _videoRow(v){
-    return { id:v.id, title:v.title||'', tag:v.tag||'', url:v.url||'', kind:v.kind||'mp4',
-      vid:v.vid||'', race_type:String(v.raceType||'100'),
-      laps:v.laps||[], strokes:v.strokes||{}, notes:v.notes||[],
+    const swimmers=this._vidSwimmers(v);
+    const first=swimmers[0]||{laps:[], strokes:{}, kicks:{}};
+    const row={ id:v.id, title:v.title||'', tag:v.tag||'', url:v.url||'', kind:v.kind||'mp4',
+      vid:v.vid||'', race_type:String(v.raceType||'100'), stroke:v.stroke||null,
+      laps:first.laps||[], strokes:first.strokes||{}, kicks:first.kicks||{},
+      swimmers, notes:v.notes||[],
       breakout_m:(v.breakoutM===''||v.breakoutM==null)?null:String(v.breakoutM),
       saved_at:v.savedAt||new Date().toISOString(), updated_at:new Date().toISOString() };
+    // A club that has the analyses table but has not yet run video_analyses_lanes.sql has no
+    // column to put the lanes in, and Postgres refuses the whole row over it. Refusing the whole
+    // row means the swim stops reaching the club at all — silently, with only the device still
+    // holding it — which is a worse outcome than the one the new columns were added for. Once a
+    // write has come back saying the column is not there, the older shape is written instead:
+    // lane one, exactly the analysis this club was saving before lanes existed.
+    if(this._videoLanesCol===false){ delete row.kicks; delete row.swimmers; delete row.stroke; }
+    return row;
   }
   _videoFromRow(r){
-    return { id:r.id, title:r.title||'Untitled clip', tag:r.tag||'', url:r.url||'',
+    const v={ id:r.id, title:r.title||'Untitled clip', tag:r.tag||'', url:r.url||'',
       kind:r.kind||'mp4', vid:r.vid||r.url||'', raceType:String(r.race_type||'100'),
-      laps:Array.isArray(r.laps)?r.laps:[], strokes:r.strokes||{},
+      stroke:r.stroke||'',
+      laps:Array.isArray(r.laps)?r.laps:[], strokes:r.strokes||{}, kicks:r.kicks||{},
       notes:Array.isArray(r.notes)?r.notes:[],
       breakoutM:r.breakout_m==null?'':String(r.breakout_m),
       savedAt:r.saved_at||'' };
+    // A row written before the lanes column existed has none, and reading `[]` as "no lanes at
+    // all" would empty a swim that is sitting right there in laps/strokes.
+    if(Array.isArray(r.swimmers) && r.swimmers.length) v.swimmers=r.swimmers;
+    return v;
   }
   async _videosFetch(){
     if(!window.__vxSelect) return;
@@ -10144,7 +10462,19 @@ class Component extends DCLogic {
     if(!this._videoRowsOn || !window.__vxUpsert) return;
     const v=(this.videoLib||[]).find(x=>x.id===id);
     if(!v || v._isBlob) return;
-    try{ window.__vxUpsert('vx_video_analyses', [this._videoRow(v)]); }catch(e){}
+    try{
+      const sent=window.__vxUpsert('vx_video_analyses', [this._videoRow(v)]);
+      // If it came back refused because a column is not there, write what the older table can
+      // hold and say so once — see _videoRow. Anything else is a real failure and is reported
+      // by the write layer rather than swallowed here.
+      if(sent && sent.then) sent.then(ok=>{
+        if(ok || this._videoLanesCol===false) return;
+        const said=String((window.__vxLastWriteErr||{}).said||'');
+        if(!/column|schema cache/i.test(said)) return;
+        this._videoLanesCol=false;
+        this._videosPersist(id);
+      }).catch(()=>{});
+    }catch(e){}
   }
   _videosForget(id){
     this._saveJSON('vx_videos', this.videoLib);
@@ -10171,8 +10501,23 @@ class Component extends DCLogic {
     const ids=(this.state.videoCompareIds||[]);
     const picked=ids.map(id=>this.videoLib.find(v=>v.id===id)).filter(Boolean);
     if(picked.length<2) return null;
-    const cols=picked.map(v=>({ id:v.id, title:v.title||'Untitled', tag:v.tag||'',
-                                raceType:(v.raceType||'100')+'m', M:this.videoRaceMetrics(v) }));
+    return this._compareTable(picked.map(v=>({ id:v.id, title:v.title||'Untitled', tag:v.tag||'',
+                                raceType:(v.raceType||'100')+'m', M:this.videoRaceMetrics(v) })));
+  }
+  // The lanes inside one recording: one heat, one gun, two or three swimmers. This is the
+  // comparison the club actually asked for — the folder's version puts three separate swims
+  // side by side, which is a different question and a weaker one, because each of those was
+  // measured from its own start.
+  videoClipCompare(v){
+    const list=this._vidSwimmers(v);
+    if(list.length<2) return null;
+    return this._compareTable(list.map((s,i)=>({ id:s.id, title:s.name||('Swimmer '+(i+1)),
+      tag:'same start', raceType:((v&&v.raceType)||'100')+'m', M:this.videoRaceMetrics(v, i) })));
+  }
+  // The table itself, given whatever is being compared. Both callers share it so the club reads
+  // one thing rather than two that merely look alike.
+  _compareTable(entries){
+    const cols=(entries||[]).filter(Boolean);
     if(cols.filter(c=>c.M).length<2) return null;
     // The marks in distance order, not in the order each coach happened to tap them — two clips
     // captured in a different order still line up mark for mark.
@@ -10224,17 +10569,31 @@ class Component extends DCLogic {
   }
   videoAddLap(){ const v=this._activeVideo(); if(!v) return;
     const t=this._getCurrentTime();
+    const idx=this._vidSwIdx(v);
+    const cur=this._vidTrack(v, idx).laps||[];
     const labels=this.videoSplitLabels(v.raceType||'100');
-    const nextIdx=(v.laps||[]).length;
+    const nextIdx=cur.length;
     if(nextIdx>=labels.length) return;
-    const laps=[...(v.laps||[]), {label:labels[nextIdx], t:+t.toFixed(2)}];
-    this.videoLib=this.videoLib.map(x=>x.id===v.id?{...x, laps}:x); if(!v._isBlob) this._videosPersist(v.id); this.forceUpdate();
+    this._vidApply(v.id, idx, {laps:[...cur, {label:labels[nextIdx], t:+t.toFixed(2)}]});
   }
+  // The distance is the clip's, not one lane's — everybody in the heat swam the same race. The
+  // marks all go, because marks captured for a 50 mean nothing on a 200.
   videoSetRaceType(raceType){ const v=this._activeVideo(); if(!v) return;
-    this.videoLib=this.videoLib.map(x=>x.id===v.id?{...x, raceType, laps:[]}:x); if(!v._isBlob) this._videosPersist(v.id); this.forceUpdate();
+    const cleared=this._vidSwimmers(v).map(s=>({...s, laps:[], strokes:{}, kicks:{}}));
+    this.videoLib=this.videoLib.map(x=>x.id===v.id?{...x, raceType, swimmers:cleared, laps:[], strokes:{}, kicks:{}}:x);
+    if(!v._isBlob) this._videosPersist(v.id);
+    this.setState({videoCountMark:null});
   }
-  videoDeleteLap(id, idx){ this.videoLib=this.videoLib.map(x=>{ if(x.id!==id) return x; const laps=x.laps.slice(); laps.splice(idx,1); return {...x, laps}; }); this._videosPersist(id); this.forceUpdate(); }
-  videoClearLaps(id){ this.videoLib=this.videoLib.map(x=>x.id===id?{...x, laps:[]}:x); this._videosPersist(id); this.forceUpdate(); }
+  videoDeleteLap(id, swIdx, lapIdx){
+    const v=this.videoLib.find(x=>x.id===id); if(!v) return;
+    const laps=(this._vidTrack(v, swIdx).laps||[]).slice(); laps.splice(lapIdx,1);
+    this._vidApply(id, swIdx, {laps});
+  }
+  videoClearLaps(id, swIdx){
+    const v=this.videoLib.find(x=>x.id===id); if(!v) return;
+    this._vidApply(id, swIdx==null?this._vidSwIdx(v):swIdx, {laps:[], strokes:{}, kicks:{}});
+    this.setState({videoCountMark:null});
+  }
   videoAddNote(){ const v=this._activeVideo(); const txt=(this.state.videoNoteDraft||'').trim(); if(!v||!txt) return;
     const t=this._getCurrentTime();
     const notes=[...v.notes, {t:+t.toFixed(2), text:txt}].sort((a,b)=>a.t-b.t);
@@ -10433,32 +10792,43 @@ class Component extends DCLogic {
   }
   // The start is the zero of the race, so setting it re-bases every split already marked — the
   // marks keep their own place in the clip and only their distance from the gun changes.
-  // The earliest mark the start has to come before. Past it, the race runs backwards.
+  // The earliest mark the start has to come before, across every lane in the clip. Past it, the
+  // race runs backwards for somebody.
   _videoStartLimit(v){
-    const others=((v&&v.laps)||[]).filter(l=>!/^\s*(start|reaction)/i.test(String((l&&l.label)||'')));
-    if(!others.length) return null;
-    return Math.min.apply(null, others.map(l=>+l.t).filter(x=>isFinite(x)));
+    const marks=[];
+    this._vidSwimmers(v).forEach(s=>(s.laps||[]).forEach(l=>{
+      if(!/^\s*(start|reaction)/i.test(String((l&&l.label)||''))) marks.push(+l.t);
+    }));
+    const usable=marks.filter(x=>isFinite(x));
+    return usable.length ? Math.min.apply(null, usable) : null;
   }
+  // The gun is the gun. Setting it re-bases every split already marked — the marks keep their
+  // own place in the clip and only their distance from the start changes — and it is written to
+  // every lane, because two swimmers in one heat did not start at two different moments. That
+  // shared zero is the whole reason a comparison inside one clip is worth more than three clips
+  // side by side.
   videoSetStartAt(t){
     const v=this._activeVideo(); if(!v) return;
     const sec=+t; if(!isFinite(sec) || sec<0) return;
     const label=(this.videoSplitLabels(v.raceType||'100')[0])||'Start';
-    const rest=(v.laps||[]).filter(l=>!/^\s*(start|reaction)/i.test(String((l&&l.label)||'')));
     // Refused rather than saved. A start after the marks does not make a slightly wrong
     // analysis, it makes an impossible one, and the club has already been shown the result.
     const limit=this._videoStartLimit(v);
     if(limit!=null && sec>=limit){
       return this.setState({videoStartMsg:'That moment is after splits you have already marked, so the race clock would run backwards. Pick an earlier sound, or clear the splits and mark them again from the start.'});
     }
-    const laps=[{label, t:+sec.toFixed(3)}, ...rest];
-    this.videoLib=this.videoLib.map(x=>x.id===v.id?{...x, laps}:x);
+    const swimmers=this._vidSwimmers(v).map(s=>({...s,
+      laps:[{label, t:+sec.toFixed(3)},
+            ...(s.laps||[]).filter(l=>!/^\s*(start|reaction)/i.test(String((l&&l.label)||'')))]}));
+    const first=swimmers[0];
+    this.videoLib=this.videoLib.map(x=>x.id===v.id?{...x, swimmers, laps:first.laps, strokes:first.strokes, kicks:first.kicks}:x);
     if(!v._isBlob) this._videosPersist(v.id);
     this.setState({videoStartMsg:''});
     this.videoSeekPaused(sec);
   }
   videoStartZero(){
     const v=this._activeVideo(); if(!v) return null;
-    const s=(v.laps||[]).find(l=>/^\s*(start|reaction)/i.test(String((l&&l.label)||'')));
+    const s=(this._vidTrack(v, 0).laps||[]).find(l=>/^\s*(start|reaction)/i.test(String((l&&l.label)||'')));
     return s ? +s.t : null;
   }
   // Seek without playing — the coach is being shown a frame to check, not a race to watch.
@@ -10813,6 +11183,13 @@ class Component extends DCLogic {
       const missing = (n==null || n<0);
       rows.push({ label, value: missing ? ('not there — run '+file) : String(n), warn: missing });
     });
+    // The lanes and the dolphin kicks are columns, not a table, so a count cannot find them.
+    // This is said only once the database has actually refused a write for one — a check that
+    // guessed would send a manager to run SQL they may not need, and the analyses are still
+    // saving in the older shape meanwhile.
+    if(this._videoLanesCol===false)
+      rows.push({ label:'Video analyses: lanes & dolphin kicks',
+                  value:'not there — run video_analyses_lanes.sql', warn:true });
     // Secure cloud sign-in status — confirms this admin carries a Supabase JWT (needed before
     // the RLS lockdown; if this shows "not signed in", do NOT apply the lockdown yet).
     const _a=window.__VX_AUTH; const _signed=!!(_a && _a.token && _a.exp && Date.now()<_a.exp);
@@ -12473,6 +12850,51 @@ class Component extends DCLogic {
     this.setState({swAiLoading:false, swAiOut:{title:out.title, blocks:out.blocks}});
     this._icons();
   }
+  // A swim, as arithmetic. Every figure here was worked out on this device from the split times
+  // and the counts the coach tapped in — distances, seconds, speeds, strokes, dolphin kicks.
+  //
+  // What does not go is the lane's name. A coach types "Sara — lane 4" on a lane so they can
+  // tell the lanes apart at the poolside, and that is exactly the field a child's name would
+  // ride out on. The mark's own label is dropped for the same reason and the distance sent
+  // instead, which says which mark it is just as well. The filter on the server drops both
+  // again — see cleanRace in src/app/api/ai/coach/route.ts — so neither end is trusted alone.
+  _aiRaceContext(v, idx){
+    const M=this.videoRaceMetrics(v, idx);
+    if(!M) return null;
+    const ctx=this._aiSquadContext();
+    if(v && v.stroke) ctx.primaryStroke=String(v.stroke).slice(0,40);
+    const race={ distance:parseInt((v&&v.raceType)||'100',10)||100,
+      splits:M.rows.map(r=>{
+        const o={metres:r.metres, sec:+r.splitNum.toFixed(2), vel:+r.velNum.toFixed(2)};
+        if(r.strokesNum) o.strokes=r.strokesNum;
+        if(r.kicksNum) o.kicks=r.kicksNum;
+        if(r.sr!=='—') o.sr=+r.sr;
+        if(r.dps!=='—') o.dps=+r.dps;
+        if(r.si!=='—') o.si=+r.si;
+        return o;
+      }) };
+    if(M.totalNum!=null) race.total=+M.totalNum.toFixed(2);
+    if(M.firstFifteen) race.first15=+M.firstFifteen.sec;
+    if(M.drop!=null) race.dropPct=+M.drop;
+    if(M.kicks) race.kicksTotal=M.kicks.total;
+    ctx.race=race;
+    return ctx;
+  }
+  // Claude reading the analysis the coach has just made. It comes underneath the sheet, never
+  // in place of it: the speeds, the stroke index and the head-to-head are arithmetic and are
+  // right whatever the model says. A model having an off day can make the wording worse here
+  // and can never change a number.
+  async videoAiAsk(){
+    if(this.state.videoAiLoading) return;
+    const v=this._activeVideo(); if(!v) return;
+    const ctx=this._aiRaceContext(v, this._vidSwIdx(v));
+    if(!ctx) return this.setState({videoAiErr:'Mark the splits first — there is nothing to read yet.'});
+    this.setState({videoAiLoading:true, videoAiOut:null, videoAiErr:''});
+    const out=await this._aiAsk('race', '', ctx);
+    if(out.error){ this.setState({videoAiLoading:false, videoAiErr:out.error}); return; }
+    this.setState({videoAiLoading:false, videoAiOut:{title:out.title, blocks:out.blocks}});
+    this._icons();
+  }
 
   renderVals(){
     const S=this.state; const self=this;
@@ -13490,11 +13912,28 @@ class Component extends DCLogic {
     // video
     const activeVid = this.videoLib.find(v=>v.id===S.videoActiveId) || this.videoLib[0] || null;
     const videoHasActive = !!activeVid;
-    const videoChips = this.videoLib.map(v=>({id:v.id, label:v.title, onClick:()=>this.setState({videoActiveId:v.id, videoRate:1}), bg:activeVid&&activeVid.id===v.id?'#0A0F1A':'#fff', fg:activeVid&&activeVid.id===v.id?'#fff':'#3A4152'}));
+    // Opening another clip starts on its first lane and clears what Claude said about the last
+    // one — an answer about somebody else's swim left on the screen reads as an answer about this
+    // one, which is the whole failure the canned assistants used to have.
+    const openClip=(id)=>this.setState({videoActiveId:id, videoRate:1, videoSwIdx:0, videoCountMark:null, videoAiOut:null, videoAiErr:''});
+    const videoChips = this.videoLib.map(v=>({id:v.id, label:v.title, onClick:()=>openClip(v.id), bg:activeVid&&activeVid.id===v.id?'#0A0F1A':'#fff', fg:activeVid&&activeVid.id===v.id?'#fff':'#3A4152'}));
+    // ---- The lanes in this clip ----
+    const vidSwimmers = activeVid ? this._vidSwimmers(activeVid) : [];
+    const vidSwIdx = activeVid ? this._vidSwIdx(activeVid) : 0;
+    const vidTrack = activeVid ? this._vidTrack(activeVid, vidSwIdx) : {laps:[], strokes:{}, kicks:{}, name:''};
+    const LANE_INK = ['var(--color-brand)', '#22D7D7', '#F5A623'];
+    const videoSwTabs = vidSwimmers.map((s,i)=>{
+      const M=this.videoRaceMetrics(activeVid, i);
+      return { name:s.name||('Swimmer '+(i+1)), on:i===vidSwIdx,
+        sub: M && M.total!=null ? (M.total+'s') : ((s.laps||[]).length ? ((s.laps||[]).length+' marks') : 'not marked'),
+        bg: i===vidSwIdx?'#0A0F1A':'#fff', fg: i===vidSwIdx?'#fff':'#3A4152',
+        dot: LANE_INK[i%LANE_INK.length],
+        onClick:()=>this.videoSwimmerPick(i) };
+    });
     const fmtMS=(sec)=>{ sec=Math.max(0,sec||0); const m=Math.floor(sec/60); const s=Math.floor(sec%60); return m+':'+(s<10?'0':'')+s; };
     let lapBars=[]; let lapSplits=[];
-    if(activeVid && activeVid.laps.length){
-      const laps=activeVid.laps;
+    if(activeVid && (vidTrack.laps||[]).length){
+      const laps=vidTrack.laps;
       lapSplits = laps.map((l,i)=> i===0? l.t : +(l.t-laps[i-1].t).toFixed(2));
       const lapMax=Math.max(...lapSplits), lapMin=Math.min(...lapSplits);
       lapBars = lapSplits.map((t,i)=>({t:t.toFixed(1), lap:laps[i].label, h:Math.round(20+((t-lapMin)/((lapMax-lapMin)||1))*66), fill:i%2===0?squad.accent:'#BBD4F5'}));
@@ -13516,11 +13955,11 @@ class Component extends DCLogic {
     const videoStartCands = S.videoStartCands||[];
     const videoStartCand = videoStartCands[S.videoStartPick||0]||null;
     const raceTypeOptions = activeVid ? ['50','100','200','400','800','1500'].map(rt=>({label:rt, onClick:()=>this.videoSetRaceType(rt), on:(activeVid.raceType||'100')===rt, bg:(activeVid.raceType||'100')===rt?squad.accent:'#fff', fg:(activeVid.raceType||'100')===rt?'#fff':'#3A4152'})) : [];
-    const nextSplitLabel = activeVid ? (()=>{ const labels=this.videoSplitLabels(activeVid.raceType||'100'); const done=(activeVid.laps||[]).length; return done<labels.length ? labels[done] : null; })() : null;
+    const nextSplitLabel = activeVid ? (()=>{ const labels=this.videoSplitLabels(activeVid.raceType||'100'); const done=(vidTrack.laps||[]).length; return done<labels.length ? labels[done] : null; })() : null;
     const videoSplitsTotal = activeVid ? this.videoSplitLabels(activeVid.raceType||'100').length : 0;
     // An analysis captured under the old marks holds more of them than the club now taps, and
     // "8/6 captured" reads as a fault rather than as an older swim.
-    const videoSplitsDone = activeVid ? Math.min((activeVid.laps||[]).length, videoSplitsTotal) : 0;
+    const videoSplitsDone = activeVid ? Math.min((vidTrack.laps||[]).length, videoSplitsTotal) : 0;
     const videoAllSplitsDone = activeVid ? videoSplitsDone>=videoSplitsTotal : false;
     // _isBlob means it lives only in this tab, so it is the opposite of uploaded. Read the
     // wrong way round, this told a coach a device-only clip was safely stored.
@@ -13530,13 +13969,24 @@ class Component extends DCLogic {
     // The folder. Every analysis the club has ever filed, newest first, with enough on each line
     // to recognise a swim months later — and the tick that puts it into the comparison.
     const videoCompareIds = S.videoCompareIds||[];
-    const videoSavedRows = this.videoLib.map(v=>{
+    // A club that has filmed a season cannot scroll to the swim it wants. The search reads the
+    // title, the tag, the distance and the lane names, because "Sara", "Doha Open" and "200"
+    // are all things a coach would think of first.
+    const folderQ=(S.videoFolderQ||'').trim().toLowerCase();
+    const videoSavedRows = this.videoLib.filter(v=>{
+      if(!folderQ) return true;
+      const hay=[v.title, v.tag, (v.raceType||'100')+'m', v.stroke, this._videoSavedAt(v)]
+        .concat(this._vidSwimmers(v).map(s=>s.name)).filter(Boolean).join(' ').toLowerCase();
+      return hay.indexOf(folderQ)>=0;
+    }).map(v=>{
       const M=this.videoRaceMetrics(v);
       const tot=this.videoSplitLabels(v.raceType||'100').length;
-      const done=Math.min((v.laps||[]).length, tot);
+      const lanes=this._vidSwimmers(v);
+      const done=Math.min((lanes[0]?lanes[0].laps:[]).length, tot);
       const picked=videoCompareIds.indexOf(v.id)>=0;
       return { id:v.id, title:v.title||'Untitled clip',
-        meta:[(v.raceType||'100')+'m', this._videoSavedAt(v), v.tag].filter(Boolean).join(' · '),
+        meta:[(v.raceType||'100')+'m', v.stroke, this._videoSavedAt(v), v.tag,
+              lanes.length>1?(lanes.length+' swimmers'):''].filter(Boolean).join(' · '),
         total: M?(M.total+'s'):'—',
         splits: done+'/'+tot,
         isActive: activeVid && activeVid.id===v.id,
@@ -13547,12 +13997,24 @@ class Component extends DCLogic {
         // who cannot tell a saved analysis from a device-only one will find out by losing one.
         where: v._isBlob ? 'On this device only' : (this._videoRowsOn ? 'Saved to the club ✓' : 'Saved ✓'),
         whereFg: v._isBlob ? '#B4820C' : '#0C7A4F',
-        onOpen:()=>this.setState({videoActiveId:v.id, videoRate:1}),
+        onOpen:()=>openClip(v.id),
         onCompare:()=>this.videoCompareToggle(v.id),
         onDelete:()=>this.videoDelete(v.id) };
     });
     const videoCompare = this.videoCompareTable();
     const videoCompareCount = videoCompareIds.length;
+    const videoClipCompare = activeVid ? this.videoClipCompare(activeVid) : null;
+    // One shape for both head-to-head tables, so the sheet reads the same whether it is three
+    // lanes in one clip or three clips from the folder.
+    const h2hCols=(T)=>T?T.cols.map(c=>({title:c.title, sub:[c.raceType, c.tag].filter(Boolean).join(' · ')})):[];
+    const h2hRows=(T)=>T?T.rows.map(r=>({label:r.label, cells:r.cells.map(c=>({
+      value:c.value, gap:c.gap,
+      bg:c.best?'var(--brand-tint)':'transparent', fg:c.best?'var(--color-brand-ink)':'var(--vx-slate-500)',
+      edge:c.best?'var(--color-brand)':'transparent' }))})):[];
+    const h2hTotal=(T)=>T?{label:T.totalRow.label, cells:T.totalRow.cells.map(c=>({
+      value:c.value, gap:c.gap,
+      bg:c.best?'var(--color-brand)':'var(--vx-slate-50)', fg:c.best?'var(--on-brand)':'var(--vx-slate-500)',
+      edge:c.best?'var(--color-brand)':'var(--border-subtle)' }))}:{label:'Total', cells:[]};
 
     // ---- Fitness Plan ----
     const fitPlan = this.getFitPlan(S.squadId);
@@ -15595,7 +16057,21 @@ class Component extends DCLogic {
       lapBars, videoHasActive, videoChips, activeVideoTitle: activeVid?activeVid.title:'', activeVideoTag: activeVid?activeVid.tag:'',
       videoIsMp4, videoIsYoutube, videoIsVimeo, activeVideoUrl: activeVid?activeVid.url:'', activeVideoVid: activeVid?activeVid.vid:'',
       onPlayerMount,
-      videoRateOptions, onVideoAddLap:()=>this.videoAddLap(), videoHasLaps, videoNoLaps: !videoHasLaps, onVideoClearLaps: activeVid?()=>this.videoClearLaps(activeVid.id):null,
+      videoRateOptions, onVideoAddLap:()=>this.videoAddLap(), videoHasLaps, videoNoLaps: !videoHasLaps, onVideoClearLaps: activeVid?()=>this.videoClearLaps(activeVid.id, vidSwIdx):null,
+      // ---- The lanes in this recording ----
+      videoSwTabs, videoSwHasMany: vidSwimmers.length>1,
+      videoSwName: vidTrack.name||'', onVideoSwName:(e)=>this.videoSwimmerRename(vidSwIdx, e.target.value),
+      videoSwCanAdd: vidSwimmers.length<3,
+      videoSwAddLabel: vidSwimmers.length<3 ? ('Add swimmer '+(vidSwimmers.length+1)+' from this clip') : 'Three lanes is the limit',
+      onVideoSwAdd:()=>this.videoSwimmerAdd(),
+      videoSwCanRemove: vidSwimmers.length>1, onVideoSwRemove:()=>this.videoSwimmerRemove(vidSwIdx),
+      videoSwMsg:S.videoSwMsg||'', videoSwMsgShow: !!S.videoSwMsg,
+      videoSwHint: vidSwimmers.length>1
+        ? 'Marking '+(vidTrack.name||'this lane')+'. Every lane is measured from the same start signal, so the head-to-head below is the race as it was actually swum.'
+        : 'One recording can hold two or three lanes of the same heat. Add a swimmer and mark their splits against the same start.',
+      videoStrokeOptions: activeVid ? ['Free','Back','Breast','Fly','IM'].map(st=>({label:st, on:(activeVid.stroke||'')===st,
+        onClick:()=>this.videoSetStroke((activeVid.stroke||'')===st?'':st),
+        bg:(activeVid.stroke||'')===st?squad.accent:'#fff', fg:(activeVid.stroke||'')===st?'#fff':'#3A4152'})) : [],
       onStopwatchMount,
       stopwatchZeroSet: videoStartZero!=null,
       stopwatchZeroLabel: videoStartZero!=null ? ('start at '+videoStartZero.toFixed(2)+'s in the clip') : 'no start set — this is the clip’s own clock',
@@ -15619,14 +16095,28 @@ class Component extends DCLogic {
         ? ('Not it? Try the next of '+videoStartCands.length+' sounds') : '',
       onVideoNextStartCand:()=>this.videoNextStartCandidate(),
       ...(()=>{
-        const M=this.videoRaceMetrics(activeVid);
-        if(!M) return {raceHasMetrics:false};
+        const M=this.videoRaceMetrics(activeVid, vidSwIdx);
+        // Nothing marked yet. Every key the sheet reads is still handed over, because a binding
+        // that only exists once a coach has tapped something is a binding that is missing on the
+        // one render where the screen is empty.
+        if(!M) return {raceHasMetrics:false, raceCountHas:false, raceCountChips:[],
+          raceCountMark:'', raceCountStrokes:'0', raceCountKicks:'0', raceCountKickable:false,
+          raceCountKickNote:'', raceCountKickOpacity:'1', onCountStroke:null, onCountStrokeBack:null,
+          onCountKick:null, onCountKickBack:null};
         const vs=M.rows.map(r=>r.velNum);
         const top=Math.max(...vs, 0.1), floor=Math.min(...vs, top);
         const head=[];
         if(M.firstFifteen) head.push({label:'First 15m', value:M.firstFifteen.sec, sub:M.firstFifteen.vel+' m/s · start & underwater', color:'var(--color-brand)'});
         if(M.underwater) head.push({label:'Underwater', value:M.underwater.vel, sub:M.underwater.metres+' m · '+M.underwater.sec+' s', color:'var(--ac-cyan)'});
         if(M.out) head.push({label:'Out / back', value:M.out+' / '+M.back, sub:'first & second length', color:'var(--color-brand)'});
+        // The underwaters. Off the block and off the walls are two different skills, and a
+        // swimmer who kicks eight off the start and three off every turn is losing the race at
+        // the turns — which one figure averaged over both would hide.
+        if(M.kicks) head.push({label:'Dolphin kicks', value:String(M.kicks.total),
+          sub:[M.kicks.offStart!=null?(M.kicks.offStart+' off the start'):'',
+               M.kicks.offTurns!=null?(M.kicks.offTurns+' avg off the walls'):'']
+              .filter(Boolean).join(' · ') || (M.kicks.perLength+' per length'),
+          color:'var(--ac-cyan)'});
         // The number a highlight of one good length never shows: how much speed was lost by
         // the end. Anything past a tenth of the peak is where the race was actually decided.
         head.push({label:'Speed drop', value:M.drop+'%', sub:M.fastest+' → '+M.slowest+' m/s',
@@ -15650,16 +16140,62 @@ class Component extends DCLogic {
           raceRows: M.rows.map((r,i)=>({ ...r,
             rowBg: i%2 ? 'var(--vx-slate-50)' : 'transparent',
             velInk: r.velNum>=top-1e-9 ? 'var(--cyan-dark)' : 'var(--color-brand)',
-            onStrokes:(e)=>this.videoSetStrokes(r.label, e.target.value) })),
+            onStrokes:(e)=>this.videoSetStrokes(r.label, e.target.value),
+            // Only the mark that follows a wall owns an underwater. A kick box on every row
+            // would invite a count for the second half of a length, where there is no
+            // streamline to count, and the total would quietly stop meaning anything.
+            kickable:r.underwater, notKickable:!r.underwater, kicksShown:r.underwater?r.kicks:'',
+            onKicks:(e)=>this.videoSetKicks(r.label, e.target.value) })),
           // The breakout box only belongs to analyses captured with a breakout mark. On the
           // marks the club uses now there is nothing to measure it against, and a box that
           // cannot change a number is a box that reads as broken.
           raceHasBreakout: M.hasBreakout,
           raceBreakoutM: (activeVid&&activeVid.breakoutM)||'',
           onRaceBreakout:(e)=>this.videoSetBreakout(e.target.value),
-          raceReadout: 'Speed, stroke rate, distance per stroke and stroke index are all worked out from the split times and the stroke counts — type the strokes for a length and the rest follows. Stroke index is distance per stroke times speed: it rises only when a longer stroke has not cost you speed.'
+          raceReadout: 'Speed, stroke rate, distance per stroke and stroke index are all worked out from the split times and the counts — type the strokes for a length and the rest follows. Stroke index is distance per stroke times speed: it rises only when a longer stroke has not cost you speed. Dolphin kicks are counted in the streamline off the block and off each wall, and belong to the mark that follows the wall.',
+          // ---- Counting by thumb ----
+          //
+          // A coach watching an underwater at quarter speed has one thumb and no hand free for
+          // a number pad. The mark is chosen once and then each tap is one stroke or one kick;
+          // the boxes in the table above hold the same two numbers and either may be used.
+          raceCountHas:true,
+          ...(()=>{
+            // The mark being counted, resolved once. Switching lane can leave the chosen mark
+            // behind — the other swimmer may not be marked that far — and the chips and the
+            // counters must not then disagree about which mark is on screen.
+            const row=M.rows.find(r=>r.label===S.videoCountMark)||M.rows[0];
+            return {
+              raceCountChips: M.rows.map(r=>({ label:r.label,
+                on:row.label===r.label,
+                bg:row.label===r.label?squad.accent:'#fff',
+                fg:row.label===r.label?'#fff':'#3A4152',
+                onClick:()=>this.setState({videoCountMark:r.label}) })),
+              raceCountMark:row.label,
+              raceCountStrokes:String(row.strokesNum||0),
+              raceCountKicks:String(row.kicksNum||0),
+              raceCountKickable:row.underwater,
+              // A tap that stores a number the sheet then refuses to show is worse than no
+              // button. Mid-length there is no streamline, so the kick side goes quiet and says
+              // where the count for this length actually belongs.
+              raceCountKickOpacity: row.underwater ? '1' : '.4',
+              raceCountKickNote: row.underwater
+                ? 'This mark follows a wall, so the kicks off it are counted here.'
+                : 'No wall before this mark — the kicks for this length are counted on the mark that opens it.',
+              onCountStroke:()=>this.videoBumpCount('strokes', row.label, 1),
+              onCountStrokeBack:()=>this.videoBumpCount('strokes', row.label, -1),
+              onCountKick: row.underwater ? (()=>this.videoBumpCount('kicks', row.label, 1)) : null,
+              onCountKickBack: row.underwater ? (()=>this.videoBumpCount('kicks', row.label, -1)) : null };
+          })()
         };
       })(),
+      // ---- What Claude makes of it ----
+      onVideoAiAsk: activeVid?()=>this.videoAiAsk():null,
+      videoAiBtnLabel: S.videoAiLoading ? 'Reading the race…' : (S.videoAiOut ? 'Read it again' : 'Ask Claude to read this race'),
+      videoAiBtnIcon: S.videoAiLoading ? 'loader-2' : 'sparkles',
+      videoAiSpin: S.videoAiLoading ? 'vx-spin' : '',
+      videoAiHasOut: !!S.videoAiOut, videoAiOut: S.videoAiOut||{title:'',blocks:[]},
+      videoAiErr: S.videoAiErr||'', videoAiErrShow: !!S.videoAiErr,
+      videoAiFoot: 'The splits, speeds and the head-to-head above are arithmetic — they are right whatever the assistant says, and this comes underneath them rather than in place of them. What is sent is the swim as numbers: distances, times, speeds, strokes and dolphin kicks. No name, no date of birth, and not even the lane name you typed.',
       raceTypeOptions, nextSplitLabel, videoSplitsDone, videoSplitsTotal, videoAllSplitsDone, videoSplitsRemaining: !videoAllSplitsDone,
       videoIsUploaded, videoDeviceOnly, videoCanDownload,
       videoUploadMsg:S.videoUploadMsg||'', videoUploadMsgShow:!!S.videoUploadMsg, activeVideoDownloadUrl: activeVid?this._mediaSrc(activeVid.url):'', activeVideoDownloadName: activeVid?(activeVid.title||'clip')+'.mp4':'clip.mp4',
@@ -15675,11 +16211,15 @@ class Component extends DCLogic {
       videoTagDraft:S.videoTagDraft, onVideoTagDraft:(e)=>this.setState({videoTagDraft:e.target.value}),
       onVideoAddSave:()=>this.videoAdd(), onVideoDeleteActive: activeVid?()=>this.videoDelete(activeVid.id):null,
       videoLibEmpty: this.videoLib.length===0,
-      videoSavedRows, videoFolderHas: videoSavedRows.length>0, videoFolderCount: videoSavedRows.length+' saved',
-      videoFolderShow: videoSavedRows.length>0 && S.videoFolderOpen!==false,
+      videoSavedRows, videoFolderHas: this.videoLib.length>0,
+      videoFolderCount: folderQ ? (videoSavedRows.length+' of '+this.videoLib.length) : (videoSavedRows.length+' saved'),
+      videoFolderQ: S.videoFolderQ||'', onVideoFolderQ:(e)=>this.setState({videoFolderQ:e.target.value}),
+      videoFolderNoHits: videoSavedRows.length===0 && this.videoLib.length>0,
+      videoFolderNoHitsMsg: 'Nothing here matches “'+(S.videoFolderQ||'').trim()+'”. Search a title, a meet, a swimmer’s lane name, a stroke, or a distance.',
+      videoFolderShow: this.videoLib.length>0 && S.videoFolderOpen!==false,
       videoFolderIcon: S.videoFolderOpen!==false ? 'folder-open' : 'folder',
       videoFolderChevron: S.videoFolderOpen!==false ? 'chevron-up' : 'chevron-down',
-      videoFolderBtnSub: videoSavedRows.length+(videoSavedRows.length===1?' analysis':' analyses')
+      videoFolderBtnSub: this.videoLib.length+(this.videoLib.length===1?' analysis':' analyses')
         +(S.videoFolderOpen!==false ? '' : ' — tap to open'),
       // Which of the two places it is actually kept, said plainly. Before the table exists the
       // club is still on the one shared document, and that is worth knowing rather than assuming.
@@ -15694,17 +16234,19 @@ class Component extends DCLogic {
       videoCompareMsg:S.videoCompareMsg||'', videoCompareMsgShow: !!S.videoCompareMsg,
       videoCompareCount, onVideoCompareClear:()=>this.videoCompareClear(),
       videoCompareHas: !!videoCompare,
-      videoCompareCols: videoCompare?videoCompare.cols.map(c=>({title:c.title, sub:[c.raceType, c.tag].filter(Boolean).join(' · ')})):[],
-      videoCompareRows: videoCompare?videoCompare.rows.map(r=>({label:r.label, cells:r.cells.map(c=>({
-        value:c.value, gap:c.gap,
-        bg:c.best?'var(--brand-tint)':'transparent', fg:c.best?'var(--color-brand-ink)':'var(--vx-slate-500)',
-        edge:c.best?'var(--color-brand)':'transparent' }))})):[],
-      videoCompareTotal: videoCompare?{label:videoCompare.totalRow.label, cells:videoCompare.totalRow.cells.map(c=>({
-        value:c.value, gap:c.gap,
-        bg:c.best?'var(--color-brand)':'var(--vx-slate-50)', fg:c.best?'var(--on-brand)':'var(--vx-slate-500)',
-        edge:c.best?'var(--color-brand)':'var(--border-subtle)' }))}:{label:'Total', cells:[]},
+      videoCompareCols: h2hCols(videoCompare),
+      videoCompareRows: h2hRows(videoCompare),
+      videoCompareTotal: h2hTotal(videoCompare),
       videoCompareHint: videoCompareCount>=2 ? 'Green is the fastest at that mark; the small figure is how far behind.'
                                              : 'Tick two or three saved analyses to compare them mark for mark.',
+      // The same table, for the lanes inside the one recording. This is the stronger of the two,
+      // because every lane here was measured from the same gun rather than from its own.
+      videoClipCompareHas: !!videoClipCompare,
+      videoClipCompareCols: h2hCols(videoClipCompare),
+      videoClipCompareRows: h2hRows(videoClipCompare),
+      videoClipCompareTotal: h2hTotal(videoClipCompare),
+      videoClipCompareTitle: 'In this race',
+      videoClipCompareFoot: 'Two or three lanes of one heat, marked in one recording and measured from the same start signal. The fastest at each mark is filled in; the small figure under the others is how far behind they were at that point of the race.',
       composeText:S.compose, onComposeChange:(e)=>this.setState({compose:e.target.value}), composeTags, onPost, feed,
       composeEmojiChips, composeEmojiOpen:!!S.composeEmojiOpen, onComposeEmojiToggle, onComposePickPhoto, onComposePhoto, onComposeRemovePhoto,
       composeHasImage:!!S.composeImage, composeImageEl: S.composeImage? window.React.createElement('img',{src:S.composeImage, alt:'', style:{width:'100%',maxHeight:180,objectFit:'cover',borderRadius:10,marginTop:8}}) : null,

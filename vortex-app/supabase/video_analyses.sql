@@ -31,6 +31,13 @@ create table if not exists vx_video_analyses (
   -- The marks, as captured: [{label:'Start', t:4.317}, {label:'15m', t:11.12}, …]
   laps        jsonb not null default '[]'::jsonb,
   strokes     jsonb not null default '{}'::jsonb,   -- {'25m': 9, '35m': 9}
+  -- The dolphin kicks in each streamline, keyed by the mark that follows the wall: {'15m': 8}
+  kicks       jsonb not null default '{}'::jsonb,
+  -- One recording of a heat holds two or three lanes, all measured from the same gun:
+  -- [{id, name, laps, strokes, kicks}]. Lane one is mirrored into laps/strokes/kicks above so
+  -- an analysis is still readable by an app that knows nothing about lanes.
+  swimmers    jsonb not null default '[]'::jsonb,
+  stroke      text,                                 -- Free | Back | Breast | Fly | IM
   notes       jsonb not null default '[]'::jsonb,   -- [{t: 12.4, text: '…'}]
   breakout_m  text,                                 -- only on analyses marked the old way
   saved_at    timestamptz not null default now(),

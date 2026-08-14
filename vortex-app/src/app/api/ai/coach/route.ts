@@ -55,6 +55,13 @@ attendance or load looks like the real story, say that instead.`,
 core and mobility. Bodyweight and technique first.`,
   nutrition: `Practical fuelling around training sessions in Doha's heat, for this age group.
 General guidance for a coach to pass on — no targets, no plans for individuals.`,
+  race: `Read this race, split by split, and say what to work on. Each split carries the distance
+it ends at, the time it took, the speed, and — where the coach counted them — the strokes taken,
+the dolphin kicks off that wall, the stroke rate, the distance per stroke and the stroke index.
+Blocks: where the race was won or lost (the first 15, the speed drop, stroke rate against
+distance per stroke, the underwater kicks), the one thing to change first, and what to set in
+training for it. Refer to a split by its distance — "the 35", "the last 5". Say only what these
+numbers support: a swim with no stroke counts cannot be given a verdict on the stroke.`,
 };
 
 // Only these reach the prompt. Everything else in the request is dropped.
@@ -66,6 +73,52 @@ const ENUM_SEX = ["male", "female", ""];
 
 // A best time, as numbers and an event name — no meet, no date, nothing that places a child.
 type Best = { event?: unknown; seconds?: unknown; dropSeconds?: unknown };
+
+// A race, as arithmetic. Every field here is a measurement the video screen worked out from the
+// split times and the counts a coach tapped in: how far, how long, how fast, how many strokes,
+// how many dolphin kicks. The mark's own label never comes — a coach types "Sara lane 4" on a
+// lane, and a label is the one field in this payload where a child's name could ride along. The
+// distance says which mark it is just as well.
+const RACE_NUM: [string, number][] = [
+  ["distance", 1500], ["total", 3600], ["first15", 60], ["dropPct", 100],
+  ["kicksTotal", 400], ["lengths", 40],
+];
+const SPLIT_NUM: [string, number][] = [
+  ["vel", 10], ["strokes", 200], ["kicks", 120], ["sr", 240], ["dps", 12], ["si", 60],
+];
+type Split = { metres?: unknown; sec?: unknown } & Record<string, unknown>;
+
+function bounded(v: unknown, max: number): number | null {
+  const n = typeof v === "number" ? v : parseFloat(String(v ?? ""));
+  if (!Number.isFinite(n) || n < 0 || n > max) return null;
+  return Math.round(n * 100) / 100;
+}
+
+// Exported for the same reason as cleanContext: the tests must exercise the filter that ships.
+export function cleanRace(raw: unknown): Record<string, unknown> | null {
+  if (!raw || typeof raw !== "object") return null;
+  const src = raw as Record<string, unknown>;
+  const splits = (Array.isArray(src.splits) ? src.splits : []).slice(0, 48)
+    .map((s) => {
+      const r = (s || {}) as Split;
+      const metres = bounded(r.metres, 2000), sec = bounded(r.sec, 3600);
+      if (metres == null || sec == null || sec <= 0) return null;
+      const out: Record<string, number> = { metres, sec };
+      for (const [k, max] of SPLIT_NUM) {
+        const n = bounded(r[k], max);
+        if (n != null && n > 0) out[k] = n;
+      }
+      return out;
+    })
+    .filter(Boolean);
+  if (!splits.length) return null;
+  const race: Record<string, unknown> = { splits };
+  for (const [k, max] of RACE_NUM) {
+    const n = bounded(src[k], max);
+    if (n != null) race[k] = n;
+  }
+  return race;
+}
 
 // Exported so the tests exercise the real filter rather than a copy of it. What this drops is
 // the whole safeguard; a test against a reimplementation of it would agree with itself for ever.
@@ -91,6 +144,8 @@ export function cleanContext(raw: unknown): Record<string, unknown> {
     return Number.isFinite(drop) ? { event, seconds, dropSeconds: drop } : { event, seconds };
   }).filter(Boolean);
   if (cleanBests.length) out.bests = cleanBests;
+  const race = cleanRace(src.race);
+  if (race) out.race = race;
   return out;
 }
 

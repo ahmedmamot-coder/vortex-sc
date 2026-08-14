@@ -2855,7 +2855,9 @@ describe("InBody sheet", () => {
     const ctx = () => {
       const c = {};
       c._splitMetres = bind("_splitMetres", c);
-      c.videoRaceMetrics = bind("videoRaceMetrics", c, ["_splitMetres"]);
+      c._vidSwimmers = bind("_vidSwimmers", c);
+      c._vidTrack = bind("_vidTrack", c, ["_vidSwimmers"]);
+      c.videoRaceMetrics = bind("videoRaceMetrics", c, ["_splitMetres", "_vidTrack", "_vidSwimmers"]);
       c.videoSplitLabels = bind("videoSplitLabels", c);
       return c;
     };
@@ -3003,8 +3005,11 @@ describe("InBody sheet", () => {
       const c = { videoLib: lib || [A, B, C], state: { videoCompareIds: ids },
                   setState(p) { Object.assign(this.state, p); } };
       c._splitMetres = bind("_splitMetres", c);
-      c.videoRaceMetrics = bind("videoRaceMetrics", c, ["_splitMetres"]);
-      c.videoCompareTable = bind("videoCompareTable", c, ["videoRaceMetrics"]);
+      c._vidSwimmers = bind("_vidSwimmers", c);
+      c._vidTrack = bind("_vidTrack", c, ["_vidSwimmers"]);
+      c.videoRaceMetrics = bind("videoRaceMetrics", c, ["_splitMetres", "_vidTrack", "_vidSwimmers"]);
+      c._compareTable = bind("_compareTable", c);
+      c.videoCompareTable = bind("videoCompareTable", c, ["videoRaceMetrics", "_compareTable"]);
       c.videoCompareToggle = bind("videoCompareToggle", c);
       return c;
     };
@@ -3053,6 +3058,311 @@ describe("InBody sheet", () => {
     it("a clip with no marks yet cannot be compared against", () => {
       const empty = clip("d", "Nour", []);
       eq(ctx(["a", "d"], [A, empty]).videoCompareTable(), null);
+    });
+  });
+
+  // "add strokes count and stream line dolphin kick counts". The strokes were counted; the
+  // streamline was not, so a sheet full of stroke rates said nothing about the part of the race
+  // that is swum without a stroke at all.
+  describe("dolphin kicks in the streamline", () => {
+    const ctx = () => {
+      const c = {};
+      c._splitMetres = bind("_splitMetres", c);
+      c._vidSwimmers = bind("_vidSwimmers", c);
+      c._vidTrack = bind("_vidTrack", c, ["_vidSwimmers"]);
+      c.videoRaceMetrics = bind("videoRaceMetrics", c, ["_splitMetres", "_vidTrack", "_vidSwimmers"]);
+      return c;
+    };
+    const FIFTY = {
+      raceType: "50",
+      laps: [{ label: "Start", t: 0 }, { label: "15m", t: 6.62 }, { label: "25m", t: 12.13 },
+             { label: "35m", t: 17.75 }, { label: "45m", t: 23.58 }, { label: "50m", t: 26.63 }],
+      strokes: { "25m": 9 }, kicks: { "15m": 8 },
+    };
+    const HUNDRED = {
+      raceType: "100",
+      laps: [{ label: "Start", t: 0 },
+             { label: "L1 15m", t: 6.4 }, { label: "L1 25m", t: 11.9 }, { label: "L1 50m", t: 26.6 },
+             { label: "L2 15m", t: 33.8 }, { label: "L2 25m", t: 39.4 }, { label: "L2 50m", t: 56.1 }],
+      strokes: {}, kicks: { "L1 15m": 8, "L2 15m": 4 },
+    };
+
+    it("the kicks off the block are counted, and reach the sheet", () => {
+      const M = ctx().videoRaceMetrics(FIFTY);
+      const by = Object.fromEntries(M.rows.map((r) => [r.label, r]));
+      eq(by["15m"].kicksNum, 8);
+      eq(M.kicks.total, 8);
+    });
+    // A kick belongs to a streamline, and a streamline follows a wall. Counting them against
+    // the 35 m mark — the middle of a length — would be counting something that is not there,
+    // and the total would quietly stop meaning anything.
+    it("only a mark that follows a wall can hold them", () => {
+      const M = ctx().videoRaceMetrics({ ...FIFTY, kicks: { "15m": 8, "35m": 5 } });
+      const by = Object.fromEntries(M.rows.map((r) => [r.label, r]));
+      eq(by["15m"].underwater, true, "the 15 follows the block");
+      eq(by["35m"].underwater, false, "the 35 follows nothing but swimming");
+      eq(by["35m"].kicksNum, null, "so a count filed against it is not shown");
+      eq(M.kicks.total, 8, "nor added into the total");
+    });
+    // The two are different skills, and one figure averaged over both hides exactly the swimmer
+    // this is meant to find: eight off the block, four off every turn.
+    it("off the start and off the walls are reported apart", () => {
+      const M = ctx().videoRaceMetrics(HUNDRED);
+      eq(M.kicks.offStart, 8);
+      eq(M.kicks.offTurns, 4, "the average off the walls, not counting the block");
+      eq(M.kicks.total, 12);
+    });
+    it("every length of a longer race follows a wall, so every one can be counted", () => {
+      const M = ctx().videoRaceMetrics({ raceType: "800",
+        laps: [{ label: "Start", t: 0 }, { label: "L1 50m", t: 30 }, { label: "L2 50m", t: 62 }],
+        strokes: {}, kicks: { "L1 50m": 6, "L2 50m": 3 } });
+      eq(M.rows.every((r) => r.underwater), true);
+      eq(M.kicks.total, 9);
+    });
+    it("a swim nobody counted has no kick figures rather than zeroes", () => {
+      eq(ctx().videoRaceMetrics({ ...FIFTY, kicks: {} }).kicks, null,
+         "0 kicks off the block is a claim about the swim; not counting them is not");
+    });
+    it("counting the kicks never disturbs the times", () => {
+      const M = ctx().videoRaceMetrics(FIFTY);
+      eq(M.total, "26.63");
+      eq(M.rows.find((r) => r.label === "25m").split, "5.51");
+    });
+  });
+
+  // "compare between 2 or 3 swimmers in 1 race and in 1 video". A heat is one recording with
+  // eight lanes in it. Marking it as one swimmer meant three swimmers were three clips — each
+  // measured from its own start, which is the comparison that is not worth making.
+  describe("two or three swimmers in one recording", () => {
+    const ctx = (lib) => {
+      const c = { videoLib: lib, state: { videoActiveId: "v1", videoSwIdx: 0 },
+                  setState(p) { Object.assign(this.state, p); },
+                  forceUpdate() {}, _videosPersist(id) { this.persisted = id; },
+                  videoSeekPaused() {} };
+      c._activeVideo = bind("_activeVideo", c);
+      c._splitMetres = bind("_splitMetres", c);
+      c.videoSplitLabels = bind("videoSplitLabels", c);
+      c._vidSwimmers = bind("_vidSwimmers", c);
+      c._vidTrack = bind("_vidTrack", c, ["_vidSwimmers"]);
+      c._vidSwIdx = bind("_vidSwIdx", c, ["_vidSwimmers"]);
+      c._vidPatchTrack = bind("_vidPatchTrack", c, ["_vidSwimmers"]);
+      c._vidApply = bind("_vidApply", c, ["_vidPatchTrack", "_vidSwimmers"]);
+      c.videoRaceMetrics = bind("videoRaceMetrics", c, ["_splitMetres", "_vidTrack", "_vidSwimmers"]);
+      c._compareTable = bind("_compareTable", c);
+      c.videoClipCompare = bind("videoClipCompare", c, ["_vidSwimmers", "videoRaceMetrics", "_compareTable"]);
+      c.videoStartZero = bind("videoStartZero", c, ["_activeVideo", "_vidTrack"]);
+      c._videoStartLimit = bind("_videoStartLimit", c, ["_vidSwimmers"]);
+      c.videoSetStartAt = bind("videoSetStartAt", c,
+        ["_activeVideo", "videoSplitLabels", "_videoStartLimit", "_vidSwimmers"]);
+      c.videoSwimmerAdd = bind("videoSwimmerAdd", c,
+        ["_activeVideo", "_vidSwimmers", "videoStartZero", "videoSplitLabels"]);
+      c.videoSwimmerRemove = bind("videoSwimmerRemove", c, ["_activeVideo", "_vidSwimmers"]);
+      c.videoSetStrokes = bind("videoSetStrokes", c, ["_activeVideo", "_vidSwIdx", "_vidTrack", "_vidApply"]);
+      c.videoSetKicks = bind("videoSetKicks", c, ["_activeVideo", "_vidSwIdx", "_vidTrack", "_vidApply"]);
+      c.videoBumpCount = bind("videoBumpCount", c, ["_activeVideo", "_vidSwIdx", "_vidTrack", "_vidApply"]);
+      c.videoAddLap = bind("videoAddLap", c,
+        ["_activeVideo", "_vidSwIdx", "_vidTrack", "_vidApply", "videoSplitLabels"]);
+      c.videoSetRaceType = bind("videoSetRaceType", c, ["_activeVideo", "_vidSwimmers"]);
+      return c;
+    };
+    const heat = () => [{
+      id: "v1", title: "Heat 4", raceType: "50", kind: "mp4",
+      swimmers: [
+        { id: "l1", name: "Sara", kicks: {}, strokes: {},
+          laps: [{ label: "Start", t: 2 }, { label: "15m", t: 8.62 }, { label: "50m", t: 28.63 }] },
+        { id: "l2", name: "Lina", kicks: {}, strokes: {},
+          laps: [{ label: "Start", t: 2 }, { label: "15m", t: 8.40 }, { label: "50m", t: 29.10 }] },
+      ],
+      laps: [{ label: "Start", t: 2 }, { label: "15m", t: 8.62 }, { label: "50m", t: 28.63 }],
+      strokes: {}, kicks: {},
+    }];
+
+    // An analysis from last season has its marks at the top of the record and no lanes at all.
+    // Reading that as "no swimmers" would empty a swim that is sitting right there.
+    it("a swim marked before lanes existed opens as one lane, not as none", () => {
+      const c = ctx([{ id: "v1", raceType: "50", laps: [{ label: "Start", t: 0 }, { label: "50m", t: 26.6 }], strokes: { "50m": 40 } }]);
+      const lanes = c._vidSwimmers(c.videoLib[0]);
+      eq(lanes.length, 1);
+      eq(lanes[0].laps.length, 2, "its marks are where they always were");
+      eq(lanes[0].strokes["50m"], 40);
+      eq(c.videoRaceMetrics(c.videoLib[0]).total, "26.60");
+    });
+    it("each lane keeps its own race", () => {
+      const c = ctx(heat());
+      eq(c.videoRaceMetrics(c.videoLib[0], 0).total, "26.63");
+      eq(c.videoRaceMetrics(c.videoLib[0], 1).total, "27.10");
+    });
+    it("marking a split goes to the lane being marked and to no other", () => {
+      const c = ctx(heat());
+      c.state.videoSwIdx = 1;
+      c.videoSetStrokes("15m", 7);
+      eq(c._vidTrack(c.videoLib[0], 1).strokes["15m"], 7);
+      eq(c._vidTrack(c.videoLib[0], 0).strokes["15m"], undefined, "Sara did not take Lina's strokes");
+    });
+    it("and so does a kick count", () => {
+      const c = ctx(heat());
+      c.state.videoSwIdx = 1;
+      c.videoSetKicks("15m", 5);
+      eq(c._vidTrack(c.videoLib[0], 1).kicks["15m"], 5);
+      eq(c._vidTrack(c.videoLib[0], 0).kicks["15m"], undefined);
+    });
+    // A coach counting an underwater at quarter speed has one thumb and no hand for a keyboard.
+    it("tapping counts up, and back down again, without going below nothing", () => {
+      const c = ctx(heat());
+      c.videoBumpCount("kicks", "15m", 1);
+      c.videoBumpCount("kicks", "15m", 1);
+      eq(c._vidTrack(c.videoLib[0], 0).kicks["15m"], 2);
+      c.videoBumpCount("kicks", "15m", -1);
+      c.videoBumpCount("kicks", "15m", -1);
+      c.videoBumpCount("kicks", "15m", -1);
+      eq("15m" in c._vidTrack(c.videoLib[0], 0).kicks, false, "not −1, and not a stored 0");
+    });
+    // This is the whole reason a comparison inside one clip beats three clips side by side.
+    it("the gun is the gun — setting the start sets it for every lane", () => {
+      const c = ctx(heat());
+      c.videoSetStartAt(3.1);
+      eq(c._vidTrack(c.videoLib[0], 0).laps[0].t, 3.1);
+      eq(c._vidTrack(c.videoLib[0], 1).laps[0].t, 3.1, "two swimmers in one heat did not start at two moments");
+      eq(c._vidTrack(c.videoLib[0], 1).laps[1].t, 8.4, "and the marks stay where they were in the clip");
+    });
+    it("a start after any lane's marks is refused, not just after the lane on screen", () => {
+      const c = ctx(heat());
+      c.state.videoSwIdx = 0;
+      c.videoSetStartAt(8.5);                       // after Lina's 15 m at 8.40
+      eq(c.videoStartZero(), 2, "the start it already had");
+      eq(/race clock would run backwards/.test(c.state.videoStartMsg), true);
+    });
+    it("a new lane starts from the gun that is already set", () => {
+      const c = ctx(heat());
+      c.videoSwimmerAdd();
+      const lanes = c._vidSwimmers(c.videoLib[0]);
+      eq(lanes.length, 3);
+      eq(lanes[2].laps[0].t, 2, "so its splits are comparable the moment they are marked");
+      eq(c.state.videoSwIdx, 2, "and the coach is put on the lane they just added");
+    });
+    it("a fourth lane is refused rather than silently dropped", () => {
+      const c = ctx(heat());
+      c.videoSwimmerAdd();
+      c.videoSwimmerAdd();
+      eq(c._vidSwimmers(c.videoLib[0]).length, 3);
+      eq(/Three lanes/.test(c.state.videoSwMsg), true);
+    });
+    it("the last lane cannot be removed — a clip always has one", () => {
+      const c = ctx([{ ...heat()[0], swimmers: [heat()[0].swimmers[0]] }]);
+      c.videoSwimmerRemove(0);
+      eq(c._vidSwimmers(c.videoLib[0]).length, 1);
+    });
+    it("changing the distance clears every lane, not only the one on screen", () => {
+      const c = ctx(heat());
+      c.videoSetRaceType("200");
+      eq(c._vidSwimmers(c.videoLib[0]).every((s) => s.laps.length === 0), true,
+         "marks captured for a 50 mean nothing on a 200");
+    });
+    // Lane one is written back to the top of the record, because that is where an app that
+    // knows nothing about lanes looks for the swim.
+    it("lane one is mirrored to where the old app reads it", () => {
+      const c = ctx(heat());
+      c.videoSetStrokes("15m", 6);
+      eq(c.videoLib[0].laps[0].label, "Start");
+      eq(c.videoLib[0].strokes["15m"], 6);
+    });
+    it("two lanes of one heat compare mark for mark", () => {
+      const T = ctx(heat()).videoClipCompare(heat()[0]);
+      eq(T.cols.map((c) => c.title).join(", "), "Sara, Lina");
+      const by = Object.fromEntries(T.rows.map((r) => [r.label, r]));
+      eq(by["15m"].cells.map((c) => c.best).join(","), "false,true", "Lina is out first");
+      eq(T.totalRow.cells[0].best, true, "and Sara wins it");
+      eq(T.totalRow.cells[1].gap, "+0.47");
+    });
+    it("one lane is not a comparison", () => {
+      const one = heat(); one[0].swimmers = [one[0].swimmers[0]];
+      eq(ctx(one).videoClipCompare(one[0]), null);
+    });
+    it("a lane nobody has marked yet is not compared against", () => {
+      const h = heat();
+      h[0].swimmers.push({ id: "l3", name: "Maya", laps: [], strokes: {}, kicks: {} });
+      const T = ctx(h).videoClipCompare(h[0]);
+      eq(T.cols.length, 3, "it still has its column");
+      eq(T.totalRow.cells[2].value, "—", "but nothing is invented for it");
+      eq(T.totalRow.cells[2].best, false);
+    });
+  });
+
+  // What is sent when a coach asks Claude to read a swim. A name typed on a lane is the one
+  // field in this payload a child's name could ride out on.
+  describe("asking Claude to read a race", () => {
+    const ctx = () => {
+      const c = { state: {}, squadById: {}, roster: {},
+                  _aiSquadContext() { return { swimmers: 12, age: 14 }; } };
+      c._splitMetres = bind("_splitMetres", c);
+      c._vidSwimmers = bind("_vidSwimmers", c);
+      c._vidTrack = bind("_vidTrack", c, ["_vidSwimmers"]);
+      c.videoRaceMetrics = bind("videoRaceMetrics", c, ["_splitMetres", "_vidTrack", "_vidSwimmers"]);
+      c._aiRaceContext = bind("_aiRaceContext", c, ["videoRaceMetrics"]);
+      return c;
+    };
+    const CLIP = {
+      raceType: "50", stroke: "Back", title: "Sara Curtis · lane 4",
+      swimmers: [{ id: "l1", name: "Sara Curtis", strokes: { "25m": 9 }, kicks: { "15m": 8 },
+        laps: [{ label: "Start", t: 0 }, { label: "15m", t: 6.62 }, { label: "25m", t: 12.13 },
+               { label: "50m", t: 26.63 }] }],
+    };
+
+    it("the swim goes as arithmetic — distances, times, speeds, strokes, kicks", () => {
+      const race = ctx()._aiRaceContext(CLIP, 0).race;
+      eq(race.distance, 50);
+      eq(race.total, 26.63);
+      eq(race.first15, 6.62);
+      eq(race.splits.length, 3);
+      eq(race.splits[0].metres, 15);
+      eq(race.splits[0].kicks, 8);
+      eq(race.splits[1].strokes, 9);
+      eq(race.kicksTotal, 8);
+    });
+    // The lane name is what a coach types so they can tell the lanes apart at the poolside, and
+    // the mark's label is next to it in the same object. Neither goes.
+    it("no name goes with it, and no mark label either", () => {
+      const sent = JSON.stringify(ctx()._aiRaceContext(CLIP, 0));
+      eq(/Sara/.test(sent), false, "not the lane's name");
+      eq(/Curtis/.test(sent), false);
+      eq(/label/.test(sent), false, "and not the mark's label — the distance says which mark it is");
+      eq(/15m/.test(sent), false);
+    });
+    it("the stroke goes, because it changes what a stroke count means", () =>
+      eq(ctx()._aiRaceContext(CLIP, 0).primaryStroke, "Back"));
+    it("a swim with nothing marked is not sent at all", () =>
+      eq(ctx()._aiRaceContext({ raceType: "50", laps: [] }, 0), null));
+
+    // The filter on the server drops it all again, so neither end is trusted on its own.
+    const clean = AI_ROUTE.cleanRace;
+    it("the server drops a name smuggled into a split", () => {
+      const out = clean({ distance: 50, splits: [{ metres: 15, sec: 6.62, label: "Sara", swimmer: "Sara" }] });
+      eq(JSON.stringify(out.splits), JSON.stringify([{ metres: 15, sec: 6.62 }]));
+    });
+    it("a split with no distance or no time is not a split", () => {
+      eq(clean({ splits: [{ sec: 6.62 }, { metres: 15 }, { metres: 15, sec: 0 }] }), null);
+    });
+    it("a figure outside anything a swim can produce is dropped", () => {
+      const out = clean({ splits: [{ metres: 15, sec: 6.62, vel: 4000, strokes: 9 }] });
+      eq("vel" in out.splits[0], false, "4000 m/s is not a swimmer");
+      eq(out.splits[0].strokes, 9);
+    });
+    it("a race with no splits at all is nothing to read", () => {
+      eq(clean({ distance: 50, splits: [] }), null);
+      eq(clean(null), null);
+      eq(clean("50 free"), null);
+    });
+    it("it rides in on the same filter as everything else, so one place governs it", () => {
+      const out = AI_ROUTE.cleanContext({ name: "Sara", race: { splits: [{ metres: 15, sec: 6.62 }] } });
+      eq("name" in out, false);
+      eq(out.race.splits[0].metres, 15);
+    });
+    it("the assistant is told to read a race, not asked to invent one", () => {
+      const AI = readFileSync(new URL("../src/app/api/ai/coach/route.ts", import.meta.url), "utf8");
+      eq(/race: `Read this race/.test(AI), true);
+      eq(/dolphin kick/i.test(AI), true);
+      eq(/Say only what these\nnumbers support/.test(AI), true,
+         "a swim with no stroke counts must not be given a verdict on the stroke");
     });
   });
 
@@ -3184,10 +3494,12 @@ describe("InBody sheet", () => {
       c._activeVideo = bind("_activeVideo", c);
       c.videoSplitLabels = bind("videoSplitLabels", c);
       c._splitMetres = bind("_splitMetres", c);
-      c.videoRaceMetrics = bind("videoRaceMetrics", c, ["_splitMetres"]);
-      c.videoStartZero = bind("videoStartZero", c, ["_activeVideo"]);
-      c.videoSetStartAt = bind("videoSetStartAt", c, ["_activeVideo", "videoSplitLabels", "_videoStartLimit"]);
-      c._videoStartLimit = bind("_videoStartLimit", c);
+      c._vidSwimmers = bind("_vidSwimmers", c);
+      c._vidTrack = bind("_vidTrack", c, ["_vidSwimmers"]);
+      c.videoRaceMetrics = bind("videoRaceMetrics", c, ["_splitMetres", "_vidTrack", "_vidSwimmers"]);
+      c.videoStartZero = bind("videoStartZero", c, ["_activeVideo", "_vidTrack"]);
+      c.videoSetStartAt = bind("videoSetStartAt", c, ["_activeVideo", "videoSplitLabels", "_videoStartLimit", "_vidSwimmers"]);
+      c._videoStartLimit = bind("_videoStartLimit", c, ["_vidSwimmers"]);
       return c;
     };
     it("a start moved by the detector moves every split with it", () => {
@@ -3364,9 +3676,10 @@ describe("InBody sheet", () => {
       const c = { videoLib: lib || [clip], _videoRowsOn: true, saved: [], deleted: [],
                   _saveJSON(k, v) { this.blob = v; },
                   _isFullAccess: () => true, forceUpdate() {} };
-      c._videoRow = bind("_videoRow", c);
+      c._vidSwimmers = bind("_vidSwimmers", c);
+      c._videoRow = bind("_videoRow", c, ["_vidSwimmers"]);
       c._videoFromRow = bind("_videoFromRow", c);
-      c._videosPersist = bind("_videosPersist", c, ["_videoRow"]);
+      c._videosPersist = bind("_videosPersist", c, ["_videoRow", "_vidSwimmers"]);
       c._videosForget = bind("_videosForget", c);
       return c;
     };
@@ -3393,6 +3706,53 @@ describe("InBody sheet", () => {
       eq(back.notes[0].text, "late breath");
       eq(back.raceType, "50", "race_type in the database, raceType in the app");
       eq(back.title, "Sara 50 back");
+    });
+    // A coach opens a swim months later and expects to find every lane they marked and every
+    // count they tapped, exactly as they left them.
+    it("the lanes, and the dolphin kicks, survive the trip out and back", () => {
+      const c = ctx();
+      const heat = { ...clip, kicks: { "15m": 8 }, stroke: "Back",
+        swimmers: [
+          { id: "l1", name: "Sara", laps: clip.laps, strokes: { "15m": 6 }, kicks: { "15m": 8 } },
+          { id: "l2", name: "Lina", laps: [{ label: "Start", t: 0 }, { label: "15m", t: 6.4 }],
+            strokes: {}, kicks: { "15m": 5 } }] };
+      const back = c._videoFromRow(c._videoRow(heat));
+      eq(back.swimmers.length, 2);
+      eq(back.swimmers[1].name, "Lina");
+      eq(back.swimmers[1].kicks["15m"], 5);
+      eq(back.stroke, "Back");
+      eq(back.kicks["15m"], 8, "lane one is still at the top of the row, where the old app reads it");
+      eq(back.laps[1].t, 6.62);
+    });
+    // A row saved before the lanes column existed comes back with none. Reading that as "no
+    // swimmers" would empty a swim that is sitting right there in laps and strokes.
+    it("a row saved before lanes existed is not emptied by opening it", () => {
+      const c = ctx();
+      const back = c._videoFromRow({ id: "vid1", race_type: "50",
+        laps: [{ label: "Start", t: 0 }, { label: "50m", t: 26.6 }], strokes: { "50m": 40 } });
+      eq("swimmers" in back, false, "nothing is invented for it");
+      eq(c._vidSwimmers(back).length, 1, "and it still reads as one lane");
+      eq(c._vidSwimmers(back)[0].laps.length, 2);
+    });
+    // A club that has the table but has not run video_analyses_lanes.sql has no column for the
+    // lanes, and Postgres refuses the whole row over it — so the swim would stop reaching the
+    // club at all, which is worse than the problem the lanes were added to solve.
+    it("a table without the lanes column still gets the swim, in the shape it can hold", () => {
+      const c = withSync(ctx());
+      c._videoLanesCol = false;
+      c._videosPersist("vid1");
+      const row = c.saved[0][1][0];
+      eq("swimmers" in row, false);
+      eq("kicks" in row, false);
+      eq(row.laps.length, 2, "but lane one's marks are still saved");
+      eq(row.strokes["15m"], 6);
+    });
+    it("and it only drops them once a write has actually said the column is missing", () => {
+      const c = withSync(ctx());
+      eq("swimmers" in c._videoRow(clip), true, "the columns are assumed present until proven otherwise");
+      const persist = methodSource("_videosPersist").body;
+      eq(/schema cache/.test(persist), true, "and what proves it is the database's own answer");
+      eq(/_videoLanesCol=false/.test(persist), true);
     });
     it("a clip still uploading has no row and is not sent as one", () => {
       const c = withSync(ctx([{ ...clip, _isBlob: true }]));
