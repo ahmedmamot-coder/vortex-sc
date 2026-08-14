@@ -2672,6 +2672,81 @@ describe("InBody sheet", () => {
       const fn = sourceBetween("_blobIsStale(key){", "\n  }");
       eq(/remote > mine \+ 60000/.test(fn), true, "clocks differ; a device that just wrote is not stale");
     });
+    // The whole point of the migration: a squad is a row, so editing one cannot touch another.
+    describe("one row per squad", () => {
+      const rowCtx = (rows) => {
+        const c = {
+          _baseSquads: [{ id: "junior", name: "Junior", accent: "#2A63E0", short: "Jr" },
+                        { id: "seniora", name: "Senior A", accent: "#3B23C7", short: "SrA" }],
+          squadRows: rows, roster: {}, state: {}, setState(p){ Object.assign(this.state, p); },
+          forceUpdate(){}, rebuildRoster(){}, audit(){}, _squadRowWatch(){}, _isFullAccess: () => true,
+        };
+        c._glowFrom = bind("_glowFrom", c);
+        c._rebuildSquads = bind("_rebuildSquads", c, ["_glowFrom"]);
+        c._squadRow = bind("_squadRow", c);
+        c.squadFieldSave = bind("squadFieldSave", c, ["_rebuildSquads", "rebuildRoster", "forceUpdate", "audit", "_squadRowWatch"]);
+        c._rebuildSquads();
+        return c;
+      };
+      const ROWS = [{ id: "junior", name: "Junior", ages: "11-12", accent: "#2A63E0", short: "Jr", sort: 0 },
+                    { id: "seniora", name: "Senior A", ages: "14", accent: "#3B23C7", short: "SrA", sort: 1 }];
+
+      it("the table is the truth once it has any rows", () => {
+        const c = rowCtx(ROWS.map((r) => ({ ...r })));
+        eq(c.squads.length, 2);
+        eq(c.squadById.junior.ages, "11-12", "read from the row, not from the built-in list");
+      });
+      it("editing one squad writes only that squad", () => {
+        const sent = [];
+        const restore = globalThis.window;
+        globalThis.window = { __vxUpsert: (t, rows) => { sent.push({ t, rows }); return Promise.resolve(true); } };
+        const c = rowCtx(ROWS.map((r) => ({ ...r })));
+        try { c.squadFieldSave("junior", { accent: "#FF0000" }); } finally { globalThis.window = restore; }
+        eq(sent.length, 1);
+        eq(sent[0].t, "squads");
+        eq(sent[0].rows.length, 1, "one row — Senior A must not be in this write at all");
+        eq(sent[0].rows[0].id, "junior");
+        eq(sent[0].rows[0].accent, "#FF0000");
+      });
+      it("the other squad is untouched in memory too", () => {
+        const restore = globalThis.window;
+        globalThis.window = { __vxUpsert: () => Promise.resolve(true) };
+        const c = rowCtx(ROWS.map((r) => ({ ...r })));
+        try { c.squadFieldSave("junior", { name: "Juniors" }); } finally { globalThis.window = restore; }
+        eq(c.squadById.seniora.name, "Senior A");
+        eq(c.squadById.junior.name, "Juniors");
+        eq(c.squadById.junior.id, "junior", "the id never moves — everything is keyed to it");
+      });
+      it("the glow still follows the colour", () => {
+        const restore = globalThis.window;
+        globalThis.window = { __vxUpsert: () => Promise.resolve(true) };
+        const c = rowCtx(ROWS.map((r) => ({ ...r })));
+        try { c.squadFieldSave("junior", { accent: "#FF0000" }); } finally { globalThis.window = restore; }
+        eq(c.squadById.junior.glow, "rgba(255,0,0,.35)");
+      });
+      it("reordering writes only the squads that moved", () => {
+        const move = sourceBetween("squadMove(id, dir){", "\n  rebuildRoster(){");
+        eq(/moved\.length/.test(move), true);
+        eq(/at\(r\.id\)!==this\.squadRows\.indexOf\(r\)/.test(move), true,
+           "rewriting the whole list to record an order is what made one document dangerous");
+      });
+      it("deleting removes one row rather than rewriting the set", () => {
+        const del = sourceBetween("squadDelete(id){", "\n  squadMove(");
+        eq(/__vxDelete\('squads', 'id=eq\.'/.test(del), true);
+      });
+      it("an empty or missing table falls back rather than losing the squads", () => {
+        const c = rowCtx([]);
+        eq(c.squads.length, 2, "the built-in nine still show before the SQL is run");
+        const fetchFn = sourceBetween("async _squadsFetch(){", "\n  // Fill the table once");
+        eq(/if\(rows==null\) return;/.test(fetchFn), true, "a missing table must keep the fallback");
+      });
+      it("only a manager seeds the table", () => {
+        const seed = sourceBetween("async _squadsSeed(){", "\n  _squadRow(");
+        eq(/this\._isFullAccess\(\)/.test(seed), true,
+           "a parent's device must not decide what the club's squads are");
+      });
+    });
+
     it("squad edits sync to the database like everything else", () =>
       eq(/var SYNC = \["vx_squads"/.test(SOURCE), true,
          "a squad added on one device has to exist on all of them"));

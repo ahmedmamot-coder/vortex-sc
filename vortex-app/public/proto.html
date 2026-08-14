@@ -5602,7 +5602,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-11e';
+const VX_BUILD='2026-08-11f';
 // Roles that carry the run of the club: Club Administration, adding and editing anywhere.
 // Coach, Assistant Coach and Fitness Coach are deliberately absent — a fitness coach works
 // across every squad without being able to rewrite the club.
@@ -6504,7 +6504,46 @@ class Component extends DCLogic {
 
   // Build the live squad list from the base nine plus anything the club has added, with the
   // overlay applied. Called wherever the list can change, so nothing holds a stale copy.
+  // One row per squad, read from the squads table. While that table is empty or missing the app
+  // falls back to the old overlay, so nothing breaks before the SQL is run — and the first time
+  // a manager opens it with the table present, the club's squads are written into it.
+  async _squadsFetch(){
+    if(!window.__vxSelect) return;
+    const rows=await window.__vxSelect('squads', 'select=*&order=sort.asc&limit=200');
+    if(rows==null) return;                    // table missing or unreadable: keep the fallback
+    if(!rows.length){ try{ await this._squadsSeed(); }catch(e){} return; }
+    this.squadRows=rows;
+    this._rebuildSquads(); try{ this.rebuildRoster(); }catch(e){}
+    this.forceUpdate();
+  }
+  // Fill the table once, from whatever the club is already using. Staff only — a parent's device
+  // must not be the one that decides what the squads are.
+  async _squadsSeed(){
+    if(!window.__vxUpsert || !this._isFullAccess()) return;
+    const rows=(this.squads||[]).map((sq,i)=>this._squadRow(sq, i));
+    if(!rows.length) return;
+    const ok=await window.__vxUpsert('squads', rows);
+    if(ok) this._squadsFetch();
+  }
+  _squadRow(sq, sort){
+    return { id:sq.id, name:sq.name||'', ages:sq.ages||'', accent:sq.accent||'#2733D6',
+      short:sq.short||'', coach:sq.coach||'', sort:(sort!=null?sort:0),
+      updated_at:new Date().toISOString() };
+  }
   _rebuildSquads(){
+    // A row per squad is the truth once the table has any. Everything below is the old
+    // single-document overlay, kept only so the app works before the table exists.
+    if(Array.isArray(this.squadRows) && this.squadRows.length){
+      this.squads=this.squadRows.map(r=>{
+        const base=(this._baseSquads||[]).find(b=>b.id===r.id)||{};
+        return { ...base, id:r.id, name:r.name||base.name||r.id, ages:r.ages||'',
+          accent:r.accent||base.accent||'#2733D6', glow:this._glowFrom(r.accent||base.accent),
+          short:r.short||base.short||'', coach:r.coach||base.coach||'',
+          photo:base.photo||'', count:base.count||0 };
+      });
+      this.squadById={}; this.squads.forEach(x=>this.squadById[x.id]=x);
+      return;
+    }
     const e=this.squadEdits||{ovr:{}, added:[], removed:{}, order:[]};
     const all=[...this._baseSquads.map(s=>({...s})), ...(e.added||[]).map(s=>({...s}))]
       .filter(s=>!(e.removed||{})[s.id]);
@@ -6617,19 +6656,49 @@ class Component extends DCLogic {
     const sq={id, name, ages:(f.ages||'').trim(), count:0, coach:(f.coach||'').trim(),
       accent, glow:this._glowFrom(accent), photo:'',
       short:((f.short||name).trim().slice(0,3)||'SQ')};
-    const e=this._currentSquadEdits();
-    this._saveSquads({...e, added:[...(e.added||[]), sq],
-      order:(e.order&&e.order.length)? [...e.order, id] : this.squads.map(x=>x.id).concat([id])});
+    if(Array.isArray(this.squadRows) && this.squadRows.length){
+      const row=this._squadRow(sq, this.squadRows.length);
+      this.squadRows=[...this.squadRows, row];
+      this._rebuildSquads(); try{ this.rebuildRoster(); }catch(e){}
+      try{ if(window.__vxUpsert) window.__vxUpsert('squads', [row]); }catch(e){}
+    } else {
+      const e=this._currentSquadEdits();
+      this._saveSquads({...e, added:[...(e.added||[]), sq],
+        order:(e.order&&e.order.length)? [...e.order, id] : this.squads.map(x=>x.id).concat([id])});
+    }
     this.setState({squadAddOpen:false, squadForm:{name:'',ages:'',accent:'#2733D6',short:'',coach:''},
       squadMsg:name+' added \u2713 It has no swimmers yet \u2014 use Move swimmers to fill it.', squadOk:true});
     try{ this.audit('squad.add', name, {squad:id}); }catch(e){}
   }
   squadFieldSave(id, patch){
+    try{ this.audit('squad.edit', id, {squad:id, changed:Object.keys(patch).join(',')}); }catch(err){}
+    // One squad, one row. Renaming Junior writes Junior — it cannot touch Senior A, so two
+    // coaches editing two squads can no longer overwrite each other at all.
+    if(Array.isArray(this.squadRows) && this.squadRows.length){
+      const i=this.squadRows.findIndex(r=>r.id===id);
+      if(i<0) return;
+      const next={...this.squadRows[i], ...patch, updated_at:new Date().toISOString()};
+      this.squadRows=this.squadRows.map((r,k)=>k===i?next:r);
+      this._rebuildSquads(); try{ this.rebuildRoster(); }catch(e){}
+      this.forceUpdate();
+      return this._squadRowWatch(window.__vxUpsert && window.__vxUpsert('squads', [next]), patch);
+    }
     const e=this._currentSquadEdits();
     const cur=(e.ovr||{})[id]||{};
     this._saveSquads({...e, ovr:{...(e.ovr||{}), [id]:{...cur, ...patch}}});
-    try{ this.audit('squad.edit', id, {squad:id, changed:Object.keys(patch).join(',')}); }catch(err){}
     this._squadSaveWatch(patch);
+  }
+  // Did that one row land? Same question as before, asked of a write that can only affect the
+  // squad it names.
+  async _squadRowWatch(p, patch){
+    const what=Object.keys(patch||{}).join(', ')||'change';
+    try{
+      const ok=p ? await p : false;
+      if(!ok){ const e=window.__vxLastWriteErr||{};
+        return this.setState({squadOk:false, squadMsg:'Saved on this device, but the database refused it: '
+          +(e.said||('HTTP '+(e.status||'?')))+' \u2014 it will be lost when the app is reopened.'}); }
+      this.setState({squadOk:true, squadMsg:'Saved \u2713 ('+what+')'});
+    }catch(e){ this.setState({squadOk:false, squadMsg:'Saved on this device, but it could not be sent.'}); }
   }
   // Did it actually reach the database? Every save here is silent, and a silent save that the
   // database refused looks exactly like one that worked until the next time the app is opened —
@@ -6662,10 +6731,16 @@ class Component extends DCLogic {
     if(this.squads.length<=1)
       return this.setState({squadMsg:'This is the only squad left. The club needs at least one.', squadOk:false});
     if(!window.confirm('Delete '+sq.name+'?\n\nIt has no swimmers. This can be undone by adding it again, but its name and colour would have to be set once more.')) return;
-    const e=this._currentSquadEdits();
-    this._saveSquads({...e, removed:{...(e.removed||{}), [id]:true},
-      added:(e.added||[]).filter(x=>x.id!==id),
-      order:(e.order||[]).filter(x=>x!==id)});
+    if(Array.isArray(this.squadRows) && this.squadRows.length){
+      this.squadRows=this.squadRows.filter(r=>r.id!==id);
+      this._rebuildSquads(); try{ this.rebuildRoster(); }catch(e){}
+      try{ if(window.__vxDelete) window.__vxDelete('squads', 'id=eq.'+encodeURIComponent(id)); }catch(e){}
+    } else {
+      const e=this._currentSquadEdits();
+      this._saveSquads({...e, removed:{...(e.removed||{}), [id]:true},
+        added:(e.added||[]).filter(x=>x.id!==id),
+        order:(e.order||[]).filter(x=>x!==id)});
+    }
     this.setState({squadMsg:sq.name+' deleted \u2713', squadOk:true});
     try{ this.audit('squad.delete', sq.name, {squad:id}); }catch(err){}
   }
@@ -6674,6 +6749,17 @@ class Component extends DCLogic {
     const i=ids.indexOf(id); const j=i+dir;
     if(i<0 || j<0 || j>=ids.length) return;
     ids.splice(j, 0, ids.splice(i, 1)[0]);
+    if(Array.isArray(this.squadRows) && this.squadRows.length){
+      // Only the two that swapped are written. Rewriting the whole list to record an order is
+      // what made a single document dangerous in the first place.
+      const at=(id)=>ids.indexOf(id);
+      const moved=this.squadRows.filter(r=>at(r.id)!==this.squadRows.indexOf(r))
+        .map(r=>({...r, sort:at(r.id), updated_at:new Date().toISOString()}));
+      this.squadRows=this.squadRows.map(r=>({...r, sort:at(r.id)})).sort((a,b)=>a.sort-b.sort);
+      this._rebuildSquads(); this.forceUpdate();
+      try{ if(window.__vxUpsert && moved.length) window.__vxUpsert('squads', moved); }catch(e){}
+      return;
+    }
     this._saveSquads({...this._currentSquadEdits(), order:ids});
   }
   rebuildRoster(){
@@ -11216,6 +11302,7 @@ class Component extends DCLogic {
       if(changed) this._hydrateShared();
     } catch(e){} finally { this._syncBusy=false; }
     try{ this._squadPlansFetch(); }catch(e){}
+    try{ this._squadsFetch(); }catch(e){}
     try{ this._planCustomFetch(); }catch(e){}
     try{ this._famMsgFetch(); }catch(e){}
     try{ this._alertsFetch(); }catch(e){}
