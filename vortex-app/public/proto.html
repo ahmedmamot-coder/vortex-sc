@@ -3386,6 +3386,51 @@ if ('serviceWorker' in navigator) {
                           </sc-if>
                         </div>
 
+                        <sc-if value="{{ raceHasMetrics }}" hint-placeholder-val="{{ false }}">
+                          <div style="background:#0A0F1A;border-radius:16px;padding:15px;color:#fff">
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:11px">
+                              <p style="margin:0;font-size:13px;font-weight:800">Race analysis</p>
+                              <span style="font-family:var(--font-mono);font-size:13px;font-weight:800;color:#22D7D7">{{ raceTotal }}</span>
+                            </div>
+                            <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:11px">
+                              <sc-for list="{{ raceHeadline }}" as="h" hint-placeholder-count="4">
+                                <div style="flex:1;min-width:76px;background:rgba(255,255,255,.06);border-radius:10px;padding:8px 9px">
+                                  <span style="display:block;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">{{ h.label }}</span>
+                                  <span style="display:block;font-family:var(--font-mono);font-size:15px;font-weight:800;color:{{ h.color }};margin-top:2px">{{ h.value }}</span>
+                                  <span style="display:block;font-size:9.5px;color:rgba(255,255,255,.45);margin-top:1px">{{ h.sub }}</span>
+                                </div>
+                              </sc-for>
+                            </div>
+                            <div style="display:flex;align-items:flex-end;gap:5px;height:64px;margin-bottom:10px">
+                              <sc-for list="{{ raceSpeedBars }}" as="b" hint-placeholder-count="5">
+                                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px">
+                                  <span style="font-family:var(--font-mono);font-size:9px;color:rgba(255,255,255,.75)">{{ b.vel }}</span>
+                                  <div style="width:100%;height:{{ b.h }}px;background:{{ b.fill }};border-radius:4px"></div>
+                                  <span style="font-size:9px;color:rgba(255,255,255,.5)">{{ b.label }}</span>
+                                </div>
+                              </sc-for>
+                            </div>
+                            <div style="display:flex;font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.45);font-weight:700;padding:0 2px 5px">
+                              <span style="flex:1.1">Split</span><span style="flex:1;text-align:right">Time</span><span style="flex:1;text-align:right">m/s</span><span style="flex:.9;text-align:right">Str</span><span style="flex:1;text-align:right">SR</span><span style="flex:1;text-align:right">DPS</span><span style="flex:1;text-align:right">SI</span>
+                            </div>
+                            <sc-for list="{{ raceRows }}" as="r" hint-placeholder-count="5">
+                              <div style="display:flex;align-items:center;border-top:1px solid rgba(255,255,255,.08);padding:6px 2px">
+                                <span style="flex:1.1;font-size:11.5px;font-weight:700">{{ r.label }}</span>
+                                <span style="flex:1;text-align:right;font-family:var(--font-mono);font-size:11.5px">{{ r.split }}</span>
+                                <span style="flex:1;text-align:right;font-family:var(--font-mono);font-size:11.5px;color:#22D7D7">{{ r.vel }}</span>
+                                <input value="{{ r.strokes }}" onchange="{{ r.onStrokes }}" inputmode="numeric" placeholder="–" style="flex:.9;min-width:0;text-align:right;background:rgba(255,255,255,.08);border:none;border-radius:6px;padding:3px 5px;color:#fff;font-family:var(--font-mono);font-size:11.5px;outline:none">
+                                <span style="flex:1;text-align:right;font-family:var(--font-mono);font-size:11.5px;color:rgba(255,255,255,.8)">{{ r.sr }}</span>
+                                <span style="flex:1;text-align:right;font-family:var(--font-mono);font-size:11.5px;color:rgba(255,255,255,.8)">{{ r.dps }}</span>
+                                <span style="flex:1;text-align:right;font-family:var(--font-mono);font-size:11.5px;color:rgba(255,255,255,.8)">{{ r.si }}</span>
+                              </div>
+                            </sc-for>
+                            <div style="display:flex;align-items:center;gap:9px;margin-top:11px;background:rgba(255,255,255,.06);border-radius:10px;padding:8px 10px">
+                              <span style="flex:1;font-size:11px;color:rgba(255,255,255,.7);line-height:1.4">Breakout distance, in metres from the wall</span>
+                              <input value="{{ raceBreakoutM }}" onchange="{{ onRaceBreakout }}" inputmode="decimal" placeholder="14.1" style="flex:none;width:64px;text-align:right;background:rgba(255,255,255,.1);border:none;border-radius:7px;padding:5px 7px;color:#fff;font-family:var(--font-mono);font-size:12px;outline:none">
+                            </div>
+                            <p style="margin:9px 0 0;font-size:10.5px;color:rgba(255,255,255,.5);line-height:1.5">{{ raceReadout }}</p>
+                          </div>
+                        </sc-if>
                         <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:15px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
                           <p style="margin:0 0 9px;font-size:13px;font-weight:700;color:#0C1116">Notes</p>
                           <div style="display:flex;gap:7px;margin-bottom:10px">
@@ -5557,7 +5602,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-10z';
+const VX_BUILD='2026-08-11a';
 // Roles that carry the run of the club: Club Administration, adding and editing anywhere.
 // Coach, Assistant Coach and Fitness Coach are deliberately absent — a fitness coach works
 // across every squad without being able to rewrite the club.
@@ -9270,6 +9315,87 @@ class Component extends DCLogic {
       else { labels.push(prefix+'50m'); }
     }
     return labels;
+  }
+  // How far into the race each marker is. Labels carry a lap prefix on longer events ('L2 25m'),
+  // and the two that are not distances — Reaction and Breakout — are handled by the caller.
+  _splitMetres(label, lapLen){
+    const t=String(label||'');
+    const lap=(t.match(/^L(\d+)\s/)||[])[1];
+    const m=(t.match(/(\d+)\s*m/)||[])[1];
+    if(!m) return null;
+    return ((parseInt(lap||'1',10)-1)*(lapLen||50)) + parseInt(m,10);
+  }
+  // Everything the analysis shows is worked out from the split times and the stroke counts —
+  // nothing is typed twice. Velocity is distance over time; distance per stroke is distance
+  // over strokes; stroke rate is strokes per minute; and the stroke index is DPS times velocity,
+  // which is the number that says whether a longer stroke is actually costing speed.
+  videoRaceMetrics(v){
+    if(!v) return null;
+    const laps=(v.laps||[]).filter(l=>l&&typeof l==='object');
+    if(!laps.length) return null;
+    const strokes=v.strokes||{};
+    const lapLen=50;
+    const rows=[]; let prevT=0, prevM=0, reaction=null, breakoutT=null;
+    laps.forEach(l=>{
+      const lab=String(l.label||'');
+      if(/reaction/i.test(lab)){ reaction=+l.t; prevT=+l.t; return; }
+      if(/breakout/i.test(lab)){ breakoutT=+l.t; return; }
+      const m=this._splitMetres(lab, lapLen);
+      if(m==null) return;
+      const dist=m-prevM, split=(+l.t)-prevT;
+      if(!(dist>0) || !(split>0)){ prevM=m; prevT=+l.t; return; }
+      const n=parseInt(strokes[lab],10);
+      const vel=dist/split;
+      const dps=(n>0)?(dist/n):null;
+      const sr=(n>0)?(n/(split/60)):null;
+      rows.push({ label:lab, metres:m, dist,
+        split:split.toFixed(2), cum:(+l.t).toFixed(2),
+        vel:vel.toFixed(2), velNum:vel,
+        strokes:(n>0?String(n):''),
+        sr: sr!=null?sr.toFixed(1):'—',
+        dps: dps!=null?dps.toFixed(2):'—',
+        si: (dps!=null)?(dps*vel).toFixed(2):'—' });
+      prevM=m; prevT=+l.t;
+    });
+    if(!rows.length) return null;
+    // The underwater is its own race. Separating it stops a fast breakout flattering a slow
+    // swim, and a slow breakout hiding a good one.
+    const bo=parseFloat(v.breakoutM);
+    let underwater=null;
+    if(breakoutT!=null && !isNaN(bo) && bo>0){
+      const t=breakoutT-(reaction||0);
+      if(t>0) underwater={metres:bo.toFixed(1), sec:t.toFixed(2), vel:(bo/t).toFixed(2)};
+    }
+    // Swimming speed at its best against its worst — the number a coach acts on, and the one
+    // a highlight reel of a single good length never shows.
+    const swim=rows.filter(r=>r.dist>=5);
+    const fast=Math.max(...swim.map(r=>r.velNum));
+    const slow=Math.min(...swim.map(r=>r.velNum));
+    const drop=fast>0 ? ((fast-slow)/fast*100) : 0;
+    const total=+laps[laps.length-1].t;
+    // Out and back, for anything longer than one length.
+    let out=null, back=null;
+    const half=rows.find(r=>r.metres===lapLen);
+    if(half && total>half.cum){ out=(+half.cum).toFixed(2); back=(total-(+half.cum)).toFixed(2); }
+    return { rows, reaction: reaction!=null?reaction.toFixed(2):null, underwater,
+      drop:drop.toFixed(1), dropBad: drop>12,
+      out, back, total:total.toFixed(2),
+      fastest:fast.toFixed(2), slowest:slow.toFixed(2) };
+  }
+  videoSetStrokes(label, n){
+    const v=this._activeVideo(); if(!v) return;
+    const k=parseInt(n,10);
+    const strokes={...(v.strokes||{})};
+    if(k>0) strokes[label]=k; else delete strokes[label];
+    this.videoLib=this.videoLib.map(x=>x.id===v.id?{...x, strokes}:x);
+    if(!v._isBlob) this._saveJSON('vx_videos', this.videoLib);
+    this.forceUpdate();
+  }
+  videoSetBreakout(m){
+    const v=this._activeVideo(); if(!v) return;
+    this.videoLib=this.videoLib.map(x=>x.id===v.id?{...x, breakoutM:m}:x);
+    if(!v._isBlob) this._saveJSON('vx_videos', this.videoLib);
+    this.forceUpdate();
   }
   videoDelete(id){ this.videoLib=this.videoLib.filter(v=>v.id!==id); this._saveJSON('vx_videos', this.videoLib); if(this.state.videoActiveId===id) this.setState({videoActiveId:null}); else this.forceUpdate(); }
   _activeVideo(){ return this.videoLib.find(v=>v.id===this.state.videoActiveId) || this.videoLib[0] || null; }
@@ -14325,6 +14451,29 @@ class Component extends DCLogic {
       videoIsMp4, videoIsYoutube, videoIsVimeo, activeVideoUrl: activeVid?activeVid.url:'', activeVideoVid: activeVid?activeVid.vid:'',
       onPlayerMount,
       videoRateOptions, onVideoAddLap:()=>this.videoAddLap(), videoHasLaps, videoNoLaps: !videoHasLaps, onVideoClearLaps: activeVid?()=>this.videoClearLaps(activeVid.id):null,
+      ...(()=>{
+        const M=this.videoRaceMetrics(activeVid);
+        if(!M) return {raceHasMetrics:false};
+        const vs=M.rows.map(r=>r.velNum); const top=Math.max(...vs, 0.1);
+        const head=[];
+        if(M.reaction) head.push({label:'Reaction', value:M.reaction, sub:'to first mark', color:'#fff'});
+        if(M.underwater) head.push({label:'Underwater', value:M.underwater.vel, sub:M.underwater.metres+' m · '+M.underwater.sec+' s', color:'#22D7D7'});
+        if(M.out) head.push({label:'Out / back', value:M.out+' / '+M.back, sub:'first & second length', color:'#fff'});
+        // The number a highlight of one good length never shows: how much speed was lost by
+        // the end. Anything past a tenth of the peak is where the race was actually decided.
+        head.push({label:'Speed drop', value:M.drop+'%', sub:M.fastest+' → '+M.slowest+' m/s',
+                   color: M.dropBad?'#FF8A8D':'#7CE7C6'});
+        return {
+          raceHasMetrics:true, raceTotal:M.total+'s', raceHeadline:head,
+          raceSpeedBars: M.rows.map(r=>({ label:r.label.replace(/^L\d+\s/,''), vel:r.vel,
+            h: Math.max(6, Math.round((r.velNum/top)*52)),
+            fill: r.velNum>=top*0.98 ? '#22D7D7' : 'rgba(255,255,255,.35)' })),
+          raceRows: M.rows.map(r=>({ ...r, onStrokes:(e)=>this.videoSetStrokes(r.label, e.target.value) })),
+          raceBreakoutM: (activeVid&&activeVid.breakoutM)||'',
+          onRaceBreakout:(e)=>this.videoSetBreakout(e.target.value),
+          raceReadout: 'Speed, stroke rate, distance per stroke and stroke index are all worked out from the split times and the stroke counts — type the strokes for a length and the rest follows. Stroke index is distance per stroke times speed: it rises only when a longer stroke has not cost you speed.'
+        };
+      })(),
       raceTypeOptions, nextSplitLabel, videoSplitsDone, videoSplitsTotal, videoAllSplitsDone, videoSplitsRemaining: !videoAllSplitsDone,
       videoIsUploaded, videoDeviceOnly, videoCanDownload,
       videoUploadMsg:S.videoUploadMsg||'', videoUploadMsgShow:!!S.videoUploadMsg, activeVideoDownloadUrl: activeVid?this._mediaSrc(activeVid.url):'', activeVideoDownloadName: activeVid?(activeVid.title||'clip')+'.mp4':'clip.mp4',

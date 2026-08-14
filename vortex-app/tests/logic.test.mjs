@@ -2771,6 +2771,88 @@ describe("InBody sheet", () => {
       eq(/AbortSignal\.timeout\(timeoutMs\)/.test(lib), true));
   });
 
+  // Measured against a real broadcast analysis of the same event: Sara Curtis, 50 back, splits
+  // 6.62 / 12.13 / 17.75 / 23.58 / 26.63, breakout 14.1 m, and stroke figures at 20/30/40 m.
+  // Everything here has to be derived from the split times and the stroke counts — a coach at
+  // the poolside will not type a number twice, and a number typed twice is a number that
+  // disagrees with itself.
+  describe("race analysis", () => {
+    const ctx = () => {
+      const c = {};
+      c._splitMetres = bind("_splitMetres", c);
+      c.videoRaceMetrics = bind("videoRaceMetrics", c, ["_splitMetres"]);
+      return c;
+    };
+    const CURTIS = {
+      laps: [
+        { label: "Reaction", t: 0.62 }, { label: "Breakout", t: 5.9 },
+        { label: "15m", t: 6.62 }, { label: "25m", t: 12.13 },
+        { label: "35m", t: 17.75 }, { label: "45m", t: 23.58 }, { label: "50m", t: 26.63 },
+      ],
+      strokes: { "25m": 9, "35m": 9, "45m": 9 },
+      breakoutM: "14.1",
+    };
+
+    it("the splits produce the same segment times the broadcast showed", () => {
+      const M = ctx().videoRaceMetrics(CURTIS);
+      const by = Object.fromEntries(M.rows.map((r) => [r.label, r]));
+      eq(by["25m"].split, "5.51");   // 12.13 - 6.62
+      eq(by["35m"].split, "5.62");   // 17.75 - 12.13
+      eq(by["45m"].split, "5.83");   // 23.58 - 17.75
+      eq(by["50m"].split, "3.05");   // 26.63 - 23.58
+      eq(M.total, "26.63");
+    });
+    it("speed is worked out per segment, over the right distance", () => {
+      const by = Object.fromEntries(ctx().videoRaceMetrics(CURTIS).rows.map((r) => [r.label, r]));
+      eq(by["25m"].vel, "1.81", "10 m in 5.51 s");
+      eq(by["50m"].dist, 5, "the last segment is 5 m, not 10 — using 10 would flatter the finish");
+    });
+    it("stroke rate, distance per stroke and stroke index all follow from one typed number", () => {
+      const by = Object.fromEntries(ctx().videoRaceMetrics(CURTIS).rows.map((r) => [r.label, r]));
+      eq(by["25m"].dps, "1.11", "10 m in 9 strokes");
+      eq(by["25m"].sr, "98.0", "9 strokes in 5.51 s");
+      // 1.1111 x 1.81488, not the rounded 1.11 x 1.81 — rounding twice drifts, and stroke index
+      // is the number a coach compares between swims.
+      eq(by["25m"].si, "2.02", "distance per stroke times speed, both unrounded");
+    });
+    it("a segment with no stroke count still reports its speed", () => {
+      const by = Object.fromEntries(ctx().videoRaceMetrics(CURTIS).rows.map((r) => [r.label, r]));
+      eq(by["15m"].vel, "2.50", "the first 15 m includes the dive");
+      eq(by["15m"].sr, "—", "and must not invent a stroke rate it was never given");
+    });
+    // The underwater is its own race: a fast breakout otherwise flatters a slow swim, and a slow
+    // one hides a good swim.
+    it("the underwater is measured separately from the swimming", () => {
+      const M = ctx().videoRaceMetrics(CURTIS);
+      eq(M.underwater.metres, "14.1");
+      eq(M.underwater.sec, "5.28", "from the start signal, not from zero");
+      eq(M.underwater.vel, "2.67");
+    });
+    it("speed drop across the race is reported, and flagged when it is large", () => {
+      const M = ctx().videoRaceMetrics(CURTIS);
+      eq(M.fastest, "2.50");
+      eq(M.slowest, "1.64", "45–50 m");
+      eq(M.drop, "34.4");
+      eq(M.dropBad, true);
+    });
+    it("a race with nothing marked yet reports nothing rather than zeroes", () => {
+      eq(ctx().videoRaceMetrics({ laps: [] }), null);
+      eq(ctx().videoRaceMetrics(null), null);
+    });
+    it("longer races count from the right end of the pool", () => {
+      const c = ctx();
+      eq(c._splitMetres("L2 25m", 50), 75, "second length, 25 m in");
+      eq(c._splitMetres("15m", 50), 15);
+      eq(c._splitMetres("Breakout", 50), null, "not a distance");
+    });
+    it("out and back are split at the wall", () => {
+      const M = ctx().videoRaceMetrics({
+        laps: [{ label: "L1 50m", t: 26.63 }, { label: "L2 50m", t: 55.1 }], strokes: {} });
+      eq(M.out, "26.63");
+      eq(M.back, "28.47");
+    });
+  });
+
   describe("the activity log", () => {
     // navigator is a getter-only global in Node, so it is replaced by descriptor and put back.
     const withNav = (ua, fn) => {
