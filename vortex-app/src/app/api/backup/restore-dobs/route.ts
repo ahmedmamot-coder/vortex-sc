@@ -14,7 +14,7 @@
 //   POST /api/backup/restore-dobs?file=backup-2026-08-12.json&confirm=123
 
 import {
-  guard, svc, BUCKET, readBackup, clubStateKey, dobsIn, shapeOf, type RosterEdits,
+  guard, svc, BUCKET, readBackup, clubStateKey, dobsIn, dobsFromRosterTable, shapeOf, type RosterEdits,
 } from "@/lib/backupStore";
 
 const SB_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://qhrpwiakobgcxfmcoyfg.supabase.co";
@@ -34,16 +34,23 @@ export async function POST(request: Request) {
   const head = { "cache-control": "no-store" } as const;
   const q = new URL(request.url).searchParams;
   const file = q.get("file") || "";
+  const from = q.get("from") || "";
   const confirm = parseInt(q.get("confirm") || "", 10);
 
-  if (!file) return Response.json({ error: "pass ?file= — see /api/backup/list" }, { status: 400, headers: head });
   if (!Number.isFinite(confirm))
     return Response.json({ error: "pass ?confirm=<the number /api/backup/inspect reported>" }, { status: 400, headers: head });
 
-  const snap = await readBackup(file);
-  if (!snap) return Response.json({ error: "could not read that backup", file }, { status: 404, headers: head });
-
-  const backupDobs = dobsIn(clubStateKey(snap, "vx_roster_edits") as RosterEdits | null);
+  let backupDobs: Record<string, string>;
+  if (from === "vx_roster") {
+    const rows = await dobsFromRosterTable();
+    if (!rows) return Response.json({ error: "could not read vx_roster — nothing was changed" }, { status: 502, headers: head });
+    backupDobs = rows;
+  } else {
+    if (!file) return Response.json({ error: "pass ?file= (see /api/backup/list), or ?from=vx_roster" }, { status: 400, headers: head });
+    const snap = await readBackup(file);
+    if (!snap) return Response.json({ error: "could not read that backup", file }, { status: 404, headers: head });
+    backupDobs = dobsIn(clubStateKey(snap, "vx_roster_edits") as RosterEdits | null);
+  }
   const live = await readLive();
   if (!live) return Response.json({ error: "could not read the club's current roster — nothing was changed" }, { status: 502, headers: head });
 

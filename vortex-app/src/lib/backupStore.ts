@@ -120,6 +120,37 @@ export function dobsIn(edits: RosterEdits | null): Record<string, string> {
   return out;
 }
 
+/**
+ * The dates of birth stranded in vx_roster.
+ *
+ * The per-row migration wrote 72 rows before Postgres began rejecting whole batches, and 71 of
+ * them carry a date. Those rows are debris — the app has not read that table since the migration
+ * was switched off — but they were written FROM the roster while it was still whole, so they are
+ * a copy of exactly what was lost, sitting in the same database.
+ */
+export async function dobsFromRosterTable(): Promise<Record<string, string> | null> {
+  const r = await fetch(SB_URL + "/rest/v1/vx_roster?select=sw_id,state,patch&limit=5000", { headers: svc() });
+  if (!r.ok) return null;
+  let rows: Array<{ sw_id?: string; state?: string; patch?: Record<string, unknown> }>;
+  try {
+    rows = await r.json();
+  } catch {
+    return null;
+  }
+  const out: Record<string, string> = {};
+  for (const row of rows || []) {
+    // A row marking a swimmer removed from a squad says nothing about their date of birth, and
+    // the same swimmer's real row is elsewhere in the same table.
+    if (!row || row.state === "deleted") continue;
+    const id = row.sw_id;
+    const dob = row.patch && (row.patch as { dob?: unknown }).dob;
+    if (typeof id !== "string" || !id) continue;
+    if (typeof dob !== "string" || !dob.trim()) continue;
+    out[id] = dob.trim();
+  }
+  return out;
+}
+
 /** How many swimmers an overlay describes, per half — for reporting, never for deciding. */
 export function shapeOf(edits: RosterEdits | null) {
   let edited = 0,

@@ -3479,6 +3479,31 @@ describe("InBody sheet", () => {
     });
     it("an empty or missing date is not counted as one", () =>
       eq(/typeof dob !== "string" \|\| !dob\.trim\(\)/.test(store), true));
+
+    // The migration wrote 72 rows before Postgres began rejecting whole batches, and 71 of them
+    // carry a date. The app has not read that table since the migration was switched off, so
+    // they are debris — but they were written from the roster while it was still whole.
+    describe("the rows the abandoned migration left behind", () => {
+      it("are a source the same repair can use", () => {
+        eq(/dobsFromRosterTable/.test(store), true);
+        eq(/from === "vx_roster"/.test(repair), true);
+        eq(/from === "vx_roster"/.test(inspect), true);
+      });
+      it("go through every one of the same checks, not a shortcut", () => {
+        // The source is chosen, then the single shared path does the confirming, the shape
+        // assertion, the undo and the write.
+        eq(/backupDobs = rows;/.test(repair), true);
+        eq((repair.match(/toAdd\.length !== confirm/g) || []).length, 1, "one confirm gate, not one per source");
+        eq((repair.match(/abandoned without writing/g) || []).length, 1, "one shape assertion");
+        eq((repair.match(/could not save an undo copy first/g) || []).length, 1, "one undo");
+      });
+      // A 'deleted' row records a swimmer leaving a squad and carries no date worth having; the
+      // same swimmer's real row is elsewhere in the same table.
+      it("skip the rows that only record a removal", () =>
+        eq(/row\.state === "deleted"\) continue/.test(store), true));
+      it("still refuse to run without the confirmed count", () =>
+        eq(/if \(!Number\.isFinite\(confirm\)\)[\s\S]{0,200}status: 400/.test(repair), true));
+    });
   });
 
   // A restore rewinds the database to a moment before the newer tables were created, so "is that

@@ -6,7 +6,7 @@
 //   /api/backup/inspect?file=backup-2026-08-12.json
 
 import {
-  guard, readBackup, clubStateKey, dobsIn, shapeOf, type RosterEdits,
+  guard, readBackup, clubStateKey, dobsIn, dobsFromRosterTable, shapeOf, type RosterEdits,
 } from "@/lib/backupStore";
 
 const SB_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://qhrpwiakobgcxfmcoyfg.supabase.co";
@@ -16,14 +16,32 @@ export async function GET(request: Request) {
   if (bad) return bad;
   const head = { "cache-control": "no-store" } as const;
 
-  const file = new URL(request.url).searchParams.get("file") || "";
-  if (!file) return Response.json({ error: "pass ?file=backup-YYYY-MM-DD.json — see /api/backup/list" }, { status: 400, headers: head });
+  const q = new URL(request.url).searchParams;
+  const from = q.get("from") || "";
+  const file = q.get("file") || "";
 
-  const snap = await readBackup(file);
-  if (!snap) return Response.json({ error: "could not read that backup", file }, { status: 404, headers: head });
+  // Two places the lost dates can be read from, checked the same way and applied by the same
+  // repair: a nightly snapshot, or the rows the abandoned migration left behind in vx_roster.
+  let backupDobs: Record<string, string>;
+  let source: string;
+  let takenAt: string | null = null;
+  let sourceShape: ReturnType<typeof shapeOf> | null = null;
 
-  const fromBackup = clubStateKey(snap, "vx_roster_edits") as RosterEdits | null;
-  const backupDobs = dobsIn(fromBackup);
+  if (from === "vx_roster") {
+    const rows = await dobsFromRosterTable();
+    if (!rows) return Response.json({ error: "could not read vx_roster" }, { status: 502, headers: head });
+    backupDobs = rows;
+    source = "vx_roster (rows left by the abandoned migration)";
+  } else {
+    if (!file) return Response.json({ error: "pass ?file=backup-YYYY-MM-DD.json (see /api/backup/list), or ?from=vx_roster" }, { status: 400, headers: head });
+    const snap = await readBackup(file);
+    if (!snap) return Response.json({ error: "could not read that backup", file }, { status: 404, headers: head });
+    const fromBackup = clubStateKey(snap, "vx_roster_edits") as RosterEdits | null;
+    backupDobs = dobsIn(fromBackup);
+    source = file;
+    takenAt = snap.takenAt || null;
+    sourceShape = shapeOf(fromBackup);
+  }
 
   // And what the club has right now, so the two can be compared rather than assumed.
   let live: RosterEdits | null = null;
@@ -47,9 +65,9 @@ export async function GET(request: Request) {
 
   return Response.json(
     {
-      file,
-      takenAt: snap.takenAt || null,
-      backup: { dobs: Object.keys(backupDobs).length, shape: shapeOf(fromBackup) },
+      source,
+      takenAt,
+      backup: { dobs: Object.keys(backupDobs).length, shape: sourceShape },
       liveNow: { dobs: Object.keys(liveDobs).length, shape: shapeOf(live) },
       wouldRestore: wouldAdd.length,
       // Named, so somebody who knows these children can check the answer before it is applied.
@@ -62,7 +80,7 @@ export async function GET(request: Request) {
         "touch anything other than dates of birth",
       ],
       next: wouldAdd.length
-        ? `POST /api/backup/restore-dobs?file=${file}&confirm=${wouldAdd.length} — the count has to match what you were just shown.`
+        ? `POST /api/backup/restore-dobs?${from === "vx_roster" ? "from=vx_roster" : "file=" + file}&confirm=${wouldAdd.length} — the count has to match what you were just shown.`
         : "There is nothing here that the club does not already have.",
     },
     { headers: head },
