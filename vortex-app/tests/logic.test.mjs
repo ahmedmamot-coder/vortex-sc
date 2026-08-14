@@ -2,7 +2,7 @@
 // Every case here is a real bug that reached coaches or parents.
 
 import { readFileSync } from "node:fs";
-import { bind, describe, it, itAsync, eq, report, SOURCE, sourceBetween, runInSandbox } from "./harness.mjs";
+import { bind, methodSource, describe, it, itAsync, eq, report, SOURCE, sourceBetween, runInSandbox } from "./harness.mjs";
 // The real route module. Node strips the types, so these tests run the filter that ships
 // rather than a regex-mangled copy of it.
 const AI_ROUTE = await import("../src/app/api/ai/coach/route.ts");
@@ -3053,6 +3053,195 @@ describe("InBody sheet", () => {
     it("a clip with no marks yet cannot be compared against", () => {
       const empty = clip("d", "Nour", []);
       eq(ctx(["a", "d"], [A, empty]).videoCompareTable(), null);
+    });
+  });
+
+  // The Start mark was a coach's thumb, and every split, speed and comparison was measured from
+  // it. The start signal is already in the recording, so the app can find it instead — and this
+  // is testable to the sample, because the recording can be built here with the answer known.
+  describe("hearing the start signal", () => {
+    const ctx = () => {
+      const c = {};
+      c._audioEnvelope = bind("_audioEnvelope", c);
+      c._percentile = bind("_percentile", c);
+      c._goertzel = bind("_goertzel", c);
+      c._findStartTone = bind("_findStartTone", c, ["_audioEnvelope", "_percentile", "_goertzel"]);
+      c._fmtStopwatch = bind("_fmtStopwatch", c);
+      return c;
+    };
+
+    const RATE = 48000;
+    // A repeatable "random" so a failure is a real failure and not an unlucky afternoon.
+    const noise = (seed) => { let s = seed; return () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return (s / 0x3fffffff) - 1; }; };
+    /** A pool: room noise throughout, then whatever events are asked for. */
+    const pool = (seconds, events) => {
+      const n = RATE * seconds, buf = new Float32Array(n), rnd = noise(7);
+      for (let i = 0; i < n; i++) buf[i] = rnd() * 0.01;          // the room
+      for (const ev of events) {
+        const from = Math.round(ev.at * RATE), len = Math.round(ev.dur * RATE);
+        for (let i = 0; i < len && from + i < n; i++) {
+          // A tone rises in about a millisecond rather than instantly, like a real speaker.
+          const rise = Math.min(1, i / (RATE * 0.001));
+          const body = ev.freq ? Math.sin(2 * Math.PI * ev.freq * i / RATE) : rnd();
+          buf[from + i] += body * ev.amp * rise;
+        }
+      }
+      return buf;
+    };
+
+    // A race as it is actually filmed: the referee's long whistle, then the start beep, then
+    // eight swimmers hitting the water, then the crowd — which is the loudest thing in the clip.
+    const RACE = () => pool(12, [
+      { at: 1.20, dur: 1.40, freq: 2000, amp: 0.30 },            // referee's whistle
+      { at: 4.317, dur: 0.35, freq: 1000, amp: 0.60 },           // THE START
+      { at: 4.60, dur: 1.20, amp: 0.35 },                        // the dive
+      { at: 8.00, dur: 3.50, amp: 0.45 },                        // the crowd at the finish
+    ]);
+
+    it("finds the start beep, not the whistle and not the crowd", () => {
+      const f = ctx()._findStartTone(RACE(), RATE);
+      eq(Math.abs(f.best.t - 4.317) < 0.02, true,
+         `heard the start at ${f.best && f.best.t}, the beep is at 4.317`);
+    });
+    it("to the millisecond, which is closer than a thumb ever gets", () => {
+      const f = ctx()._findStartTone(RACE(), RATE);
+      eq(Math.abs(f.best.t - 4.317) < 0.005, true, `off by ${(f.best.t - 4.317).toFixed(4)}s`);
+    });
+    it("and reports the tone it heard, so a coach can judge it", () => {
+      const f = ctx()._findStartTone(RACE(), RATE);
+      eq(f.best.freq, 1000);
+      eq(f.best.loud > 5, true, "far louder than the pool's own noise");
+      eq(f.best.splash > 0.4, true, "and something big hit the water straight after");
+    });
+    // The whistle is loud and tonal too. It must still be offered, because a start system that
+    // sounds like a whistle is not unheard of, and one tap is a cheaper correction than retyping
+    // every split.
+    it("the whistle is kept as the next-best answer rather than thrown away", () => {
+      const f = ctx()._findStartTone(RACE(), RATE);
+      eq(f.candidates.length > 1, true);
+      eq(f.candidates.some((c) => Math.abs(c.t - 1.20) < 0.05), true, "the whistle is on the list");
+    });
+    // The crowd at the finish is routinely louder and longer than the beep, and it is the thing
+    // that fooled the first version of this: with the background taken as the middle of the
+    // clip's loudness, more than half the clip was loud and the beep failed to clear a gate set
+    // from itself.
+    it("a crowd louder than the beep does not become the start", () => {
+      const f = ctx()._findStartTone(pool(14, [
+        { at: 1.20, dur: 1.40, freq: 2000, amp: 0.30 },
+        { at: 4.317, dur: 0.35, freq: 1000, amp: 0.35 },       // a quiet start system
+        { at: 4.60, dur: 1.20, amp: 0.30 },
+        { at: 7.50, dur: 5.50, amp: 0.60 },                    // a loud, long crowd
+      ]), RATE);
+      eq(Math.abs(f.best.t - 4.317) < 0.02, true, `heard the start at ${f.best && f.best.t}`);
+    });
+    it("a start right at the top of the clip is still found", () => {
+      const f = ctx()._findStartTone(pool(8, [
+        { at: 0.25, dur: 0.35, freq: 1000, amp: 0.55 },
+        { at: 0.55, dur: 1.20, amp: 0.35 },
+      ]), RATE);
+      eq(Math.abs(f.best.t - 0.25) < 0.02, true, `heard the start at ${f.best && f.best.t}`);
+    });
+    it("a clip with no start in it says so instead of picking the loudest cough", () => {
+      const f = ctx()._findStartTone(pool(6, []), RATE);
+      eq(f.best, null);
+      eq(f.quiet, true);
+    });
+    it("silence, and a clip too short to hold a race, are not crashes", () => {
+      eq(ctx()._findStartTone(new Float32Array(0), RATE).best, null);
+      eq(ctx()._findStartTone(null, RATE).best, null);
+      eq(ctx()._findStartTone(new Float32Array(100), RATE).best, null);
+    });
+    // The scoring leans on the tone measure, so it is worth knowing it measures what it claims.
+    it("a pure tone reads as one frequency and noise does not", () => {
+      const c = ctx();
+      const tone = new Float32Array(2048), rnd = noise(3), hiss = new Float32Array(2048);
+      for (let i = 0; i < 2048; i++) { tone[i] = Math.sin(2 * Math.PI * 1000 * i / RATE); hiss[i] = rnd(); }
+      eq(c._goertzel(tone, 0, 2048, RATE, 1000) > 0.9, true, "a full-scale sine reads about 1");
+      eq(c._goertzel(tone, 0, 2048, RATE, 2400) < 0.05, true, "and nothing at a frequency it is not");
+      eq(c._goertzel(hiss, 0, 2048, RATE, 1000) < 0.05, true, "noise is not a tone");
+    });
+
+    it("the clock reads in the swimmer's terms", () => {
+      const c = ctx();
+      eq(c._fmtStopwatch(0), "0.00");
+      eq(c._fmtStopwatch(26.63), "26.63");
+      eq(c._fmtStopwatch(63.4), "1:03.40", "a 100 is a minute and change, not 63 seconds");
+      eq(c._fmtStopwatch(-0.42), "−0.42", "before the gun it counts down");
+    });
+  });
+
+  // Setting the start re-bases the whole analysis, because every other mark keeps its own place
+  // in the clip and only its distance from the gun changes.
+  describe("setting the start re-bases the splits", () => {
+    const clip = { id: "v1", raceType: "50", laps: [
+      { label: "Start", t: 4.50 }, { label: "15m", t: 11.12 }, { label: "50m", t: 31.13 }] };
+    const ctx = () => {
+      const c = { videoLib: [clip], state: { videoActiveId: "v1" },
+                  setState(p) { Object.assign(this.state, p); },
+                  _saveJSON() { this.saved = true; },
+                  videoSeekPaused(t) { this.seeked = t; } };
+      c._activeVideo = bind("_activeVideo", c);
+      c.videoSplitLabels = bind("videoSplitLabels", c);
+      c._splitMetres = bind("_splitMetres", c);
+      c.videoRaceMetrics = bind("videoRaceMetrics", c, ["_splitMetres"]);
+      c.videoStartZero = bind("videoStartZero", c, ["_activeVideo"]);
+      c.videoSetStartAt = bind("videoSetStartAt", c, ["_activeVideo", "videoSplitLabels"]);
+      return c;
+    };
+    it("a start moved by the detector moves every split with it", () => {
+      const c = ctx();
+      c.videoSetStartAt(4.317);
+      const M = c.videoRaceMetrics(c.videoLib[0]);
+      eq(M.total, "26.81", "31.13 on the clip, from a gun at 4.317");
+      eq(M.rows[0].cum, "6.80", "and the 15 m is measured from the gun too");
+    });
+    it("it replaces the start rather than adding a second one", () => {
+      const c = ctx();
+      c.videoSetStartAt(4.317);
+      c.videoSetStartAt(4.400);
+      eq(c.videoLib[0].laps.filter((l) => /start/i.test(l.label)).length, 1);
+      eq(c.videoStartZero(), 4.4);
+    });
+    it("the marks already captured are left exactly where they were in the clip", () => {
+      const c = ctx();
+      c.videoSetStartAt(4.317);
+      eq(c.videoLib[0].laps.map((l) => l.t).join(" "), "4.317 11.12 31.13");
+    });
+    it("it seeks to the frame, so the coach can see what the app heard", () => {
+      const c = ctx();
+      c.videoSetStartAt(4.317);
+      eq(c.seeked, 4.317);
+    });
+    it("a nonsense time is refused rather than wrecking the analysis", () => {
+      const c = ctx();
+      c.videoSetStartAt(-3);
+      c.videoSetStartAt("nonsense");
+      eq(c.videoStartZero(), 4.5, "still the start it already had");
+    });
+    it("an old analysis marked with Reaction has that replaced, not doubled", () => {
+      const c = ctx();
+      c.videoLib = [{ ...clip, laps: [{ label: "Reaction", t: 1.1 }, { label: "15m", t: 8.0 }] }];
+      c.videoSetStartAt(0.9);
+      eq(c.videoLib[0].laps.map((l) => l.label).join(","), "Start,15m");
+    });
+  });
+
+  // A YouTube player is somebody else's page in a frame, and the browser will not let this app
+  // listen to it. That is a limit of the web, and it has to be said rather than failing quietly.
+  describe("clips the app cannot listen to", () => {
+    const src = methodSource("videoFindStart").body;
+    it("say why, and what to do instead", () => {
+      eq(/kind!=='mp4'/.test(src), true);
+      eq(/will not let the app hear its sound/.test(src), true);
+      eq(/Set start here/.test(src), true, "and point at the tap that does work");
+    });
+    it("never leave the button spinning when they refuse", () => {
+      eq(/videoStartBusy:false[^}]*\}\);\s*\n\s*\}\s*\n\s*const AC/.test(src) || /videoStartBusy:false/.test(src),
+         true, "the not-supported path clears the busy flag");
+    });
+    it("close the audio context on the way out, including when decoding throws", () => {
+      eq((src.match(/ctx\.close\(\)/g) || []).length >= 2, true,
+         "a leaked AudioContext per attempt is how a browser tab runs out of them");
     });
   });
 
