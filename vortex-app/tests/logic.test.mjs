@@ -1268,6 +1268,45 @@ describe("expired session", () => {
       await flush();
       eq(t.win.__vxFailedCount(), 2, "collapsing unrelated rows would hide a real loss");
     });
+    // The same lesson, a year later, on the coaches' side. A saved session was written with a
+    // plain insert, so replaying it — pressing Retry, or the app replaying a write it queued
+    // while the sign-in had expired — hit the row that was already there: 409, duplicate key
+    // value violates unique constraint "plan_sessions_pkey", for ever, on a coach's phone.
+    it("a saved session is written as an upsert, never a plain insert", () => {
+      for (const t of ["plan_sessions", "fitness_sessions", "lounge_posts", "lounge_comments",
+                       "family_messages", "signup_alerts", "hr_sets"])
+        eq(new RegExp("__vxInsert\\('" + t + "'").test(SOURCE), false,
+           t + " mints its own id, so sending it twice must update rather than be refused");
+      eq(/__vxUpsert\('plan_sessions', \[row\]\)/.test(SOURCE), true);
+    });
+    // The row the database is refusing is the row the coach is being told they lost.
+    itAsync("a session the database already has stops being counted as unsaved", async () => {
+      const conflict = res(409, { message: 'duplicate key value violates unique constraint "plan_sessions_pkey"' });
+      const t = boot({ auth: LIVE, reply: (url) => (url.includes("/plan_sessions") ? conflict : GOOD_TOKEN) });
+      // Through __vxInsert for the same reason as the test above: it is what this sandbox
+      // carries. The counting lives in _failAdd, which every write path shares.
+      await t.win.__vxInsert("plan_sessions", [{ id: "sp1_1", title: "Session", ts: 1 }]);
+      await flush();
+      eq(t.win.__vxFailedCount(), 0,
+         "a red banner saying the session was lost, at the moment it is safely stored");
+    });
+    // Narrow on purpose. family_accounts reuses the login's id on every edit, so a duplicate
+    // there can equally be a rename that did NOT land — dropping it would lose the edit silently.
+    itAsync("but a duplicate on a row that gets edited is still a lost change", async () => {
+      const conflict = res(409, { message: 'duplicate key value violates unique constraint "family_accounts_pkey"' });
+      const t = boot({ auth: LIVE, reply: (url) => (url.includes("/family_accounts") ? conflict : GOOD_TOKEN) });
+      await t.win.__vxInsert("family_accounts", [{ id: "9f2a1c3e-5b7d-4e21-9a08-6c3f1b2d4e5a", name: "A", ts: 1 }]);
+      await flush();
+      eq(t.win.__vxFailedCount(), 1);
+    });
+    itAsync("and a clash on some other column is never read as 'already saved'", async () => {
+      const conflict = res(409, { message: 'duplicate key value violates unique constraint "plan_sessions_sday_key"' });
+      const t = boot({ auth: LIVE, reply: (url) => (url.includes("/plan_sessions") ? conflict : GOOD_TOKEN) });
+      await t.win.__vxInsert("plan_sessions", [{ id: "sp2_1", ts: 1 }]);
+      await flush();
+      eq(t.win.__vxFailedCount(), 1, "that is a real collision with somebody else's row");
+    });
+
     it("a uuid is checked properly, not just for being a string", () => {
       const isUuid = bind("_isUuid", {});
       eq(isUuid("9f2a1c3e-5b7d-4e21-9a08-6c3f1b2d4e5a"), true);

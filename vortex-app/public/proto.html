@@ -144,6 +144,34 @@ if ('serviceWorker' in navigator) {
   function _blocking(said, body){
     return /foreign key/i.test(String(said||"")) || /foreign key/i.test(String(body||""));
   }
+  // A duplicate primary key is not a change waiting to be saved. It is a change that IS saved:
+  // the row is in the database, which is precisely what the database is complaining about. It
+  // got there because this exact write already succeeded once and was sent a second time —
+  // which is what pressing Retry does, and what replaying a write queued while a sign-in had
+  // expired does.
+  //
+  // Counting that as unsaved is the worst way to be wrong. It puts a red banner and a number on
+  // a coach's phone saying the session they just wrote was lost, at the moment that session is
+  // safely stored, and no amount of retrying can ever clear it — every retry re-reports the
+  // same duplicate. It is dropped instead, along with any earlier entry for the same row, which
+  // is the same landed write.
+  //
+  // Only the primary key counts. A duplicate on some other unique column is a real collision
+  // with somebody else's row and still has to be shown.
+  //
+  // And only for these tables. Each is append-only with an id minted fresh at the moment of the
+  // save and never reused, so a duplicate there can only mean "this same save already landed".
+  // family_accounts is deliberately absent: its id is the login's, reused every time the account
+  // is edited, so a duplicate can equally mean a rename that did NOT land — and dropping that
+  // would lose the edit while telling nobody.
+  var APPEND_ONLY = ["plan_sessions","fitness_sessions","lounge_posts","lounge_comments",
+                     "family_messages","signup_alerts","hr_sets","attendance_marks",
+                     "vx_video_analyses","audit_log"];
+  function _alreadyThere(table, said, body){
+    if(APPEND_ONLY.indexOf(String(table||""))<0) return false;
+    var s=String(said||"")+" "+String(body||"");
+    return /duplicate key value/i.test(s) && /_pkey/i.test(s);
+  }
   function _blockAdd(sig, table, payload, said){
     try{
       var a=_blockLoad().filter(function(x){ return x && x.sig!==sig; });
@@ -197,6 +225,11 @@ if ('serviceWorker' in navigator) {
     if(_blocking(said, body)){
       _blockAdd(sig, table, payload, said);
       window.__vxLastError = { table:table, status:status, body:String(body||"").slice(0,300), ts:Date.now() };
+      try{ window.dispatchEvent(new CustomEvent("vx-write-failed")); }catch(e){}
+      return;
+    }
+    if(_alreadyThere(table, said, body)){
+      _failSave(a.filter(function(x){ return x && x.sig!==sig; }));
       try{ window.dispatchEvent(new CustomEvent("vx-write-failed")); }catch(e){}
       return;
     }
@@ -6201,7 +6234,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-14c';
+const VX_BUILD='2026-08-14d';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -8922,7 +8955,7 @@ class Component extends DCLogic {
     const rec={id, date:(f.date||this.todayISO()), label:(f.label||'').trim(), avg, max, note:(f.note||'').trim()};
     const list=(this.hrSets[swId]=this.hrSets[swId]||[]).slice(); list.unshift(rec); list.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
     this.hrSets={...this.hrSets, [swId]:list}; this.forceUpdate();
-    if(window.__vxInsert){ try{ await window.__vxInsert('hr_sets', [{ id, sw_id:swId, date:rec.date, label:rec.label, avg_hr:avg, max_hr:max, note:rec.note, ts:Date.now(), updated_at:new Date().toISOString() }]); }catch(e){} }
+    if(window.__vxUpsert){ try{ await window.__vxUpsert('hr_sets', [{ id, sw_id:swId, date:rec.date, label:rec.label, avg_hr:avg, max_hr:max, note:rec.note, ts:Date.now(), updated_at:new Date().toISOString() }]); }catch(e){} }
     // Flag an unusually high max HR to staff (in-app feed + push), so no red-line goes unnoticed.
     // Threshold is age-adjusted: the estimated max HR ≈ 207 − 0.7×age (Gellish formula).
     const swmA=this.allSwimmersFlat().find(s=>s.id===swId); const _age=swmA?parseInt(this._swAge(swmA),10):0;
@@ -9860,7 +9893,7 @@ class Component extends DCLogic {
     const nd={...d}; nd[post.id]=''; this.setState({commentDrafts:nd});
     this._notifyMentions(txt, me.label);
     if(post.author && post.author!==me.label) this.notify('coach','message-circle', me.label+' replied to your post', txt.slice(0,90));
-    try{ if(window.__vxInsert){ const ok=await window.__vxInsert('lounge_comments', [c]); if(ok) await this._loungeCommentsFetch(); } }catch(e){}
+    try{ if(window.__vxUpsert){ const ok=await window.__vxUpsert('lounge_comments', [c]); if(ok) await this._loungeCommentsFetch(); } }catch(e){}
   }
   async loungeSendRequest(){ const me=this._me(); const toId=this.state.reqTo||''; const txt=(this.state.reqText||'').trim();
     if(!toId||!txt) return this.setState({reqMsg:'Pick a manager and write your request.'});
@@ -9869,7 +9902,7 @@ class Component extends DCLogic {
     this.setState({feed:[np, ...(this.state.feed||[])], reqOpen:false, reqText:'', reqMsg:''});
     this.notify('coach','inbox', 'New request for '+(to.label||'manager'), me.label+': '+txt.slice(0,80));
     const row={id:np.id, author:np.author, role:np.role, initials:np.initials, photo:np.photo, tag:np.tag, body:np.text, image:'', ts:np.ts, to_id:toId, to_name:to.label||'', kind:'request'};
-    try{ if(window.__vxInsert){ const ok=await window.__vxInsert('lounge_posts', [row]); if(ok) await this._loungeFetch(); } }catch(e){}
+    try{ if(window.__vxUpsert){ const ok=await window.__vxUpsert('lounge_posts', [row]); if(ok) await this._loungeFetch(); } }catch(e){}
   }
   _mentionTextEl(text){ const R=window.React; const parts=String(text||'').split(/(@[\w]+)/g);
     return R.createElement('span', null, parts.map((seg,i)=> /^@[\w]+$/.test(seg) ? R.createElement('span',{key:i, style:{color:'#067EEA',fontWeight:700}}, seg) : seg )); }
@@ -11240,7 +11273,7 @@ class Component extends DCLogic {
     const list=[rec, ...((this.fitSaved&&this.fitSaved[squadId])||[])]; this.fitSaved={...(this.fitSaved||{}), [squadId]:list};
     this.setState({fitSavedMsg:'Session saved for '+this._fmtDMY(date)+' · '+slot+(time?(' '+time):'')+' ✓'});
     const row={ id, squad_id:squadId, title:rec.title, total_exs:rec.totalEx, plan:planCopy, sday:date, ts:Date.now() };
-    try{ if(window.__vxInsert){ const ok=await window.__vxInsert('fitness_sessions', [row]); if(ok) await this._fitSessFetch(); else this.setState({fitSavedMsg:'Saved on this device, but the database rejected it — run the fitness_sessions SQL.'}); } }catch(e){} }
+    try{ if(window.__vxUpsert){ const ok=await window.__vxUpsert('fitness_sessions', [row]); if(ok) await this._fitSessFetch(); else this.setState({fitSavedMsg:'Saved on this device, but the database rejected it — run the fitness_sessions SQL.'}); } }catch(e){} }
   loadFitSession(squadId, id){ const rec=((this.fitSaved&&this.fitSaved[squadId])||[]).find(r=>r.id===id); if(!rec) return;
     this.mutateFitPlan(squadId, p=>{ p.title=rec.plan.title; p.sections=JSON.parse(JSON.stringify(rec.plan.sections||[])); });
     this.setState({fitSavedMsg:'Loaded into the editor — change date/time and Save again to reschedule.', fitSessDate:rec.date||this.todayISO(), fitSessSlot:rec.slot||'AM', fitSessTime:rec.time||''}); }
@@ -11262,7 +11295,7 @@ class Component extends DCLogic {
       this._pushSend({swimmerIds:[swimmerId]}, 'New message from '+fromName, (body||setText||'📹 Video to review').slice(0,90), '/'); }
     else { this.notify('coach','message-circle', fromName+' (family) replied', (body||(video?'📹 sent a video':setText)).slice(0,80));
       this._pushSend({role:'staff'}, fromName+' (family) replied', (body||(video?'📹 sent a video':setText)).slice(0,90), '/'); }
-    try{ if(window.__vxInsert){ const ok=await window.__vxInsert('family_messages',[rec]); if(ok) await this._famMsgFetch(); } }catch(e){} }
+    try{ if(window.__vxUpsert){ const ok=await window.__vxUpsert('family_messages',[rec]); if(ok) await this._famMsgFetch(); } }catch(e){} }
   // ---- Web Push: opt-in subscribe + trigger a notification via the /api/push/send endpoint ----
   _urlB64ToUint8(base64){ const pad='='.repeat((4-base64.length%4)%4); const b=(base64+pad).replace(/-/g,'+').replace(/_/g,'/'); const raw=atob(b); const arr=new Uint8Array(raw.length); for(let i=0;i<raw.length;i++) arr[i]=raw.charCodeAt(i); return arr; }
   async enablePush(){
@@ -11969,7 +12002,7 @@ class Component extends DCLogic {
     this.notify('coach', 'user-plus', _signTitle, _signBody);
     // Append-only alert row so the admin reliably receives every sign-up, on any device
     // (a synced blob would get overwritten by whichever device wrote last).
-    if(window.__vxInsert){ try{ window.__vxInsert('signup_alerts', [{ id:'sa'+Date.now()+'_'+Math.random().toString(36).slice(2,6), icon:'user-plus', title:_signTitle, body:_signBody, ts:Date.now() }]); }catch(e){} }
+    if(window.__vxUpsert){ try{ window.__vxUpsert('signup_alerts', [{ id:'sa'+Date.now()+'_'+Math.random().toString(36).slice(2,6), icon:'user-plus', title:_signTitle, body:_signBody, ts:Date.now() }]); }catch(e){} }
     const firstSwId=(S.famPicked[0]||'').split('::')[1];
     if(firstSwId) this.notify('family_sw:'+firstSwId, 'party-popper', 'Welcome to Vortex SC!', 'Hi '+S.famName.trim()+', your account is ready \u2014 a confirmation would be emailed to '+email+' in the live app. Explore performance, attendance, results and meets any time.');
     try{
@@ -11999,7 +12032,7 @@ class Component extends DCLogic {
     const title='Family sign-in';
     const body=(rec.name||rec.email)+' signed in ('+rec.email+')'+(kids?(' · '+kids):' · no child linked');
     try{ this.notify('coach', 'log-in', title, body); }catch(e){}
-    try{ if(window.__vxInsert) window.__vxInsert('signup_alerts', [{ id:'li'+Date.now()+'_'+Math.random().toString(36).slice(2,6), icon:'log-in', title, body, ts:Date.now() }]); }catch(e){}
+    try{ if(window.__vxUpsert) window.__vxUpsert('signup_alerts', [{ id:'li'+Date.now()+'_'+Math.random().toString(36).slice(2,6), icon:'log-in', title, body, ts:Date.now() }]); }catch(e){}
     try{ this._pushSend({role:'staff'}, title, body, '/'); }catch(e){}
   }
   async famLogin(){ this.setState({famErr:''});
@@ -12188,7 +12221,7 @@ class Component extends DCLogic {
     // And tell the managers, so a coach can say it in person at the session too.
     try{ this.notify('admin', 'cake', name+'’s birthday'+(turning!=null?(' — '+turning+' today'):''), (squadName||'')+' · the club’s message has gone to them and their parents'); }catch(e){}
     try{ this._pushSend({role:'staff'}, 'Birthday today: '+name, (squadName||'')+(turning!=null?(' · turning '+turning):''), '/'); }catch(e){}
-    try{ if(window.__vxInsert) await window.__vxInsert('family_messages',[rec]); }catch(e){}
+    try{ if(window.__vxUpsert) await window.__vxUpsert('family_messages',[rec]); }catch(e){}
   }
   // Runs when a coach opens the app. Once per swimmer per year, recorded in a shared store so
   // five devices opening the app do not send five greetings.
@@ -12396,7 +12429,7 @@ class Component extends DCLogic {
       {squad:squadId, date:date, slot:slot, metres:rec.totalM, zone:rec.zone}); }catch(e){}
     // Append a row (never overwrites another device's sessions), then refresh from the table.
     const row={ id, squad_id:squadId, title:rec.title, zone:rec.zone, total_m:rec.totalM, plan:planCopy, sday:date, ts:Date.now() };
-    try{ if(window.__vxInsert){ const ok=await window.__vxInsert('plan_sessions', [row]); if(ok) await this._plansFetch(); else this.setState({savedPlanMsg:'Saved on this device, but the database rejected it — run the plan_sessions SQL.'}); } }catch(e){}
+    try{ if(window.__vxUpsert){ const ok=await window.__vxUpsert('plan_sessions', [row]); if(ok) await this._plansFetch(); else this.setState({savedPlanMsg:'Saved on this device, but the database rejected it — run the plan_sessions SQL.'}); } }catch(e){}
     const sqName=(this.squadById[squadId]&&this.squadById[squadId].name)||'';
     this._pushSend({swimmerIds:(this.roster[squadId]||[]).map(s=>s.id)}, 'New training plan'+(sqName?(' · '+sqName):''), (rec.title||'Session')+' · '+this.shortDateISO(date), '/'); }
   loadPlanSnapshot(squadId, id){ const rec=((this.savedPlans&&this.savedPlans[squadId])||[]).find(r=>r.id===id); if(!rec) return; this.mutatePlan(squadId, p=>{ p.title=rec.plan.title; p.zone=rec.plan.zone; p.sections=JSON.parse(JSON.stringify(rec.plan.sections)); }); this.setState({savedPlanMsg:'Loaded into the editor — change date/time and Save again to reschedule.', planSessDate:rec.date||this.todayISO(), planSessSlot:rec.slot||'AM', planSessTime:rec.time||''}); }
@@ -14341,7 +14374,7 @@ class Component extends DCLogic {
       if(el) el.value=''; this.setState({feed:[np, ...(this.state.feed||[])], compose:'', composeImage:'', composeEmojiOpen:false});
       this.notify('coach', 'megaphone', acct.label+' posted in the Lounge', '['+tagName+'] '+(txt||'📷 Photo').slice(0,90));
       const row={id:np.id, author:np.author, role:np.role, initials:np.initials, photo:np.photo, tag:np.tag, body:np.text, image:np.image, ts:np.ts};
-      try{ if(window.__vxInsert){ const ok=await window.__vxInsert('lounge_posts', [row]); if(ok) await this._loungeFetch(); } }catch(e){} };
+      try{ if(window.__vxUpsert){ const ok=await window.__vxUpsert('lounge_posts', [row]); if(ok) await this._loungeFetch(); } }catch(e){} };
     const composeEmojis=['🏊','🔥','💪','🏆','🥇','⏱️','👏','✅','🎯','📣','😀','😅','🙌','❤️','🎉','👍','🚀','💧','🌊','⭐'];
     const composeEmojiChips=composeEmojis.map(e=>({e, onClick:()=>{ this.setState({compose:(this.state.compose||'')+e}); }}));
     const onComposeEmojiToggle=()=>this.setState({composeEmojiOpen:!this.state.composeEmojiOpen});
