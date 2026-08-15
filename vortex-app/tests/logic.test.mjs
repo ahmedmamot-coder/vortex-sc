@@ -1305,6 +1305,24 @@ describe("expired session", () => {
       eq(/row-level security/.test(blocked[0].said || ""), true, "the reason has to travel with it");
       eq(t.win.__vxFailedCount(), 0, "and it is not counted as work a retry could still save");
     });
+    // "1 change has not been saved · audit_log" on a coach's phone, after every one of their
+    // changes had in fact saved. The activity log is the app writing its own diary; a coach who
+    // marked a register and saw that has been told their register is at risk, and it is not.
+    itAsync("the activity log failing is not the coach's change failing", async () => {
+      const t = boot({ auth: LIVE, reply: (url) => (url.includes("/audit_log") ? res(500, { message: "nope" }) : GOOD_TOKEN) });
+      await t.win.__vxInsert("audit_log", [{ action: "plan.save" }]);
+      await flush();
+      eq(t.win.__vxFailedCount(), 0, "nothing of theirs is waiting");
+      eq(t.win.__vxBlocked().length, 0);
+      eq((t.win.__vxLastError || {}).table, "audit_log", "but the reason is kept — a log that fails silently is not a log");
+    });
+    itAsync("and a real change still counts", async () => {
+      const t = boot({ auth: LIVE, reply: (url) => (url.includes("/attendance_marks") ? res(500, {}) : GOOD_TOKEN) });
+      await t.win.__vxInsert("attendance_marks", [{ id: "m1" }]);
+      await flush();
+      eq(t.win.__vxFailedCount(), 1, "a register is the coach's work and must be chased");
+    });
+
     // Set-aside rows were cleared only by somebody pressing the button on the banner, so after
     // the cause was fixed the app went on reporting a fault that no longer existed — and the
     // only way to tell a stale banner from a live one was to fix the same thing twice.

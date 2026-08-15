@@ -200,6 +200,16 @@ if ('serviceWorker' in navigator) {
     }catch(e){}
   }
   function _failAdd(op, table, payload, status, body){
+    // The activity log is the app's own bookkeeping, not the coach's work. A row that will not
+    // record means the recording is broken — which the Activity log screen already says, in its
+    // own words, on its own page — and it must never reach a coach's phone as "1 change has not
+    // been saved". Nothing of theirs is waiting: they marked a register, and the register saved.
+    // The reason is still kept, because a log that fails silently is not a log.
+    if(String(table||"")==="audit_log"){
+      window.__vxLastError = { table:table, status:status, body:String(body||"").slice(0,300), ts:Date.now() };
+      try{ window.dispatchEvent(new CustomEvent("vx-write-failed")); }catch(e){}
+      return;
+    }
     var a=_failLoad();
     // What the database said, kept in a form a person can act on. For a rejected shape this is
     // the whole diagnosis — "column family_accounts.pass does not exist" is one line and one
@@ -6308,7 +6318,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-15c';
+const VX_BUILD='2026-08-15d';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
