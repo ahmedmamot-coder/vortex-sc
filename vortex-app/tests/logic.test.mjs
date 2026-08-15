@@ -1021,6 +1021,37 @@ describe("expired session", () => {
     eq(t.upserted.length, 0);
   });
 
+  // Anything that was not a token used to mean "the session is dead", and the session was
+  // thrown away on the spot. A rate limit or a bad minute at Supabase would therefore sign a
+  // coach out of the club's app for good, at the poolside, over something that clears itself.
+  for (const [status, what] of [[429, "a rate limit"], [503, "a bad minute at the server"],
+                                [500, "a server error"], [502, "a gateway error"]]) {
+    itAsync(what + " does not sign the coach out", async () => {
+      const t = boot({ auth: EXPIRED, failed: QUEUED, reply: () => res(status, { error: "try again" }) });
+      await flush();
+      eq(t.win.__vxAuthDead, false, "only the auth server saying the token is no good means that");
+      eq(!!t.win.__VX_AUTH, true, "the session is kept, so the next attempt can work");
+      eq("vx_auth" in t.store, true, "and it survives a reload");
+    });
+  }
+  itAsync("but a refresh token the auth server rejects still ends the session", async () => {
+    for (const status of [400, 401, 403]) {
+      const t = boot({ auth: EXPIRED, failed: QUEUED, reply: () => res(status, { error: "invalid_grant" }) });
+      await flush();
+      eq(t.win.__vxAuthDead, true, "HTTP " + status + " is the auth server refusing the token itself");
+      eq(t.win.__VX_AUTH, null);
+    }
+  });
+  // "family_accounts · HTTP 401 · retrying automatically" named the table and the number and
+  // then said the one thing that does not help. The server's own words are what tell an
+  // expired token apart from a permission this account has never had.
+  it("a retry that keeps failing shows what the database actually said", () => {
+    const detail = sourceBetween("saveFailDetail: S.authDead", "// Signed out, the Retry button is a lie");
+    eq(/retrying automatically'\s*\+\s*\(\(S\.saveFailLast && S\.saveFailLast\.said\)/.test(detail), true,
+       "the reason is captured on every failure and must not be dropped on this one");
+    eq(/the database said: /.test(detail), true);
+  });
+
   // The state a coach was actually stuck in: the app still signed in, the database session
   // long gone, so every attendance mark came back 401 under "retrying automatically" — a
   // retry that could never work, for as long as the app stayed open.

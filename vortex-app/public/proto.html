@@ -327,9 +327,20 @@ if ('serviceWorker' in navigator) {
     var a=window.__VX_AUTH; if(!a||!a.refresh) return Promise.resolve(false);
     if(_refreshing) return _refreshing;          // one refresh at a time, never a stampede
     _refreshing = fetch(SB_URL+"/auth/v1/token?grant_type=refresh_token", { method:"POST", headers:{ "apikey":SB_ANON, "Content-Type":"application/json" }, body: JSON.stringify({ refresh_token:a.refresh }) })
-      .then(function(r){ return r.ok? r.json():null; })
-      .then(function(j){
-        if(j && j.access_token){ window.__vxSetAuth(j); return true; }
+      .then(function(r){
+        // Any answer that was not a token used to be read as "the session is dead", and the
+        // session was thrown away on the spot. A rate limit or a bad minute at Supabase — a
+        // 429, a 502, a 503 — would therefore sign a coach out of the club's app for good, on
+        // the poolside, for a reason that would have cleared itself in seconds.
+        //
+        // Only the auth server saying the refresh token is no good means that. Everything else
+        // is kept: the token in hand may still have life in it, and the next attempt can work.
+        var dead = (r.status===400 || r.status===401 || r.status===403);
+        return (r.ok ? r.json() : Promise.resolve(null)).then(function(j){ return {j:j, dead:dead}; });
+      })
+      .then(function(out){
+        if(out.j && out.j.access_token){ window.__vxSetAuth(out.j); return true; }
+        if(!out.dead) return false;                 // transient — keep the session, try again later
         // The refresh token itself is dead — nothing here can recover it, only a fresh
         // sign-in can. Say so, instead of retrying forever against an empty session.
         _saveAuth(null); window.__vxAuthDead = true;
@@ -6234,7 +6245,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-14d';
+const VX_BUILD='2026-08-14e';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -11423,6 +11434,18 @@ class Component extends DCLogic {
     // Secure cloud sign-in status — confirms this admin carries a Supabase JWT (needed before
     // the RLS lockdown; if this shows "not signed in", do NOT apply the lockdown yet).
     const _a=window.__VX_AUTH; const _signed=!!(_a && _a.token && _a.exp && Date.now()<_a.exp);
+    // What the last refused write was actually told. A 401 that keeps coming back is one of
+    // three different problems — an expired token, a permission this account does not have, or
+    // a key that does not match the project — and they are told apart by this line and nothing
+    // else. It was being kept in memory and shown nowhere.
+    const _we=window.__vxLastWriteErr;
+    if(_we) rows.unshift({ label:'Last write refused', value:_we.table+' · HTTP '+_we.status+(_we.said?(' · '+_we.said):''), warn:true });
+    // A token with no refresh token beside it cannot renew itself: it will work until it
+    // expires and then refuse everything, which reads as "it worked this morning".
+    if(_a) rows.unshift({ label:'Sign-in expires',
+      value:(_a.exp ? new Date(_a.exp).toLocaleString() : 'unknown')
+            + (_a.refresh ? ' · renews itself' : ' · NO refresh token — it cannot renew'),
+      warn: !_a.refresh || !_signed });
     rows.unshift({ label:'Secure cloud sign-in', value:_signed?('✓ '+(_a.email||'signed in')):'— not signed in', warn:!_signed });
     this._dataCheck = { rows, at:new Date().toISOString() };
     this.setState({dataCheckRunning:false, dataCheckMsg:'Checked '+new Date().toLocaleTimeString()});
@@ -15736,9 +15759,17 @@ class Component extends DCLogic {
         // different problems and they need three different people: a permission is the club's
         // to change, a rejected shape is the database's, and a bad connection fixes itself.
         : (S.saveFailLast ? (S.saveFailLast.table+' · '+(S.saveFailLast.status?('HTTP '+S.saveFailLast.status):'no connection')) : '')
-          + (!(S.saveRefused>0 && S.saveRefused>=S.saveFailCount) ? ' · retrying automatically'
-            : (S.saveFailLast && (S.saveFailLast.status===403 || S.saveFailLast.status===401)
+          + (!(S.saveRefused>0 && S.saveRefused>=S.saveFailCount)
+              // "retrying automatically" and nothing else is what a 401 has said for months.
+              // It is true and it is useless: it does not say why the server is refusing, so
+              // the one line that would end the argument — "JWT expired", "permission denied
+              // for table family_accounts" — was captured, stored, and never shown to anybody.
+              // A retry that keeps failing needs the server's own words, not reassurance.
+              ? ' · retrying automatically'
+                + ((S.saveFailLast && S.saveFailLast.said) ? (' — the database said: '+S.saveFailLast.said) : '')
+              : (S.saveFailLast && (S.saveFailLast.status===403 || S.saveFailLast.status===401)
                 ? ' · refused — this account is not allowed to make that change'
+                  + ((S.saveFailLast && S.saveFailLast.said) ? (': '+S.saveFailLast.said) : '')
                 : ' · the database rejected it, so retrying cannot help'
                   + ((S.saveFailLast && S.saveFailLast.said) ? (': '+S.saveFailLast.said) : '')
                   + '. Show this to whoever looks after the database.')),
