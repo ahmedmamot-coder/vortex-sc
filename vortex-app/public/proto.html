@@ -6256,7 +6256,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-14f';
+const VX_BUILD='2026-08-14g';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -15756,9 +15756,14 @@ class Component extends DCLogic {
         // anything wrong with the app or the data, and it is fixed in one place.
         if(/row-level security/i.test(said)){
           const t=(b[0]&&b[0].table)||'that table';
-          return 'You are signed in, but the database does not recognise this account as staff, so it will not accept writes to '+t+'. '
-            +'Nothing is lost — the changes are still here and will save once it does. Whoever looks after the database needs to add '
-            +(((window.__VX_AUTH&&window.__VX_AUTH.email)||'the email you sign in with'))+' to the staff list (vx_staff_emails) and re-run security_4_roles.sql.';
+          // Naming one cause here was wrong: the first club to see this had the email in the
+          // staff list already, and the banner sent them to check the one thing that was
+          // right. Being signed in and being recognised as staff are different questions, and
+          // which one has failed is answered by the database, not guessed at on a phone.
+          return 'You are signed in, but the database is not treating this account ('
+            +((window.__VX_AUTH&&window.__VX_AUTH.email)||'this sign-in')
+            +') as staff, so it will not accept writes to '+t+'. Nothing is lost — the changes are still here and save themselves the moment it does. '
+            +'Whoever looks after the database should run STEP 1 of supabase/staff_access_repair.sql: it reports which part of the check is failing rather than guessing.';
         }
         const fam=b.filter(x=>x&&x.table==='family_accounts').length;
         if(fam===b.length && fam>0) return 'They are family accounts that point at logins which no longer exist — the restore changed which logins there are. Nothing is lost: they are still listed in the app, and they will save themselves the next time those people sign in.';
