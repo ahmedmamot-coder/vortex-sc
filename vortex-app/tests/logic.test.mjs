@@ -1021,6 +1021,40 @@ describe("expired session", () => {
     eq(t.upserted.length, 0);
   });
 
+  // The quietest failure in the app: the token expires, every request falls back to the anon
+  // key, the screen still says signed in, and every write is refused by a policy written
+  // `to authenticated` — on every table at once. It reads as the database having forgotten who
+  // you are, and the club chased the staff allowlist for it.
+  itAsync("an expired token repairs itself instead of sending the anon key for ever", async () => {
+    // The refresh is kept failing transiently so the session stays stale — otherwise the boot
+    // refresh fixes it and the write proves nothing.
+    let refreshed = 0;
+    const t = boot({
+      auth: EXPIRED,
+      reply: (url) => {
+        if (url.includes("/auth/v1/token")) { refreshed++; return res(503, {}); }
+        return res(200, []);
+      },
+    });
+    await flush();
+    const afterBoot = refreshed;
+    await t.win.__vxInsert("vx_squads", [{ id: "s1" }]);
+    await flush();
+    eq(refreshed > afterBoot, true, "finding the token stale must start a refresh, not shrug");
+  });
+  itAsync("and while it is stale the app knows it is writing as nobody", async () => {
+    const t = boot({ auth: EXPIRED, reply: () => res(503, {}) });
+    await t.win.__vxInsert("vx_squads", [{ id: "s1" }]);
+    await flush();
+    eq(t.win.__vxSendingAnon, true, "'signed in' and 'writing as yourself' are different questions");
+  });
+  itAsync("a live token is sent as itself, and says so", async () => {
+    const t = boot({ auth: LIVE, reply: () => res(200, []) });
+    await t.win.__vxInsert("vx_squads", [{ id: "s1" }]);
+    await flush();
+    eq(t.win.__vxSendingAnon, false);
+  });
+
   // Anything that was not a token used to mean "the session is dead", and the session was
   // thrown away on the spot. A rate limit or a bad minute at Supabase would therefore sign a
   // coach out of the club's app for good, at the poolside, over something that clears itself.

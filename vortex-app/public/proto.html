@@ -329,7 +329,24 @@ if ('serviceWorker' in navigator) {
   // on Auth yet — it falls back to the anon key, so all existing flows keep working unchanged.
   window.__VX_AUTH = null;
   function _saveAuth(a){ window.__VX_AUTH = a; try{ if(a) localStorage.setItem('vx_auth', JSON.stringify(a)); else localStorage.removeItem('vx_auth'); }catch(e){} }
-  function _curTok(){ var a=window.__VX_AUTH; if(a && a.token && a.exp && Date.now() < (a.exp - 5000)) return a.token; return SB_ANON; }
+  // Which key actually goes out. A live session sends the coach's own token; anything else
+  // falls back to the anon key — and that fallback is the quietest failure in the app. The
+  // screen still says signed in, reads still work because most tables are readable, and every
+  // write is refused with "new row violates row-level security policy" because the policies are
+  // written `to authenticated` and an anonymous visitor is not that. It reads as the database
+  // having forgotten who you are, on every table at once.
+  //
+  // So the fallback now says so, and repairs itself: finding the token stale starts a refresh
+  // rather than shrugging and sending anon for ever. _doRefresh de-duplicates, and a session
+  // with no refresh token or a dead one does not get past its own first line.
+  function _curTok(){
+    var a=window.__VX_AUTH;
+    if(a && a.token && a.exp && Date.now() < (a.exp - 5000)){ window.__vxSendingAnon=false; return a.token; }
+    window.__vxSendingAnon = !!(a && a.token);     // signed in, but sending the anon key
+    if(a && a.refresh && !window.__vxAuthDead){ try{ _doRefresh(); }catch(e){} }
+    return SB_ANON;
+  }
+  window.__vxSendingAnon = false;
   function dyn(extra){ var h={ "apikey": SB_ANON, "Authorization": "Bearer " + _curTok(), "Content-Type": "application/json" }; return extra ? Object.assign(h, extra) : h; }
   var _refreshTimer=null;
   function _scheduleRefresh(){ if(_refreshTimer) clearTimeout(_refreshTimer); var a=window.__VX_AUTH; if(!a||!a.refresh) return; var due=a.exp - Date.now() - 60000; if(due<0) due=0; if(due>3000000) due=3000000; _refreshTimer=setTimeout(_doRefresh, due); }
@@ -6256,7 +6273,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-14g';
+const VX_BUILD='2026-08-14h';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -11457,6 +11474,12 @@ class Component extends DCLogic {
       value:(_a.exp ? new Date(_a.exp).toLocaleString() : 'unknown')
             + (_a.refresh ? ' · renews itself' : ' · NO refresh token — it cannot renew'),
       warn: !_a.refresh || !_signed });
+    // The question every other line here is a proxy for: which key is actually on the writes.
+    // "Signed in" and "writing as yourself" are not the same thing, and the gap between them is
+    // where a whole club's saves go.
+    rows.unshift({ label:'Writing to the database as',
+      value: _signed ? ('the signed-in coach ✓') : (_a ? 'ANONYMOUS — the sign-in has expired, so every staff-only write is refused' : 'ANONYMOUS — not signed in'),
+      warn: !_signed });
     rows.unshift({ label:'Secure cloud sign-in', value:_signed?('✓ '+(_a.email||'signed in')):'— not signed in', warn:!_signed });
     this._dataCheck = { rows, at:new Date().toISOString() };
     this.setState({dataCheckRunning:false, dataCheckMsg:'Checked '+new Date().toLocaleTimeString()});
