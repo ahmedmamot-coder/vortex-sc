@@ -1213,15 +1213,50 @@ describe("expired session", () => {
         eq(mount.includes(ev), true,
            "an installed app can come back without a " + ev + " neighbour firing");
     });
+    // It reaches a banner — the one that says the database is refusing the row itself. A
+    // security policy is not a bad connection: the account is signed in and the database has
+    // decided this row is not theirs to write, so counting it as "waiting to be saved" behind
+    // a Retry button is a promise the app cannot keep.
     itAsync("a refused blob write reaches the banner instead of a console nobody has open", async () => {
       const t = boot({ auth: LIVE, reply: (url) => (url.includes("/club_state") ? res(403, { message: "new row violates row-level security policy" }) : GOOD_TOKEN) });
       await t.win.__vxpush("vx_squads", JSON.stringify({ ovr: { junior: { accent: "#FF0000" } } }));
       await flush();
-      const held = t.win.__vxFailed();
-      eq(held.length, 1, "squads, brand, goals and the meets calendar all failed in silence");
-      eq(held[0].op, "push");
-      eq(/row-level security/.test(held[0].said || held[0].body || ""), true, "the reason has to travel with it");
+      const blocked = t.win.__vxBlocked();
+      eq(blocked.length, 1, "squads, brand, goals and the meets calendar all failed in silence");
+      eq(blocked[0].table, "vx_squads", "named by the key the coach changed, not the blob it lives in");
+      eq(/row-level security/.test(blocked[0].said || ""), true, "the reason has to travel with it");
+      eq(t.win.__vxFailedCount(), 0, "and it is not counted as work a retry could still save");
     });
+    // The club's own 401: signed in, but the database does not recognise the account as staff,
+    // so every family row it writes is refused by the policy. Retrying that forever put "8
+    // changes have not been saved" on a manager's phone with no way to clear it.
+    itAsync("a row the security policy refuses stops being counted as unsaved", async () => {
+      const rls = res(401, { message: 'new row violates row-level security policy for table "family_accounts"' });
+      const t = boot({ auth: LIVE, reply: (url) => (url.includes("/family_accounts") ? rls : GOOD_TOKEN) });
+      await t.win.__vxInsert("family_accounts", [{ id: "9f2a1c3e-5b7d-4e21-9a08-6c3f1b2d4e5a", name: "A", ts: 1 }]);
+      await flush();
+      eq(t.win.__vxFailedCount(), 0, "a Retry button that cannot work is worse than no button");
+      eq(t.win.__vxBlocked().length, 1, "but it still has to be said, and said accurately");
+    });
+    // And it must come back. A security policy is a setting on the club's database: run the
+    // right SQL and these rows become writable. Remembering them as refused for ever would
+    // skip them after the fix, and the fix would look like it had not worked.
+    itAsync("but it is not written off the way a broken login is", async () => {
+      const rls = res(401, { message: 'new row violates row-level security policy for table "family_accounts"' });
+      const t = boot({ auth: LIVE, reply: (url) => (url.includes("/family_accounts") ? rls : GOOD_TOKEN) });
+      await t.win.__vxInsert("family_accounts", [{ id: "9f2a1c3e-5b7d-4e21-9a08-6c3f1b2d4e5a", ts: 1 }]);
+      await flush();
+      eq("vx_fam_refused" in t.store, false, "that list is for ids whose login is genuinely gone");
+    });
+    itAsync("a foreign key, which really is gone, is still written off", async () => {
+      const fk = res(409, { message: 'insert or update on table "family_accounts" violates foreign key constraint' });
+      const t = boot({ auth: LIVE, reply: (url) => (url.includes("/family_accounts") ? fk : GOOD_TOKEN) });
+      await t.win.__vxInsert("family_accounts", [{ id: "9f2a1c3e-5b7d-4e21-9a08-6c3f1b2d4e5a", ts: 1 }]);
+      await flush();
+      eq(JSON.parse(t.store.vx_fam_refused || "[]").length, 1,
+         "its id has to be a real login and that login no longer exists");
+    });
+
     // A 403 is permanent and is deliberately not retried — pushKey queues that one for when a
     // token arrives. A server having a bad moment is the case the replay arm is for.
     itAsync("and a recoverable one is replayed, not just recorded", async () => {

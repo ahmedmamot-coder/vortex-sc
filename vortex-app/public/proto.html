@@ -142,7 +142,13 @@ if ('serviceWorker' in navigator) {
   function _blockLoad(){ try{ var v=JSON.parse(localStorage.getItem(BLOCKK)||"[]"); return Array.isArray(v)?v:[]; }catch(e){ return []; } }
   function _blockSave(a){ try{ localStorage.setItem(BLOCKK, JSON.stringify(a.slice(-50))); }catch(e){} }
   function _blocking(said, body){
-    return /foreign key/i.test(String(said||"")) || /foreign key/i.test(String(body||""));
+    var s=String(said||"")+" "+String(body||"");
+    // Two refusals that a retry can never turn into a save. A foreign key needs the row it
+    // points at to exist. A security policy needs the club's own database settings changed —
+    // "new row violates row-level security policy" means the account is signed in and the
+    // database has decided this row is not theirs to write, which is an answer, not a hiccup.
+    // Both were being counted as work waiting to be saved, behind a Retry button, for ever.
+    return /foreign key/i.test(s) || /row-level security/i.test(s);
   }
   // A duplicate primary key is not a change waiting to be saved. It is a change that IS saved:
   // the row is in the database, which is precisely what the database is complaining about. It
@@ -179,7 +185,12 @@ if ('serviceWorker' in navigator) {
       _blockSave(a);
       // The account row points at a login that is gone, so the app must stop offering it. This
       // is the same list _famRefusedIds reads.
-      if(table==="family_accounts"){
+      //
+      // Only for a broken foreign key. A security policy is the club's own setting: run the
+      // right SQL and these rows become writable again, so they have to be offered again. Put
+      // them on this list and they would be skipped for ever, and the fix would look like it
+      // had not worked.
+      if(table==="family_accounts" && /foreign key/i.test(String(said||""))){
         var r=[]; try{ var v=JSON.parse(localStorage.getItem("vx_fam_refused")||"[]"); if(Array.isArray(v)) r=v; }catch(e){}
         (Array.isArray(payload)?payload:[payload]).forEach(function(row){
           if(row && row.id && r.indexOf(row.id)<0) r.push(row.id);
@@ -6245,7 +6256,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-14e';
+const VX_BUILD='2026-08-14f';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -15739,9 +15750,19 @@ class Component extends DCLogic {
       blockedTitle: ((S.saveBlocked||[]).length===1 ? '1 record cannot go into the database' : (S.saveBlocked||[]).length+' records cannot go into the database'),
       blockedDetail: (()=>{
         const b=(S.saveBlocked||[]);
+        const said=(b[0]&&b[0].said)||'';
+        // A security policy is not a broken row. The account is signed in and the database has
+        // decided this row is not theirs to write — which is a setting on the database, not
+        // anything wrong with the app or the data, and it is fixed in one place.
+        if(/row-level security/i.test(said)){
+          const t=(b[0]&&b[0].table)||'that table';
+          return 'You are signed in, but the database does not recognise this account as staff, so it will not accept writes to '+t+'. '
+            +'Nothing is lost — the changes are still here and will save once it does. Whoever looks after the database needs to add '
+            +(((window.__VX_AUTH&&window.__VX_AUTH.email)||'the email you sign in with'))+' to the staff list (vx_staff_emails) and re-run security_4_roles.sql.';
+        }
         const fam=b.filter(x=>x&&x.table==='family_accounts').length;
         if(fam===b.length && fam>0) return 'They are family accounts that point at logins which no longer exist — the restore changed which logins there are. Nothing is lost: they are still listed in the app, and they will save themselves the next time those people sign in.';
-        return 'The database is refusing the rows themselves, so retrying cannot help. Show this to whoever looks after the database: '+((b[0]&&b[0].said)||'');
+        return 'The database is refusing the rows themselves, so retrying cannot help. Show this to whoever looks after the database: '+said;
       })(),
       onBlockedDismiss: ()=>{ try{ if(window.__vxClearBlocked) window.__vxClearBlocked(); }catch(e){} this.setState({saveBlocked:[], saveBlockedHidden:true}); },
       saveFailShow: (S.saveFailCount>0 || S.authDead) && !S.saveFailHidden,
