@@ -4800,15 +4800,20 @@ describe("InBody sheet", () => {
         eq(/localStorage/.test(sourceBetween(m, "\n  }")), false,
            "a bad afternoon is not a fact about the club");
     });
-    // The seed runs from _squadsFetch, which runs wherever the squad list can change.
-    it("the squad seed asks before re-sending, and learns when refused", () => {
-      const seed = sourceBetween("async _squadsSeed(){", "\n  }");
-      eq(/if\(this\._policyHeld\('squads'\)\) return;/.test(seed), true, "asks first");
-      eq(/this\._policyRefused\(window\.__vxLastWriteErr\)\) this\._policyHold\('squads'\)/.test(seed), true,
-         "and learns, or every fetch seeds it again");
-      eq(/!this\._isFullAccess\(\)/.test(seed), true,
-         "a parent's device must not be the one that decides what the squads are");
-    });
+    // Every seed that runs off an empty read. _squadsFetch and _videosFetch both seed whenever
+    // their table comes back empty, and both are called from wherever their list can change, so
+    // a refused seed is re-sent on every fetch for as long as the app is open. It went squads,
+    // then videos, on the same evening.
+    for (const [what, method, key] of [["squads", "_squadsSeed", "squads"], ["video analyses", "_videosSeed", "videos"]]) {
+      it("the " + what + " seed asks before re-sending, and learns when refused", () => {
+        const seed = sourceBetween("async " + method + "(){", "\n  }");
+        eq(new RegExp("if\\(this\\._policyHeld\\('" + key + "'\\)\\) return;").test(seed), true, "asks first");
+        eq(new RegExp("this\\._policyRefused\\(window\\.__vxLastWriteErr\\)\\) this\\._policyHold\\('" + key + "'\\)").test(seed), true,
+           "and learns, or every fetch seeds it again");
+        eq(/!this\._isFullAccess\(\)/.test(seed), true,
+           "a parent's device must not be the one that decides what the club has");
+      });
+    }
     it("signing in makes the row worth offering again", () =>
       eq(/this\._famClearRefused\(rec\.id\)/.test(SOURCE), true,
          "signing in proves the login exists, which is the thing that was missing"));

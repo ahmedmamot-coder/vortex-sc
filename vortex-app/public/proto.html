@@ -6415,7 +6415,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-15o';
+const VX_BUILD='2026-08-15p';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -10980,6 +10980,11 @@ class Component extends DCLogic {
   // parent's device must not be the one that decides what the club's library is.
   async _videosSeed(){
     if(!window.__vxUpsert || !this._isFullAccess()) return;
+    // Same as the squad seed: _videosFetch seeds whenever the table reads back empty, so a seed
+    // the policy refuses is attempted again on every fetch, and the club's whole library lands on
+    // the banner as work it has lost. It has not lost any of it — every clip is on the device and
+    // in the old document, which is still what the app reads until this table has rows.
+    if(this._policyHeld('videos')) return;
     const seen={}, rows=[];
     (this.videoLib||[]).forEach(v=>{
       if(!v || !v.id || v._isBlob || seen[v.id]) return;    // never the same id twice in one batch
@@ -10993,6 +10998,7 @@ class Component extends DCLogic {
     // library in the database at all; without this it would sit here refused until somebody
     // happened to mark a new clip.
     if(this._videoColsRefused()) return this._videosSeed();
+    if(this._policyRefused(window.__vxLastWriteErr)) this._policyHold('videos');
   }
   // Did that write come back refused because the table has no column for what was in it? Said
   // once, and remembered — see _videoRow, which then writes the shape the older table can hold.
