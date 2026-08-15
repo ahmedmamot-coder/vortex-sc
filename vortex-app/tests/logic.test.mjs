@@ -4744,8 +4744,18 @@ describe("InBody sheet", () => {
       // Recoverable, so it must be forgettable — and in memory, never on disk.
       const hold = sourceBetween("_famHold(id){", "\n  }");
       eq(/localStorage/.test(hold), false, "a policy refusal must not outlive the session");
-      eq(/if\(fromTable\.length\) this\._famHeld=null;/.test(SOURCE), true,
-         "the read and the write are gated by the same rule, so rows coming back means try again");
+    });
+    // What lets a held row be offered again, and what must NOT. Staff can read the family list
+    // while six particular rows still will not go in, so "the read returned something" is no
+    // evidence at all that the write will now be taken — clearing on that put all six straight
+    // back on the queue, on every read, which is the loop this was supposed to end.
+    it("only a new token lets a held row be tried again", () => {
+      const held = sourceBetween("_famIsHeld(id){", "\n  }");
+      eq(/__VX_AUTH && window\.__VX_AUTH\.token/.test(held), true, "a fresh token is the signal");
+      eq(/tok!==this\._famHeldTok/.test(held), true, "and only when it has actually changed");
+      eq(/fromTable/.test(held), false, "a read that works is not a write that works");
+      eq(/if\(fromTable\.length\) this\._famHeld=null;/.test(SOURCE), false,
+         "the old rule cleared the hold on every successful read");
     });
     it("signing in makes the row worth offering again", () =>
       eq(/this\._famClearRefused\(rec\.id\)/.test(SOURCE), true,

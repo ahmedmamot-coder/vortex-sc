@@ -325,7 +325,14 @@ if ('serviceWorker' in navigator) {
     // the log retrying. __vxSetAuth clears this flag and replays the queue straight away.
     if(window.__vxAuthDead) return Promise.resolve({tried:0, fixed:0, signedOut:true});
     // Refresh an expired token first, otherwise every replay repeats the same 401.
-    return (window.__vxEnsureAuth ? window.__vxEnsureAuth() : Promise.resolve(true)).then(function(){
+    return (window.__vxEnsureAuth ? window.__vxEnsureAuth() : Promise.resolve(true)).then(function(live){
+    // And if there is no session to refresh, do not send them anyway. A write with no token is
+    // an anonymous visitor: the database refuses it, _blocking() correctly declines to call that
+    // a settled answer because there was nobody to answer about, so it goes straight back on the
+    // queue and the count never moves. Every 45 seconds, for as long as the app is open. That is
+    // not a retry, it is the same refusal on a loop, and it is what a banner nothing can clear
+    // is made of.
+    if(live===false) return {tried:0, fixed:0, signedOut:true};
     var all=_failLoad(); if(!all.length) return {tried:0, fixed:0};
     var a=all.filter(function(x){ return !x.refused; });
     _failSave(all.filter(function(x){ return x.refused; }));   // keep the refusals, retry the rest
@@ -6408,7 +6415,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-15m';
+const VX_BUILD='2026-08-15n';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -7104,8 +7111,23 @@ class Component extends DCLogic {
   // moment the database lets this account see the family list again, because reading and writing
   // family_accounts are gated by the very same rule: if the read returns rows, the write is
   // worth trying again.
-  _famHold(id){ (this._famHeld = this._famHeld || new Set()).add(id); }
-  _famIsHeld(id){ return !!(this._famHeld && this._famHeld.has(id)); }
+  _famHold(id){
+    this._famHeldTok = (window.__VX_AUTH && window.__VX_AUTH.token) || '';
+    (this._famHeld = this._famHeld || new Set()).add(id);
+  }
+  // A fresh token is a fresh answer to the question the policy asked, so a held row is worth one
+  // more attempt — on a sign-in, or on the hourly refresh, and not before.
+  //
+  // It used to clear whenever the read returned any rows at all, and that was wrong in exactly
+  // the case this exists for: staff CAN read the family list while six particular rows still
+  // will not go in, so every read cleared the hold, re-offered all six, and put them back. The
+  // read working is not evidence that the write will.
+  _famIsHeld(id){
+    if(!this._famHeld || !this._famHeld.has(id)) return false;
+    const tok=(window.__VX_AUTH && window.__VX_AUTH.token) || '';
+    if(tok && tok!==this._famHeldTok){ this._famHeld=null; return false; }
+    return true;
+  }
   _saveFamily(list){ this.family=list; try{ this._saveLocalOnly('vx_family', list); }catch(e){} this.setState({family:list}); }
   async _familyFetch(){ if(!window.__vxSelect) return; const rows=await window.__vxSelect('family_accounts', 'select=*&limit=2000');
     // Remember whether the read actually worked, so the admin screen can tell "nobody has
@@ -7113,9 +7135,6 @@ class Component extends DCLogic {
     this._famFetchOk = (rows!=null);
     if(rows==null) return;
     const fromTable=rows.map(r=>({ id:r.id, name:r.name||'', email:r.email||'', phone:r.phone||'', pass:r.pass||'', role:r.role||'parent', swimmerIds:r.swimmer_ids||[] }));
-    // The policies let this account see families again, so whatever was refused on those grounds
-    // can be offered again.
-    if(fromTable.length) this._famHeld=null;
     const have=new Set(fromTable.map(f=>(f.email||'').trim().toLowerCase()));
     // Self-heal: any account registered on this device that never made it into the table
     // (a failed insert / offline moment / RLS refusal) is KEPT and re-uploaded, so it can
