@@ -1305,6 +1305,38 @@ describe("expired session", () => {
       eq(/row-level security/.test(blocked[0].said || ""), true, "the reason has to travel with it");
       eq(t.win.__vxFailedCount(), 0, "and it is not counted as work a retry could still save");
     });
+    // Set-aside rows were cleared only by somebody pressing the button on the banner, so after
+    // the cause was fixed the app went on reporting a fault that no longer existed — and the
+    // only way to tell a stale banner from a live one was to fix the same thing twice.
+    itAsync("the banner clears itself once the table takes a write again", async () => {
+      let refuse = true;
+      const t = boot({ auth: LIVE,
+        reply: (url) => (url.includes("/family_accounts")
+          ? (refuse ? res(401, { message: 'new row violates row-level security policy' }) : res(200, []))
+          : GOOD_TOKEN) });
+      await t.win.__vxInsert("family_accounts", [{ id: "9f2a1c3e-5b7d-4e21-9a08-6c3f1b2d4e5a" }]);
+      await flush();
+      eq(t.win.__vxBlocked().length, 1, "refused while the policy refused it");
+      refuse = false;                                    // the club runs the SQL
+      await t.win.__vxInsert("family_accounts", [{ id: "9f2a1c3e-5b7d-4e21-9a08-6c3f1b2d4e5a" }]);
+      await flush();
+      eq(t.win.__vxBlocked().length, 0, "and gone the moment the same table accepts one");
+    });
+    itAsync("a key clears when the document it lives in takes a write", async () => {
+      let refuse = true;
+      const t = boot({ auth: LIVE,
+        reply: (url) => (url.includes("/club_state")
+          ? (refuse ? res(403, { message: "new row violates row-level security policy" }) : res(200, []))
+          : GOOD_TOKEN) });
+      await t.win.__vxpush("vx_squads", JSON.stringify({ a: 1 }));
+      await flush();
+      eq(t.win.__vxBlocked().length, 1);
+      refuse = false;
+      await t.win.__vxpush("vx_billing", JSON.stringify({ b: 2 }));
+      await flush();
+      eq(t.win.__vxBlocked().length, 0, "one document, so one answer clears the lot");
+    });
+
     // The club's own 401: signed in, but the database does not recognise the account as staff,
     // so every family row it writes is refused by the policy. Retrying that forever put "8
     // changes have not been saved" on a manager's phone with no way to clear it.

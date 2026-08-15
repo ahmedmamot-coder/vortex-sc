@@ -289,6 +289,19 @@ if ('serviceWorker' in navigator) {
   // What the database is refusing outright, for the screen that says so. Never retried.
   window.__vxBlocked = function(){ return _blockLoad(); };
   window.__vxClearBlocked = function(){ _blockSave([]); try{ window.dispatchEvent(new CustomEvent("vx-write-failed")); }catch(e){} };
+  // A write to this table just succeeded, so whatever the database was refusing about it is
+  // over. Set-aside rows were only ever cleared by somebody pressing the button on the banner,
+  // which meant that after the cause was fixed the app went on reporting a fault that no longer
+  // existed — and the one way to tell a stale banner from a live one was to fix it twice.
+  // Matched on the table, so "club_state (vx_fee_plans)" clears when club_state takes a write.
+  function _blockClearTable(table){
+    try{
+      var a=_blockLoad(); if(!a.length) return;
+      var base=String(table||"").split(" (")[0];
+      var keep=a.filter(function(x){ return !x || String(x.table||"").split(" (")[0] !== base; });
+      if(keep.length!==a.length){ _blockSave(keep); try{ window.dispatchEvent(new CustomEvent("vx-write-failed")); }catch(e){} }
+    }catch(e){}
+  }
   // Replay everything still pending. Anything that succeeds is dropped from the log.
   window.__vxRetryFailed = function(){
     if(!_failLoad().length) return Promise.resolve({tried:0, fixed:0});
@@ -442,7 +455,7 @@ if ('serviceWorker' in navigator) {
     try {
       p = fetch(REST, { method:"POST", headers: dyn({"Prefer":"resolution=merge-duplicates,return=minimal"}),
         body: JSON.stringify([{ key:k, value:val, updated_at:new Date().toISOString() }]) })
-      .then(function(r){ window.__vxSyncOk = r.ok;
+      .then(function(r){ window.__vxSyncOk = r.ok; if(r.ok) _blockClearTable("club_state");
         if(r.ok) return {ok:true};
         if(r.status===401||r.status===403){ _vxQueue(function(){ pushKey(k, v); }); }
         return r.text().then(function(t){ try{ console.warn("vx sync HTTP "+r.status+" on "+k+": "+t); }catch(e){}
@@ -471,7 +484,7 @@ if ('serviceWorker' in navigator) {
   window.__VX_SB = { url: SB_URL, anon: SB_ANON, head: HEAD };
   // Generic table helpers — used by the Lounge chat, where each message is its own row
   // (append-only INSERT), so posts can never overwrite each other.
-  window.__vxInsert = function(table, rows){ return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":"return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(!r.ok){ if(r.status===401||r.status===403){ _vxQueue(function(){ window.__vxInsert(table, rows); }); } r.text().then(function(t){ try{console.warn("vx insert "+table+" HTTP "+r.status+": "+t);}catch(e){} _failAdd("insert", table, rows, r.status, t); }); } return r.ok; }).catch(function(e){ _failAdd("insert", table, rows, 0, "network: "+(e&&e.message)); return false; }); };
+  window.__vxInsert = function(table, rows){ return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":"return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(r.ok) _blockClearTable(table); if(!r.ok){ if(r.status===401||r.status===403){ _vxQueue(function(){ window.__vxInsert(table, rows); }); } r.text().then(function(t){ try{console.warn("vx insert "+table+" HTTP "+r.status+": "+t);}catch(e){} _failAdd("insert", table, rows, r.status, t); }); } return r.ok; }).catch(function(e){ _failAdd("insert", table, rows, 0, "network: "+(e&&e.message)); return false; }); };
   // A read rejected with 401 means the token expired, not that the table is empty. Returning
   // null there is why the roster and attendance came back blank after the app had been sitting
   // in the background: nothing retried, nothing was reported. Refresh once, then ask again.
@@ -519,7 +532,7 @@ if ('serviceWorker' in navigator) {
   // allowed" send a person to completely different places, and that was being written to a
   // console nobody has open on a phone at the poolside.
   window.__vxLastWriteErr = null;
-  window.__vxUpsert = function(table, rows){ return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":"resolution=merge-duplicates,return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(r.ok){ window.__vxLastWriteErr=null; return true; } if(r.status===401||r.status===403){ _vxQueue(function(){ window.__vxUpsert(table, rows); }); } return r.text().then(function(t){ try{console.warn("vx upsert "+table+" HTTP "+r.status+": "+t);}catch(e){} _failAdd("upsert", table, rows, r.status, t); var said=""; try{ said=(JSON.parse(t)||{}).message||""; }catch(e){} window.__vxLastWriteErr={table:table, status:r.status, said:said||String(t||"").slice(0,200)}; return false; }); }).catch(function(e){ _failAdd("upsert", table, rows, 0, "network: "+(e&&e.message)); window.__vxLastWriteErr={table:table, status:0, said:"it could not be sent from this device"+((e&&e.message)?(" ("+e.message+")"):"")}; return false; }); };
+  window.__vxUpsert = function(table, rows){ return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":"resolution=merge-duplicates,return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(r.ok){ window.__vxLastWriteErr=null; _blockClearTable(table); return true; } if(r.status===401||r.status===403){ _vxQueue(function(){ window.__vxUpsert(table, rows); }); } return r.text().then(function(t){ try{console.warn("vx upsert "+table+" HTTP "+r.status+": "+t);}catch(e){} _failAdd("upsert", table, rows, r.status, t); var said=""; try{ said=(JSON.parse(t)||{}).message||""; }catch(e){} window.__vxLastWriteErr={table:table, status:r.status, said:said||String(t||"").slice(0,200)}; return false; }); }).catch(function(e){ _failAdd("upsert", table, rows, 0, "network: "+(e&&e.message)); window.__vxLastWriteErr={table:table, status:0, said:"it could not be sent from this device"+((e&&e.message)?(" ("+e.message+")"):"")}; return false; }); };
   // Supabase Realtime (websocket) — best-effort live updates. On any change to `table`, calls
   // onChange(). Auto-reconnects, heartbeats, and re-auths on token refresh. If realtime isn't
   // enabled/available it simply never fires and the app's polling fallback keeps things in sync.
@@ -6295,7 +6308,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-15b';
+const VX_BUILD='2026-08-15c';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
