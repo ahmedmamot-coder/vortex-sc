@@ -4738,24 +4738,76 @@ describe("InBody sheet", () => {
     // club sat behind "30 changes have not been saved · retrying automatically" that Discard
     // could not clear, because the next _familyFetch queued all thirty again.
     it("a policy refusal is held back rather than re-queued every read", () => {
-      eq(/this\._famIsHeld\(f\.id\)/.test(fn), true, "held rows are not offered again this session");
-      eq(/_famHold\(f\.id\)/.test(fn), true, "and a policy refusal is what puts them there");
-      eq(/row-level security|403/.test(fn), true, "recognised from what the database actually said");
-      // Recoverable, so it must be forgettable — and in memory, never on disk.
-      const hold = sourceBetween("_famHold(id){", "\n  }");
-      eq(/localStorage/.test(hold), false, "a policy refusal must not outlive the session");
+      eq(/this\._policyHeld\('family:'\+f\.id\)/.test(fn), true, "held rows are not offered again");
+      eq(/this\._policyRefused\(e\)\) this\._policyHold\('family:'\+f\.id\)/.test(fn), true,
+         "and a policy refusal is what puts them there");
     });
-    // What lets a held row be offered again, and what must NOT. Staff can read the family list
-    // while six particular rows still will not go in, so "the read returned something" is no
-    // evidence at all that the write will now be taken — clearing on that put all six straight
-    // back on the queue, on every read, which is the loop this was supposed to end.
-    it("only a new token lets a held row be tried again", () => {
-      const held = sourceBetween("_famIsHeld(id){", "\n  }");
-      eq(/__VX_AUTH && window\.__VX_AUTH\.token/.test(held), true, "a fresh token is the signal");
-      eq(/tok!==this\._famHeldTok/.test(held), true, "and only when it has actually changed");
-      eq(/fromTable/.test(held), false, "a read that works is not a write that works");
-      eq(/if\(fromTable\.length\) this\._famHeld=null;/.test(SOURCE), false,
-         "the old rule cleared the hold on every successful read");
+  });
+
+  // The same fault, twice in one evening: family_accounts, then vx_squads_t. Both re-send on a
+  // schedule of their own — the family backfill on every read of the family list, the squad seed
+  // on every read of an empty squad table — so a refusal by the club's own policies becomes a red
+  // banner that nothing the club does can clear. Written once, so a third table cannot do it.
+  describe("a write the club's own policies refuse", () => {
+    const ctx = () => {
+      const c = { _polHeld: null };
+      c._policyHold = bind("_policyHold", c);
+      c._policyHeld = bind("_policyHeld", c);
+      c._policyRefused = bind("_policyRefused", c);
+      return c;
+    };
+    const tok = (t) => { globalThis.window = { __VX_AUTH: t ? { token: t } : null }; };
+
+    it("is held once the policy has refused it", () => {
+      tok("aaa"); const c = ctx();
+      eq(c._policyHeld("squads"), false, "nothing is held before anything is refused");
+      c._policyHold("squads");
+      eq(c._policyHeld("squads"), true);
+      eq(c._policyHeld("family:1"), false, "and only the thing that was refused");
+    });
+    // A sign-in or the hourly refresh is a new answer to the question the policy asked.
+    it("a new token lets it be tried once more", () => {
+      tok("aaa"); const c = ctx();
+      c._policyHold("squads");
+      tok("bbb");
+      eq(c._policyHeld("squads"), false, "the sign-in is the whole point of holding rather than refusing");
+      tok("bbb");
+      c._policyHold("squads");
+      eq(c._policyHeld("squads"), true, "and it holds again on the new token");
+    });
+    it("nothing else releases it", () => {
+      tok("aaa"); const c = ctx();
+      c._policyHold("squads");
+      tok("aaa");
+      eq(c._policyHeld("squads"), true, "the same token is the same answer");
+      globalThis.window = { __VX_AUTH: null };
+      eq(c._policyHeld("squads"), true, "and losing the session certainly is not a fresh chance");
+    });
+    it("both refusals the database can give are recognised", () => {
+      const c = ctx();
+      // PostgREST answers 401 when the request carried no identity at all, 403 when it carried
+      // one the policy refused. Re-sending it unchanged gets the same answer either way.
+      eq(c._policyRefused({ status: 401 }), true);
+      eq(c._policyRefused({ status: 403 }), true);
+      eq(c._policyRefused({ status: 0, said: 'new row violates row-level security policy for table "vx_squads_t"' }), true);
+      eq(c._policyRefused({ status: 500 }), false, "a bad minute at the database must still be retried");
+      eq(c._policyRefused({ status: 409, said: "violates foreign key constraint" }), false,
+         "that one is written off elsewhere, permanently, and for a different reason");
+      eq(c._policyRefused(null), false);
+    });
+    it("it is never written to disk", () => {
+      for (const m of ["_policyHold(key){", "_policyHeld(key){"])
+        eq(/localStorage/.test(sourceBetween(m, "\n  }")), false,
+           "a bad afternoon is not a fact about the club");
+    });
+    // The seed runs from _squadsFetch, which runs wherever the squad list can change.
+    it("the squad seed asks before re-sending, and learns when refused", () => {
+      const seed = sourceBetween("async _squadsSeed(){", "\n  }");
+      eq(/if\(this\._policyHeld\('squads'\)\) return;/.test(seed), true, "asks first");
+      eq(/this\._policyRefused\(window\.__vxLastWriteErr\)\) this\._policyHold\('squads'\)/.test(seed), true,
+         "and learns, or every fetch seeds it again");
+      eq(/!this\._isFullAccess\(\)/.test(seed), true,
+         "a parent's device must not be the one that decides what the squads are");
     });
     it("signing in makes the row worth offering again", () =>
       eq(/this\._famClearRefused\(rec\.id\)/.test(SOURCE), true,

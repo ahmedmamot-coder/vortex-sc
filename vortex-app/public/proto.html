@@ -6415,7 +6415,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-15n';
+const VX_BUILD='2026-08-15o';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -7111,22 +7111,41 @@ class Component extends DCLogic {
   // moment the database lets this account see the family list again, because reading and writing
   // family_accounts are gated by the very same rule: if the read returns rows, the write is
   // worth trying again.
-  _famHold(id){
-    this._famHeldTok = (window.__VX_AUTH && window.__VX_AUTH.token) || '';
-    (this._famHeld = this._famHeld || new Set()).add(id);
-  }
-  // A fresh token is a fresh answer to the question the policy asked, so a held row is worth one
-  // more attempt — on a sign-in, or on the hourly refresh, and not before.
+  // ---- Writes the club's own security policies refused -----------------------------------------
   //
-  // It used to clear whenever the read returned any rows at all, and that was wrong in exactly
-  // the case this exists for: staff CAN read the family list while six particular rows still
-  // will not go in, so every read cleared the hold, re-offered all six, and put them back. The
-  // read working is not evidence that the write will.
-  _famIsHeld(id){
-    if(!this._famHeld || !this._famHeld.has(id)) return false;
+  // Two places in this app re-send on a schedule of their own: the family backfill, on every read
+  // of the family list, and the squad seed, on every read of an empty squad table. Both are right
+  // to exist — they are what heals a device whose write was lost — and both, when the policy says
+  // no, turn into a red banner that nothing the club can do will clear, because the next read
+  // queues the very same write again. It happened on family_accounts and then, the same evening,
+  // on vx_squads_t. A third table would have done it again, so this is written once.
+  //
+  // A refusal is held against the token that got it. A new token — a sign-in, or the hourly
+  // refresh — is a new answer to the question the policy asked, so the write is offered once
+  // more. Nothing is written off, and nothing is kept on disk: this is a bad afternoon, not a
+  // fact about the club.
+  //
+  // What must NOT release a hold is the matching read succeeding. Staff can read the whole family
+  // list while six particular rows still will not go in; reading and writing ask the same question
+  // of the policy but not of the row, and clearing on a good read put all six straight back.
+  _policyHold(key){
+    this._polHeld = this._polHeld || {};
+    this._polHeld[key] = (window.__VX_AUTH && window.__VX_AUTH.token) || '';
+  }
+  _policyHeld(key){
+    const held=this._polHeld;
+    if(!held || !(key in held)) return false;
     const tok=(window.__VX_AUTH && window.__VX_AUTH.token) || '';
-    if(tok && tok!==this._famHeldTok){ this._famHeld=null; return false; }
+    if(tok && tok!==held[key]){ delete held[key]; return false; }
     return true;
+  }
+  // 401 and 403 both arrive here: PostgREST answers 401 when the request carried no identity at
+  // all and 403 when it carried one the policy refused, and either way re-sending it unchanged
+  // gets the same answer.
+  _policyRefused(err){
+    const e=err||{};
+    return e.status===401 || e.status===403
+        || /row-level security|violates .* policy|permission denied/i.test(e.said||'');
   }
   _saveFamily(list){ this.family=list; try{ this._saveLocalOnly('vx_family', list); }catch(e){} this.setState({family:list}); }
   async _familyFetch(){ if(!window.__vxSelect) return; const rows=await window.__vxSelect('family_accounts', 'select=*&limit=2000');
@@ -7158,21 +7177,15 @@ class Component extends DCLogic {
     // A row the database has refused for that reason is remembered and not offered again.
     const _refused=this._famRefusedIds();
     localOnly.forEach(f=>{
-      if(!window.__vxUpsert || !this._isUuid(f.id) || _refused.indexOf(f.id)>=0 || this._famIsHeld(f.id)) return;
+      if(!window.__vxUpsert || !this._isUuid(f.id) || _refused.indexOf(f.id)>=0 || this._policyHeld('family:'+f.id)) return;
       try{
         const p=window.__vxUpsert('family_accounts', [{id:f.id, name:f.name, email:f.email, phone:f.phone, pass:f.pass, role:f.role, swimmer_ids:f.swimmerIds||[], ts:Date.now()}]);
-        if(p&&p.then) p.then(ok=>{ if(ok){ this._famHeld=null; return; }
+        if(p&&p.then) p.then(ok=>{ if(ok) return;
           const e=window.__vxLastWriteErr||{};
           // Only a foreign-key refusal: that one means the login is gone and cannot come back
           // by retrying.
           if(/foreign key/i.test(e.said||'')) return this._famMarkRefused(f.id);
-          // A refusal by the club's security policies is not permanent — but re-offering the
-          // same row on the very next fetch is how a red banner becomes impossible to clear.
-          // Every read of this table re-queued all thirty of these, so Discard emptied the
-          // queue and the next fetch filled it straight back up: "30 changes have not been
-          // saved" that nothing the club could do would shift. Hold them until the database
-          // shows it will take them.
-          if(e.status===401 || e.status===403 || /row-level security|violates .* policy|permission denied/i.test(e.said||'')) this._famHold(f.id);
+          if(this._policyRefused(e)) this._policyHold('family:'+f.id);
         }).catch(()=>{});
       }catch(e){}
     });
@@ -7404,10 +7417,17 @@ class Component extends DCLogic {
   // must not be the one that decides what the squads are.
   async _squadsSeed(){
     if(!window.__vxUpsert || !this._isFullAccess()) return;
+    // _squadsFetch seeds whenever the table reads back empty, and it is called from everywhere
+    // the squad list can change. So a seed the policy refuses is not attempted once — it is
+    // attempted on every fetch, for as long as the app is open, and each one lands on the banner
+    // as work the club has lost. It has not lost anything: the squads are on the device and in
+    // the old document, and the table is simply not accepting them yet.
+    if(this._policyHeld('squads')) return;
     const rows=(this.squads||[]).map((sq,i)=>this._squadRow(sq, i));
     if(!rows.length) return;
     const ok=await window.__vxUpsert('vx_squads_t', rows);
-    if(ok) this._squadsFetch();
+    if(ok) return this._squadsFetch();
+    if(this._policyRefused(window.__vxLastWriteErr)) this._policyHold('squads');
   }
   _squadRow(sq, sort){
     return { id:sq.id, name:sq.name||'', ages:sq.ages||'', accent:sq.accent||'#2733D6',
