@@ -450,13 +450,13 @@ if ('serviceWorker' in navigator) {
           // surfaces a refusal in the red banner; the shared blob — squads, brand, goals, the
           // meets calendar, notifications — failed in complete silence, so a change made
           // yesterday was simply gone today with nothing said at any point.
-          _failAdd("push", k, {key:k, value:v}, r.status, t);
+          _failAdd("push", "club_state ("+k+")", {key:k, value:v}, r.status, t);
           return {ok:false, status:r.status, why:(r.status===401||r.status===403)
             ? "the database refused it — this account may not be allowed to make that change"
             : ("the database answered HTTP "+r.status)}; });
       })
       .catch(function(e){ window.__vxSyncOk=false; try{ console.warn("vx sync network error on "+k, e); }catch(x){}
-        _failAdd("push", k, {key:k, value:v}, 0, "network: "+((e&&e.message)||""));
+        _failAdd("push", "club_state ("+k+")", {key:k, value:v}, 0, "network: "+((e&&e.message)||""));
         return {ok:false, why:"it could not be sent from this device"+((e&&e.message)?(" ("+e.message+")"):"")}; });
     } catch(e){ p = Promise.resolve({ok:false, why:"it could not be sent from this device"}); }
     window.__vxLastPush[k] = p;
@@ -6295,7 +6295,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-15a';
+const VX_BUILD='2026-08-15b';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.

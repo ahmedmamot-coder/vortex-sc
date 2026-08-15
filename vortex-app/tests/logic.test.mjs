@@ -1299,7 +1299,9 @@ describe("expired session", () => {
       await flush();
       const blocked = t.win.__vxBlocked();
       eq(blocked.length, 1, "squads, brand, goals and the meets calendar all failed in silence");
-      eq(blocked[0].table, "vx_squads", "named by the key the coach changed, not the blob it lives in");
+      // Both halves: the key the coach changed AND the table it actually lives in. Naming only
+      // the key sent two people hunting for policies on a table that has never existed.
+      eq(blocked[0].table, "club_state (vx_squads)");
       eq(/row-level security/.test(blocked[0].said || ""), true, "the reason has to travel with it");
       eq(t.win.__vxFailedCount(), 0, "and it is not counted as work a retry could still save");
     });
