@@ -1368,6 +1368,41 @@ describe("expired session", () => {
     });
   });
 
+  // "could not read the bundled roster", from two endpoints, for their whole existence — one of
+  // them written specifically to settle an argument about a club's missing dates of birth. The
+  // asset is not one assignment: it is window.VX_ROSTER={…};window.VX_MEETS=[…];, and reading it
+  // as "everything after the first =" swallowed the meets too, so the parse threw on the first
+  // character of the second statement. On a server and on a laptop alike.
+  describe("reading the club's own roster out of the asset", () => {
+    const lib = readFileSync(new URL("../src/lib/backupStore.ts", import.meta.url), "utf8");
+    const asset = readFileSync(new URL("../public/assets/roster.js", import.meta.url), "utf8");
+    // The real file, not a fixture: a fixture with one assignment in it would have passed all day.
+    const run = (src) => {
+      const body = lib.slice(lib.indexOf("export function rosterFromAsset"));
+      const fn = new Function("src", body.slice(body.indexOf("{") + 1, body.indexOf("\n}")) .replace(/ as [^;)]+/g, ""));
+      return fn(src);
+    };
+
+    it("the asset really does hold more than one thing, which is the whole bug", () => {
+      const names = [...asset.matchAll(/window\.[A-Z_]+\s*=/g)].map((m) => m[0]);
+      eq(names.length > 1, true, "if this is ever one again, the old code would have worked and this test is why");
+      eq(names[0], "window.VX_ROSTER=");
+    });
+    it("reads the roster and stops where it ends", () => {
+      const got = run(asset);
+      eq(!!got, true, "this returned null in production every single time it was called");
+      eq(Object.keys(got).length > 1, true, "several squads");
+      const n = Object.values(got).reduce((a, b) => a + b.length, 0);
+      eq(n > 250, true, "and the club's swimmers, not a fragment");
+    });
+    it("is not fooled by a brace inside a name", () =>
+      eq(run('window.VX_ROSTER={"a":[{"id":"r1","name":"O}Brien {x"}]};window.VX_MEETS=[];').a[0].id, "r1"));
+    it("says nothing rather than guessing when the roster is not there", () => {
+      eq(run("window.VX_MEETS=[];"), null);
+      eq(run(""), null);
+    });
+  });
+
   // The count itself was what went wrong — 317 swimmers where the night before had 304 — and
   // every other repair here refuses to touch the count on purpose. Refusing left nowhere to go.
   describe("putting the whole roster back to a night", () => {

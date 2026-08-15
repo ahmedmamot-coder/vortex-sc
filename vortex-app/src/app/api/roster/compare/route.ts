@@ -13,21 +13,11 @@
 
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { guard, svc, type RosterEdits } from "@/lib/backupStore";
+import { guard, svc, rosterFromAsset, type RosterEdits } from "@/lib/backupStore";
 
 const SB_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://qhrpwiakobgcxfmcoyfg.supabase.co";
 
 type Swimmer = { id?: string; name?: string; dob?: string; age?: number };
-
-function parseRoster(src: string): Record<string, Swimmer[]> | null {
-  const at = src.indexOf("=");
-  if (at < 0) return null;
-  try {
-    return JSON.parse(src.slice(at + 1).replace(/;\s*$/, "")) as Record<string, Swimmer[]>;
-  } catch {
-    return null;
-  }
-}
 
 /**
  * The club's own roster, as shipped in the app bundle. It has ages and no dates at all.
@@ -42,14 +32,14 @@ async function baseRoster(origin: string): Promise<Record<string, Swimmer[]> | n
   try {
     const r = await fetch(origin + "/assets/roster.js", { cache: "no-store" });
     if (r.ok) {
-      const got = parseRoster(await r.text());
+      const got = rosterFromAsset(await r.text());
       if (got) return got;
     }
   } catch {
     /* fall through to the disk, which is where it lives when this runs on a laptop */
   }
   try {
-    return parseRoster(await readFile(join(process.cwd(), "public", "assets", "roster.js"), "utf8"));
+    return rosterFromAsset(await readFile(join(process.cwd(), "public", "assets", "roster.js"), "utf8"));
   } catch {
     return null;
   }

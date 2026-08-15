@@ -151,6 +151,49 @@ export async function dobsFromRosterTable(): Promise<Record<string, string> | nu
   return out;
 }
 
+export type BaseSwimmer = { id?: string; name?: string; dob?: string; age?: number };
+
+/**
+ * The club's own roster, out of the asset the app loads.
+ *
+ * assets/roster.js is not one assignment. It is `window.VX_ROSTER={…};window.VX_MEETS=[…];`, and
+ * reading it as "everything after the first =" swallows the meets as well, so JSON.parse threw on
+ * the first character of the second statement — every time, on a server and on a laptop alike.
+ * Two endpoints reported "could not read the bundled roster" for their whole existence because
+ * of it, including the one written to settle an argument about a club's missing dates of birth.
+ *
+ * So the value is taken by matching braces from the first one after the name, which is the only
+ * way to end at the right place when more than one thing lives in the file.
+ */
+export function rosterFromAsset(src: string): Record<string, BaseSwimmer[]> | null {
+  const at = src.search(/window\.VX_ROSTER\s*=\s*/);
+  if (at < 0) return null;
+  const open = src.indexOf("{", at);
+  if (open < 0) return null;
+  let depth = 0,
+    inStr = false,
+    esc = false;
+  for (let i = open; i < src.length; i++) {
+    const c = src[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === "\\") esc = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') inStr = true;
+    else if (c === "{") depth++;
+    else if (c === "}" && --depth === 0) {
+      try {
+        return JSON.parse(src.slice(open, i + 1)) as Record<string, BaseSwimmer[]>;
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
+}
+
 /** How many swimmers an overlay describes, per half — for reporting, never for deciding. */
 export function shapeOf(edits: RosterEdits | null) {
   let edited = 0,

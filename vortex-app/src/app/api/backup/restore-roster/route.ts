@@ -19,21 +19,11 @@
 
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { guard, svc, BUCKET, readBackup, clubStateKey, dobsIn, shapeOf, type RosterEdits } from "@/lib/backupStore";
+import { guard, svc, BUCKET, readBackup, clubStateKey, dobsIn, shapeOf, rosterFromAsset, type RosterEdits } from "@/lib/backupStore";
 
 const SB_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://qhrpwiakobgcxfmcoyfg.supabase.co";
 
 type Swimmer = { id?: string; name?: string; dob?: string };
-
-function parseRoster(src: string): Record<string, Swimmer[]> | null {
-  const at = src.indexOf("=");
-  if (at < 0) return null;
-  try {
-    return JSON.parse(src.slice(at + 1).replace(/;\s*$/, "")) as Record<string, Swimmer[]>;
-  } catch {
-    return null;
-  }
-}
 
 // public/ is served by the CDN and is not in the serverless bundle, so this is fetched from the
 // deployment. The disk read is what works on a laptop.
@@ -41,14 +31,14 @@ async function baseRoster(origin: string): Promise<Record<string, Swimmer[]> | n
   try {
     const r = await fetch(origin + "/assets/roster.js", { cache: "no-store" });
     if (r.ok) {
-      const got = parseRoster(await r.text());
+      const got = rosterFromAsset(await r.text());
       if (got) return got;
     }
   } catch {
     /* fall through */
   }
   try {
-    return parseRoster(await readFile(join(process.cwd(), "public", "assets", "roster.js"), "utf8"));
+    return rosterFromAsset(await readFile(join(process.cwd(), "public", "assets", "roster.js"), "utf8"));
   } catch {
     return null;
   }
