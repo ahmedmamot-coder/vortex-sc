@@ -1048,6 +1048,23 @@ describe("expired session", () => {
     await flush();
     eq(t.win.__vxSendingAnon, true, "'signed in' and 'writing as yourself' are different questions");
   });
+  // Tolerating a bad minute is right; tolerating it for ever is not. While the token is
+  // expired every write leaves as an anonymous visitor and is refused, so a count that climbs
+  // with no action offered is worse than being told to sign in again.
+  itAsync("a refresh that never comes back ends up saying 'sign in again'", async () => {
+    const t = boot({ auth: EXPIRED, reply: () => res(503, {}) });
+    await flush();
+    eq(t.win.__vxAuthDead, false, "not on the first bad minute");
+    for (let i = 0; i < 4; i++) { await t.win.__vxInsert("attendance_marks", [{ id: "a" + i }]); await flush(); }
+    eq(t.win.__vxAuthDead, true, "the coach needs the one action that works");
+  });
+  itAsync("and a refresh that works clears the count rather than banking it", async () => {
+    let n = 0;
+    const t = boot({ auth: EXPIRED, reply: (url) => (url.includes("/auth/v1/token") ? (++n <= 2 ? res(503, {}) : GOOD_TOKEN) : res(200, [])) });
+    await flush();
+    for (let i = 0; i < 5; i++) { await t.win.__vxInsert("attendance_marks", [{ id: "b" + i }]); await flush(); }
+    eq(t.win.__vxAuthDead, false, "two bad minutes then a good one is not a dead session");
+  });
   itAsync("a live token is sent as itself, and says so", async () => {
     const t = boot({ auth: LIVE, reply: () => res(200, []) });
     await t.win.__vxInsert("vx_squads", [{ id: "s1" }]);

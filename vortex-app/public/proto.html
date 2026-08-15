@@ -351,6 +351,7 @@ if ('serviceWorker' in navigator) {
   var _refreshTimer=null;
   function _scheduleRefresh(){ if(_refreshTimer) clearTimeout(_refreshTimer); var a=window.__VX_AUTH; if(!a||!a.refresh) return; var due=a.exp - Date.now() - 60000; if(due<0) due=0; if(due>3000000) due=3000000; _refreshTimer=setTimeout(_doRefresh, due); }
   var _refreshing=null;
+  var _refreshFails=0;                       // consecutive refreshes that did not come back with a token
   function _doRefresh(){
     var a=window.__VX_AUTH; if(!a||!a.refresh) return Promise.resolve(false);
     if(_refreshing) return _refreshing;          // one refresh at a time, never a stampede
@@ -367,8 +368,19 @@ if ('serviceWorker' in navigator) {
         return (r.ok ? r.json() : Promise.resolve(null)).then(function(j){ return {j:j, dead:dead}; });
       })
       .then(function(out){
-        if(out.j && out.j.access_token){ window.__vxSetAuth(out.j); return true; }
-        if(!out.dead) return false;                 // transient — keep the session, try again later
+        if(out.j && out.j.access_token){ _refreshFails=0; window.__vxSetAuth(out.j); return true; }
+        if(!out.dead){
+          // Transient — keep the session and try again. But not for ever: while the token is
+          // expired every write goes out as an anonymous visitor and is refused, and a coach
+          // watching a count climb with no action offered is worse off than one told to sign
+          // in again. After a few failures in a row it is called what it is.
+          _refreshFails++;
+          if(_refreshFails>=3 && a.exp && Date.now() > a.exp){
+            window.__vxAuthDead = true;
+            try{ window.dispatchEvent(new CustomEvent("vx-write-failed")); }catch(e){}
+          }
+          return false;
+        }
         // The refresh token itself is dead — nothing here can recover it, only a fresh
         // sign-in can. Say so, instead of retrying forever against an empty session.
         _saveAuth(null); window.__vxAuthDead = true;
@@ -392,7 +404,7 @@ if ('serviceWorker' in navigator) {
     return _doRefresh();
   };
   window.__vxAuthDead = false;
-  window.__vxSetAuth = function(session){ if(!session || !session.access_token) return; window.__vxAuthDead=false; var exp=Date.now() + ((session.expires_in? session.expires_in*1000 : 3600000)); _saveAuth({ token:session.access_token, refresh:session.refresh_token||null, exp:exp, uid:(session.user&&session.user.id)||null, email:(session.user&&session.user.email)||null }); _scheduleRefresh(); try{ window.__vxFlushAuthQ(); }catch(e){} try{ if(window.__vxRT){ Object.keys(window.__vxRT).forEach(function(k){ try{ window.__vxRT[k].setToken(); }catch(e){} }); } }catch(e){}
+  window.__vxSetAuth = function(session){ if(!session || !session.access_token) return; window.__vxAuthDead=false; _refreshFails=0; var exp=Date.now() + ((session.expires_in? session.expires_in*1000 : 3600000)); _saveAuth({ token:session.access_token, refresh:session.refresh_token||null, exp:exp, uid:(session.user&&session.user.id)||null, email:(session.user&&session.user.email)||null }); _scheduleRefresh(); try{ window.__vxFlushAuthQ(); }catch(e){} try{ if(window.__vxRT){ Object.keys(window.__vxRT).forEach(function(k){ try{ window.__vxRT[k].setToken(); }catch(e){} }); } }catch(e){}
     // The banner tells the coach "sign in again and these will save automatically", so it
     // has to be immediate. Without this the queue sat there until the 45s sweep came round
     // and the banner stayed up, looking like the sign-in had not helped.
@@ -404,7 +416,7 @@ if ('serviceWorker' in navigator) {
     try{ window.dispatchEvent(new CustomEvent("vx-write-failed")); }catch(e){} };
   // Signing out deliberately is not the same as being thrown out: clear the flag so the
   // login screen does not greet the next person with "signed out — changes will not save".
-  window.__vxClearAuth = function(){ if(_refreshTimer) clearTimeout(_refreshTimer); _saveAuth(null); window.__vxAuthDead=false; };
+  window.__vxClearAuth = function(){ if(_refreshTimer) clearTimeout(_refreshTimer); _saveAuth(null); window.__vxAuthDead=false; _refreshFails=0; };
   window.__vxAuthUid = function(){ return window.__VX_AUTH ? window.__VX_AUTH.uid : null; };
   try{ var _ra=localStorage.getItem('vx_auth'); if(_ra){ var _pa=JSON.parse(_ra); if(_pa && _pa.token){ window.__VX_AUTH=_pa; if(_pa.exp && Date.now() > (_pa.exp - 60000)) _doRefresh(); else _scheduleRefresh(); } } }catch(e){}
   // Coming back to the app is the moment the token is most likely stale: refresh it, then
@@ -6273,7 +6285,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-14h';
+const VX_BUILD='2026-08-14i';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -15779,6 +15791,15 @@ class Component extends DCLogic {
         // anything wrong with the app or the data, and it is fixed in one place.
         if(/row-level security/i.test(said)){
           const t=(b[0]&&b[0].table)||'that table';
+          // Every one of the club's policies is written `to authenticated`. If the token has
+          // expired the request arrives as an anonymous visitor, none of them apply, and the
+          // row is refused — on every table at once. That is not the account failing to be
+          // recognised as staff, and saying so sent this club to check an allowlist that was
+          // right all along. Ask the one question that has an answer the coach can act on.
+          if(typeof window!=='undefined' && window.__vxSendingAnon){
+            return 'Your database sign-in has expired, so these are reaching the database as an anonymous visitor and every one of them is refused — this is not about permissions. '
+              +'Nothing is lost. Sign out and back in, and all '+((S.saveBlocked||[]).length)+' save themselves.';
+          }
           // Naming one cause here was wrong: the first club to see this had the email in the
           // staff list already, and the banner sent them to check the one thing that was
           // right. Being signed in and being recognised as staff are different questions, and
