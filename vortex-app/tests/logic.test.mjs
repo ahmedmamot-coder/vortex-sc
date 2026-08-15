@@ -1305,7 +1305,42 @@ describe("expired session", () => {
       eq(/row-level security/.test(blocked[0].said || ""), true, "the reason has to travel with it");
       eq(t.win.__vxFailedCount(), 0, "and it is not counted as work a retry could still save");
     });
-    // 304 swimmers became 317 again, with 123 dates of birth missing again, after the club fixed
+    // The route that puts the dates back has worked for a while and needed a terminal and a
+  // hand-built POST to reach — which is no use to somebody at the poolside whose roster has just
+  // gone backwards, and they will paste it into a search engine instead, twice.
+  describe("putting the dates of birth back", () => {
+    const check = methodSource("dobCheck").body;
+    const restore = methodSource("dobRestore").body;
+
+    it("reads which night's copy carries the most, rather than asking anyone to choose", () =>
+      eq(/api\/backup\/list/.test(check) && /l && l\.best/.test(check), true));
+    it("says how many would come back before anything is written", () => {
+      eq(/api\/backup\/inspect/.test(check), true);
+      eq(/wouldRestore/.test(check), true);
+      eq(/api\/backup\/restore-dobs/.test(check), false, "checking must never write");
+    });
+    // The whole safety of it: the server refuses any count but the one it just reported, so a
+    // restore cannot run against a roster that moved between looking and pressing.
+    it("carries that exact count into the restore, unchanged", () => {
+      eq(/confirm='\+p\.n/.test(restore), true);
+      eq(/dobPlan\{?/.test(restore) || /this\.state\.dobPlan/.test(restore), true);
+    });
+    it("asks first, and says what it will not do", () => {
+      eq(/window\.confirm/.test(restore), true);
+      eq(/No swimmer is added, /.test(restore), true);
+      eq(/can be undone/.test(restore), true);
+    });
+    it("offers the button only once there is something to put back", () => {
+      eq(/dobCanRestore: !!S\.dobPlan/.test(SOURCE), true);
+      eq(/dobPlan:null/.test(check), true, "and withdraws it when there is nothing");
+    });
+    it("a refusal is shown in the app rather than swallowed", () => {
+      eq(/j&&\(j\.error\|\|j\.hint\)/.test(restore), true);
+      eq(/dobOk:false/.test(restore), true);
+    });
+  });
+
+  // 304 swimmers became 317 again, with 123 dates of birth missing again, after the club fixed
     // the permission that had been holding writes back. The held writes were snapshots taken
     // before the roster was repaired, and letting them go put the old roster back.
     itAsync("a held write sends what the device believes now, not what it believed then", async () => {
