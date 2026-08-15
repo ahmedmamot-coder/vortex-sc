@@ -3288,6 +3288,138 @@ describe("InBody sheet", () => {
     });
   });
 
+  // "add an icon to choose my swimmers in the club … and if i need to compare between my
+  // swimmers and others from other clubs … save video to be in the swimmer we will choose".
+  // A lane is one of ours, picked off the roster, or somebody else's, typed.
+  describe("who is in the lane", () => {
+    const ROSTER = {
+      seniora: [{ id: "sw1", name: "Sara K", initials: "SK" },
+                { id: "sw2", name: "Lina M", initials: "LM" }],
+      junior:  [{ id: "sw3", name: "Nour A", initials: "NA" }],
+    };
+    const ctx = (lib) => {
+      const c = { videoLib: lib, state: { videoActiveId: "v1", videoSwIdx: 0 },
+                  squads: [{ id: "seniora", name: "Senior A" }, { id: "junior", name: "Junior" }],
+                  roster: ROSTER, brandConfig: { clubName: "Vortex SC" },
+                  setState(p) { Object.assign(this.state, p); },
+                  forceUpdate() {}, _videosPersist() {} };
+      c.allSwimmersFlat = bind("allSwimmersFlat", c);
+      c._activeVideo = bind("_activeVideo", c);
+      c._splitMetres = bind("_splitMetres", c);
+      c._vidSwimmers = bind("_vidSwimmers", c);
+      c._vidTrack = bind("_vidTrack", c, ["_vidSwimmers"]);
+      c._vidPatchTrack = bind("_vidPatchTrack", c, ["_vidSwimmers"]);
+      c._vidApply = bind("_vidApply", c, ["_vidPatchTrack", "_vidSwimmers"]);
+      c.videoRaceMetrics = bind("videoRaceMetrics", c, ["_splitMetres", "_vidTrack", "_vidSwimmers"]);
+      c._compareTable = bind("_compareTable", c);
+      c.videoClipCompare = bind("videoClipCompare", c, ["_vidSwimmers", "videoRaceMetrics", "_compareTable"]);
+      c.videoSwimmerLink = bind("videoSwimmerLink", c, ["_activeVideo", "allSwimmersFlat", "_vidApply"]);
+      c.videoSwimmerOutside = bind("videoSwimmerOutside", c, ["_activeVideo", "_vidApply"]);
+      c.videoSwimmerUnlink = bind("videoSwimmerUnlink", c, ["_activeVideo", "_vidApply"]);
+      c._videoSavedAt = bind("_videoSavedAt", c);
+      c.swimmerVideos = bind("swimmerVideos", c, ["_vidSwimmers", "videoRaceMetrics", "_videoSavedAt"]);
+      return c;
+    };
+    const laps = (t) => [{ label: "Start", t: 0 }, { label: "15m", t: 6.6 }, { label: "50m", t }];
+    const heat = () => [{
+      id: "v1", title: "Heat 4", raceType: "50", stroke: "Back", savedAt: "2026-08-14T10:00:00.000Z",
+      swimmers: [
+        { id: "l1", name: "Swimmer 1", swId: "", club: "", laps: laps(26.6), strokes: {}, kicks: {} },
+        { id: "l2", name: "Swimmer 2", swId: "", club: "", laps: laps(27.1), strokes: {}, kicks: {} }],
+      laps: laps(26.6), strokes: {}, kicks: {},
+    }];
+
+    it("the picker offers the whole club, not one squad", () => {
+      eq(ctx(heat()).allSwimmersFlat().map((s) => s.name).join(", "), "Sara K, Lina M, Nour A");
+    });
+    // The id is what puts the analysis on their profile; the name is what the analysis still
+    // says after they leave the club, rather than going blank where a lookup used to succeed.
+    it("picking one of ours stores the id and the name as it reads today", () => {
+      const c = ctx(heat());
+      c.videoSwimmerLink(0, "sw1");
+      const lane = c._vidTrack(c.videoLib[0], 0);
+      eq(lane.swId, "sw1");
+      eq(lane.name, "Sara K");
+      eq(lane.club, "", "one of ours is not also from another club");
+    });
+    it("an unknown id changes nothing rather than blanking the lane", () => {
+      const c = ctx(heat());
+      c.videoSwimmerLink(0, "nobody");
+      eq(c._vidTrack(c.videoLib[0], 0).name, "Swimmer 1");
+      eq(c._vidTrack(c.videoLib[0], 0).swId, "");
+    });
+    it("naming another club marks the lane as theirs, and drops any link to ours", () => {
+      const c = ctx(heat());
+      c.videoSwimmerLink(0, "sw1");
+      c.videoSwimmerOutside(0, "Al Ahli SC");
+      const lane = c._vidTrack(c.videoLib[0], 0);
+      eq(lane.club, "Al Ahli SC");
+      eq(lane.swId, "", "a swimmer cannot be ours and theirs at once");
+    });
+    it("unlinking keeps the marks and the name — it only stops the filing", () => {
+      const c = ctx(heat());
+      c.videoSwimmerLink(0, "sw1");
+      c.videoSwimmerUnlink(0);
+      const lane = c._vidTrack(c.videoLib[0], 0);
+      eq(lane.swId, "");
+      eq(lane.name, "Sara K", "the name a coach can still read");
+      eq(lane.laps.length, 3, "and every mark they made");
+    });
+    it("picking a swimmer for one lane leaves the other alone", () => {
+      const c = ctx(heat());
+      c.videoSwimmerLink(1, "sw2");
+      eq(c._vidTrack(c.videoLib[0], 1).swId, "sw2");
+      eq(c._vidTrack(c.videoLib[0], 0).swId, "");
+    });
+
+    // "save video to be in the swimmer we will choose" — the clip is stored once and shows up
+    // on the profile of every swimmer marked in it.
+    it("the analysis appears on the profile of the swimmer it was filed against", () => {
+      const c = ctx(heat());
+      c.videoSwimmerLink(0, "sw1");
+      const vids = c.swimmerVideos("sw1");
+      eq(vids.length, 1);
+      eq(vids[0].id, "v1");
+      eq(vids[0].total, "26.60s");
+      eq(/50m/.test(vids[0].meta) && /Back/.test(vids[0].meta), true);
+    });
+    it("and it opens on their lane, not on lane one's", () => {
+      const c = ctx(heat());
+      c.videoSwimmerLink(1, "sw2");
+      const vids = c.swimmerVideos("sw2");
+      eq(vids[0].laneIdx, 1);
+      eq(vids[0].total, "27.10s", "which is the time it must show them");
+    });
+    it("one clip reaches both swimmers marked in it, and is still one clip", () => {
+      const c = ctx(heat());
+      c.videoSwimmerLink(0, "sw1");
+      c.videoSwimmerLink(1, "sw2");
+      eq(c.swimmerVideos("sw1").length, 1);
+      eq(c.swimmerVideos("sw2").length, 1);
+      eq(c.videoLib.length, 1, "stored once, not copied per swimmer");
+    });
+    it("a swimmer nobody marked has none, and no swimmer at all has none", () => {
+      const c = ctx(heat());
+      eq(c.swimmerVideos("sw3").length, 0);
+      eq(c.swimmerVideos("").length, 0);
+      eq(c.swimmerVideos(null).length, 0);
+    });
+    it("a rival is never filed against one of our swimmers", () => {
+      const c = ctx(heat());
+      c.videoSwimmerOutside(0, "Al Ahli SC");
+      eq(c.swimmerVideos("sw1").length, 0);
+    });
+    // Putting your swimmer beside the one who beat them is most of the reason for marking a heat.
+    it("the head to head says which club each lane swims for", () => {
+      const c = ctx(heat());
+      c.videoSwimmerLink(0, "sw1");
+      c.videoSwimmerOutside(1, "Al Ahli SC");
+      const T = c.videoClipCompare(c.videoLib[0]);
+      eq(T.cols.map((x) => x.tag).join(" | "), "Vortex SC | Al Ahli SC");
+      eq(T.cols.map((x) => x.title).join(" | "), "Sara K | Swimmer 2");
+    });
+  });
+
   // The club's colours, pattern and mark are a guideline, not a suggestion. Everything added to
   // the video screen reads a token, so re-theming the club re-themes these too — and a colour
   // picked by hand because a third lane needed one would show up here.

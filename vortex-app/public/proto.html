@@ -941,6 +941,13 @@ if ('serviceWorker' in navigator) {
     text-transform:uppercase;color:var(--vx-slate-300);padding-right:2px}
   .vx-marker-lane{margin:8px 0 0;text-align:center;font-size:10.5px;font-weight:700;
     color:var(--vx-slate-500)}
+  /* Who is in the lane — one of ours, or a swimmer from another club. */
+  .vx-lanebadge{position:relative;display:flex;align-items:center;gap:8px;margin-top:7px;
+    border:1px solid transparent;border-radius:10px;padding:8px 10px}
+  .vx-lanepick{position:relative;margin-top:8px;background:var(--vx-slate-50);
+    border:1px solid var(--border-subtle);border-radius:12px;padding:11px}
+  .vx-lanepick-cap{margin:0 0 7px;font-size:9px;font-weight:700;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--vx-slate-300)}
   /* Counting by thumb: two targets big enough to hit without looking away from the swim. */
   .vx-countpad{position:relative;display:flex;gap:8px;margin-top:10px}
   .vx-counttile{flex:1;min-width:0;display:flex;align-items:center;gap:9px;
@@ -3052,6 +3059,24 @@ if ('serviceWorker' in navigator) {
                         <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:20px;text-align:center;font-size:12px;color:#9AA2B4">Log at least one PB to get an AI suggestion.</div>
                       </sc-if>
                     </div>
+                    <!-- Every race clip this swimmer is a lane in. The clip is stored once and
+                         appears on each swimmer marked in it; tapping opens the analysis on
+                         their lane rather than on lane one's. -->
+                    <sc-if value="{{ swVideosHas }}" hint-placeholder-val="{{ false }}">
+                      <div>
+                        <h2 style="font-size:11.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#7A8296;margin:0 2px 9px">Race videos</h2>
+                        <div style="display:flex;flex-direction:column;gap:7px">
+                          <sc-for list="{{ swVideos }}" as="sv" hint-placeholder-count="3">
+                            <button onclick="{{ sv.onOpen }}" style="display:flex;align-items:center;gap:11px;width:100%;text-align:left;background:var(--surface-card);border:1px solid var(--border-subtle);border-radius:13px;padding:10px 12px;box-shadow:0 1px 4px rgba(11,20,40,.04);cursor:pointer;font-family:inherit">
+                              <span style="width:28px;height:28px;flex:none;border-radius:8px;background:var(--brand-tint);color:var(--color-brand);display:flex;align-items:center;justify-content:center"><i data-lucide="video" style="width:15px;height:15px"></i></span>
+                              <span style="flex:1;min-width:0"><span style="display:block;font-weight:600;font-size:13px;color:var(--vx-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ sv.title }}</span><span style="display:block;font-size:11px;color:var(--vx-slate-500);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ sv.meta }}</span></span>
+                              <span style="font-family:var(--font-mono);font-weight:700;font-size:13.5px;color:var(--vx-ink)">{{ sv.total }}</span>
+                            </button>
+                          </sc-for>
+                        </div>
+                      </div>
+                    </sc-if>
+
                     <div>
                       <h2 style="font-size:11.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#7A8296;margin:0 2px 9px">Recent results</h2>
                       <div style="display:flex;flex-direction:column;gap:7px">
@@ -3646,11 +3671,49 @@ if ('serviceWorker' in navigator) {
                             </sc-for>
                           </div>
                           <div style="position:relative;display:flex;gap:7px;align-items:center">
+                            <button onclick="{{ onVideoSwPickToggle }}" title="Choose from the club" style="flex:none;width:34px;height:34px;border-radius:9px;border:1px solid {{ videoSwPickEdge }};background:{{ videoSwPickBg }};color:{{ videoSwPickFg }};cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="user-search" style="width:16px;height:16px"></i></button>
                             <input value="{{ videoSwName }}" onchange="{{ onVideoSwName }}" placeholder="Name this lane e.g. Sara · lane 4" style="flex:1;min-width:0;background:var(--vx-slate-50);border:1px solid var(--border-subtle);border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:var(--vx-ink);outline:none">
                             <sc-if value="{{ videoSwCanRemove }}" hint-placeholder-val="{{ false }}">
                               <button onclick="{{ onVideoSwRemove }}" style="flex:none;width:34px;height:34px;border-radius:9px;border:none;background:var(--vx-light-2);color:var(--vx-slate-300);cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="user-minus" style="width:15px;height:15px"></i></button>
                             </sc-if>
                           </div>
+
+                          <!-- Who this lane is. One of ours carries the swimmer's id, so the
+                               analysis lands on their profile; anybody else carries only the
+                               club they swim for, which is all the coach typed. -->
+                          <sc-if value="{{ videoSwBadgeShow }}" hint-placeholder-val="{{ false }}">
+                            <div class="vx-lanebadge" style="background:{{ videoSwBadgeBg }};border-color:{{ videoSwBadgeEdge }}">
+                              <i data-lucide="{{ videoSwBadgeIcon }}" style="width:14px;height:14px;flex:none;color:{{ videoSwBadgeFg }}"></i>
+                              <span style="flex:1;min-width:0;font-size:11.5px;font-weight:700;color:{{ videoSwBadgeFg }}">{{ videoSwBadgeText }}</span>
+                              <sc-if value="{{ videoSwIsOurs }}" hint-placeholder-val="{{ false }}">
+                                <button onclick="{{ onVideoSwUnlink }}" style="flex:none;background:none;border:none;padding:0;cursor:pointer;font-family:inherit;font-size:10.5px;font-weight:700;color:{{ videoSwBadgeFg }};opacity:.7;text-decoration:underline">Unlink</button>
+                              </sc-if>
+                            </div>
+                          </sc-if>
+
+                          <sc-if value="{{ videoSwPickOpen }}" hint-placeholder-val="{{ false }}">
+                            <div class="vx-lanepick">
+                              <p class="vx-lanepick-cap">From the club</p>
+                              <input value="{{ videoSwQuery }}" oninput="{{ onVideoSwQuery }}" placeholder="Search {{ videoSwPoolCount }} swimmers…" style="width:100%;background:var(--surface-card);border:1px solid var(--border-subtle);border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:var(--vx-ink);outline:none;margin-bottom:8px">
+                              <div class="vx-scroll" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:2px">
+                                <sc-for list="{{ videoSwPickRows }}" as="ps" hint-placeholder-count="4">
+                                  <button onclick="{{ ps.onPick }}" style="flex:none;display:flex;align-items:center;gap:7px;background:{{ ps.bg }};border:1px solid {{ ps.edge }};border-radius:999px;padding:5px 12px 5px 5px;font-family:inherit;cursor:pointer">
+                                    <span style="width:24px;height:24px;border-radius:50%;background:{{ squad.accent }};color:var(--on-brand);display:flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:700">{{ ps.initials }}</span>
+                                    <span style="text-align:left">
+                                      <span style="display:block;font-size:11.5px;font-weight:700;color:{{ ps.fg }}">{{ ps.name }}</span>
+                                      <span style="display:block;font-size:9.5px;color:var(--vx-slate-300)">{{ ps.squadName }}</span>
+                                    </span>
+                                  </button>
+                                </sc-for>
+                              </div>
+                              <sc-if value="{{ videoSwPickEmpty }}" hint-placeholder-val="{{ false }}">
+                                <p style="margin:0;font-size:11.5px;color:var(--vx-slate-500)">Nobody in the club matches that.</p>
+                              </sc-if>
+                              <p class="vx-lanepick-cap" style="margin-top:11px">From another club</p>
+                              <input value="{{ videoSwClub }}" onchange="{{ onVideoSwClub }}" placeholder="Their club e.g. Al Ahli SC" style="width:100%;background:var(--surface-card);border:1px solid var(--border-subtle);border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:var(--vx-ink);outline:none">
+                              <p style="margin:7px 0 0;font-size:10.5px;color:var(--vx-slate-500);line-height:1.5">Naming their club marks the lane as somebody else's swimmer. Type the name in the box above and mark their splits the same way — that is how your swimmer ends up next to the one who beat them.</p>
+                            </div>
+                          </sc-if>
                           <sc-if value="{{ videoSwCanAdd }}" hint-placeholder-val="{{ true }}">
                             <button onclick="{{ onVideoSwAdd }}" style="position:relative;width:100%;margin-top:7px;display:flex;align-items:center;justify-content:center;gap:7px;background:var(--brand-tint);border:1.5px dashed var(--color-brand);border-radius:11px;padding:10px;cursor:pointer;color:var(--color-brand-ink);font-family:inherit;font-size:12.5px;font-weight:700"><i data-lucide="user-plus" style="width:15px;height:15px"></i> {{ videoSwAddLabel }}</button>
                           </sc-if>
@@ -6138,7 +6201,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-14b';
+const VX_BUILD='2026-08-14c';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -6413,7 +6476,7 @@ class Component extends DCLogic {
       videoActiveId:null, videoUrlDraft:'', videoTitleDraft:'', videoTagDraft:'', videoAddOpen:false, videoRate:1, videoNoteDraft:'', videoCurT:0, videoDur:0,
       videoCompareIds:[], videoCompareMsg:'', videoFolderOpen:true, videoFolderQ:'',
       videoStartBusy:false, videoStartMsg:'', videoStartCands:[], videoStartPick:0,
-      videoSwIdx:0, videoSwMsg:'', videoCountMark:null,
+      videoSwIdx:0, videoSwMsg:'', videoCountMark:null, videoSwPickOpen:false, videoSwQuery:'',
       videoAiOut:null, videoAiLoading:false, videoAiErr:'',
       fitAddOpen:false, fitBusy:null, fitMediaMsg:'', inbodyMode:'pdf', inbodySwId:'', inbodyQuery:'', inbodyPdfBusy:false, inbodyPdfMsg:'', inbodyQrOpen:false, inbodyQrMsg:'', inbodyDraft:null,
       shareNote:'',
@@ -10236,10 +10299,15 @@ class Component extends DCLogic {
   _vidSwimmers(v){
     if(!v) return [];
     const list=Array.isArray(v.swimmers) ? v.swimmers.filter(s=>s && typeof s==='object') : [];
+    // swId is the club's own swimmer, picked from the roster; club is an outside swimmer's club.
+    // A lane has one or the other or neither — an unnamed lane is still a lane, and a coach
+    // marking a heat at the poolside should not have to say who anybody is before they can tap.
     if(list.length) return list.slice(0,3).map((s,i)=>({
       id:s.id||('lane'+(i+1)), name:s.name||('Swimmer '+(i+1)),
+      swId:s.swId||'', club:s.club||'',
       laps:Array.isArray(s.laps)?s.laps:[], strokes:s.strokes||{}, kicks:s.kicks||{} }));
-    return [{ id:'lane1', name:'Swimmer 1', laps:Array.isArray(v.laps)?v.laps:[],
+    return [{ id:'lane1', name:'Swimmer 1', swId:'', club:'',
+              laps:Array.isArray(v.laps)?v.laps:[],
               strokes:v.strokes||{}, kicks:v.kicks||{} }];
   }
   _vidTrack(v, idx){
@@ -10270,7 +10338,7 @@ class Component extends DCLogic {
     if(v && !v._isBlob) this._videosPersist(id);
     this.forceUpdate();
   }
-  videoSwimmerPick(i){ this.setState({videoSwIdx:i, videoCountMark:null}); }
+  videoSwimmerPick(i){ this.setState({videoSwIdx:i, videoCountMark:null, videoSwPickOpen:false, videoSwQuery:''}); }
   videoSwimmerAdd(){
     const v=this._activeVideo(); if(!v) return;
     const list=this._vidSwimmers(v);
@@ -10288,6 +10356,59 @@ class Component extends DCLogic {
   videoSwimmerRename(idx, name){
     const v=this._activeVideo(); if(!v) return;
     this._vidApply(v.id, idx, {name:String(name||'').slice(0,40)});
+  }
+  // ---- Who is in the lane ----
+  //
+  // A lane can be one of the club's own swimmers, picked off the roster, or somebody from
+  // another club, typed. Both are wanted: half the point of marking a heat is putting your
+  // swimmer next to the one who beat them.
+  //
+  // Picking one of ours stores the swimmer's id AND their name as it reads today. The id is
+  // what puts the analysis on their profile; the name is what the analysis still says after
+  // they leave the club, rather than going blank where a lookup used to succeed.
+  videoSwimmerLink(idx, swId){
+    const v=this._activeVideo(); if(!v) return;
+    const sw=this.allSwimmersFlat().find(s=>s.id===swId);
+    if(!sw) return;
+    this._vidApply(v.id, idx, {swId:sw.id, name:sw.name, club:''});
+    this.setState({videoSwPickOpen:false, videoSwQuery:''});
+  }
+  // Somebody from another club. There is no id because the club's roster does not have them —
+  // a name and the club they swim for is all there is, and the analysis carries no more than
+  // the coach typed.
+  videoSwimmerOutside(idx, club){
+    const v=this._activeVideo(); if(!v) return;
+    this._vidApply(v.id, idx, {swId:'', club:String(club||'').slice(0,40)});
+  }
+  // Unlinked, not deleted. The lane keeps its marks and its name; it simply stops being filed
+  // against that swimmer — which is what a coach wants after linking the wrong one.
+  videoSwimmerUnlink(idx){
+    const v=this._activeVideo(); if(!v) return;
+    this._vidApply(v.id, idx, {swId:''});
+  }
+  // Every analysis this swimmer is a lane in. One clip marked with three lanes appears on three
+  // profiles and is still stored once — the link is the lane's swimmer id, not a copy of the
+  // clip. laneIdx is which lane is theirs, so opening it lands on their splits and not lane one's.
+  swimmerVideos(swId){
+    if(!swId) return [];
+    const out=[];
+    (this.videoLib||[]).forEach(v=>{
+      const lanes=this._vidSwimmers(v);
+      const laneIdx=lanes.findIndex(s=>s.swId===swId);
+      if(laneIdx<0) return;
+      const M=this.videoRaceMetrics(v, laneIdx);
+      out.push({ id:v.id, laneIdx, title:v.title||'Untitled clip',
+        meta:[(v.raceType||'100')+'m', v.stroke, this._videoSavedAt(v), v.tag,
+              lanes.length>1?('vs '+(lanes.length-1)+(lanes.length===2?' other':' others')):'']
+             .filter(Boolean).join(' · '),
+        total: M && M.total!=null ? (M.total+'s') : '—' });
+    });
+    return out.sort((a,b)=>String(b.id).localeCompare(String(a.id)));
+  }
+  openVideoAnalysis(clipId, laneIdx){
+    this.openTool('video', true);
+    this.setState({ videoActiveId:clipId, videoSwIdx:laneIdx||0, videoRate:1,
+      videoCountMark:null, videoAiOut:null, videoAiErr:'', videoSwPickOpen:false });
   }
   videoSwimmerRemove(idx){
     const v=this._activeVideo(); if(!v) return;
@@ -10582,8 +10703,12 @@ class Component extends DCLogic {
   videoClipCompare(v){
     const list=this._vidSwimmers(v);
     if(list.length<2) return null;
+    // The column says which club each lane swims for, because putting your swimmer beside the
+    // one who beat them is most of the reason for marking a heat at all.
+    const ours=(this.brandConfig&&this.brandConfig.clubName)||'Vortex SC';
     return this._compareTable(list.map((s,i)=>({ id:s.id, title:s.name||('Swimmer '+(i+1)),
-      tag:'same start', raceType:((v&&v.raceType)||'100')+'m', M:this.videoRaceMetrics(v, i) })));
+      tag: s.club || (s.swId ? ours : 'same start'),
+      raceType:((v&&v.raceType)||'100')+'m', M:this.videoRaceMetrics(v, i) })));
   }
   // The table itself, given whatever is being compared. Both callers share it so the club reads
   // one thing rather than two that merely look alike.
@@ -13987,7 +14112,7 @@ class Component extends DCLogic {
     // Opening another clip starts on its first lane and clears what Claude said about the last
     // one — an answer about somebody else's swim left on the screen reads as an answer about this
     // one, which is the whole failure the canned assistants used to have.
-    const openClip=(id)=>this.setState({videoActiveId:id, videoRate:1, videoSwIdx:0, videoCountMark:null, videoAiOut:null, videoAiErr:''});
+    const openClip=(id)=>this.setState({videoActiveId:id, videoRate:1, videoSwIdx:0, videoCountMark:null, videoAiOut:null, videoAiErr:'', videoSwPickOpen:false, videoSwQuery:''});
     const videoChips = this.videoLib.map(v=>({id:v.id, label:v.title, onClick:()=>openClip(v.id), bg:activeVid&&activeVid.id===v.id?'var(--surface-ink)':'var(--surface-card)', fg:activeVid&&activeVid.id===v.id?'var(--text-inverse)':'var(--vx-slate-700)'}));
     // ---- The lanes in this clip ----
     const vidSwimmers = activeVid ? this._vidSwimmers(activeVid) : [];
@@ -14007,6 +14132,24 @@ class Component extends DCLogic {
         dot: LANE_INK[i%LANE_INK.length],
         onClick:()=>this.videoSwimmerPick(i) };
     });
+    // The whole club, whichever squad the video tool was opened from. A heat has swimmers from
+    // several squads in it, and a coach marking one should not have to leave the clip to reach
+    // a name that is one squad over.
+    const videoSwPool = this.allSwimmersFlat();
+    const vidPickQ=(S.videoSwQuery||'').trim().toLowerCase();
+    const videoSwPickRows = (vidPickQ
+        ? videoSwPool.filter(sw=>String(sw.name||'').toLowerCase().includes(vidPickQ)
+                              || String(sw.squadName||'').toLowerCase().includes(vidPickQ))
+        : videoSwPool)
+      .slice(0,24)
+      .map(sw=>{
+        const on = vidTrack.swId===sw.id;
+        return { id:sw.id, name:sw.name, initials:sw.initials, squadName:sw.squadName||'',
+          bg: on?'var(--brand-tint)':'var(--surface-card)',
+          edge: on?'var(--color-brand)':'var(--border-subtle)',
+          fg: on?'var(--color-brand-ink)':'var(--vx-ink)',
+          onPick:()=>this.videoSwimmerLink(vidSwIdx, sw.id) };
+      });
     const fmtMS=(sec)=>{ sec=Math.max(0,sec||0); const m=Math.floor(sec/60); const s=Math.floor(sec%60); return m+':'+(s<10?'0':'')+s; };
     let lapBars=[]; let lapSplits=[];
     if(activeVid && (vidTrack.laps||[]).length){
@@ -14961,6 +15104,11 @@ class Component extends DCLogic {
       eventChips, progEvent:selEvent||'—',
       lcmChart:{ hasData:lcmSeries.hasData, noData:!lcmSeries.hasData, best:lcmSeries.best||'—', linePts:lcmSeries.linePts, lineArea:lcmSeries.lineArea, dots:lcmSeries.dots, caption:lcmSeries.caption, drop:lcmSeries.drop, swims:lcmSeries.swims },
       scmChart:{ hasData:scmSeries.hasData, noData:!scmSeries.hasData, best:scmSeries.best||'—', linePts:scmSeries.linePts, lineArea:scmSeries.lineArea, dots:scmSeries.dots, caption:scmSeries.caption, drop:scmSeries.drop, swims:scmSeries.swims },
+      ...(()=>{
+        const vids=this.swimmerVideos(swObj.id);
+        return { swVideos: vids.map(r=>({ ...r, onOpen:()=>this.openVideoAnalysis(r.id, r.laneIdx) })),
+                 swVideosHas: vids.length>0 };
+      })(),
       swimmerKpis, swimmerPbs, swimmerResults, swQualRows, swQualHas, onBackToSquad:()=>this.setState({view:'squad', tab:'group'}),
       // ---- edit a swimmer from their own profile ----
       // A manager looking at a wrong date of birth had to leave the swimmer, find them again
@@ -16143,6 +16291,30 @@ class Component extends DCLogic {
       videoMarkingLaneShow: vidSwimmers.length>1,
       videoSwTabs, videoSwHasMany: vidSwimmers.length>1,
       videoSwName: vidTrack.name||'', onVideoSwName:(e)=>this.videoSwimmerRename(vidSwIdx, e.target.value),
+      // ---- Who is in the lane ----
+      videoSwPickOpen: !!S.videoSwPickOpen,
+      onVideoSwPickToggle:()=>this.setState({videoSwPickOpen: !S.videoSwPickOpen, videoSwQuery:''}),
+      videoSwPickBg: S.videoSwPickOpen ? 'var(--color-brand)' : 'var(--vx-slate-50)',
+      videoSwPickFg: S.videoSwPickOpen ? 'var(--on-brand)' : 'var(--color-brand)',
+      videoSwPickEdge: S.videoSwPickOpen ? 'var(--color-brand)' : 'var(--border-subtle)',
+      videoSwQuery: S.videoSwQuery||'', onVideoSwQuery:(e)=>this.setState({videoSwQuery:e.target.value}),
+      videoSwPoolCount: videoSwPool.length,
+      videoSwPickRows, videoSwPickEmpty: videoSwPickRows.length===0,
+      videoSwClub: vidTrack.club||'', onVideoSwClub:(e)=>this.videoSwimmerOutside(vidSwIdx, e.target.value),
+      onVideoSwUnlink:()=>this.videoSwimmerUnlink(vidSwIdx),
+      // One badge, saying which of the two this lane is. A lane nobody has said anything about
+      // shows nothing rather than a third state that has to be read and dismissed.
+      videoSwIsOurs: !!vidTrack.swId,
+      videoSwBadgeShow: !!(vidTrack.swId || vidTrack.club),
+      videoSwBadgeIcon: vidTrack.swId ? 'badge-check' : 'flag',
+      videoSwBadgeText: vidTrack.swId
+        ? (((videoSwPool.find(s=>s.id===vidTrack.swId)||{}).squadName)
+            ? ((this.brandConfig&&this.brandConfig.clubName)||'Vortex SC')+' · '+(videoSwPool.find(s=>s.id===vidTrack.swId)||{}).squadName
+            : ((this.brandConfig&&this.brandConfig.clubName)||'Vortex SC')+' · this analysis is on their profile')
+        : (vidTrack.club||''),
+      videoSwBadgeBg:   vidTrack.swId ? 'var(--brand-tint)' : 'var(--vx-slate-50)',
+      videoSwBadgeFg:   vidTrack.swId ? 'var(--color-brand-ink)' : 'var(--vx-slate-500)',
+      videoSwBadgeEdge: vidTrack.swId ? 'var(--color-brand)' : 'var(--border-default)',
       videoSwCanAdd: vidSwimmers.length<3,
       videoSwAddLabel: vidSwimmers.length<3 ? ('Add swimmer '+(vidSwimmers.length+1)+' from this clip') : 'Three lanes is the limit',
       onVideoSwAdd:()=>this.videoSwimmerAdd(),
