@@ -509,6 +509,10 @@ if ('serviceWorker' in navigator) {
   window.__VX_SB = { url: SB_URL, anon: SB_ANON, head: HEAD };
   // Generic table helpers — used by the Lounge chat, where each message is its own row
   // (append-only INSERT), so posts can never overwrite each other.
+  // No forced token refresh here, deliberately. _failAdd already refreshes and replays on a 401,
+  // behind a 30-second cooldown, and that cooldown is the only thing keeping it finite: a refresh
+  // calls __vxSetAuth, __vxSetAuth replays the failed queue, and the queue is made of writes. Do
+  // it from inside the write as well and the two call each other until the tab runs out of memory.
   window.__vxInsert = function(table, rows){ return ready().then(function(){ return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":"return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(r.ok) _blockClearTable(table); if(!r.ok){ if(r.status===401||r.status===403){ _vxQueue(function(){ window.__vxInsert(table, rows); }); } r.text().then(function(t){ try{console.warn("vx insert "+table+" HTTP "+r.status+": "+t);}catch(e){} _failAdd("insert", table, rows, r.status, t); }); } return r.ok; }).catch(function(e){ _failAdd("insert", table, rows, 0, "network: "+(e&&e.message)); return false; }); });
   };
   // A read rejected with 401 means the token expired, not that the table is empty. Returning
@@ -6404,7 +6408,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-15l';
+const VX_BUILD='2026-08-15m';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -7093,6 +7097,15 @@ class Component extends DCLogic {
   _famClearRefused(id){
     try{ const a=this._famRefusedIds().filter(x=>x!==id); localStorage.setItem('vx_fam_refused', JSON.stringify(a)); }catch(e){}
   }
+  // The OTHER kind of refusal. _famMarkRefused is for a broken foreign key — a login that no
+  // longer exists, which no amount of retrying will bring back — and it is permanent, kept on
+  // disk. This one is for a refusal by the club's own security policies, which running the right
+  // SQL or signing back in genuinely does fix. So it is held in memory only and forgotten the
+  // moment the database lets this account see the family list again, because reading and writing
+  // family_accounts are gated by the very same rule: if the read returns rows, the write is
+  // worth trying again.
+  _famHold(id){ (this._famHeld = this._famHeld || new Set()).add(id); }
+  _famIsHeld(id){ return !!(this._famHeld && this._famHeld.has(id)); }
   _saveFamily(list){ this.family=list; try{ this._saveLocalOnly('vx_family', list); }catch(e){} this.setState({family:list}); }
   async _familyFetch(){ if(!window.__vxSelect) return; const rows=await window.__vxSelect('family_accounts', 'select=*&limit=2000');
     // Remember whether the read actually worked, so the admin screen can tell "nobody has
@@ -7100,6 +7113,9 @@ class Component extends DCLogic {
     this._famFetchOk = (rows!=null);
     if(rows==null) return;
     const fromTable=rows.map(r=>({ id:r.id, name:r.name||'', email:r.email||'', phone:r.phone||'', pass:r.pass||'', role:r.role||'parent', swimmerIds:r.swimmer_ids||[] }));
+    // The policies let this account see families again, so whatever was refused on those grounds
+    // can be offered again.
+    if(fromTable.length) this._famHeld=null;
     const have=new Set(fromTable.map(f=>(f.email||'').trim().toLowerCase()));
     // Self-heal: any account registered on this device that never made it into the table
     // (a failed insert / offline moment / RLS refusal) is KEPT and re-uploaded, so it can
@@ -7123,14 +7139,21 @@ class Component extends DCLogic {
     // A row the database has refused for that reason is remembered and not offered again.
     const _refused=this._famRefusedIds();
     localOnly.forEach(f=>{
-      if(!window.__vxUpsert || !this._isUuid(f.id) || _refused.indexOf(f.id)>=0) return;
+      if(!window.__vxUpsert || !this._isUuid(f.id) || _refused.indexOf(f.id)>=0 || this._famIsHeld(f.id)) return;
       try{
         const p=window.__vxUpsert('family_accounts', [{id:f.id, name:f.name, email:f.email, phone:f.phone, pass:f.pass, role:f.role, swimmer_ids:f.swimmerIds||[], ts:Date.now()}]);
-        if(p&&p.then) p.then(ok=>{ if(ok) return;
+        if(p&&p.then) p.then(ok=>{ if(ok){ this._famHeld=null; return; }
           const e=window.__vxLastWriteErr||{};
           // Only a foreign-key refusal: that one means the login is gone and cannot come back
-          // by retrying. A permission problem or an outage must still be retried.
-          if(/foreign key/i.test(e.said||'')) this._famMarkRefused(f.id);
+          // by retrying.
+          if(/foreign key/i.test(e.said||'')) return this._famMarkRefused(f.id);
+          // A refusal by the club's security policies is not permanent — but re-offering the
+          // same row on the very next fetch is how a red banner becomes impossible to clear.
+          // Every read of this table re-queued all thirty of these, so Discard emptied the
+          // queue and the next fetch filled it straight back up: "30 changes have not been
+          // saved" that nothing the club could do would shift. Hold them until the database
+          // shows it will take them.
+          if(e.status===401 || e.status===403 || /row-level security|violates .* policy|permission denied/i.test(e.said||'')) this._famHold(f.id);
         }).catch(()=>{});
       }catch(e){}
     });

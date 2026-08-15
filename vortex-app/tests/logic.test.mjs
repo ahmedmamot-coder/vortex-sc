@@ -4721,12 +4721,31 @@ describe("InBody sheet", () => {
     const fn = sourceBetween("const _refused=this._famRefusedIds();", "const list=[...fromTable");
 
     it("is not offered again", () => {
-      eq(/_refused\.indexOf\(f\.id\)>=0\) return;/.test(fn), true,
+      eq(/_refused\.indexOf\(f\.id\)>=0/.test(fn), true,
          "otherwise the same refusal is counted again for as long as the app is open");
+      eq(/return;/.test(fn), true, "and the row is skipped, not merely noted");
     });
     it("only a foreign-key refusal counts as permanent", () => {
       eq(/\/foreign key\/i\.test\(e\.said\|\|''\)/.test(fn), true,
          "a permission problem or an outage must still be retried");
+      eq(/_famMarkRefused/.test(fn), true, "and that is the only thing written to the permanent list");
+      // The permanent list is for a login that is gone. A policy refusal must not reach it, or
+      // running the SQL that fixes the policy would look like it had not worked.
+      const perm = (fn.match(/if\(\/foreign key\/i[^\n]*/) || [""])[0];
+      eq(/row-level security/.test(perm), false, "a policy refusal is not a broken login");
+    });
+    // The refusals that ARE recoverable still cannot be re-offered on every single read. The
+    // club sat behind "30 changes have not been saved · retrying automatically" that Discard
+    // could not clear, because the next _familyFetch queued all thirty again.
+    it("a policy refusal is held back rather than re-queued every read", () => {
+      eq(/this\._famIsHeld\(f\.id\)/.test(fn), true, "held rows are not offered again this session");
+      eq(/_famHold\(f\.id\)/.test(fn), true, "and a policy refusal is what puts them there");
+      eq(/row-level security|403/.test(fn), true, "recognised from what the database actually said");
+      // Recoverable, so it must be forgettable — and in memory, never on disk.
+      const hold = sourceBetween("_famHold(id){", "\n  }");
+      eq(/localStorage/.test(hold), false, "a policy refusal must not outlive the session");
+      eq(/if\(fromTable\.length\) this\._famHeld=null;/.test(SOURCE), true,
+         "the read and the write are gated by the same rule, so rows coming back means try again");
     });
     it("signing in makes the row worth offering again", () =>
       eq(/this\._famClearRefused\(rec\.id\)/.test(SOURCE), true,
