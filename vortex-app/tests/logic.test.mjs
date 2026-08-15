@@ -1021,6 +1021,34 @@ describe("expired session", () => {
     eq(t.upserted.length, 0);
   });
 
+  // Starting a refresh when the token is found stale is not enough: _curTok answers
+  // synchronously, so the request is already on its way with the anon key by the time the new
+  // token lands. Those came back "new row violates row-level security policy" — the policies are
+  // written `to authenticated`, and an anonymous visitor is not that.
+  itAsync("a write waits for a usable token instead of leaving without one", async () => {
+    const order = [];
+    const t = boot({
+      auth: EXPIRED,
+      reply: (url) => {
+        order.push(String(url).includes("/auth/v1/token") ? "refresh" : "write");
+        return String(url).includes("/auth/v1/token") ? GOOD_TOKEN : res(200, []);
+      },
+    });
+    await t.win.__vxInsert("attendance_marks", [{ id: "m1" }]);
+    await flush();
+    eq(order[0], "refresh", "the token is renewed before the write, not alongside it");
+    eq(order.includes("write"), true, "and the write still goes");
+  });
+  itAsync("and the write that follows carries the new token, not the anon key", async () => {
+    const t = boot({ auth: EXPIRED, reply: (url) => (String(url).includes("/auth/v1/token") ? GOOD_TOKEN : res(200, [])) });
+    await t.win.__vxInsert("attendance_marks", [{ id: "m1" }]);
+    await flush();
+    const w = t.requests.filter((r) => !String(r.url).includes("/auth/v1/token")).pop();
+    eq(/Bearer /.test((w.opts.headers || {}).Authorization || ""), true);
+    eq(((w.opts.headers || {}).Authorization || "").includes("new.jwt"), true,
+       "otherwise every policy written `to authenticated` refuses it");
+  });
+
   // The quietest failure in the app: the token expires, every request falls back to the anon
   // key, the screen still says signed in, and every write is refused by a policy written
   // `to authenticated` — on every table at once. It reads as the database having forgotten who

@@ -19,13 +19,37 @@ const SB_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://qhrpwiakobgcxfmc
 
 type Swimmer = { id?: string; name?: string; dob?: string; age?: number };
 
-/** The club's own roster, as shipped in the app bundle. It has ages and no dates at all. */
-async function baseRoster(): Promise<Record<string, Swimmer[]> | null> {
+function parseRoster(src: string): Record<string, Swimmer[]> | null {
+  const at = src.indexOf("=");
+  if (at < 0) return null;
   try {
-    const src = await readFile(join(process.cwd(), "public", "assets", "roster.js"), "utf8");
-    const at = src.indexOf("=");
-    if (at < 0) return null;
     return JSON.parse(src.slice(at + 1).replace(/;\s*$/, "")) as Record<string, Swimmer[]>;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The club's own roster, as shipped in the app bundle. It has ages and no dates at all.
+ *
+ * Fetched over HTTP from this same deployment, not read off the disk. `public/` is served by the
+ * CDN and is not part of the serverless bundle, so the disk read could only ever work on a
+ * laptop — in production this endpoint answered "could not read the bundled roster" every single
+ * time it was asked, which is worse than not having it, because it was written to be the thing
+ * that settles an argument about a club's missing dates of birth.
+ */
+async function baseRoster(origin: string): Promise<Record<string, Swimmer[]> | null> {
+  try {
+    const r = await fetch(origin + "/assets/roster.js", { cache: "no-store" });
+    if (r.ok) {
+      const got = parseRoster(await r.text());
+      if (got) return got;
+    }
+  } catch {
+    /* fall through to the disk, which is where it lives when this runs on a laptop */
+  }
+  try {
+    return parseRoster(await readFile(join(process.cwd(), "public", "assets", "roster.js"), "utf8"));
   } catch {
     return null;
   }
@@ -45,8 +69,15 @@ export async function GET(request: Request) {
   if (bad) return bad;
   const head = { "cache-control": "no-store" } as const;
 
-  const base = await baseRoster();
-  if (!base) return Response.json({ error: "could not read the bundled roster" }, { status: 500, headers: head });
+  const base = await baseRoster(new URL(request.url).origin);
+  if (!base)
+    return Response.json(
+      {
+        error: "could not read the bundled roster",
+        hint: "It is fetched from /assets/roster.js on this same deployment. Open that URL: if it does not load, the asset is missing from the build.",
+      },
+      { status: 500, headers: head },
+    );
   const ed = await liveEdits();
   if (!ed) return Response.json({ error: "the database has no roster document" }, { status: 404, headers: head });
 
