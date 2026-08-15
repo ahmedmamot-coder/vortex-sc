@@ -6404,7 +6404,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-15j';
+const VX_BUILD='2026-08-15k';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -7198,7 +7198,10 @@ class Component extends DCLogic {
     const r=await window.__vxSelectRaw('audit_log', 'select=*&order=at.desc&limit=400');
     if(r.rows==null){
       const why = r.status===404
-          ? 'The activity_log table does not exist in the database yet. Run supabase/audit_log.sql in the Supabase SQL editor, then Load again.'
+          // Named audit_log, not activity_log. This line is read by somebody about to go looking
+          // in the SQL editor, and a table name that is not the table's name sends them looking
+          // for something that was never there.
+          ? 'The audit_log table does not exist in the database yet. Run supabase/audit_log.sql in the Supabase SQL editor, then Load again.'
         : (r.status===401 || r.status===403)
           ? 'The database refused the read. Sign out and sign back in; if it keeps happening, the log’s policies need running again (supabase/audit_log.sql).'
         : ('Could not read the log — '+(r.said||('the database answered HTTP '+r.status))+'.');
