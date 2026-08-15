@@ -397,9 +397,49 @@ if ('serviceWorker' in navigator) {
   function _scheduleRefresh(){ if(_refreshTimer) clearTimeout(_refreshTimer); var a=window.__VX_AUTH; if(!a||!a.refresh) return; var due=a.exp - Date.now() - 60000; if(due<0) due=0; if(due>3000000) due=3000000; _refreshTimer=setTimeout(_doRefresh, due); }
   var _refreshing=null;
   var _refreshFails=0;                       // consecutive refreshes that did not come back with a token
+  // The session on disk, which another tab may have replaced since this one last looked.
+  function _diskAuth(){
+    try{ var v=localStorage.getItem('vx_auth'); return v ? JSON.parse(v) : null; }catch(e){ return null; }
+  }
+  // Another tab has just signed in or refreshed. Adopt what it stored rather than carrying on
+  // with a refresh token that no longer exists — see _doRefresh for why that matters so much.
+  window.addEventListener("storage", function(e){
+    if(!e || e.key!=='vx_auth') return;
+    var d=_diskAuth();
+    if(d && d.token){
+      window.__VX_AUTH=d; window.__vxAuthDead=false; _refreshFails=0; _scheduleRefresh();
+      try{ window.__vxSendingAnon=false; }catch(x){}
+      try{ if(_failLoad().length) window.__vxRetryFailed(); }catch(x){}
+    }else{
+      window.__VX_AUTH=null;
+    }
+    try{ window.dispatchEvent(new CustomEvent("vx-write-failed")); }catch(x){}
+  });
   function _doRefresh(){
     var a=window.__VX_AUTH; if(!a||!a.refresh) return Promise.resolve(false);
     if(_refreshing) return _refreshing;          // one refresh at a time, never a stampede
+    // ...within this tab. localStorage is shared across every tab of the same site, and this app
+    // is open in a Safari tab, in the installed web app and on a phone at the same time — but
+    // window.__VX_AUTH is per-tab memory, so each of them holds its own copy of the session.
+    //
+    // Supabase ROTATES the refresh token: using one consumes it and hands back a new pair. So
+    // tab A refreshes and stores the new pair, tab B is still holding the old one, tab B's timer
+    // fires, and tab B presents a refresh token that has already been spent. The auth server
+    // treats a spent refresh token as a stolen one — that is what reuse detection is for — and
+    // revokes the whole session family. Tab B then reads that 400 as "the session is dead" and
+    // calls _saveAuth(null), which clears the SHARED key and signs every tab and every device
+    // out at once.
+    //
+    // That is why this club's sign-in kept dying while everything about their database and their
+    // plan was perfectly fine, and why signing back in fixed it for exactly as long as it took
+    // the next tab to wake up.
+    //
+    // So: look at the disk first. If another tab has already refreshed, that work is done.
+    var d=_diskAuth();
+    if(d && d.token && d.refresh && d.refresh!==a.refresh){
+      _saveAuth(d); _refreshFails=0; _scheduleRefresh();
+      return Promise.resolve(true);
+    }
     _refreshing = fetch(SB_URL+"/auth/v1/token?grant_type=refresh_token", { method:"POST", headers:{ "apikey":SB_ANON, "Content-Type":"application/json" }, body: JSON.stringify({ refresh_token:a.refresh }) })
       .then(function(r){
         // Any answer that was not a token used to be read as "the session is dead", and the
@@ -425,6 +465,17 @@ if ('serviceWorker' in navigator) {
             try{ window.dispatchEvent(new CustomEvent("vx-write-failed")); }catch(e){}
           }
           return false;
+        }
+        // Before throwing the club's session away: did another tab refresh while this request
+        // was in flight? Then the token we just presented was simply the old one, the refusal
+        // says nothing about the session, and the good pair is already on the disk. Taking that
+        // instead is the difference between one stale tab correcting itself and one stale tab
+        // signing every device in the club out.
+        var fresh=_diskAuth();
+        if(fresh && fresh.token && fresh.refresh && fresh.refresh!==a.refresh){
+          _saveAuth(fresh); _refreshFails=0; _scheduleRefresh();
+          try{ window.dispatchEvent(new CustomEvent("vx-write-failed")); }catch(e){}
+          return true;
         }
         // The refresh token itself is dead — nothing here can recover it, only a fresh
         // sign-in can. Say so, instead of retrying forever against an empty session.
@@ -6415,7 +6466,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-16a';
+const VX_BUILD='2026-08-16b';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.

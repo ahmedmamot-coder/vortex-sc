@@ -4795,6 +4795,37 @@ describe("InBody sheet", () => {
          "that one is written off elsewhere, permanently, and for a different reason");
       eq(c._policyRefused(null), false);
     });
+    // WHY the session kept expiring, with a paid plan and a healthy database.
+    //
+    // localStorage is shared across every tab of a site; window.__VX_AUTH is per-tab memory. This
+    // app runs in a Safari tab, in the installed web app and on a phone at once, so each holds
+    // its own copy of the session. Supabase ROTATES refresh tokens — using one spends it — so a
+    // second tab presenting the token a first tab already spent looks exactly like a stolen
+    // token, and reuse detection revokes the whole session family. The second tab then read that
+    // 400 as "dead", cleared the SHARED key, and signed every device out at once.
+    describe("two tabs must not sign the club out of its own app", () => {
+      it("a refresh checks the disk before spending its token", () => {
+        const fn = sourceBetween("function _doRefresh(){", "\n  }");
+        eq(/var d=_diskAuth\(\);/.test(fn), true, "another tab may already have done this work");
+        eq(/d\.refresh!==a\.refresh/.test(fn), true, "recognised by the token having been rotated");
+      });
+      // The safety net: a refusal for a token another tab has already replaced says nothing
+      // about the session, and must never be the reason the club is signed out.
+      it("a stale refusal takes the newer session rather than throwing it away", () => {
+        const fn = sourceBetween("function _doRefresh(){", "\n  }");
+        const at = fn.indexOf("var fresh=_diskAuth();");
+        eq(at > 0, true, "the disk is re-read when the server says the token is no good");
+        eq(at < fn.indexOf("_saveAuth(null); window.__vxAuthDead = true;"), true,
+           "and BEFORE the session is cleared");
+      });
+      it("a tab adopts what another tab stored instead of refreshing behind it", () => {
+        eq(/addEventListener\("storage", function\(e\)\{/.test(SOURCE), true, "tabs hear each other");
+        const fn = sourceBetween('addEventListener("storage", function(e){', "\n  });");
+        eq(/e\.key!=='vx_auth'/.test(fn), true, "only the session key");
+        eq(/window\.__vxAuthDead=false/.test(fn), true, "a fresh session is not a dead one");
+        eq(/__vxRetryFailed/.test(fn), true, "and whatever was held goes in straight away");
+      });
+    });
     // THE fault behind every one of these banners. _curTok falls back to the anon key when the
     // session expires; every read policy is `to authenticated`, so an anonymous read is not
     // refused — it comes back 200 with an empty list. Each fetch then concluded its table was
