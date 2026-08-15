@@ -1305,6 +1305,26 @@ describe("expired session", () => {
       eq(/row-level security/.test(blocked[0].said || ""), true, "the reason has to travel with it");
       eq(t.win.__vxFailedCount(), 0, "and it is not counted as work a retry could still save");
     });
+    // 304 swimmers became 317 again, with 123 dates of birth missing again, after the club fixed
+    // the permission that had been holding writes back. The held writes were snapshots taken
+    // before the roster was repaired, and letting them go put the old roster back.
+    itAsync("a held write sends what the device believes now, not what it believed then", async () => {
+      let refuse = true;
+      const t = boot({ auth: LIVE,
+        reply: (url) => (url.includes("/club_state") ? (refuse ? res(503, {}) : res(200, [])) : GOOD_TOKEN) });
+      await t.win.__vxpush("vx_roster_edits", JSON.stringify({ n: "the old roster" }));
+      await flush();
+      eq(t.win.__vxFailedCount(), 1, "held, because the database could not take it");
+      // The roster is repaired on this device while the write waits.
+      t.store.vx_roster_edits = JSON.stringify({ n: "the repaired roster" });
+      refuse = false;
+      await t.win.__vxRetryFailed();
+      await flush();
+      const sent = t.requests.filter((r) => String(r.url).includes("/club_state") && r.opts && r.opts.body);
+      const last = JSON.parse(sent[sent.length - 1].opts.body)[0];
+      eq(last.value.n, "the repaired roster", "replaying the snapshot is how the repair was undone");
+    });
+
     // Before anyone signs in the app is an anonymous visitor, and the database refusing it is
     // the database being right. Treating that as settled put "31 records cannot go into the
     // database" on the sign-in screen, in front of somebody who had not done anything yet — and
@@ -2873,7 +2893,13 @@ describe("InBody sheet", () => {
     });
     it("a successful blob write leaves nothing behind", () => {
       const retry = sourceBetween('if(it.op==="push"){', "var fn = it.op===");
-      eq(/pushKey\(it\.table, pv\)/.test(retry), true, "only pushKey knows how to write one");
+      eq(/pushKey\(pk, cur\)/.test(retry), true, "only pushKey knows how to write one");
+      // it.table reads "club_state (vx_squads)" so the banner can name both; pushKey knows keys.
+      eq(/it\.payload&&it\.payload\.key/.test(retry), true, "the key comes from the payload");
+      // And the value is re-read, not the snapshot captured when the write was refused. A queued
+      // push sits through sign-ins and repairs: replaying the old one is how a roster that had
+      // just been put right went back to the copy it was put right from.
+      eq(/localStorage\.getItem\(pk\)/.test(retry), true, "what this device believes now, not then");
     });
     // An edit built on the copy loaded at start-up pushes that older overlay back over a newer
     // one, losing a change that had already saved correctly.

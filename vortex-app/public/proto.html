@@ -336,8 +336,17 @@ if ('serviceWorker' in navigator) {
         // A blob key is replayed through pushKey, which is the only thing that knows how to
         // write one. Without this arm they would be recorded and then never retried.
         if(it.op==="push"){
-          var pv=(it.payload&&it.payload.value); if(pv===undefined) return;
-          return Promise.resolve(pushKey(it.table, pv)).then(function(r){ if(r&&r.ok) fixed++; });
+          // The key, from the payload. it.table reads "club_state (vx_squads)" for the banner's
+          // sake, and pushKey only knows keys — handing it that string refused every replay.
+          var pk=(it.payload&&it.payload.key)||"";
+          if(!pk) return;
+          // And what this device believes NOW, not what it believed when the write was refused.
+          // A queued push sits through sign-ins and repairs; replaying the old snapshot is how a
+          // roster that had just been put right went back to the copy it was put right from —
+          // 304 swimmers became 317 again, with the dates of birth missing again.
+          var cur=null; try{ cur=localStorage.getItem(pk); }catch(e){}
+          if(cur==null){ var pv=(it.payload&&it.payload.value); if(pv===undefined) return; cur=JSON.stringify(pv); }
+          return Promise.resolve(pushKey(pk, cur)).then(function(r){ if(r&&r.ok) fixed++; });
         }
         var fn = it.op==="insert" ? window.__vxInsert : it.op==="upsert" ? window.__vxUpsert : null;
         if(!fn) return;
@@ -473,7 +482,7 @@ if ('serviceWorker' in navigator) {
         body: JSON.stringify([{ key:k, value:val, updated_at:new Date().toISOString() }]) })
       .then(function(r){ window.__vxSyncOk = r.ok; if(r.ok) _blockClearTable("club_state");
         if(r.ok) return {ok:true};
-        if(r.status===401||r.status===403){ _vxQueue(function(){ pushKey(k, v); }); }
+        if(r.status===401||r.status===403){ _vxQueue(function(){ var cur=null; try{ cur=localStorage.getItem(k); }catch(e){} pushKey(k, cur==null?v:cur); }); }
         return r.text().then(function(t){ try{ console.warn("vx sync HTTP "+r.status+" on "+k+": "+t); }catch(e){}
           // Until now this went to a console nobody has open. Every OTHER write in the app
           // surfaces a refusal in the red banner; the shared blob — squads, brand, goals, the
@@ -6324,7 +6333,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-15e';
+const VX_BUILD='2026-08-15f';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
