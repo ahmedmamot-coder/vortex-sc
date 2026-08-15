@@ -1046,11 +1046,34 @@ if ('serviceWorker' in navigator) {
     border-radius:7px;display:flex;align-items:flex-end;overflow:hidden}
   .vx-speedbar{width:100%;border-radius:7px;transition:height .35s cubic-bezier(.22,1,.36,1)}
   .vx-speedlab{font-size:9.5px;font-weight:700;color:var(--vx-slate-500);flex:none}
-  .vx-tablehead{position:relative;display:flex;font-size:9px;letter-spacing:.1em;
+  /* The split table's eight columns, written once and used by both the heading row and every
+     number row.
+
+     It used to be two flex containers carrying the same list of flex ratios, and on a phone the
+     headings did not sit over their own numbers. Flex divides what is LEFT after each item's own
+     content, so "SPLIT" and "98.0" pull different shares, a boxed input's padding and border add
+     on top of its share, and the row that follows a wall has an input where the others have a
+     dot. Every one of those makes the two containers disagree, and none of them can be fixed by
+     matching the ratios more carefully — the two rows are measuring different things.
+
+     A grid divides the track first and puts the content in afterwards, so the same template on
+     both containers gives the same columns whatever is standing in them. minmax(0,…) is what
+     lets a column go narrower than its content: without it a 20-character-wide input floor would
+     push the last columns off a 390px screen. */
+  :root{--vx-splitcols:minmax(0,1.05fr) minmax(0,.95fr) minmax(0,.9fr) minmax(0,.8fr)
+    minmax(0,.8fr) minmax(0,.85fr) minmax(0,.85fr) minmax(0,.85fr)}
+  .vx-tablehead{position:relative;display:grid;grid-template-columns:var(--vx-splitcols);gap:2px;
+    font-size:9px;letter-spacing:.1em;
     text-transform:uppercase;color:var(--vx-slate-300);font-weight:700;padding:0 8px 7px}
-  .vx-tablerow{position:relative;display:flex;align-items:center;gap:2px;padding:8px;
+  .vx-tablerow{position:relative;display:grid;grid-template-columns:var(--vx-splitcols);
+    align-items:center;gap:2px;padding:8px;
     border-radius:10px;margin-bottom:2px}
-  .vx-strokebox{flex:.8;min-width:0;text-align:right;background:var(--vx-white);
+  /* A grid item still refuses to shrink below its own content unless it is told it may, and an
+     input's idea of its own content is twenty characters wide. */
+  .vx-tablehead > *, .vx-tablerow > *{min-width:0}
+  /* border-box, so the padding and border come out of the column rather than being added on top
+     of it and spilling into the next one. */
+  .vx-strokebox{min-width:0;box-sizing:border-box;text-align:right;background:var(--vx-white);
     border:1px solid var(--border-default);border-radius:7px;padding:4px 6px;color:var(--vx-ink);
     font-family:var(--font-mono);font-size:12px;font-weight:700;outline:none}
   .vx-strokebox:focus{border-color:var(--color-brand);box-shadow:0 0 0 3px var(--brand-tint)}
@@ -1108,7 +1131,7 @@ if ('serviceWorker' in navigator) {
     background:var(--vx-white);color:var(--vx-slate-300);display:flex;align-items:center;justify-content:center}
   .vx-analysis-breakout{position:relative;display:flex;align-items:center;gap:10px;margin-top:12px;
     background:var(--vx-slate-50);border:1px solid var(--border-subtle);border-radius:12px;padding:10px 12px}
-  .vx-breakoutbox{flex:none;width:70px;text-align:right;background:var(--vx-white);
+  .vx-breakoutbox{flex:none;width:70px;box-sizing:border-box;text-align:right;background:var(--vx-white);
     border:1px solid var(--border-default);border-radius:8px;padding:6px 8px;color:var(--vx-ink);
     font-family:var(--font-mono);font-size:12.5px;font-weight:700;outline:none}
   .vx-analysis-foot{position:relative;margin:13px 0 0;padding-top:11px;
@@ -3955,23 +3978,23 @@ if ('serviceWorker' in navigator) {
                               <span class="vx-analysis-legend-unit">tap in the strokes, the rest follows</span>
                             </div>
                             <div class="vx-tablehead">
-                              <span style="flex:1.05">Split</span><span style="flex:.95;text-align:right">Time</span><span style="flex:.9;text-align:right">m/s</span><span style="flex:.8;text-align:right">Str</span><span style="flex:.8;text-align:right">Kick</span><span style="flex:.85;text-align:right">SR</span><span style="flex:.85;text-align:right">DPS</span><span style="flex:.85;text-align:right">SI</span>
+                              <span>Split</span><span style="text-align:right">Time</span><span style="text-align:right">m/s</span><span style="text-align:right">Str</span><span style="text-align:right">Kick</span><span style="text-align:right">SR</span><span style="text-align:right">DPS</span><span style="text-align:right">SI</span>
                             </div>
                             <sc-for list="{{ raceRows }}" as="r" hint-placeholder-count="5">
                               <div class="vx-tablerow" style="background:{{ r.rowBg }}">
-                                <span style="flex:1.05;font-size:12px;font-weight:800;color:var(--vx-ink)">{{ r.label }}</span>
-                                <span style="flex:.95;text-align:right;font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--vx-ink)">{{ r.split }}</span>
-                                <span style="flex:.9;text-align:right;font-family:var(--font-mono);font-size:12px;font-weight:800;color:{{ r.velInk }}">{{ r.vel }}</span>
+                                <span style="font-size:12px;font-weight:800;color:var(--vx-ink)">{{ r.label }}</span>
+                                <span style="text-align:right;font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--vx-ink)">{{ r.split }}</span>
+                                <span style="text-align:right;font-family:var(--font-mono);font-size:12px;font-weight:800;color:{{ r.velInk }}">{{ r.vel }}</span>
                                 <input value="{{ r.strokes }}" onchange="{{ r.onStrokes }}" inputmode="numeric" placeholder="–" class="vx-strokebox">
                                 <sc-if value="{{ r.kickable }}" hint-placeholder-val="{{ true }}">
                                   <input value="{{ r.kicksShown }}" onchange="{{ r.onKicks }}" inputmode="numeric" placeholder="–" class="vx-strokebox vx-kickbox">
                                 </sc-if>
                                 <sc-if value="{{ r.notKickable }}" hint-placeholder-val="{{ false }}">
-                                  <span style="flex:.8;text-align:right;font-family:var(--font-mono);font-size:12px;color:var(--vx-slate-300)">·</span>
+                                  <span style="text-align:right;font-family:var(--font-mono);font-size:12px;color:var(--vx-slate-300)">·</span>
                                 </sc-if>
-                                <span style="flex:.85;text-align:right;font-family:var(--font-mono);font-size:12px;color:var(--vx-slate-500)">{{ r.sr }}</span>
-                                <span style="flex:.85;text-align:right;font-family:var(--font-mono);font-size:12px;color:var(--vx-slate-500)">{{ r.dps }}</span>
-                                <span style="flex:.85;text-align:right;font-family:var(--font-mono);font-size:12px;color:var(--vx-slate-500)">{{ r.si }}</span>
+                                <span style="text-align:right;font-family:var(--font-mono);font-size:12px;color:var(--vx-slate-500)">{{ r.sr }}</span>
+                                <span style="text-align:right;font-family:var(--font-mono);font-size:12px;color:var(--vx-slate-500)">{{ r.dps }}</span>
+                                <span style="text-align:right;font-family:var(--font-mono);font-size:12px;color:var(--vx-slate-500)">{{ r.si }}</span>
                               </div>
                             </sc-for>
                             <sc-if value="{{ raceHasBreakout }}" hint-placeholder-val="{{ false }}">
@@ -6381,7 +6404,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-15i';
+const VX_BUILD='2026-08-15j';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.

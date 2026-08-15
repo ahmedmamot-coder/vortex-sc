@@ -3902,6 +3902,32 @@ describe("InBody sheet", () => {
       eq(videoSection.split('class="vx-toolcard"').length - 1, 3,
          "every new card uses it rather than each inventing a card");
     });
+    // The split table's headings did not sit over their own numbers on a phone, because the
+    // heading row and the number rows were two separate flex containers repeating the same list
+    // of ratios. Flex hands out what is LEFT after each item's content, so "SPLIT" and "98.0"
+    // never took the same share, a boxed input's padding came out of the next column, and the
+    // row after a wall — the only one with a kick box rather than a dot — divided the space
+    // differently again. Matching the ratios more carefully cannot fix that. One grid template,
+    // named once and used by both, can, and this is the test that stops it being unpicked.
+    it("the split table's columns are one template used by both the headings and the rows", () => {
+      const head = (SOURCE.match(/\.vx-tablehead\{[^}]*\}/) || [""])[0];
+      const row  = (SOURCE.match(/\.vx-tablerow\{[^}]*\}/) || [""])[0];
+      for (const [what, css] of [["headings", head], ["rows", row]]) {
+        eq(/display:grid/.test(css), true, what + " must lay out on a grid");
+        eq(/grid-template-columns:var\(--vx-splitcols\)/.test(css), true,
+           what + " must take the shared column template, not a copy of it");
+      }
+      eq(/--vx-splitcols:[^;}]*minmax\(0,/.test(SOURCE), true,
+         "minmax(0,…) or an input's 20-character floor pushes the last columns off a 390px screen");
+      // Eight headings, and one cell per heading on a row — including the dot that stands in
+      // for the kick box on a row that does not follow a wall.
+      const headRow = (videoSection.match(/<div class="vx-tablehead">([\s\S]*?)<\/div>/) || [])[1] || "";
+      eq(headRow.split("<span").length - 1, 8, "eight headings");
+      // Leftover flex ratios in the markup do nothing on a grid item and would read as if they
+      // were still deciding the columns.
+      const table = (videoSection.match(/<div class="vx-tablehead">[\s\S]*?<\/sc-for>/) || [""])[0];
+      eq(/style="[^"]*flex:/.test(table), false, "no dead flex ratios left on the cells");
+    });
   });
 
   // What is sent when a coach asks Claude to read a swim. A name typed on a lane is the one
