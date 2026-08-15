@@ -6415,7 +6415,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-15p';
+const VX_BUILD='2026-08-16a';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -6645,7 +6645,7 @@ class Component extends DCLogic {
       famVerify:null, famVerifyInput:'', famVerifyErr:'',
       adminSection:null, famAdminQuery:'', famAdminAddFor:null, famAdminSwQuery:'', famAdminMsg:'', famAdminProblems:false,
       attDayISO:null, attDayStatus:'all', attDayOpenSquad:null,
-      saveFailCount:0, saveFailLast:null, saveFailHidden:false, authDead:false, saveBlocked:[], saveBlockedHidden:false,
+      saveFailCount:0, saveFailLast:null, saveFailHidden:false, authDead:false, sendingAnon:false, saveBlocked:[], saveBlockedHidden:false,
       updateReady:false, updateLatest:'',
       pwNew:'', pwNew2:'', pwMsg:'', pwOk:true, profileMsg:'', profileOk:true,
       staffPwDrafts:{}, staffPwMsg:'', staffPwOk:true, staffPwFor:'',
@@ -7066,6 +7066,12 @@ class Component extends DCLogic {
       const refused = list.filter(x=>x && x.refused).length;
       const last = list.length ? list[list.length-1] : null;
       const dead = !!window.__vxAuthDead;
+      // Sending the anon key means the database sees an anonymous visitor whatever the app is
+      // showing. __vxAuthDead only goes true once the refresh token itself is finished, so for
+      // hours before that the app looked signed in, every write was refused, and the banner
+      // blamed a table. This is the honest signal and it is available immediately.
+      const anon = !!window.__vxSendingAnon;
+      if(anon !== this.state.sendingAnon) this.setState({sendingAnon:anon});
       // Blocked writes are not unsaved work — the database is refusing the row itself. They are
       // counted separately so they cannot put "changes have not been saved" and a Retry button
       // on every device for ever.
@@ -7128,6 +7134,26 @@ class Component extends DCLogic {
   // What must NOT release a hold is the matching read succeeding. Staff can read the whole family
   // list while six particular rows still will not go in; reading and writing ask the same question
   // of the policy but not of the row, and clearing on a good read put all six straight back.
+  // Is this device talking to the database as itself, or as an anonymous visitor?
+  //
+  // This is the single fault behind every "N changes have not been saved" this club has seen —
+  // family_accounts, then vx_squads_t, then vx_video_analyses, then vx_squads_t again — and it
+  // was never really about any of those tables.
+  //
+  // _curTok falls back to the anon key the moment the session expires. Every table's read policy
+  // is written `to authenticated`, so an anonymous read is NOT refused: no policy applies, no row
+  // matches, and PostgREST answers 200 with an EMPTY LIST. The app then does the helpful thing
+  // and seeds the table from this device — squads, video analyses, the family list, each in turn.
+  // Those writes go out anonymously too, the write policies do refuse them, and the banner blames
+  // whichever table happened to be asked first. Meanwhile the screen looks perfectly normal,
+  // because it is drawn from the copy on the device, not from the database.
+  //
+  // So: an anonymous read carries no information whatsoever about what is in the database, and
+  // nothing may act on one. "Empty" and "invisible to you" are not the same answer, and treating
+  // them as the same is how an app decides to overwrite a database it cannot see.
+  _dbAnon(){
+    try{ return !!(typeof window!=='undefined' && window.__vxSendingAnon); }catch(e){ return false; }
+  }
   _policyHold(key){
     this._polHeld = this._polHeld || {};
     this._polHeld[key] = (window.__VX_AUTH && window.__VX_AUTH.token) || '';
@@ -7176,7 +7202,11 @@ class Component extends DCLogic {
     //
     // A row the database has refused for that reason is remembered and not offered again.
     const _refused=this._famRefusedIds();
-    localOnly.forEach(f=>{
+    // The list is still assembled and shown — the club's families do not disappear off the screen
+    // because a token expired. Only the backfill stops: an anonymous read comes back empty rather
+    // than refused, so every family looks like one this database has never heard of, and all
+    // thirty get re-sent and refused. See _dbAnon.
+    if(!this._dbAnon()) localOnly.forEach(f=>{
       if(!window.__vxUpsert || !this._isUuid(f.id) || _refused.indexOf(f.id)>=0 || this._policyHeld('family:'+f.id)) return;
       try{
         const p=window.__vxUpsert('family_accounts', [{id:f.id, name:f.name, email:f.email, phone:f.phone, pass:f.pass, role:f.role, swimmer_ids:f.swimmerIds||[], ts:Date.now()}]);
@@ -7417,6 +7447,8 @@ class Component extends DCLogic {
   // must not be the one that decides what the squads are.
   async _squadsSeed(){
     if(!window.__vxUpsert || !this._isFullAccess()) return;
+    // The empty read that sent us here may only mean the session has expired. See _dbAnon.
+    if(this._dbAnon()) return;
     // _squadsFetch seeds whenever the table reads back empty, and it is called from everywhere
     // the squad list can change. So a seed the policy refuses is not attempted once — it is
     // attempted on every fetch, for as long as the app is open, and each one lands on the banner
@@ -10980,6 +11012,8 @@ class Component extends DCLogic {
   // parent's device must not be the one that decides what the club's library is.
   async _videosSeed(){
     if(!window.__vxUpsert || !this._isFullAccess()) return;
+    // The empty read that sent us here may only mean the session has expired. See _dbAnon.
+    if(this._dbAnon()) return;
     // Same as the squad seed: _videosFetch seeds whenever the table reads back empty, so a seed
     // the policy refuses is attempted again on every fetch, and the club's whole library lands on
     // the banner as work it has lost. It has not lost any of it — every clip is on the device and
@@ -16135,16 +16169,22 @@ class Component extends DCLogic {
         return 'The database is refusing the rows themselves, so retrying cannot help. Show this to whoever looks after the database: '+said;
       })(),
       onBlockedDismiss: ()=>{ try{ if(window.__vxClearBlocked) window.__vxClearBlocked(); }catch(e){} this.setState({saveBlocked:[], saveBlockedHidden:true}); },
-      saveFailShow: S.screen==='app' && (S.saveFailCount>0 || S.authDead) && !S.saveFailHidden,
-      saveFailTitle: S.authDead
+      saveFailShow: S.screen==='app' && (S.saveFailCount>0 || S.authDead || S.sendingAnon) && !S.saveFailHidden,
+      saveFailTitle: (S.authDead || S.sendingAnon)
         ? (S.saveFailCount>0
             ? ('Signed out — ' + (S.saveFailCount===1 ? '1 change is waiting' : S.saveFailCount+' changes are waiting'))
             : 'Signed out — changes will not save')
         : (S.saveFailCount===1 ? '1 change has not been saved' : (S.saveFailCount+' changes have not been saved')),
-      saveFailDetail: S.authDead
+      // The database session expiring is not the same as being thrown out, and the app could
+      // tell the difference all along — _curTok sets a flag the moment it starts sending the
+      // anon key — but only the blocked-rows banner ever asked. This one named whichever table
+      // happened to be written first and said "retrying automatically", which is why four
+      // separate tables each looked like their own fault and each got their own SQL run at
+      // midnight. There is one fault and one action.
+      saveFailDetail: (S.authDead || S.sendingAnon)
         ? (S.saveFailCount>0
-            ? 'Your session expired. Sign in again and these will save automatically.'
-            : 'Your session expired. Sign in again before you mark anything.')
+            ? 'Your database sign-in has expired, so these are reaching the database as an anonymous visitor and every one is refused — whatever table it names. Nothing is lost. Sign out and back in and they save themselves.'
+            : 'Your database sign-in has expired. Sign in again before you mark anything.')
         // "family_accounts · HTTP 400 · retrying automatically" named the table and the number
         // and then said the one thing that was not true. A rejected write is one of three
         // different problems and they need three different people: a permission is the club's
@@ -16167,7 +16207,7 @@ class Component extends DCLogic {
       // Signed out, the Retry button is a lie — there is nothing it can do. It becomes the
       // one action that does work: go and sign in. The marks are already safe in the queue
       // and replay by themselves the moment the sign-in lands.
-      saveFailActionLabel: S.authDead ? 'Sign in' : 'Retry',
+      saveFailActionLabel: (S.authDead || S.sendingAnon) ? 'Sign in' : 'Retry',
       onSaveFailRetry: async()=>{
         // Read the live flag, not the rendered one. Sending someone back to the sign-in
         // screen is the one action here that undoes work, so it must never fire on a

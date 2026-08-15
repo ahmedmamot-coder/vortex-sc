@@ -1150,7 +1150,7 @@ describe("expired session", () => {
   // then said the one thing that does not help. The server's own words are what tell an
   // expired token apart from a permission this account has never had.
   it("a retry that keeps failing shows what the database actually said", () => {
-    const detail = sourceBetween("saveFailDetail: S.authDead", "// Signed out, the Retry button is a lie");
+    const detail = sourceBetween("saveFailDetail: (S.authDead || S.sendingAnon)", "// Signed out, the Retry button is a lie");
     eq(/retrying automatically'\s*\+\s*\(\(S\.saveFailLast && S\.saveFailLast\.said\)/.test(detail), true,
        "the reason is captured on every failure and must not be dropped on this one");
     eq(/the database said: /.test(detail), true);
@@ -4794,6 +4794,36 @@ describe("InBody sheet", () => {
       eq(c._policyRefused({ status: 409, said: "violates foreign key constraint" }), false,
          "that one is written off elsewhere, permanently, and for a different reason");
       eq(c._policyRefused(null), false);
+    });
+    // THE fault behind every one of these banners. _curTok falls back to the anon key when the
+    // session expires; every read policy is `to authenticated`, so an anonymous read is not
+    // refused — it comes back 200 with an empty list. Each fetch then concluded its table was
+    // empty and seeded it from the device, those writes went out anonymously too, and the banner
+    // blamed whichever table was asked first. Four tables, four midnight SQL runs, one fault.
+    it("an anonymous read is never treated as an empty table", () => {
+      for (const [what, method] of [["squads", "async _squadsSeed(){"], ["video analyses", "async _videosSeed(){"]]) {
+        const seed = sourceBetween(method, "\n  }");
+        eq(/if\(this\._dbAnon\(\)\) return;/.test(seed), true,
+           what + ": an empty read while signed out says nothing about the table");
+      }
+      const fam = sourceBetween("const _refused=this._famRefusedIds();", "const list=[...fromTable");
+      eq(/if\(!this\._dbAnon\(\)\) localOnly\.forEach/.test(fam), true,
+         "the family backfill is what re-sent all thirty");
+      // The families must still be listed. Losing the screen because a token expired would be a
+      // worse bug than the one being fixed.
+      eq(/const list=\[\.\.\.fromTable, \.\.\.localOnly\];/.test(SOURCE), true,
+         "the list is still assembled and shown");
+      const anon = sourceBetween("_dbAnon(){", "\n  }");
+      eq(/window\.__vxSendingAnon/.test(anon), true, "which _curTok already sets, and nothing asked");
+    });
+    // The app knew, and said nothing useful. __vxAuthDead only goes true once the refresh token
+    // itself is finished, so for hours before that the banner named a table and said "retrying
+    // automatically" — sending this club to check an allowlist that was right all along.
+    it("the banner says the session expired rather than naming a table", () => {
+      eq(/const anon = !!window\.__vxSendingAnon;/.test(SOURCE), true, "read every poll");
+      eq(/saveFailTitle: \(S\.authDead \|\| S\.sendingAnon\)/.test(SOURCE), true, "and it changes the title");
+      eq(/saveFailActionLabel: \(S\.authDead \|\| S\.sendingAnon\) \? 'Sign in' : 'Retry'/.test(SOURCE), true,
+         "Retry cannot work signed out, so the button becomes the thing that can");
     });
     it("it is never written to disk", () => {
       for (const m of ["_policyHold(key){", "_policyHeld(key){"])
