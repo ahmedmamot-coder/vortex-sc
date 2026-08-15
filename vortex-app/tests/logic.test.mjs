@@ -1048,6 +1048,31 @@ describe("expired session", () => {
     await flush();
     eq(t.win.__vxSendingAnon, true, "'signed in' and 'writing as yourself' are different questions");
   });
+  // Every diagnosis of this ran in the SQL editor, which answers as the owner of the database
+  // and can therefore only ever say "the policy looks right". That is a different question from
+  // what the policy says about THIS request, and the two disagreed for a whole afternoon.
+  itAsync("the app can ask the database what it thinks of the app's own sign-in", async () => {
+    const seen = [];
+    const t = boot({ auth: LIVE, reply: (url, n) => { seen.push(String(url)); return res(200, true); } });
+    const answer = await t.win.__vxRpc("vx_is_staff");
+    eq(answer, true);
+    eq(seen.some((u) => u.includes("/rest/v1/rpc/vx_is_staff")), true, "asked as the app, not as the owner");
+  });
+  itAsync("and it carries the app's own token, which is the whole point", async () => {
+    let auth = "";
+    const t = boot({ auth: LIVE, reply: (url, n) => { return res(200, true); } });
+    t.win.__vxRpc("vx_is_staff");
+    await flush();
+    auth = (t.requests[t.requests.length - 1].opts.headers || {}).Authorization || "";
+    eq(auth.includes(LIVE.token), true, "asking with any other key answers a different question");
+  });
+  itAsync("a refusal comes back as words rather than as a silent null", async () => {
+    const t = boot({ auth: LIVE, reply: () => res(404, { message: "function does not exist" }) });
+    const answer = await t.win.__vxRpc("vx_is_staff");
+    eq(!!(answer && answer.__err), true);
+    eq(/404/.test(answer.__err), true, "a missing function is a diagnosis, not a blank");
+  });
+
   // Tolerating a bad minute is right; tolerating it for ever is not. While the token is
   // expired every write leaves as an anonymous visitor and is refused, so a count that climbs
   // with no action offered is worse than being told to sign in again.

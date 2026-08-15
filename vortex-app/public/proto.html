@@ -502,6 +502,16 @@ if ('serviceWorker' in navigator) {
   };
   // Exact row count for a table (owner Data-Check panel). Uses PostgREST's Content-Range header
   // (Prefer: count=exact) so we never download the rows themselves. Returns a number, or -1 on error.
+  // Ask the database a question as the app itself, with the app's own token. Every diagnosis so
+  // far has been run in the SQL editor, which answers as the owner of the database and can
+  // therefore only ever say "the policy looks right" — a different question from the one that
+  // matters, which is what the policy says about THIS request. vx_is_staff() is granted to
+  // authenticated, so the app can simply ask it.
+  window.__vxRpc = function(fn, args){
+    return fetch(SB_URL+"/rest/v1/rpc/"+fn, { method:"POST", headers: dyn(), body: JSON.stringify(args||{}) })
+      .then(function(r){ return r.ok ? r.json() : r.text().then(function(t){ return {__err:'HTTP '+r.status+' '+String(t||'').slice(0,160)}; }); })
+      .catch(function(e){ return {__err:'could not be sent'+((e&&e.message)?(' ('+e.message+')'):'')}; });
+  };
   window.__vxCount = function(table, qs){ return fetch(SB_URL+"/rest/v1/"+table+"?select=id"+(qs?("&"+qs):""), { method:"HEAD", headers: dyn({"Prefer":"count=exact","Range-Unit":"items","Range":"0-0"}) }).then(function(r){ var cr=r.headers.get("content-range")||""; var m=cr.split("/"); var n=m.length>1?parseInt(m[1],10):NaN; return isNaN(n)?(r.ok?0:-1):n; }).catch(function(){ return -1; }); };
   window.__vxDelete = function(table, qs){ return fetch(SB_URL+"/rest/v1/"+table+"?"+qs, { method:"DELETE", headers: dyn() }).then(function(r){ if(!r.ok && (r.status===401||r.status===403)){ _vxQueue(function(){ window.__vxDelete(table, qs); }); } return r.ok; }).catch(function(){ return false; }); };
   // The reason a write was refused, kept for whoever asks next. Callers get a plain true/false
@@ -6285,7 +6295,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-14i';
+const VX_BUILD='2026-08-15a';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -11486,6 +11496,19 @@ class Component extends DCLogic {
       value:(_a.exp ? new Date(_a.exp).toLocaleString() : 'unknown')
             + (_a.refresh ? ' · renews itself' : ' · NO refresh token — it cannot renew'),
       warn: !_a.refresh || !_signed });
+    // The database's own answer, to the app's own token. Everything else on this screen is
+    // circumstantial: the allowlist can be right, the policy can be right, the function can be
+    // right, and the write still be refused — because none of those were asked with the token
+    // the app actually sends. This one is.
+    let _staffSays=null;
+    try{ if(window.__vxRpc) _staffSays=await window.__vxRpc('vx_is_staff'); }catch(e){ _staffSays={__err:'could not be asked'}; }
+    if(_staffSays && _staffSays.__err)
+      rows.unshift({ label:'Database says I am staff', value:'could not ask — '+_staffSays.__err, warn:true });
+    else if(_staffSays!=null)
+      rows.unshift({ label:'Database says I am staff',
+        value: _staffSays===true ? 'yes ✓ — writes to the club’s tables are allowed'
+                                 : 'NO — this is why every staff-only write is refused',
+        warn: _staffSays!==true });
     // The question every other line here is a proxy for: which key is actually on the writes.
     // "Signed in" and "writing as yourself" are not the same thing, and the gap between them is
     // where a whole club's saves go.
@@ -15807,7 +15830,10 @@ class Component extends DCLogic {
           return 'You are signed in, but the database is not treating this account ('
             +((window.__VX_AUTH&&window.__VX_AUTH.email)||'this sign-in')
             +') as staff, so it will not accept writes to '+t+'. Nothing is lost — the changes are still here and save themselves the moment it does. '
-            +'Whoever looks after the database should run STEP 1 of supabase/staff_access_repair.sql: it reports which part of the check is failing rather than guessing.';
+            // Which key is on the request, said here rather than left to be found on another
+            // screen. It is the difference between "the database does not know you" and "the
+            // database has never been asked", and every round of this has turned on it.
+            +'Open Check the reader: "Database says I am staff" is the database\'s own answer to this app\'s own sign-in, and it names the fault outright.';
         }
         const fam=b.filter(x=>x&&x.table==='family_accounts').length;
         if(fam===b.length && fam>0) return 'They are family accounts that point at logins which no longer exist — the restore changed which logins there are. Nothing is lost: they are still listed in the app, and they will save themselves the next time those people sign in.';
