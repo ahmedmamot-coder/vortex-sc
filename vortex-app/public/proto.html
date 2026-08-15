@@ -143,12 +143,18 @@ if ('serviceWorker' in navigator) {
   function _blockSave(a){ try{ localStorage.setItem(BLOCKK, JSON.stringify(a.slice(-50))); }catch(e){} }
   function _blocking(said, body){
     var s=String(said||"")+" "+String(body||"");
-    // Two refusals that a retry can never turn into a save. A foreign key needs the row it
-    // points at to exist. A security policy needs the club's own database settings changed —
-    // "new row violates row-level security policy" means the account is signed in and the
-    // database has decided this row is not theirs to write, which is an answer, not a hiccup.
-    // Both were being counted as work waiting to be saved, behind a Retry button, for ever.
-    return /foreign key/i.test(s) || /row-level security/i.test(s);
+    // A foreign key needs the row it points at to exist. No retry makes that true.
+    if(/foreign key/i.test(s)) return true;
+    // A security policy is only a settled answer if there was somebody to answer about. Before
+    // anyone signs in the app is an anonymous visitor and the database is right to refuse it —
+    // that write is not lost, it is queued, and it goes in the moment a coach signs in. Calling
+    // it permanent put "31 records cannot go into the database" on the login screen, in front of
+    // somebody who had not yet done anything and could not act on it.
+    if(/row-level security/i.test(s)){
+      var a=window.__VX_AUTH;
+      return !!(a && a.token && a.exp && Date.now() < a.exp);
+    }
+    return false;
   }
   // A duplicate primary key is not a change waiting to be saved. It is a change that IS saved:
   // the row is in the database, which is precisely what the database is complaining about. It
@@ -6318,7 +6324,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-15d';
+const VX_BUILD='2026-08-15e';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -15827,7 +15833,10 @@ class Component extends DCLogic {
       // Not red, and not "unsaved": these rows are refused by the database itself, so there is
       // nothing to retry and nothing being lost from the app's own list. It says what happened
       // and clears for good, instead of reappearing on the next fetch.
-      blockedShow: (S.saveBlocked||[]).length>0 && !S.saveBlockedHidden && !((S.saveFailCount>0 || S.authDead) && !S.saveFailHidden),
+      // Neither bar belongs on the sign-in screen. Nobody there has done anything yet, nothing
+      // of theirs is at risk, and the one action both bars ask for — retry, or sign in — is the
+      // screen they are already looking at. Everything held goes in by itself the moment they do.
+      blockedShow: S.screen==='app' && (S.saveBlocked||[]).length>0 && !S.saveBlockedHidden && !((S.saveFailCount>0 || S.authDead) && !S.saveFailHidden),
       blockedTitle: ((S.saveBlocked||[]).length===1 ? '1 record cannot go into the database' : (S.saveBlocked||[]).length+' records cannot go into the database'),
       blockedDetail: (()=>{
         const b=(S.saveBlocked||[]);
@@ -15863,7 +15872,7 @@ class Component extends DCLogic {
         return 'The database is refusing the rows themselves, so retrying cannot help. Show this to whoever looks after the database: '+said;
       })(),
       onBlockedDismiss: ()=>{ try{ if(window.__vxClearBlocked) window.__vxClearBlocked(); }catch(e){} this.setState({saveBlocked:[], saveBlockedHidden:true}); },
-      saveFailShow: (S.saveFailCount>0 || S.authDead) && !S.saveFailHidden,
+      saveFailShow: S.screen==='app' && (S.saveFailCount>0 || S.authDead) && !S.saveFailHidden,
       saveFailTitle: S.authDead
         ? (S.saveFailCount>0
             ? ('Signed out — ' + (S.saveFailCount===1 ? '1 change is waiting' : S.saveFailCount+' changes are waiting'))

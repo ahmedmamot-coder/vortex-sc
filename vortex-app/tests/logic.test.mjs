@@ -1305,6 +1305,27 @@ describe("expired session", () => {
       eq(/row-level security/.test(blocked[0].said || ""), true, "the reason has to travel with it");
       eq(t.win.__vxFailedCount(), 0, "and it is not counted as work a retry could still save");
     });
+    // Before anyone signs in the app is an anonymous visitor, and the database refusing it is
+    // the database being right. Treating that as settled put "31 records cannot go into the
+    // database" on the sign-in screen, in front of somebody who had not done anything yet — and
+    // it all saved the moment they signed in, which is the proof it was never settled.
+    itAsync("refused before anyone has signed in is queued, not written off", async () => {
+      const rls = res(401, { message: "new row violates row-level security policy" });
+      const t = boot({ reply: (url) => (url.includes("/club_state") ? rls : GOOD_TOKEN) });
+      await t.win.__vxpush("vx_squads", JSON.stringify({ a: 1 }));
+      await flush();
+      eq(t.win.__vxBlocked().length, 0, "it goes in the moment a coach signs in");
+      eq(t.win.__vxFailedCount(), 1, "so it stays where things that can still be saved live");
+    });
+    itAsync("but refused with a live session is the database's settled answer", async () => {
+      const rls = res(401, { message: "new row violates row-level security policy" });
+      const t = boot({ auth: LIVE, reply: (url) => (url.includes("/club_state") ? rls : GOOD_TOKEN) });
+      await t.win.__vxpush("vx_squads", JSON.stringify({ a: 1 }));
+      await flush();
+      eq(t.win.__vxBlocked().length, 1, "signed in and still refused is a permission, not a wait");
+      eq(t.win.__vxFailedCount(), 0);
+    });
+
     // "1 change has not been saved · audit_log" on a coach's phone, after every one of their
     // changes had in fact saved. The activity log is the app writing its own diary; a coach who
     // marked a register and saw that has been told their register is at risk, and it is not.
@@ -4089,7 +4110,13 @@ describe("InBody sheet", () => {
     it("the notice says what happened rather than 'not saved'", () => {
       eq(/point at logins which no longer exist/.test(SOURCE), true);
       eq(/Nothing is lost/.test(SOURCE), true);
-      eq(/blockedShow: \(S\.saveBlocked\|\|\[\]\)\.length>0/.test(SOURCE), true);
+      eq(/blockedShow:[^\n]*\(S\.saveBlocked\|\|\[\]\)\.length>0/.test(SOURCE), true);
+    });
+    // Not on the sign-in screen. Nobody there has done anything yet, nothing of theirs is at
+    // risk, and both bars ask for an action that IS the screen they are looking at.
+    it("and not in front of somebody who has not signed in yet", () => {
+      eq(/blockedShow: S\.screen==='app'/.test(SOURCE), true);
+      eq(/saveFailShow: S\.screen==='app'/.test(SOURCE), true);
     });
     it("and never sits on top of a real unsaved-work banner", () =>
       eq(/blockedShow:[^\n]*!\(\(S\.saveFailCount>0 \|\| S\.authDead\) && !S\.saveFailHidden\)/.test(SOURCE), true));
