@@ -1368,6 +1368,45 @@ describe("expired session", () => {
     });
   });
 
+  // The count itself was what went wrong — 317 swimmers where the night before had 304 — and
+  // every other repair here refuses to touch the count on purpose. Refusing left nowhere to go.
+  describe("putting the whole roster back to a night", () => {
+    const route = readFileSync(new URL("../src/app/api/backup/restore-roster/route.ts", import.meta.url), "utf8");
+    const check = methodSource("rollbackCheck").body;
+    const run = methodSource("rollbackRun").body;
+
+    it("says what the result will be before it writes anything", () => {
+      eq(/export async function GET/.test(route), true, "a read-only arm that answers the question");
+      eq(/willBe/.test(route) && /isNow/.test(route), true, "both sides, so it is a choice and not a leap");
+    });
+    // The count that reaches the screen, not the number of entries in the overlay: an overlay
+    // counts edits and additions, and the club counts swimmers.
+    it("counts swimmers the way the screen does, not overlay entries", () => {
+      eq(/function swimmerCount/.test(route), true);
+      eq(/gone\[sw\.id\]/.test(route), true, "a deleted swimmer is not on the screen and must not be in the count");
+    });
+    it("refuses any number but the one it just reported", () => {
+      eq(/p\.willBe\.swimmers !== confirm/.test(route), true);
+      eq(/the roster moved since you looked/.test(route), true);
+    });
+    // A backup that would empty the club is a broken file, not a decision somebody gets to make.
+    it("refuses to empty the club however hard it is confirmed", () =>
+      eq(/p\.willBe\.swimmers < 50/.test(route), true));
+    it("keeps today before replacing it, and refuses to go on if it cannot", () => {
+      eq(/before-restore-/.test(route), true);
+      eq(/could not keep a copy of today's roster first, so nothing was changed/.test(route), true);
+    });
+    it("hands back the call that undoes it", () =>
+      eq(/undo: `POST \/api\/backup\/restore-roster\?file=\$\{encodeURIComponent\(undoName\)\}/.test(route), true));
+    it("the button never offers today's copy, which is the one that went wrong", () =>
+      eq(/files\.find\(n=>n\.indexOf\(today\)<0\)/.test(check), true));
+    it("and asks, naming what it replaces", () => {
+      eq(/window\.confirm/.test(run), true);
+      eq(/including anything typed today/.test(run), true);
+      eq(/can be undone/.test(run), true);
+    });
+  });
+
   // 304 swimmers became 317 again, with 123 dates of birth missing again, after the club fixed
     // the permission that had been holding writes back. The held writes were snapshots taken
     // before the roster was repaired, and letting them go put the old roster back.
