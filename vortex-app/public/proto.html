@@ -6404,7 +6404,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-15k';
+const VX_BUILD='2026-08-15l';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -14121,7 +14121,17 @@ class Component extends DCLogic {
     const tpType1000On = S.tpaceType==='1000', tpType400On = S.tpaceType==='400';
 
     // ---- Level-Up Review (promotion engine) ----
-    const isElevated = S.pickedId==='ahmed' || S.pickedId==='mahmoud' || S.pickedId==='admin';
+    // Who may approve a promotion. This was a hand-written list of three account ids, and it was
+    // wrong in every direction it could be: Sameh — the club's Administrator, full access on
+    // every other screen in the app — was not on it, so he could see a swimmer was ready and not
+    // move them. Coach Mahmoud was, so one squad's coach could promote across the whole club
+    // while having no other administrative power at all. And 'admin' is not an account and never
+    // has been. Nobody the club has added in Club Administration since could ever appear on it,
+    // whatever role they were given.
+    //
+    // Moving a child between squads is exactly the decision the club's own roles already
+    // describe, so it asks the same question the rest of the app asks.
+    const isElevated = this._isFullAccess();
     const DAY2=86400000;
     const promoCandidates=[];
     this.squads.forEach(sq=>{
@@ -15190,7 +15200,11 @@ class Component extends DCLogic {
           onDashMeets:()=>this.setState({view:'squad', squadId:((_myIds&&_myIds[0])||this.state.squadId||(this.squads[0]||{}).id), tab:'more'}),
         };
       })(),
-      onGoAdmin:()=>this.setState({view:'admin'}), onGoTools:()=>{ const a=this.accounts.find(x=>x.id===S.pickedId)||{}; const adm=!!(a.id==='ahmed'||a.id==='sameh'); this.setState({view:'tools', toolScopeClub:adm}); }, onGoMove:()=>this.setState({view:'move'}),
+      onGoAdmin:()=>this.setState({view:'admin'}), onGoTools:()=>{ const a=this.accounts.find(x=>x.id===S.pickedId)||{};
+        // Which scope the tools open on. Same question, so the same answer — a Head Coach the
+        // club added in Club Administration runs the club and should land on the club, not on
+        // whichever squad happens to be selected.
+        this.setState({view:'tools', toolScopeClub:this._isFullAccess(a)}); }, onGoMove:()=>this.setState({view:'move'}),
       onGoHub:()=>this.setState({view:'hub', showSwitcher:false}), onLogout:()=>{ try{ this.audit('sign-out', '', {side:'staff'}); }catch(e){} try{ localStorage.removeItem('vx_session'); }catch(e){} if(window.__vxClearAuth){ try{ window.__vxClearAuth(); }catch(e){} } this.setState({screen:'login', loginStage:'accounts', pin:'', view:'hub'}); },
       onGoHandbook:()=>this.setState({view:'handbook'}), onOpenHandbookPdf:()=>this._openUrl('vortex-handbook.pdf'), handbookCards:this.handbook.map(c=>({icon:c.icon, title:c.title, summary:c.summary, expanded:S.handbookOpen===c.id, chevron:S.handbookOpen===c.id?'chevron-up':'chevron-down', onToggle:()=>this.setState({handbookOpen:S.handbookOpen===c.id?null:c.id}), sections:c.sections.map(s=>({h:s.h, lead:s.lead||'', hasLead:!!s.lead, bullets:s.bullets||[]}))})),
       ...(()=>{

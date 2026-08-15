@@ -2666,6 +2666,23 @@ describe("InBody sheet", () => {
       eq(c._isFullAccess({ id: "ahmed", role: "Coach" }), true);
       eq(c._isFullAccess({ id: "sameh", role: "Coach" }), true);
     });
+    // Approving a promotion moves a child between squads. It used to ask a hand-written list of
+    // three account ids — which left the club's Administrator unable to approve anything, gave
+    // one squad's coach the run of every squad's promotions, and named an account that does not
+    // exist. A second list of who counts as an admin will always drift away from the first, so
+    // there must not be a second list.
+    it("who may approve a promotion is the club's roles, not a list of names", () => {
+      const line = (SOURCE.match(/const isElevated\s*=\s*[^;]*/) || [""])[0];
+      eq(line.length > 0, true, "the promotion gate must still exist");
+      eq(/_isFullAccess\(/.test(line), true, "it must ask the same question as the rest of the app");
+      eq(/pickedId\s*===/.test(line), false, "and never a hand-written list of account ids");
+      // Sameh must actually pass it, which is the whole reason this changed.
+      const c = ctx();
+      eq(c._isFullAccess({ id: "sameh", role: "Administrator · full access" }), true,
+         "the club's Administrator may approve a promotion");
+      eq(c._isFullAccess({ id: "mahmoud", role: "Vortex A coach" }), false,
+         "one squad's coach may not promote across the club");
+    });
     // One person, two jobs: an assistant coach who also runs the fitness work is one login,
     // not two accounts.
     it("somebody can hold two positions", () => {
