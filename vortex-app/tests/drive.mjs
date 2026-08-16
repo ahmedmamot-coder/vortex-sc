@@ -85,6 +85,50 @@ async function openApp(browser, seed) {
   return page;
 }
 
+/**
+ * The same app, but signed in — and with the database replaced by a recorder.
+ *
+ * openApp above deliberately has no token, which proves nothing goes out when nobody is signed
+ * in. That is half the question. The other half is the one the club actually asked: when somebody
+ * IS signed in, does pressing Save reach Supabase, or does it stop at the phone? Saving to
+ * localStorage and saving to the database look identical on screen — both instant, both still
+ * there after a refresh on that phone — and only one of them is there on the tablet tomorrow.
+ *
+ * So this seeds a live-looking token, intercepts every REST call, answers it as the database
+ * would, and keeps the list. page.writes is then what actually left the device.
+ */
+async function openLive(browser, seed) {
+  const page = await (await browser.newContext({ viewport: { width: 1280, height: 1000 } })).newPage();
+  const problems = [], writes = [];
+  page.on("pageerror", (e) => problems.push(String(e.message)));
+  await page.route("**/rest/v1/**", async (route) => {
+    const req = route.request(), m = req.method();
+    const table = (new URL(req.url()).pathname.split("/rest/v1/")[1] || "").split("?")[0];
+    if (m !== "GET" && m !== "HEAD") {
+      let keys = [];
+      try {
+        const body = JSON.parse(req.postData() || "[]");
+        keys = (Array.isArray(body) ? body : [body]).map((r) => r && r.key).filter(Boolean);
+      } catch {}
+      writes.push({ method: m, table, keys, body: req.postData() || "" });
+    }
+    await route.fulfill({ status: m === "GET" ? 200 : 201, contentType: "application/json", body: "[]" });
+  });
+  await page.addInitScript((s) => {
+    localStorage.setItem("vx_session", JSON.stringify({ type: "staff", id: "ahmed" }));
+    // Read back at boot into window.__VX_AUTH. An hour of life, so no refresh is attempted.
+    localStorage.setItem("vx_auth", JSON.stringify({ token: "drive-fake", refresh: "drive-fake", exp: Date.now() + 3600000 }));
+    localStorage.removeItem("vx_nav");
+    for (const [k, v] of Object.entries(s || {})) localStorage.setItem(k, JSON.stringify(v));
+  }, seed || {});
+  // Not networkidle: a signed-in app polls, so the network is never idle and the wait never ends.
+  await page.goto("http://127.0.0.1:" + PORT + "/proto.html?drive=" + Date.now(), { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(2200);
+  page.problems = problems;
+  page.writes = writes;
+  return page;
+}
+
 const scenes = [];
 const scene = (name, fn) => scenes.push({ name, fn });
 const eq = (got, want, why) => {
@@ -141,6 +185,113 @@ scene("a date of birth typed in the admin list is still there after a reload", a
   });
   eq(after.length > 0, true, "the date never reached the roster overlay (" + opened + ")");
   return "stored under " + JSON.stringify(after[0]);
+});
+
+// ---------------------------------------------------------------------------------------------
+// The same date of birth again, but signed in — and this time the question is whether it left the
+// phone. The scene above proves it reaches the roster overlay; a coach cannot tell that apart
+// from it reaching Supabase, and the difference is the whole of what the club has been losing.
+// ---------------------------------------------------------------------------------------------
+scene("a date of birth typed in the admin list is sent to the database, not just the device", async (browser) => {
+  const page = await openLive(browser);
+  await tap(page, "Club Administration");
+  await tap(page, "Roster · add / edit");
+  const opened = await page.evaluate(() => {
+    let icon = document.querySelector('svg.lucide-pencil, i[data-lucide="pencil"]');
+    let btn = icon && icon.closest("button");
+    if (!btn) {
+      const row = [...document.querySelectorAll("div")]
+        .filter((d) => d.querySelectorAll(":scope > button").length === 2)
+        .sort((a, b) => (a.textContent || "").length - (b.textContent || "").length)[0];
+      btn = row && row.querySelector(":scope > button");
+    }
+    if (!btn) return null;
+    btn.click();
+    return ((btn.closest("div") || {}).textContent || "").trim().slice(0, 40);
+  });
+  if (!opened) throw new Error("no swimmer row had an edit button");
+  await page.waitForTimeout(600);
+  const box = await page.$('input[placeholder="DOB dd/mm/yyyy"]');
+  if (!box) throw new Error("the editor opened without a date of birth box");
+  await box.click();
+  await box.type("09/11/2015", { delay: 25 });
+  page.writes.length = 0;
+  await tap(page, "Save");
+  await page.waitForTimeout(1800);
+
+  const roster = page.writes.filter((w) => w.table === "club_state" && w.keys.includes("vx_roster_edits"));
+  eq(roster.length > 0, true,
+     "Save wrote the date to this phone and sent nothing — tables written: "
+     + ([...new Set(page.writes.map((w) => w.table))].join(", ") || "none"));
+  // And the date has to be IN what was sent, not merely a write of the same key triggered by
+  // something else on the screen.
+  eq(roster.some((w) => w.body.includes("09/11/2015")), true, "a write went out, but not carrying the date");
+  return "sent to club_state, carrying the date";
+});
+
+// ---------------------------------------------------------------------------------------------
+// Attendance is the most-pressed thing in the club — every coach, every squad, twice a day — and
+// it is the one write where two coaches are marking at the same time on different phones. It has
+// its own table for that reason. This checks a mark actually reaches it.
+// ---------------------------------------------------------------------------------------------
+scene("marking a swimmer on the register reaches the attendance table", async (browser) => {
+  const page = await openLive(browser);
+  await tap(page, "Tools & AI");
+  await tap(page, "Daily Attendance");
+  await tap(page, "Pre-Team");                  // opens that squad's summary in place
+  // The club-wide screen lists everyone but marks nobody: cycleAttend works off the open squad,
+  // so on this screen tapping a swimmer does nothing at all. "Take / edit this squad’s register" is
+  // the way through to the register that does mark, and the route a coach actually takes.
+  await tap(page, "Take / edit this squad");
+  page.writes.length = 0;
+  // On the register each swimmer has a small status button of its own, reading exactly
+  // "Present", and tapping it cycles present → absent → late. Matching anything merely
+  // CONTAINING the word finds the filter chip ("Present 272") and the squad header
+  // ("Pre-Team · 3/3 present") first, and clicking either of those only filters or closes a
+  // squad — indistinguishable, from the outside, from a mark that saved nothing.
+  const who = await page.evaluate(() => {
+    const btn = [...document.querySelectorAll("button,[onclick]")]
+      .find((e) => e.offsetParent && /^(present|absent|late)$/i.test((e.innerText || "").trim()));
+    if (!btn) return null;
+    btn.click();
+    const row = btn.closest("div");
+    return ((row && row.innerText) || "").split("\n").find((s) => /[a-z]{2,}\s+[a-z]{2,}/i.test(s)) || "a swimmer";
+  });
+  if (!who) throw new Error("no swimmer on the register had a status button");
+  await page.waitForTimeout(1600);
+
+  const marks = page.writes.filter((w) => w.table === "attendance_marks");
+  eq(marks.length > 0, true,
+     "the register was marked on this phone and nothing was sent — tables written: "
+     + ([...new Set(page.writes.map((w) => w.table))].join(", ") || "none"));
+  return who + " marked, and it went to attendance_marks";
+});
+
+// ---------------------------------------------------------------------------------------------
+// Sitting on a screen and touching nothing must not write to the database.
+//
+// Found by accident, while a fake database was answering every read with an empty list: the app
+// posted the squad table three hundred times in two seconds and would have gone on until the tab
+// was closed. The seed writes the rows, the write is accepted, so it re-reads — and if that read
+// still comes back empty it seeds again, for ever. A write that succeeds and a read that returns
+// nothing is what a table whose INSERT and SELECT policies disagree does, and this club has
+// already had one policy written the permissive way and the other not.
+//
+// Nothing on screen would ever have said so. It would have looked like a slow app and a large bill.
+// ---------------------------------------------------------------------------------------------
+scene("an idle screen does not write to the database over and over", async (browser) => {
+  // Every read answers empty — the state that turned one seed into an unbroken loop.
+  const page = await openLive(browser);
+  await page.waitForTimeout(1500);
+  page.writes.length = 0;
+  await page.waitForTimeout(6000);          // six seconds of doing absolutely nothing
+  const byTable = {};
+  for (const w of page.writes) byTable[w.table] = (byTable[w.table] || 0) + 1;
+  const worst = Object.entries(byTable).sort((a, b) => b[1] - a[1])[0];
+  eq(!worst || worst[1] <= 12, true,
+     "idle for six seconds and it wrote " + (worst && worst[1]) + " times to " + (worst && worst[0])
+     + " — every signed-in device would be doing this at once");
+  return worst ? worst[1] + " writes to " + worst[0] + " in six idle seconds" : "no writes at all while idle";
 });
 
 // ---------------------------------------------------------------------------------------------

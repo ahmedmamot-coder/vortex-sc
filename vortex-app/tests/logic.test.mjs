@@ -2801,6 +2801,105 @@ describe("InBody sheet", () => {
   // undeclared variable is not a syntax error, it is a runtime one, and the runtime here is a
   // coach's phone at the poolside.
   //
+  // Filling an empty table for the first time, without filling it for ever.
+  //
+  // Both seeds are reached the same way: the fetch reads the table, finds it empty, seeds it, and
+  // — because the write was accepted — reads again. If that read still comes back empty, it seeds
+  // again. Accepted write, empty read, is not hypothetical: it is what a table whose INSERT
+  // policy and SELECT policy disagree does, and this club has already had one policy written the
+  // permissive way and the other not. Caught by a browser sitting still: three hundred writes to
+  // vx_squads_t in two seconds, with nothing on screen to say so on any device.
+  describe("seeding an empty table happens once, not for ever", () => {
+    for (const [fn, latch, table] of [
+      ["_squadsSeed", "_squadsSeeded", "vx_squads_t"],
+      ["_videosSeed", "_videosSeeded", "vx_video_analyses"],
+    ]) {
+      const body = methodSource(fn).body;
+      it(fn + " gives up after one accepted fill", () => {
+        eq(new RegExp("if\\(this\\." + latch + "\\) return;").test(body), true,
+           "nothing stops the second run, so an empty read starts the whole loop again");
+        // The latch has to be set where the write SUCCEEDED. Setting it earlier would mean a
+        // refused first attempt is never retried once the policy is fixed.
+        eq(new RegExp("if\\(ok\\)\\{ this\\." + latch + "=true; return this\\.").test(body), true,
+           "the latch must be set on success, and only on success");
+      });
+      it(fn + " still refuses to fill " + table + " anonymously", () =>
+        eq(/_dbAnon\(\)\) return;/.test(body) && /_isFullAccess\(\)\) return;/.test(body), true));
+    }
+  });
+
+  // "Every click must save in the database, not on the device."
+  //
+  // Saving to localStorage and saving to Supabase look identical from the screen: both are
+  // instant, both survive a refresh on THAT phone, and only one of them is still there when the
+  // coach opens their tablet — or when the phone is replaced. The club has already lost work to
+  // exactly this, and the fault is never visible at the moment it happens.
+  //
+  // So every key the app writes to the device has to be accounted for, one of three ways. A key
+  // that is none of them is data living on one phone, and this fails until somebody says which
+  // it is. Adding a fourth category is a decision; forgetting to is not.
+  describe("nothing is saved to the device alone", () => {
+    const SYNC = JSON.parse(SOURCE.match(/var SYNC = (\[[^\]]*\])/)[1]);
+
+    // 1. Written for this device and no other, on purpose. Each says why, because "it is only a
+    //    preference" is exactly what would be said about a key that should have been synced.
+    const DEVICE_ONLY = {
+      vx_auth: "the Supabase token itself — sending it anywhere is the bug, not the fix",
+      vx_session: "who is signed in on THIS phone; the tablet has its own",
+      vx_nav: "which screen this device was last on",
+      vx_theme: "light or dark on this device",
+      vx_lang: "the language this device reads in",
+      vx_push_on: "this browser's own push permission (the subscription itself goes to push_subscriptions)",
+      vx_alert_read: "which notices this device has read",
+      vx_alert_hidden: "which notices this device has dismissed",
+      vx_fam_refused: "a note that this device's family write was refused, so it can say so",
+    };
+    // 2. A local copy of a database table, so the screen can draw before the read comes back.
+    //    The table is the truth; losing the copy costs nothing.
+    const CACHE_OF = {
+      vx_attend_log: "attendance_marks",
+      vx_family: "family_accounts",
+      vx_staff_accounts: "staff_accounts",
+      vx_account_ovr: "staff_accounts",
+      vx_fitness_plans: "fitness_plans",
+      vx_plans: "squad_plans",
+      vx_season: "season_plans",
+      vx_saved_plans: "plan_sessions",
+      vx_docs_cache: "swimmer_docs",
+      vx_photos_cache: "swimmer_docs",
+      vx_hrsets_cache: "hr_sets",
+      vx_wear_cache: "inbody_readings",
+      vx_wellness_cache: "inbody_readings",
+      vx_plan_custom: "club_state",
+    };
+
+    const written = new Set();
+    for (const m of SOURCE.matchAll(
+      /(?:_saveJSON|_saveLocalOnly|__vxsetlocal|localStorage\.setItem)\(\s*['"](vx_[a-zA-Z0-9_]+)['"]/g))
+      written.add(m[1]);
+
+    it("every key written to this device is accounted for", () => {
+      const stray = [...written].filter((k) => !SYNC.includes(k) && !DEVICE_ONLY[k] && !CACHE_OF[k]).sort();
+      eq(stray.join(", "), "",
+         "written to the device and nowhere else — either sync it, or add it above and say why");
+    });
+    // The other direction: a key listed as synced that nothing ever writes is a screen whose
+    // save was quietly renamed, and the sync list still swearing it is covered.
+    it("every synced key is one something actually writes", () =>
+      eq(SYNC.filter((k) => !written.has(k)).join(", "), "", "in the sync list but never written"));
+
+    // A cache is only a cache if the table behind it is really being written. Naming one above
+    // is a claim, and this is what checks it.
+    for (const [key, table] of Object.entries(CACHE_OF))
+      it(key + " has " + table + " actually written behind it", () =>
+        eq(new RegExp("__vx(?:Upsert|Insert)\\(\\s*['\"]" + table + "['\"]").test(SOURCE), true,
+           "nothing ever writes " + table + ", so " + key + " is not a cache — it is the only copy"));
+
+    // Neither list may quietly grow to cover a real save.
+    it("the device-only list stays small enough to read", () =>
+      eq(Object.keys(DEVICE_ONLY).length <= 12, true, "if this needs to grow, the reason needs an argument"));
+  });
+
   // Before any of that: the file has to parse. A stray brace anywhere in 16,000 lines takes the
   // whole app down on every device at once, and the club's only way back is a build that parses.
   // Every other test here reads the source as text and would pass happily on a file that cannot

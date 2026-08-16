@@ -6508,7 +6508,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-16i';
+const VX_BUILD='2026-08-16j';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -7573,10 +7573,20 @@ class Component extends DCLogic {
     // as work the club has lost. It has not lost anything: the squads are on the device and in
     // the old document, and the table is simply not accepting them yet.
     if(this._policyHeld('squads')) return;
+    // Seed once per run of the app, and never again — including when the write is accepted.
+    //
+    // The loop this closes: seed writes the rows, the write is accepted, so it re-reads; if that
+    // read still comes back empty it seeds again, is accepted again, re-reads again. A write that
+    // succeeds and a read that returns nothing is not a hypothetical here — it is precisely what a
+    // table whose INSERT policy and SELECT policy disagree does, and this club has already had one
+    // policy written the permissive way and the other not. There is nothing on screen to say it is
+    // happening; it is simply the app writing to Supabase without pause for as long as the tab is
+    // open, on every staff device at once.
+    if(this._squadsSeeded) return;
     const rows=(this.squads||[]).map((sq,i)=>this._squadRow(sq, i));
     if(!rows.length) return;
     const ok=await window.__vxUpsert('vx_squads_t', rows);
-    if(ok) return this._squadsFetch();
+    if(ok){ this._squadsSeeded=true; return this._squadsFetch(); }
     if(this._policyRefused(window.__vxLastWriteErr)) this._policyHold('squads');
   }
   _squadRow(sq, sort){
@@ -11197,6 +11207,9 @@ class Component extends DCLogic {
     // the banner as work it has lost. It has not lost any of it — every clip is on the device and
     // in the old document, which is still what the app reads until this table has rows.
     if(this._policyHeld('videos')) return;
+    // Once per run, for the same reason as the squad seed above: accepted-write plus empty-read
+    // is an unbroken write loop, and nothing on screen would ever say so.
+    if(this._videosSeeded) return;
     const seen={}, rows=[];
     (this.videoLib||[]).forEach(v=>{
       if(!v || !v.id || v._isBlob || seen[v.id]) return;    // never the same id twice in one batch
@@ -11204,7 +11217,7 @@ class Component extends DCLogic {
     });
     if(!rows.length) return;
     const ok=await window.__vxUpsert('vx_video_analyses', rows);
-    if(ok) return this._videosFetch();
+    if(ok){ this._videosSeeded=true; return this._videosFetch(); }
     // The first fill is often the first write this club's table has ever taken, so it is also
     // where a missing column shows up first. Filling in the older shape is what puts the club's
     // library in the database at all; without this it would sit here refused until somebody
