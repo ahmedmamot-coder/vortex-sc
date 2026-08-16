@@ -1472,7 +1472,11 @@ describe("expired session", () => {
       await t.win.__vxpush("vx_squads", JSON.stringify({ a: 1 }));
       await flush();
       eq(t.win.__vxBlocked().length, 0, "it goes in the moment a coach signs in");
-      eq(t.win.__vxFailedCount(), 1, "so it stays where things that can still be saved live");
+      eq(t.win.__vxFailed().length, 1, "so it stays where things that can still be saved live");
+      // Kept, retried, and NOT counted. Before anyone has signed in there is no token to send it
+      // with, so it was never lost — telling a coach who has just signed in that 24 changes have
+      // not been saved is the lie this whole night was made of.
+      eq(t.win.__vxFailedCount(), 0, "a write that has not been sent yet is not work the club lost");
     });
     itAsync("but refused with a live session is the database's settled answer", async () => {
       const rls = res(401, { message: "new row violates row-level security policy" });
@@ -4852,6 +4856,28 @@ describe("InBody sheet", () => {
     // exactly the window between signing out and the new token landing — when signing in fires
     // every fetch at once. So the seeds ran again and the club's report was precise: Retry
     // cleared it, and signing out and back in brought the same thirty straight back.
+    // The guards above are per-caller, and there is always another caller. Guarding the seeds
+    // stopped the seeds and the write-through sync filled the banner instead, from
+    // club_state (vx_sw_status), seconds after the same sign-in. The rule belongs in the one
+    // place every write passes through: nothing goes out without a token of our own.
+    it("no write is ever sent without a live token", () => {
+      const tok = sourceBetween("function _haveTok(){", "\n  }");
+      eq(/a\.token && a\.exp && Date\.now\(\) < \(a\.exp - 5000\)/.test(tok), true,
+         "a live token of this device's own, with a margin");
+      eq(/catch\(e\)\{ return false; \}/.test(tok), true, "and unsure means no");
+      for (const fn of ["__vxInsert", "__vxUpsert", "__vxDelete"]) {
+        const src = (SOURCE.match(new RegExp("window\\." + fn + " = function[^\\n]*")) || [""])[0];
+        eq(/if\(!_haveTok\(\)\)\{ _vxQueue\(/.test(src), true, fn + " must queue rather than send");
+      }
+      const push = sourceBetween("function pushKey(k, v){", "\n  }");
+      eq(/if\(!_haveTok\(\)\)\{/.test(push), true, "and the shared document too");
+      // Queued, not failed. A write waiting for a sign-in is not work the club has lost, and
+      // saying so is what put "24 changes have not been saved" in front of a coach who had
+      // just signed in successfully.
+      eq(/waiting for the sign-in to land/.test(push), true, "and it is not reported as lost");
+      eq(/_failAdd\("push"/.test(push.split("if(!_haveTok()){")[0] || ""), false,
+         "nothing is recorded as failed before the token is even checked");
+    });
     it("no session at all counts as anonymous, not as signed in", () => {
       const anon = sourceBetween("_dbAnon(){", "\n  }");
       eq(/const a=window\.__VX_AUTH;/.test(anon), true, "it looks at the session itself");

@@ -110,12 +110,43 @@ if ('serviceWorker' in navigator) {
   // split-second right after login is never lost.
   window.__vxAuthQ = [];
   function _vxQueue(fn){ try{ if(window.__vxAuthQ.length<200) window.__vxAuthQ.push(fn); }catch(e){} }
+  // A live token of this device's own — not the anon key, not a stale one.
+  //
+  // Nothing in this layer may go out without one. A write sent as an anonymous visitor is not a
+  // write: every table's policy is written `to authenticated`, so it is refused, recorded as
+  // unsaved work, and put on a coach's banner as changes they have lost. And the moment that
+  // happens most is the second AFTER a sign-in, when every fetch and every write-through fires
+  // at once and the new token has not landed yet — which is why the banner kept coming back the
+  // instant this club signed out and in again, table after table, all night.
+  //
+  // Queue it instead. __vxSetAuth flushes that queue the moment the token arrives, so the write
+  // still happens, seconds later, and nobody is told they lost anything.
+  // It also keeps the two flags the app reports with true, exactly as _curTok would have — because
+  // not sending must not cost the app the ability to SAY why. "Signed in but writing as nobody"
+  // and "no session at all, only a sign-in can help" need different words on the banner, and both
+  // were previously learned by sending a doomed request and reading the refusal.
+  function _haveTok(){
+    try{
+      var a=window.__VX_AUTH;
+      if(a && a.token && a.exp && Date.now() < (a.exp - 5000)){ window.__vxSendingAnon=false; return true; }
+      window.__vxSendingAnon = !!(a && a.token);
+      // Nothing to wait for: no session and no refresh token means retrying cannot help and the
+      // banner must offer a sign-in instead of "retrying automatically".
+      if(!a || !a.refresh) window.__vxAuthDead = true;
+      return false;
+    }catch(e){ return false; }
+  }
   window.__vxFlushAuthQ = function(){ var q=window.__vxAuthQ||[]; window.__vxAuthQ=[]; for(var i=0;i<q.length;i++){ try{ q[i](); }catch(e){} } };
 
   // ---- Failed writes: never silent, never lost -------------------------------------------
   // Every rejected write is recorded to localStorage (so it survives a reload), retried
   // automatically, and surfaced in the app. Five parent registrations were once refused by
   // the database with nobody told; this is what makes that impossible.
+  // Not a failure: the write never left, because there was no token to send it with. It sits
+  // in the same persistent queue and is replayed the same way, but it is not counted as work
+  // the club has lost — saying so is what put "24 changes have not been saved" in front of a
+  // coach one second after a successful sign-in.
+  var NOTSENT = -1;
   var FAILK = "vx_failed_writes";
   function _failLoad(){ try{ return JSON.parse(localStorage.getItem(FAILK)||"[]")||[]; }catch(e){ return []; } }
   function _failSave(a){ try{ localStorage.setItem(FAILK, JSON.stringify(a.slice(-100))); }catch(e){} }
@@ -300,7 +331,7 @@ if ('serviceWorker' in navigator) {
       if(keep.length!==a.length) _failSave(keep);
     }catch(e){}
   })();
-  window.__vxFailedCount = function(){ return _failLoad().length; };
+  window.__vxFailedCount = function(){ return _failLoad().filter(function(x){ return x && x.status!==NOTSENT; }).length; };
   window.__vxClearFailed = function(){ _failSave([]); try{ window.dispatchEvent(new CustomEvent("vx-write-failed")); }catch(e){} };
   // What the database is refusing outright, for the screen that says so. Never retried.
   window.__vxBlocked = function(){ return _blockLoad(); };
@@ -534,6 +565,17 @@ if ('serviceWorker' in navigator) {
     if (SYNC.indexOf(k) === -1) return Promise.resolve({ok:false, why:"this is not a synced key"});
     var val; try { val = JSON.parse(v); } catch(e){ return Promise.resolve({ok:false, why:"could not be read back"}); }
     window.__vxWriteTs[k] = Date.now();
+    // See _haveTok. Sending this now would be refused for being anonymous and land on the
+    // banner as work the club has lost; it has lost nothing, the value is already on the device.
+    if(!_haveTok()){
+      _vxQueue(function(){ var cur=null; try{ cur=localStorage.getItem(k); }catch(e){} pushKey(k, cur==null?v:cur); });
+      // Recorded too, not only queued: __vxAuthQ is memory, and a tab closed before the sign-in
+      // lands would take the write with it. Status NOTSENT keeps it in the persistent queue, to
+      // be replayed like any other, while keeping it off the banner — it is not work the club
+      // has lost, it is work that has not been sent yet.
+      _failAdd("push", "club_state ("+k+")", {key:k, value:v}, NOTSENT, "waiting for the sign-in to land");
+      return Promise.resolve({ok:false, why:"waiting for the sign-in to land"});
+    }
     var p;
     try {
       p = fetch(REST, { method:"POST", headers: dyn({"Prefer":"resolution=merge-duplicates,return=minimal"}),
@@ -571,7 +613,7 @@ if ('serviceWorker' in navigator) {
   // behind a 30-second cooldown, and that cooldown is the only thing keeping it finite: a refresh
   // calls __vxSetAuth, __vxSetAuth replays the failed queue, and the queue is made of writes. Do
   // it from inside the write as well and the two call each other until the tab runs out of memory.
-  window.__vxInsert = function(table, rows){ return ready().then(function(){ return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":"return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(r.ok) _blockClearTable(table); if(!r.ok){ if(r.status===401||r.status===403){ _vxQueue(function(){ window.__vxInsert(table, rows); }); } r.text().then(function(t){ try{console.warn("vx insert "+table+" HTTP "+r.status+": "+t);}catch(e){} _failAdd("insert", table, rows, r.status, t); }); } return r.ok; }).catch(function(e){ _failAdd("insert", table, rows, 0, "network: "+(e&&e.message)); return false; }); });
+  window.__vxInsert = function(table, rows){ return ready().then(function(){ if(!_haveTok()){ _vxQueue(function(){ window.__vxInsert(table, rows); }); _failAdd("insert", table, rows, NOTSENT, "waiting for the sign-in to land"); return false; } return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":"return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(r.ok) _blockClearTable(table); if(!r.ok){ if(r.status===401||r.status===403){ _vxQueue(function(){ window.__vxInsert(table, rows); }); } r.text().then(function(t){ try{console.warn("vx insert "+table+" HTTP "+r.status+": "+t);}catch(e){} _failAdd("insert", table, rows, r.status, t); }); } return r.ok; }).catch(function(e){ _failAdd("insert", table, rows, 0, "network: "+(e&&e.message)); return false; }); });
   };
   // A read rejected with 401 means the token expired, not that the table is empty. Returning
   // null there is why the roster and attendance came back blank after the app had been sitting
@@ -625,14 +667,14 @@ if ('serviceWorker' in navigator) {
       .catch(function(e){ return {__err:'could not be sent'+((e&&e.message)?(' ('+e.message+')'):'')}; });
   };
   window.__vxCount = function(table, qs){ return fetch(SB_URL+"/rest/v1/"+table+"?select=id"+(qs?("&"+qs):""), { method:"HEAD", headers: dyn({"Prefer":"count=exact","Range-Unit":"items","Range":"0-0"}) }).then(function(r){ var cr=r.headers.get("content-range")||""; var m=cr.split("/"); var n=m.length>1?parseInt(m[1],10):NaN; return isNaN(n)?(r.ok?0:-1):n; }).catch(function(){ return -1; }); };
-  window.__vxDelete = function(table, qs){ return ready().then(function(){ return fetch(SB_URL+"/rest/v1/"+table+"?"+qs, { method:"DELETE", headers: dyn() }).then(function(r){ if(!r.ok && (r.status===401||r.status===403)){ _vxQueue(function(){ window.__vxDelete(table, qs); }); } return r.ok; }).catch(function(){ return false; }); });
+  window.__vxDelete = function(table, qs){ return ready().then(function(){ if(!_haveTok()){ _vxQueue(function(){ window.__vxDelete(table, qs); }); return false; } return fetch(SB_URL+"/rest/v1/"+table+"?"+qs, { method:"DELETE", headers: dyn() }).then(function(r){ if(!r.ok && (r.status===401||r.status===403)){ _vxQueue(function(){ window.__vxDelete(table, qs); }); } return r.ok; }).catch(function(){ return false; }); });
   };
   // The reason a write was refused, kept for whoever asks next. Callers get a plain true/false
   // because that is all most of them can act on, but "the table does not exist" and "you are not
   // allowed" send a person to completely different places, and that was being written to a
   // console nobody has open on a phone at the poolside.
   window.__vxLastWriteErr = null;
-  window.__vxUpsert = function(table, rows){ return ready().then(function(){ return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":"resolution=merge-duplicates,return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(r.ok){ window.__vxLastWriteErr=null; _blockClearTable(table); return true; } if(r.status===401||r.status===403){ _vxQueue(function(){ window.__vxUpsert(table, rows); }); } return r.text().then(function(t){ try{console.warn("vx upsert "+table+" HTTP "+r.status+": "+t);}catch(e){} _failAdd("upsert", table, rows, r.status, t); var said=""; try{ said=(JSON.parse(t)||{}).message||""; }catch(e){} window.__vxLastWriteErr={table:table, status:r.status, said:said||String(t||"").slice(0,200)}; return false; }); }).catch(function(e){ _failAdd("upsert", table, rows, 0, "network: "+(e&&e.message)); window.__vxLastWriteErr={table:table, status:0, said:"it could not be sent from this device"+((e&&e.message)?(" ("+e.message+")"):"")}; return false; }); });
+  window.__vxUpsert = function(table, rows){ return ready().then(function(){ if(!_haveTok()){ _vxQueue(function(){ window.__vxUpsert(table, rows); }); _failAdd("upsert", table, rows, NOTSENT, "waiting for the sign-in to land"); return false; } return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":"resolution=merge-duplicates,return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(r.ok){ window.__vxLastWriteErr=null; _blockClearTable(table); return true; } if(r.status===401||r.status===403){ _vxQueue(function(){ window.__vxUpsert(table, rows); }); } return r.text().then(function(t){ try{console.warn("vx upsert "+table+" HTTP "+r.status+": "+t);}catch(e){} _failAdd("upsert", table, rows, r.status, t); var said=""; try{ said=(JSON.parse(t)||{}).message||""; }catch(e){} window.__vxLastWriteErr={table:table, status:r.status, said:said||String(t||"").slice(0,200)}; return false; }); }).catch(function(e){ _failAdd("upsert", table, rows, 0, "network: "+(e&&e.message)); window.__vxLastWriteErr={table:table, status:0, said:"it could not be sent from this device"+((e&&e.message)?(" ("+e.message+")"):"")}; return false; }); });
   };
   // Supabase Realtime (websocket) — best-effort live updates. On any change to `table`, calls
   // onChange(). Auto-reconnects, heartbeats, and re-auths on token refresh. If realtime isn't
@@ -6466,7 +6508,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-16c';
+const VX_BUILD='2026-08-16d';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -7113,7 +7155,9 @@ class Component extends DCLogic {
   _refreshFailState(){
     try{
       const n = window.__vxFailedCount ? window.__vxFailedCount() : 0;
-      const list = (n && window.__vxFailed) ? window.__vxFailed() : [];
+      // The banner names the newest thing it is chasing, and a write that has not been sent
+      // yet is not one of them.
+      const list = ((n && window.__vxFailed) ? window.__vxFailed() : []).filter(x=>x && x.status!==-1);
       const refused = list.filter(x=>x && x.refused).length;
       const last = list.length ? list[list.length-1] : null;
       const dead = !!window.__vxAuthDead;
