@@ -97,7 +97,7 @@ async function openApp(browser, seed) {
  * So this seeds a live-looking token, intercepts every REST call, answers it as the database
  * would, and keeps the list. page.writes is then what actually left the device.
  */
-async function openLive(browser, seed) {
+async function openLive(browser, seed, db) {
   const page = await (await browser.newContext({ viewport: { width: 1280, height: 1000 } })).newPage();
   const problems = [], writes = [];
   page.on("pageerror", (e) => problems.push(String(e.message)));
@@ -112,7 +112,16 @@ async function openLive(browser, seed) {
       } catch {}
       writes.push({ method: m, table, keys, body: req.postData() || "" });
     }
-    await route.fulfill({ status: m === "GET" ? 200 : 201, contentType: "application/json", body: "[]" });
+    // A read answers with whatever the caller seeded for that table, and [] otherwise.
+    //
+    // This matters more than it looks. Several screens keep a fallback for a club whose table has
+    // no rows yet — squads, videos and the plans all still work off the old shared document until
+    // their table has something in it. Answering every read with [] pins the app to that fallback,
+    // so a test that "proves the save works" proves it for the path the club stopped using. The
+    // squad edit went to club_state instead of vx_squads_t for exactly that reason.
+    const rows = (m === "GET" && db && db[table]) || [];
+    await route.fulfill({ status: m === "GET" ? 200 : 201, contentType: "application/json",
+                          body: JSON.stringify(rows) });
   });
   await page.addInitScript((s) => {
     localStorage.setItem("vx_session", JSON.stringify({ type: "staff", id: "ahmed" }));
@@ -354,6 +363,97 @@ scene("editing a fitness plan reaches the fitness_plans table", async (browser) 
   eq(plans.every((w) => { try { return JSON.parse(w.body).length === 1; } catch { return false; } }), true,
      "a plan write carried more than one squad's row");
   return plans.length + " write(s), one squad's row each, carrying the exercise";
+});
+
+// ---------------------------------------------------------------------------------------------
+// A post in the Vortex Lounge. Every message is its own row, on purpose — a squad's feed is the
+// one place several people type at once, and a shared document would have them overwriting each
+// other's posts.
+// ---------------------------------------------------------------------------------------------
+scene("a post in the lounge reaches the lounge_posts table", async (browser) => {
+  const page = await openLive(browser);
+  await tap(page, "Tools & AI");
+  await tap(page, "Vortex Lounge");
+  const box = await page.$('textarea[placeholder="Share a set, a win, a question…"]');
+  if (!box) throw new Error("the lounge opened with nowhere to type");
+  await box.click();
+  await box.type("Great session tonight", { delay: 20 });
+  await page.waitForTimeout(300);
+  page.writes.length = 0;
+  // The post button carries no text at all — it is a paper-plane icon. Matching on words found
+  // some other button entirely and clicked it, which looked exactly like a post that saved
+  // nothing. Lucide swaps the <i data-lucide="send"> for an <svg class="lucide-send"> once it
+  // runs, so both spellings have to be accepted, the same as the roster's pencil.
+  const posted = await page.evaluate(() => {
+    const icon = document.querySelector('svg.lucide-send, i[data-lucide="send"]');
+    const b = icon && icon.closest("button");
+    if (!b) return false;
+    b.click();
+    return true;
+  });
+  if (!posted) throw new Error("the lounge had no send button to press");
+  await page.waitForTimeout(1800);
+
+  const rows = page.writes.filter((w) => w.table === "lounge_posts");
+  eq(rows.length > 0, true, "the post stayed on the phone — tables written: "
+     + ([...new Set(page.writes.map((w) => w.table))].join(", ") || "none"));
+  eq(rows.some((w) => w.body.includes("Great session tonight")), true, "a write went out without the post in it");
+  // Append-only. An upsert of the whole feed is how one coach's post erases another's.
+  eq(rows.every((w) => w.method === "POST"), true, "a post must be an insert, never a rewrite of the feed");
+  return "sent to lounge_posts, carrying the message";
+});
+
+// ---------------------------------------------------------------------------------------------
+// Renaming a squad. One row per squad, so two coaches editing two squads cannot overwrite each
+// other — which is the whole reason squads were taken out of the shared document.
+// ---------------------------------------------------------------------------------------------
+scene("editing a squad reaches the squads table", async (browser) => {
+  // Seeded, so the app is on the row-per-squad path the club actually runs rather than the
+  // shared-document fallback it keeps for a table that has never been filled.
+  // All nine, with the club's real ids. Seeding a subset leaves the roster holding swimmers in
+  // squads that no longer exist, and the app does not survive that — which is worth knowing, but
+  // is not what this scene is asking.
+  const SQ = [["preteam","Pre-Team"],["advb","Advanced B"],["adva","Advanced A"],["junior","Junior"],
+              ["seniorb","Senior B"],["seniora","Senior A"],["vortexb","Vortex B"],["vortexa","Vortex A"],
+              ["legend","Legend"]];
+  const page = await openLive(browser, null, {
+    vx_squads_t: SQ.map(([id, name], i) => ({ id, name, ages: "", accent: "#2733D6",
+                                              short: name.slice(0, 3), coach: "", sort: i })),
+  });
+  await tap(page, "Club Administration");
+  await tap(page, "add, rename, colours");        // the Squads row, by its own subtitle
+  const opened = await page.evaluate(() => {
+    const b = [...document.querySelectorAll("button,[onclick]")]
+      .find((e) => e.offsetParent && /^edit$/i.test((e.innerText || "").trim()));
+    if (!b) return false;
+    b.click();
+    return true;
+  });
+  if (!opened) throw new Error("no squad had an edit button");
+  await page.waitForTimeout(700);
+  const typed = await page.evaluate(() => {
+    const i = [...document.querySelectorAll("input[type=text], input:not([type])")]
+      .find((e) => e.offsetParent && (e.value || "").trim().length > 0);
+    if (!i) return null;
+    const was = i.value;
+    const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+    set.call(i, was + " X");
+    i.dispatchEvent(new Event("input", { bubbles: true }));
+    return was;
+  });
+  if (typed == null) throw new Error("the squad editor opened with nothing to type into");
+  page.writes.length = 0;
+  await page.waitForTimeout(400);
+  await tap(page, "Save");
+  await page.waitForTimeout(1800);
+
+  const rows = page.writes.filter((w) => w.table === "vx_squads_t");
+  eq(rows.length > 0, true, "the squad was renamed on this phone only — tables written: "
+     + ([...new Set(page.writes.map((w) => w.table))].join(", ") || "none"));
+  // One row, not all nine. Sending the whole list is what let one edit undo another's.
+  eq(rows.some((w) => { try { return JSON.parse(w.body).length === 1; } catch { return false; } }), true,
+     "a squad edit sent more than one squad's row");
+  return "renamed " + JSON.stringify(typed) + ", sent one row to vx_squads_t";
 });
 
 // ---------------------------------------------------------------------------------------------
