@@ -3100,7 +3100,9 @@ describe("InBody sheet", () => {
       const fn = sourceBetween("  persistRosterEdits(){", "\n  }");
       eq(/_blobIsStale\('vx_roster_edits'\)/.test(fn), true, "it has to check before writing");
       const guard = fn.slice(0, fn.indexOf("this._saveJSON"));
-      eq(/return this\.setState/.test(guard), true, "and stop, not warn and write anyway");
+      // It reports the refusal to the caller now, so the editor can stay open rather than close
+      // on a save that never happened — but it still stops before _saveJSON, which is the point.
+      eq(/return false;/.test(guard), true, "and stop, not warn and write anyway");
       eq(/replace every swimmer they added or removed/.test(fn), true,
          "the person needs to know what was at stake, not just that it did not save");
     });
@@ -4877,6 +4879,27 @@ describe("InBody sheet", () => {
       eq(/waiting for the sign-in to land/.test(push), true, "and it is not reported as lost");
       eq(/_failAdd\("push"/.test(push.split("if(!_haveTok()){")[0] || ""), false,
          "nothing is recorded as failed before the token is even checked");
+    });
+    // A date of birth typed in twice and still missing after a refresh. persistRosterEdits
+    // refuses when the database's copy is newer than the last time THIS device wrote — but the
+    // pull adopted that newer copy without recording it, so the marker never moved, and the only
+    // thing that would move it was the write being refused. Once a device pulled a roster written
+    // anywhere else, it could never save a roster edit again.
+    it("taking the database's copy is recorded, or the device is stale for ever", () => {
+      const pull = sourceBetween("const writeTs=window.__vxWriteTs||{};", "if(changed) this._hydrateShared();");
+      eq(/localStorage\.setItem\('__vxts_'\+r\.key, String\(remoteTs\)\)/.test(pull), true,
+         "seeing and taking a copy is what stops this device being behind it");
+      const stale = sourceBetween("_blobIsStale(key){", "\n  }");
+      eq(/remote > mine \+ 60000/.test(stale), true, "and the guard still only fires on a genuinely newer copy");
+    });
+    // The refusal above went to rosterFixMsg, which renders in Settings. A coach editing a
+    // swimmer saw the panel close and the row look edited, and nothing had been written.
+    it("a refused roster edit does not look like a save", () => {
+      const persist = sourceBetween("persistRosterEdits(){", "\n  }");
+      eq(/return false;/.test(persist), true, "it says when it refused");
+      eq(/return true;/.test(persist), true, "and when it did not");
+      eq(/if\(this\.persistRosterEdits\(\)!==false\) this\.setState\(\{swEditId:null\}\);/.test(SOURCE), true,
+         "and the editor stays open on a refusal");
     });
     it("no session at all counts as anonymous, not as signed in", () => {
       const anon = sourceBetween("_dbAnon(){", "\n  }");

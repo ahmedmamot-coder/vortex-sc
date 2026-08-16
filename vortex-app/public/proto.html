@@ -6508,7 +6508,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-16d';
+const VX_BUILD='2026-08-16e';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -8169,12 +8169,14 @@ class Component extends DCLogic {
     }
     if(this._blobIsStale('vx_roster_edits')){
       this.rebuildRoster(); this.forceUpdate();
-      return this.setState({rosterFixOk:false, rosterFixMsg:
+      this.setState({rosterFixOk:false, rosterFixMsg:
         'Not saved. Another device changed the roster more recently than this one has read, and '
         +'writing now would replace every swimmer they added or removed. Reload the app to take '
         +'their copy, then make the change again \u2014 or Settings \u2192 Roster copy if this device is the right one.'});
+      return false;
     }
     this._saveJSON('vx_roster_edits', this.rosterEdits); this.rebuildRoster(); this.forceUpdate();
+    return true;
   }
   EVENT_CATALOG(){ return ['50 Free','100 Free','200 Free','400 Free','800 Free','1500 Free','50 Back','100 Back','200 Back','50 Breast','100 Breast','200 Breast','50 Fly','100 Fly','200 Fly','100 IM','200 IM','400 IM']; }
   parseTimeStr(t){ t=(t||'').trim(); if(!t) return null; if(t.includes(':')){ const [m,s]=t.split(':'); const sec=parseInt(m,10)*60+parseFloat(s); return isNaN(sec)?null:sec; } const sec=parseFloat(t); return isNaN(sec)?null:sec; }
@@ -8690,8 +8692,9 @@ class Component extends DCLogic {
         }
       }
     }
-    this.persistRosterEdits();
-    this.setState({swEditId:null});
+    // Only close the editor if it actually saved. Closing on a refusal is what made a silent one
+    // invisible: the panel shut, the row looked edited, and nothing had been written.
+    if(this.persistRosterEdits()!==false) this.setState({swEditId:null});
   }
   adminDeleteSwimmer(squadId, id){
     // A child leaving the roster is the single change most likely to be asked about later,
@@ -13354,6 +13357,13 @@ class Component extends DCLogic {
         // way a later write can tell it is about to overwrite something newer than what it read.
         try{ window.__vxRemoteTs=window.__vxRemoteTs||{}; window.__vxRemoteTs[r.key]=remoteTs; }catch(e){}
         const s=JSON.stringify(r.value); if(localStorage.getItem(r.key)!==s){ setLocal(r.key, s); changed=true; }
+        // This device has now SEEN the database's copy and taken it, so it is no longer behind it.
+        // Without recording that, _blobIsStale goes on comparing the remote stamp against the last
+        // time this device WROTE — and that never moves, because the write it is blocking is the
+        // only thing that would move it. A device that once pulled a roster written elsewhere
+        // could then never save a roster edit again: refused, silently, for ever. A date of birth
+        // typed in twice and still missing after a refresh is exactly what that looks like.
+        try{ if(remoteTs) localStorage.setItem('__vxts_'+r.key, String(remoteTs)); }catch(e){}
       });
       if(changed) this._hydrateShared();
     } catch(e){} finally { this._syncBusy=false; }
