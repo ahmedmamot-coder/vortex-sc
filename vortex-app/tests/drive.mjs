@@ -71,6 +71,12 @@ async function openApp(browser, seed) {
   page.on("pageerror", (e) => problems.push(String(e.message)));
   await page.addInitScript((s) => {
     localStorage.setItem("vx_session", JSON.stringify({ type: "staff", id: "ahmed" }));
+    // The app remembers where you were and returns you there on a refresh, which is right for a
+    // coach and wrong for this. The sweep reloads between screens to get back to the hub, and
+    // instead every reload landed on the screen it had just left — so a screen reachable only
+    // from the hub was reported "could not be reached from the hub at all". Fourteen of them
+    // were, and none of them was actually broken. This runs on every navigation in the page.
+    localStorage.removeItem("vx_nav");
     for (const [k, v] of Object.entries(s || {})) localStorage.setItem(k, JSON.stringify(v));
   }, seed || {});
   await page.goto("http://127.0.0.1:" + PORT + "/proto.html?drive=" + Date.now(), { waitUntil: "networkidle" });
@@ -178,14 +184,23 @@ scene("no write leaves the device while there is no session", async (browser) =>
 // — which is a chart that silently draws nothing. A coach does not report an empty chart as a
 // bug; they assume the squad has no data. So this asks every screen, once, in one run.
 // ---------------------------------------------------------------------------------------------
+// The first version of this list had all 38 names in one bucket and three routes to try. Seven of
+// them are not tool screens at all — they are the cards on the Coaches Handbook, which expand in
+// place rather than opening — so the sweep reported them "could not be reached" run after run,
+// and that noise sat on top of the real answer. Two lists, each opened the way it actually opens.
 const TOOLS = [
-  "AI Assistants","Daily Attendance","Activity log","Birthdays","Boards","Club Configuration",
-  "Pace Clock","Communication","Dryland & Land Prep","Meet Entries","Family accounts",
+  "Insights","AI Assistants","Daily Attendance","Activity log","Birthdays","Boards",
+  "Club Configuration","Pace Clock","Zone Engine","Meet Entries","Family accounts",
   "Fitness Plan","Season Goals","Top Improvers","InBody Import","Vortex Lounge","Meet Day",
-  "Meet Operations","The Vortex Pathway","Level-Up Review","Race Strategy","Rankings",
-  "Recovery Board","Relay Builder","AI Plan Review","Load & Risk","Safety & Wellbeing",
-  "Season Plan","Session Planning","Sponsors","Squads","Staff","Meet Standards","Swimmers",
-  "Talent Board","Stroke Technique Cues","T-Pace Tests","Video Analysis",
+  "Level-Up Review","Race Strategy","Rankings","Recovery Board","Relay Builder","AI Plan Review",
+  "Load & Risk","Season Plan","Sponsors","Squads","Staff","Meet Standards","Swimmers",
+  "Talent Board","T-Pace Tests","Video Analysis",
+];
+// Every card on the Coaches Handbook. These are what a new coach reads, so a section that renders
+// empty is a section that teaches nothing — and it looks identical to one that is simply short.
+const HANDBOOK = [
+  "The Vortex Pathway","Energy-Zone System","Stroke Technique Cues","Session Planning",
+  "Dryland & Land Prep","Meet Operations","Safety & Wellbeing","Communication",
 ];
 
 scene("every tool screen renders without a broken binding or chart", async (browser) => {
@@ -195,16 +210,20 @@ scene("every tool screen renders without a broken binding or chart", async (brow
   // A fresh load per screen. The back arrow does not reliably return to the grid, and one screen
   // failing to close would report every screen after it as missing — which is a bug in the test,
   // not in the app, and the worst kind of noise to hand somebody.
+  // Ways in, because the tiles are not all in one place: most are under Tools & AI, the
+  // club-level ones under Club Administration, and the squad-scoped ones only exist once a squad
+  // is open. A screen this test cannot reach is a screen nobody is checking.
+  const SCREENS = [
+    ...TOOLS.map((name) => ({ name, routes: [["Tools & AI"], ["Club Administration"], ["Senior A", "Tools & AI"]] })),
+    ...HANDBOOK.map((name) => ({ name, routes: [["Coaches Handbook"]] })),
+  ];
   const broken = [];
-  for (const name of TOOLS) {
+  for (const { name, routes } of SCREENS) {
     await page.goto("http://127.0.0.1:" + PORT + "/proto.html?drive=" + Date.now(), { waitUntil: "networkidle" });
     await page.waitForTimeout(1100);
     page.problems.length = 0;
-    // Three ways in, because the tiles are not all in one place: most are under Tools & AI, the
-    // club-level ones under Club Administration, and the squad-scoped ones only exist once a
-    // squad is open. A screen this test cannot reach is a screen nobody is checking.
     let opened = false;
-    for (const route of [["Tools & AI"], ["Club Administration"], ["Senior A", "Tools & AI"]]) {
+    for (const route of routes) {
       try {
         for (const step of route) await tap(page, step);
         seen.length = 0;
@@ -242,9 +261,9 @@ scene("every tool screen renders without a broken binding or chart", async (brow
       if (b.errors?.length) bits.push("error: " + b.errors.join(" | "));
       return "\n       · " + b.tool.padEnd(24) + bits.join("  ");
     }).join("");
-    throw new Error(broken.length + " of " + TOOLS.length + " screens have something unrendered:" + lines);
+    throw new Error(broken.length + " of " + SCREENS.length + " screens have something unrendered:" + lines);
   }
-  return TOOLS.length + " screens, nothing unrendered";
+  return SCREENS.length + " screens, nothing unrendered";
 });
 
 // ---------------------------------------------------------------------------------------------
