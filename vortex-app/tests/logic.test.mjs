@@ -4499,6 +4499,37 @@ describe("InBody sheet", () => {
     });
   });
 
+  // Found in this club's own roster: 08/20/2014, sitting next to 20/09/2012 and 14/12/2015.
+  // Some dates were typed the American way round. Read strictly, month 20 is not a date — so
+  // those children had no birthday at all: no card, no age from their date, and nothing on any
+  // screen to say why. The overlay held the date the whole time.
+  describe("a date of birth typed the other way round", () => {
+    const c = {};
+    c._dobParts = bind("_dobParts", c);
+
+    it("is read, because month twenty is not a month", () => {
+      const p = c._dobParts("08/20/2014");
+      eq(!!p, true, "it must not read as no date at all");
+      eq(p.iso, "2014-08-20", "the 20th of August");
+    });
+    it("and the club's own way round is untouched", () => {
+      eq(c._dobParts("20/09/2012").iso, "2012-09-20");
+      eq(c._dobParts("14/12/2015").iso, "2015-12-14");
+      eq(c._dobParts("2010-04-17").iso, "2010-04-17");
+    });
+    // The one thing that must NOT happen: guessing when both halves could be a month. The club
+    // types dd/mm, so 06/03 is the 6th of March, and a coin toss is not a date of birth.
+    it("an ambiguous date is never swapped", () => {
+      eq(c._dobParts("06/03/2014").iso, "2014-03-06");
+      eq(c._dobParts("01/12/2011").iso, "2011-12-01");
+    });
+    it("and nonsense is still nonsense", () => {
+      eq(c._dobParts("20/20/2014"), null, "neither half can be a month");
+      eq(c._dobParts("31/02/2014"), null, "31 February is nobody's birthday");
+      eq(c._dobParts(""), null);
+    });
+  });
+
   // The club had 304 dates of birth in the database and a screen saying 123 were missing.
   //
   // The overlay is keyed squad-then-swimmer, and a move is a removal from one squad plus an
@@ -5639,7 +5670,12 @@ describe("dates of birth", () => {
   it("both formats agree on the same day", () => eq(parts("17/04/2017").iso, parts("2017-04-17").iso));
 
   it("31 February is refused, not rolled into March", () => eq(parts("31/02/2017"), null));
-  it("month 13 is refused", () => eq(parts("01/13/2017"), null));
+  // This used to be refused, and refusing it cost children their birthday. 08/20/2014 is in this
+  // club's own roster next to 20/09/2012 — some dates were typed the American way round, and read
+  // strictly they are not dates at all, so those swimmers simply had none and nothing said why.
+  // Month 13 cannot be a month and 1 can be, so there is nothing to guess: it is the 13th.
+  it("month 13 is read the only way round it can be", () => eq(parts("01/13/2017").iso, "2017-01-13"));
+  it("but only when one half cannot possibly be a month", () => eq(parts("13/13/2017"), null));
   it("day 32 is refused", () => eq(parts("32/01/2017"), null));
   it("a year nobody was born in is refused", () => eq(parts("17/04/1750"), null));
   it("nonsense is refused rather than half-read", () => eq(parts("not a date"), null));
