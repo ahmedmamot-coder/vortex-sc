@@ -13,6 +13,9 @@
 //   * it writes today's overlay to the bucket first, under its own name, so this is undoable by
 //     running it again against that file
 //   * it refuses a backup that would empty the club, whatever the caller confirms
+//   * it refuses a backup holding fewer dates of birth than the roster holds now, unless the
+//     caller passes back the exact number that would go — because dates going missing is the
+//     harm this club has actually taken, twice
 //
 //   GET  /api/backup/restore-roster?file=backup-2026-08-14.json   → what it would do
 //   POST /api/backup/restore-roster?file=backup-2026-08-14.json&confirm=304
@@ -106,8 +109,14 @@ export async function GET(request: Request) {
       file: p.file,
       willBe: p.willBe,
       isNow: p.isNow,
-      willNotDo: ["run without being told the exact swimmer count above", "throw today's roster away without keeping a copy of it"],
-      next: `POST /api/backup/restore-roster?file=${encodeURIComponent(file)}&confirm=${p.willBe.swimmers}`,
+      willNotDo: [
+        "run without being told the exact swimmer count above",
+        "throw today's roster away without keeping a copy of it",
+        "take dates of birth away without being told the exact number that would go",
+      ],
+      next:
+        `POST /api/backup/restore-roster?file=${encodeURIComponent(file)}&confirm=${p.willBe.swimmers}` +
+        (p.isNow.dates > p.willBe.dates ? `&dropdates=${p.isNow.dates - p.willBe.dates}` : ""),
     },
     { headers: head },
   );
@@ -136,6 +145,20 @@ export async function POST(request: Request) {
   if (p.willBe.swimmers < 50)
     return Response.json(
       { error: `that backup makes only ${p.willBe.swimmers} swimmers, which is not a roster this club has ever had` },
+      { status: 409, headers: head },
+    );
+  // Dates of birth are what this club has actually lost, twice, and a restore is the one thing on
+  // the screen that can take them away. So it has to be said out loud and passed back, exactly as
+  // the swimmer count is: `dropdates` is not a flag to set, it is the number that would go.
+  // Undoing a restore is the one case where losing them is the intent, and it still says how many.
+  const drops = p.isNow.dates - p.willBe.dates;
+  const owned = parseInt(q.get("dropdates") || "0", 10) || 0;
+  if (drops > 0 && owned !== drops)
+    return Response.json(
+      {
+        error: `that backup holds ${p.willBe.dates} dates of birth and the roster holds ${p.isNow.dates}, so this would take ${drops} away`,
+        hint: `Nothing was changed. If that is really the intent — undoing a restore is the usual reason — add &dropdates=${drops}.`,
+      },
       { status: 409, headers: head },
     );
 

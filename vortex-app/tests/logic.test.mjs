@@ -1454,12 +1454,43 @@ describe("expired session", () => {
     });
     it("hands back the call that undoes it", () =>
       eq(/undo: `POST \/api\/backup\/restore-roster\?file=\$\{encodeURIComponent\(undoName\)\}/.test(route), true));
-    it("the button never offers today's copy, which is the one that went wrong", () =>
-      eq(/files\.find\(n=>n\.indexOf\(today\)<0\)/.test(check), true));
-    it("and asks, naming what it replaces", () => {
+    it("the button never offers today's nightly copy, which is the one that went wrong", () =>
+      eq(/nights=all\.filter\(b=>!this\._rbIsUndo\(b\.name\) && String\(b\.name\)\.indexOf\(today\)<0\)/.test(check), true));
+    // The undo copy is written today, always — so the rule "skip anything with today's date in
+    // it" made the one file that undoes a bad restore the one file the button could not reach.
+    it("but does offer the undo copy, which is always written today", () => {
+      eq(/_rbIsUndo\(b\.name\) && fresh\(b\)/.test(check), true, "an undo copy from the last day, ahead of the nights");
+      eq(/undo\[0\]\|\|nights\.find/.test(check), true);
+    });
+    it("prefers the copy carrying the most dates of birth, not simply the newest", () =>
+      eq(/nights\.reduce\(\(m,b\)=>Math\.max\(m, b\.dobs\|\|0\), 0\)/.test(check), true));
+    // Dates of birth are what this club has actually lost. A night's copy holding fewer than the
+    // roster holds now is not a recovery, and is not offered at all.
+    it("refuses a night's copy that holds fewer dates than the roster does now", () => {
+      eq(/lost > 0 && !this\._rbIsUndo\(pick\)/.test(check), true, "refused in the check, so no plan is ever offered");
+      eq(/would take '\+lost\+' away/.test(check), true, "and says how many, not just that it refused");
+      eq(/rbPlan:null/.test(check.slice(0, check.indexOf("rbPlan:{"))), true, "and leaves nothing to press");
+    });
+    it("says nothing to put back rather than writing an identical roster", () =>
+      eq(/willBe\.swimmers===g\.isNow\.swimmers && g\.willBe\.dates===g\.isNow\.dates/.test(check), true));
+    it("and asks, leading with what would be lost", () => {
       eq(/window\.confirm/.test(run), true);
+      eq(/Dates of birth: '\+p\.dNow\+' now/.test(run), true, "dates first — the count alone reads like a success");
+      eq(/are not in that copy\. They will go/.test(run), true);
       eq(/including anything typed today/.test(run), true);
       eq(/can be undone/.test(run), true);
+    });
+    // The plan on the screen can be minutes old, and a pull in between changes what is here.
+    it("reads it again after the confirm, and stops if the answer moved", () => {
+      eq(/const lost=g\.isNow\.dates - g\.willBe\.dates/.test(run), true);
+      eq(/Nothing was changed — check again/.test(run), true);
+      eq(/confirm='\+g\.willBe\.swimmers/.test(run), true, "confirms the fresh count, not the stale one");
+    });
+    // The client can be wrong, out of date, or bypassed entirely — this is the guard that holds.
+    it("the route itself refuses to drop dates unless told the exact number", () => {
+      eq(/const drops = p\.isNow\.dates - p\.willBe\.dates/.test(route), true);
+      eq(/drops > 0 && owned !== drops/.test(route), true);
+      eq(/dropdates/.test(route), true);
     });
   });
 
@@ -2770,6 +2801,23 @@ describe("InBody sheet", () => {
   // undeclared variable is not a syntax error, it is a runtime one, and the runtime here is a
   // coach's phone at the poolside.
   //
+  // Before any of that: the file has to parse. A stray brace anywhere in 16,000 lines takes the
+  // whole app down on every device at once, and the club's only way back is a build that parses.
+  // Every other test here reads the source as text and would pass happily on a file that cannot
+  // run at all.
+  it("every script in the page parses", () => {
+    let n = 0;
+    for (const m of SOURCE.matchAll(/<script(?![^>]*src=)[^>]*>([\s\S]*?)<\/script>/g)) {
+      if (/type="[^"]*(json|template)/.test(m[0])) continue;
+      n++;
+      // new Function parses without running: a syntax error throws here, at the line it is on.
+      try { new Function(m[1]); } catch (e) {
+        eq(String(e), "", "script #" + n + " does not parse — this is a white screen for the whole club");
+      }
+    }
+    eq(n >= 1, true, "the page must still have scripts to check");
+  });
+
   // renderVals() builds every value the page renders and is where these locals live. They are
   // written with a leading underscore by convention, which makes them findable: each one used
   // must be declared in the same function.
@@ -2800,6 +2848,57 @@ describe("InBody sheet", () => {
 
     const missing = [...used].filter((n) => !declared.has(n));
     eq(missing.join(", "), "", "used in renderVals but never declared there");
+  });
+
+  // The console on a working build was a wall of "printSheet.accent never resolved" and SVG parse
+  // errors from `<path d="undefined">`, on every render, on every screen. None of it was a fault;
+  // all of it was screens that only build their own values when they are open. The cost was that
+  // a real error had nowhere to be seen — which is how a 400 on fitness_plans went unnoticed for
+  // as long as it did. So every one of them gets a harmless default, and anything still shouting
+  // in that console is worth reading.
+  describe("the console says nothing on a screen that is fine", () => {
+    const body = (() => {
+      const s = SOURCE.indexOf("  renderVals(){");
+      return SOURCE.slice(s, SOURCE.indexOf("\n  }\n", s));
+    })();
+    // The defaults have to come FIRST: later keys in the same object literal win, so a screen
+    // that IS open still overrides its own default rather than being flattened by it. That
+    // ordering is the whole fix, so the test checks the ordering and not merely the presence.
+    for (const k of ["printSheet", "famChart", "lcmChart", "scmChart"]) {
+      const at = [...body.matchAll(new RegExp("\\b" + k + ":\\s*\\{", "g"))].map((m) => m.index);
+      it(k + " has a default, and it comes before the real one", () => {
+        eq(at.length >= 1, true, "no " + k + " in renderVals at all");
+        // Two sites, default then real — or one, if that screen's builder has gone away.
+        if (at.length > 1) eq(at[0] < at[1], true, "a default placed after the real value silently wins over it");
+        eq(/(accent:'#2733D6'|hasData:false)/.test(body.slice(at[0], at[0] + 120)), true,
+           "the first " + k + " must be the harmless default");
+      });
+    }
+    it("the chart defaults draw nothing rather than a path of 'undefined'", () => {
+      const i = body.indexOf("famChart:{");
+      eq(/hasData:false, ?noData:true/.test(body.slice(i, i + 200)), true);
+      eq(/linePts:''/.test(body.slice(i, i + 200)), true, "an empty path draws nothing; 'undefined' is an SVG parse error");
+    });
+  });
+
+  // fitness_plans exists in the club's database, holds a row, and answered 400 to
+  // `select=id,plan,ts,updated_at` every single time — one of those columns is not there. The read
+  // failed, the app fell back to the copy on the device, and every coach's fitness plan stayed on
+  // the phone it was typed on. Naming columns couples a read to a schema the club may not have;
+  // a missing column should cost that field, not the whole read.
+  describe("reading the plan tables cannot be broken by one missing column", () => {
+    for (const t of ["fitness_plans", "squad_plans", "season_plans"])
+      it(t + " is read with select=*", () => {
+        const m = SOURCE.match(new RegExp("__vxSelect\\(\\s*'" + t + "'\\s*,\\s*'([^']*)'"));
+        eq(!!m, true, "the read must still be findable");
+        eq(m[1], "select=*", "naming columns here is what silently stopped the writes reaching anyone");
+      });
+    // And the migration that adds them back, for a database that is already wrong.
+    it("ships the repair for a database missing them", () => {
+      const sql = readFileSync(new URL("../supabase/plan_tables_repair.sql", import.meta.url), "utf8");
+      eq(/add column if not exists/.test(sql), true, "safe to run twice, and on a database already correct");
+      eq(/notify pgrst/.test(sql), true, "PostgREST caches the schema; without this the 400 continues");
+    });
   });
 
   // A build that throws while drawing the screen takes the whole interface with it — including
