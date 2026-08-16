@@ -6508,7 +6508,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-16k';
+const VX_BUILD='2026-08-16m';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -8886,7 +8886,33 @@ class Component extends DCLogic {
     if(a.id==='ahmed' || a.id==='sameh') return true;
     // Any one of them is enough. A head coach who also helps with fitness does not lose the
     // run of the club by taking on the second job.
-    return this._rolesOf(a).some(r=>VX_FULL_ACCESS_ROLES.indexOf(r)>=0);
+    return this._rolesOf(a).some(r=>this._isFullAccessRole(r));
+  }
+  // Whether a role, as a person actually typed it, means full access.
+  //
+  // This used to be `VX_FULL_ACCESS_ROLES.indexOf(role) >= 0` — exact string equality against a
+  // list of seven. Neither of the club's two admins matches that list:
+  //
+  //   Ahmed  · "Technical Director · full access"   the list says "Technical Manager"
+  //   Sameh  · "Administrator · full access"        the list says "Admin"
+  //
+  // Both had full access only because their account ids are hardcoded two lines above. Anybody
+  // else — Mary, or Sameh himself signing in through a staff account created in the Staff screen
+  // rather than the built-in one — gets an id the hardcode does not know, a role that matches
+  // nothing, and no access, with nothing on screen saying why. The role box is free text typed by
+  // a person; "Administrator" and "Admin" are the same job and the app has to know that.
+  _isFullAccessRole(role){
+    const raw=String(role||'').toLowerCase();
+    // It says full access. It has said so on both admins since the app was built. Believe it.
+    if(/full access/.test(raw)) return true;
+    // Everything before a "·" is the job; anything after is a note about it.
+    const title=raw.split('·')[0].replace(/[^a-z ]+/g,' ').replace(/\s+/g,' ').trim();
+    if(!title) return false;
+    // Whole words, so "Pre-Team coach" can never be read as "ceo" and a coach never inherits the
+    // run of the club from a substring.
+    if(!/\b(owner|ceo|admin|administrator|manager|director|head coach)\b/.test(title)) return false;
+    // An assistant to the manager is not the manager.
+    return !/\b(assistant|deputy|trainee|intern)\b/.test(title);
   }
   _rebuildAccounts(){
     // Rebuild this.accounts from the base staff + synced custom staff + per-account overrides.
@@ -15243,7 +15269,10 @@ class Component extends DCLogic {
           const all=picked.length===0;
           const roles=String(d.role!=null?d.role:(a.role||'')).split(',').map(x=>x.trim()).filter(Boolean);
           const role=roles.length?roles.join(' \u00b7 '):'no position yet';
-          const full=(a.id==='ahmed'||a.id==='sameh')||roles.some(r=>VX_FULL_ACCESS_ROLES.indexOf(r)>=0);
+          // The same question as _isFullAccess, and it must be asked the same way — this is the
+          // sentence that TELLS somebody what their role gets them. Answered differently, it says
+          // "full access" to a person the app then refuses, or the reverse.
+          const full=this._isFullAccess(a);
           return {
             editAllBg: all?'var(--vx-blue)':'#fff', editAllFg: all?'#fff':'#3A4152',
             editAllBorder: all?'var(--vx-blue)':'#E5E9F0',
@@ -16746,7 +16775,9 @@ class Component extends DCLogic {
         const all=picked.length===0;
         const roles=String((S.staffAddForm&&S.staffAddForm.role)||'').split(',').map(x=>x.trim()).filter(Boolean);
         const role=roles.length?roles.join(' \u00b7 '):'no position yet';
-        const full=roles.some(r=>VX_FULL_ACCESS_ROLES.indexOf(r)>=0);
+        // The role being typed into the form, not an existing account — there is no `a` here.
+        // Same question, same answer, asked through the same helper.
+        const full=roles.some(r=>this._isFullAccessRole(r));
         return {
           staffSquadAllBg: all?'var(--vx-blue)':'#fff', staffSquadAllFg: all?'#fff':'#3A4152',
           staffSquadAllBorder: all?'var(--vx-blue)':'#E5E9F0',

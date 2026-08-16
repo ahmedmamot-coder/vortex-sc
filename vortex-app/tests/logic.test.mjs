@@ -2674,7 +2674,8 @@ describe("InBody sheet", () => {
       c._canSeeSquad = bind("_canSeeSquad", c);
       c._rolesOf = bind("_rolesOf", c, ["_me"]);
       c._roleLabel = bind("_roleLabel", c, ["_rolesOf"]);
-      c._isFullAccess = bind("_isFullAccess", c, ["_me", "_rolesOf"]);
+      c._isFullAccessRole = bind("_isFullAccessRole", c);
+      c._isFullAccess = bind("_isFullAccess", c, ["_me", "_rolesOf", "_isFullAccessRole"]);
       return c;
     };
 
@@ -2801,6 +2802,56 @@ describe("InBody sheet", () => {
   // undeclared variable is not a syntax error, it is a runtime one, and the runtime here is a
   // coach's phone at the poolside.
   //
+  // Who counts as an admin, judged on what somebody actually typed in the role box.
+  //
+  // This was `VX_FULL_ACCESS_ROLES.indexOf(role) >= 0` — exact string equality against a list of
+  // seven — and NEITHER of the club's two admins matches that list:
+  //
+  //   Ahmed  "Technical Director · full access"   the list says "Technical Manager"
+  //   Sameh  "Administrator · full access"        the list says "Admin"
+  //
+  // Both worked only because their account ids are hardcoded. Anyone else with the same job —
+  // Mary, or Sameh himself signing in through a staff account made in the Staff screen instead of
+  // the built-in one — gets an id the hardcode does not know and a role that matches nothing, and
+  // is refused with nothing on screen saying why. They are the two people running this club.
+  describe("an admin is an admin however the role was typed", () => {
+    const src = methodSource("_isFullAccessRole").body;
+    // Compiled and run, not read: the point is the answers, not the wording.
+    const isFull = new Function("role", src.slice(src.indexOf("{") + 1, src.lastIndexOf("}")));
+
+    // Exactly the strings in this club's own account list.
+    for (const role of ["Technical Director · full access", "Administrator · full access"])
+      it('"' + role + '" is full access', () => eq(isFull(role), true));
+    // And the shapes somebody would plausibly type for the same job.
+    for (const role of ["Admin", "admin", "Administrator", "Manager", "Club Manager", "Owner",
+                        "CEO", "Head Coach", "head coach", "Aquatic Director", "Technical Manager"])
+      it('"' + role + '" is full access', () => eq(isFull(role), true));
+
+    // And the ones that must not be, including every coach role the club actually uses.
+    for (const role of ["Pre-Team coach", "Advanced B coach", "Advanced A coach", "Junior coach",
+                        "Senior B coach", "Senior A coach", "Vortex B coach", "Vortex A coach",
+                        "Legend coach", "Fitness coach", "Coach", "", "Assistant Manager",
+                        "Deputy Head Coach", "Trainee Admin"])
+      it('"' + role + '" is not', () => eq(isFull(role), false));
+
+    // A substring must never do it: "ceo" hides inside ordinary words.
+    it("does not read a job title out of the middle of a word", () =>
+      eq(isFull("Receptionist") || isFull("Ceramics") || isFull("Administrative assistant"), false));
+
+    // The three places that ask this question have to give the same answer. One of them is the
+    // sentence that TELLS somebody what their role gets them — answered differently, it promises
+    // full access to a person the app then refuses.
+    it("is asked in one place, not three", () => {
+      // Comments in the source explain what the old check was, and a mention in prose is not a
+      // check that still runs — strip them before counting, or this fails on its own footnote.
+      const code = SOURCE.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+      const stray = [...code.matchAll(/VX_FULL_ACCESS_ROLES\.indexOf/g)].length;
+      eq(stray, 0, "a copy of the old exact-match check is still deciding access somewhere");
+      eq((SOURCE.match(/_isFullAccessRole\(/g) || []).length >= 3, true,
+         "every caller must go through the one helper");
+    });
+  });
+
   // A security-definer function with no pinned search_path.
   //
   // `security definer` means the function runs with its owner's privileges, not the caller's —
