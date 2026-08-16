@@ -481,6 +481,39 @@ scene("editing a season plan reaches the season_plans table", async (browser) =>
 });
 
 // ---------------------------------------------------------------------------------------------
+// Entering a swimmer into an event. This is the one with a deadline attached: entries close, and
+// an entry that stayed on the phone it was typed on is a child who does not swim.
+// ---------------------------------------------------------------------------------------------
+scene("entering a swimmer in an event reaches the database", async (browser) => {
+  const page = await openLive(browser);
+  await tap(page, "Tools & AI");
+  await tap(page, "Meet Entries");
+  const box = await page.$('input[placeholder="Search swimmer…"]');
+  if (!box) throw new Error("meet entries opened with no swimmer search");
+  await box.click();
+  await box.type("Alia", { delay: 25 });
+  await page.waitForTimeout(900);
+  await tap(page, "Alia Ezzat");
+  await tap(page, "50 Free");
+  page.writes.length = 0;
+  // "Add × selected events" — the count is in the label, so match the beginning only.
+  const added = await page.evaluate(() => {
+    const b = [...document.querySelectorAll("button,[onclick]")]
+      .find((e) => e.offsetParent && /^add\b/i.test((e.innerText || "").replace(/\s+/g, " ").trim()));
+    if (!b) return false;
+    b.click();
+    return true;
+  });
+  if (!added) throw new Error("nothing on the screen would add the selected event");
+  await page.waitForTimeout(1800);
+
+  const rows = page.writes.filter((w) => w.table === "club_state" && w.keys.includes("vx_meet_entries"));
+  eq(rows.length > 0, true, "the entry stayed on this phone — tables and keys written: "
+     + (page.writes.map((w) => w.table + (w.keys.length ? ":" + w.keys.join("/") : "")).join(", ") || "none"));
+  return "sent to club_state as vx_meet_entries";
+});
+
+// ---------------------------------------------------------------------------------------------
 // Sitting on a screen and touching nothing must not write to the database.
 //
 // Found by accident, while a fake database was answering every read with an empty list: the app
