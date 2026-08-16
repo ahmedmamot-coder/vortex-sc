@@ -171,6 +171,83 @@ scene("no write leaves the device while there is no session", async (browser) =>
 });
 
 // ---------------------------------------------------------------------------------------------
+// Every tool screen, opened, and told off for anything that did not render.
+//
+// The club's own console was full of the evidence and nobody was reading it: bindings that never
+// resolved and were "rendered as empty", and SVG attributes left as the literal text "{{ d.x }}"
+// — which is a chart that silently draws nothing. A coach does not report an empty chart as a
+// bug; they assume the squad has no data. So this asks every screen, once, in one run.
+// ---------------------------------------------------------------------------------------------
+const TOOLS = [
+  "AI Assistants","Daily Attendance","Activity log","Birthdays","Boards","Club Configuration",
+  "Pace Clock","Communication","Dryland & Land Prep","Meet Entries","Family accounts",
+  "Fitness Plan","Season Goals","Top Improvers","InBody Import","Vortex Lounge","Meet Day",
+  "Meet Operations","The Vortex Pathway","Level-Up Review","Race Strategy","Rankings",
+  "Recovery Board","Relay Builder","AI Plan Review","Load & Risk","Safety & Wellbeing",
+  "Season Plan","Session Planning","Sponsors","Squads","Staff","Meet Standards","Swimmers",
+  "Talent Board","Stroke Technique Cues","T-Pace Tests","Video Analysis",
+];
+
+scene("every tool screen renders without a broken binding or chart", async (browser) => {
+  const page = await openApp(browser);
+  const seen = [];
+  page.on("console", (m) => seen.push(m.text()));
+  // A fresh load per screen. The back arrow does not reliably return to the grid, and one screen
+  // failing to close would report every screen after it as missing — which is a bug in the test,
+  // not in the app, and the worst kind of noise to hand somebody.
+  const broken = [];
+  for (const name of TOOLS) {
+    await page.goto("http://127.0.0.1:" + PORT + "/proto.html?drive=" + Date.now(), { waitUntil: "networkidle" });
+    await page.waitForTimeout(1100);
+    page.problems.length = 0;
+    // Three ways in, because the tiles are not all in one place: most are under Tools & AI, the
+    // club-level ones under Club Administration, and the squad-scoped ones only exist once a
+    // squad is open. A screen this test cannot reach is a screen nobody is checking.
+    let opened = false;
+    for (const route of [["Tools & AI"], ["Club Administration"], ["Senior A", "Tools & AI"]]) {
+      try {
+        for (const step of route) await tap(page, step);
+        seen.length = 0;
+        await tap(page, name);
+        opened = true;
+        break;
+      } catch {
+        await page.goto("http://127.0.0.1:" + PORT + "/proto.html?drive=" + Date.now(), { waitUntil: "networkidle" });
+        await page.waitForTimeout(900);
+      }
+    }
+    if (!opened) { broken.push({ tool: name, why: "could not be reached from the hub at all" }); continue; }
+    await page.waitForTimeout(600);
+
+    const unresolved = [...new Set(seen.filter((t) => /never resolved/.test(t))
+      .map((t) => (t.match(/\{\{\s*([^}]+?)\s*\}\}/) || [, t])[1]))];
+    const svg = [...new Set(seen.filter((t) => /Problem parsing|Invalid value for/.test(t))
+      .map((t) => (t.match(/"\{\{\s*([^}]+?)\s*\}\}"/) || [, "?"])[1]))];
+    // Text the runtime could not fill, left visible to a coach.
+    const litera = await page.evaluate(() => {
+      const t = document.body.innerText || "";
+      return [...new Set((t.match(/\{\{[^}]{1,40}\}\}/g) || []))].slice(0, 5);
+    });
+    if (unresolved.length || svg.length || litera.length || page.problems.length)
+      broken.push({ tool: name, unresolved, svg, onScreen: litera, errors: page.problems.slice(0, 2) });
+  }
+
+  if (broken.length) {
+    const lines = broken.map((b) => {
+      const bits = [];
+      if (b.why) bits.push(b.why);
+      if (b.unresolved?.length) bits.push("empty: " + b.unresolved.join(", "));
+      if (b.svg?.length) bits.push("chart not drawn: " + b.svg.join(", "));
+      if (b.onScreen?.length) bits.push("raw on screen: " + b.onScreen.join(" "));
+      if (b.errors?.length) bits.push("error: " + b.errors.join(" | "));
+      return "\n       · " + b.tool.padEnd(24) + bits.join("  ");
+    }).join("");
+    throw new Error(broken.length + " of " + TOOLS.length + " screens have something unrendered:" + lines);
+  }
+  return TOOLS.length + " screens, nothing unrendered";
+});
+
+// ---------------------------------------------------------------------------------------------
 const only = process.argv[2];
 await start();
 const browser = await chromium.launch({ executablePath: CHROME });
