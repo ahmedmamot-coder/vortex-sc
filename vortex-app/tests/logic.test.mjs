@@ -3110,7 +3110,10 @@ describe("InBody sheet", () => {
       eq(/window\.__vxRemoteTs\[r\.key\]=remoteTs/.test(SOURCE), true,
          "recorded even when this device's copy is kept, or a later write cannot tell");
       const fn = sourceBetween("_blobIsStale(key){", "\n  }");
-      eq(/remote > mine \+ 60000/.test(fn), true, "clocks differ; a device that just wrote is not stale");
+      // The slack is still a minute, and the comparison now also forgives a copy this device has
+      // already taken — a device is behind only what it has neither written nor seen.
+      eq(/\+ 60000/.test(fn), true, "clocks differ; a device that just wrote is not stale");
+      eq(/Math\.max\(mine, seen\)/.test(fn), true, "nor one that has already taken the newer copy");
     });
     // The whole point of the migration: a squad is a row, so editing one cannot touch another.
     describe("one row per squad", () => {
@@ -4926,10 +4929,26 @@ describe("InBody sheet", () => {
     // anywhere else, it could never save a roster edit again.
     it("taking the database's copy is recorded, or the device is stale for ever", () => {
       const pull = sourceBetween("const writeTs=window.__vxWriteTs||{};", "if(changed) this._hydrateShared();");
-      eq(/localStorage\.setItem\('__vxts_'\+r\.key, String\(remoteTs\)\)/.test(pull), true,
+      eq(/localStorage\.setItem\('__vxseen_'\+r\.key, String\(remoteTs\)\)/.test(pull), true,
          "seeing and taking a copy is what stops this device being behind it");
       const stale = sourceBetween("_blobIsStale(key){", "\n  }");
-      eq(/remote > mine \+ 60000/.test(stale), true, "and the guard still only fires on a genuinely newer copy");
+      eq(/remote > Math\.max\(mine, seen\) \+ 60000/.test(stale), true,
+         "the guard fires on a copy this device has neither written nor taken");
+    });
+    // The first version of this stamped __vxts_ with the SERVER's clock. __vxts_ means "when this
+    // device last wrote", it is stamped with Date.now(), and applyPull resolves a tie in the
+    // server's favour — so after any pull a genuine local edit could compare as older than the
+    // copy just taken and be thrown away. This club lost three swimmers and five dates of birth
+    // to it inside half an hour. Two clocks, two markers, and never the same one.
+    it("a server clock never touches the marker that decides whose copy wins", () => {
+      const pull = sourceBetween("const writeTs=window.__vxWriteTs||{};", "if(changed) this._hydrateShared();");
+      eq(/setItem\('__vxts_'\+r\.key, String\(remoteTs\)\)/.test(pull), false,
+         "__vxts_ is this device's own clock, and applyPull gives a tie to the server");
+      // The only place __vxts_ is written stays the local-write path, with Date.now().
+      eq(/origSet\('__vxts_'\+k, String\(Date\.now\(\)\)\)/.test(SOURCE), true,
+         "stamped when this device writes, and only then");
+      eq(/var takeRemote = \(\(localVal==null && !haveMirror\) \|\| !localTs \|\| remoteTs>=localTs\)/.test(SOURCE), true,
+         "the tie-break this has to stay safe against");
     });
     // The refusal above went to rosterFixMsg, which renders in Settings. A coach editing a
     // swimmer saw the panel close and the row look edited, and nothing had been written.

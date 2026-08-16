@@ -6508,7 +6508,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-16g';
+const VX_BUILD='2026-08-16h';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -8031,8 +8031,16 @@ class Component extends DCLogic {
     try{
       const remote=(window.__vxRemoteTs||{})[key]||0;
       const mine=parseInt(localStorage.getItem('__vxts_'+key)||'0',10)||0;
+      // And the newest copy this device has actually taken from the database. Without it, the
+      // marker only ever moves when this device WRITES — so a device that once pulled a roster
+      // written elsewhere was stale for ever, and the only thing that would have cleared it was
+      // the write being refused. A date of birth typed in twice and still missing is that.
+      //
+      // Kept as its own key, on the server's clock, never mixed into __vxts_: that one decides
+      // whose copy wins a pull, and putting a foreign clock in it cost this club three swimmers.
+      const seen=parseInt(localStorage.getItem('__vxseen_'+key)||'0',10)||0;
       // A minute of slack: clocks differ, and a device that wrote seconds ago is not stale.
-      return !!(remote && remote > mine + 60000);
+      return !!(remote && remote > Math.max(mine, seen) + 60000);
     }catch(e){ return false; }
   }
   // ---- the roster, one row per change ----------------------------------------------------------
@@ -13365,13 +13373,18 @@ class Component extends DCLogic {
         // way a later write can tell it is about to overwrite something newer than what it read.
         try{ window.__vxRemoteTs=window.__vxRemoteTs||{}; window.__vxRemoteTs[r.key]=remoteTs; }catch(e){}
         const s=JSON.stringify(r.value); if(localStorage.getItem(r.key)!==s){ setLocal(r.key, s); changed=true; }
-        // This device has now SEEN the database's copy and taken it, so it is no longer behind it.
-        // Without recording that, _blobIsStale goes on comparing the remote stamp against the last
-        // time this device WROTE — and that never moves, because the write it is blocking is the
-        // only thing that would move it. A device that once pulled a roster written elsewhere
-        // could then never save a roster edit again: refused, silently, for ever. A date of birth
-        // typed in twice and still missing after a refresh is exactly what that looks like.
-        try{ if(remoteTs) localStorage.setItem('__vxts_'+r.key, String(remoteTs)); }catch(e){}
+        // What this device has SEEN, kept well away from __vxts_.
+        //
+        // __vxts_ means "when this device last WROTE", it is stamped with Date.now(), and
+        // applyPull resolves a tie in the server's favour (remoteTs >= localTs). Stamping it with
+        // the SERVER's clock therefore did real damage: after any pull the marker sat at the
+        // server's time, a genuine local edit stamped the device's — which can be lower — and the
+        // next pull judged the club's own work older than the copy it had just taken and threw it
+        // away. This club lost three swimmers and five dates of birth to that in half an hour.
+        //
+        // Two clocks, two markers. _blobIsStale asks about the newest copy this device has seen,
+        // which is what it always meant, and nothing that decides whose copy wins is touched.
+        try{ if(remoteTs) localStorage.setItem('__vxseen_'+r.key, String(remoteTs)); }catch(e){}
       });
       if(changed) this._hydrateShared();
     } catch(e){} finally { this._syncBusy=false; }
