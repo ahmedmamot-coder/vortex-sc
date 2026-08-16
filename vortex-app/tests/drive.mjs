@@ -268,6 +268,63 @@ scene("marking a swimmer on the register reaches the attendance table", async (b
 });
 
 // ---------------------------------------------------------------------------------------------
+// What the console says before anybody touches anything.
+//
+// The 38-screen sweep below clears the console immediately before opening each screen, so
+// everything logged while the app was starting up was thrown away unread — and starting up is
+// exactly when the print sheet and the three progress charts render with no data behind them.
+// A screenshot of the live console showed a page of "{{ pset.dist }} never resolved" that the
+// sweep had been reporting as clean, for as long as the sweep has existed.
+//
+// This is the check that a coach opening the app on a phone logs nothing. It matters because a
+// console full of harmless red is where a real error hides: the 400 that stopped every coach's
+// fitness plan reaching the database scrolled past in exactly this noise for weeks.
+// ---------------------------------------------------------------------------------------------
+scene("opening the app logs nothing unresolved, before a single tap", async (browser) => {
+  const seen = [];
+  const page = await (await browser.newContext({ viewport: { width: 1280, height: 1000 } })).newPage();
+  page.on("console", (m) => seen.push(m.text()));
+  const problems = [];
+  page.on("pageerror", (e) => problems.push(String(e.message)));
+  await page.addInitScript(() => {
+    localStorage.setItem("vx_session", JSON.stringify({ type: "staff", id: "ahmed" }));
+    localStorage.removeItem("vx_nav");
+  });
+  await page.goto("http://127.0.0.1:" + PORT + "/proto.html?boot=" + Date.now(), { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(3000);   // long enough for lucide, the charts and the first render
+
+  // Four lines I could not explain, listed rather than silenced.
+  //
+  // psec.startLabel was in this list and is now fixed: the print sheet's section mapper never
+  // copied it out of planSections, so every printed session had a blank where each section's
+  // start time belongs. That one was real, and it prints now.
+  //
+  // These four resist the same treatment. The only mapper that can produce a `pset` gives all
+  // four of them a value — setMetres is `(Number(x)||0).toLocaleString()`, which cannot be
+  // undefined — and the sheet itself renders correctly with real data: four sections, eight rows,
+  // every distance and time present. So they come from a render pass I have not identified, and
+  // saying "fixed" would be a guess. They are named here so the check still fails on anything
+  // NEW, which is the whole reason it exists.
+  const KNOWN = ["pset.dist", "pset.txt", "pset.timeLabel", "pset.setMetres"];
+  const unresolved = [...new Set(seen.filter((t) => /never resolved/.test(t))
+    .map((t) => (t.match(/\{\{\s*([^}]+?)\s*\}\}/) || [, t])[1]))];
+  const unexplained = unresolved.filter((b) => !KNOWN.includes(b));
+  const svg = [...new Set(seen.filter((t) => /Problem parsing|Invalid value for/.test(t)))];
+  eq(unexplained.join(", "), "", "a binding resolved to nothing on a plain start-up");
+  eq(svg.length, 0, "charts drew a path of 'undefined' on a plain start-up: " + svg.slice(0, 2).join(" | "));
+  eq(problems.join(" | "), "", "the app threw while starting");
+  // The print sheet has to actually be built, or this scene passes because nothing rendered.
+  const sheet = await page.evaluate(() => {
+    const n = document.getElementById("vx-print-sheet");
+    return n ? { rows: n.querySelectorAll("tr").length, start: /\d{1,2}:\d{2}\s?(AM|PM)/.test(n.innerText || "") } : null;
+  });
+  eq(!!sheet && sheet.rows > 0, true, "the print sheet rendered nothing, so this proves nothing about it");
+  eq(sheet.start, true, "the printed sheet has no start time on it — psec.startLabel is missing again");
+  return seen.length + " console lines, " + sheet.rows + " printed rows with start times, "
+       + unresolved.length + " known holes and no new ones";
+});
+
+// ---------------------------------------------------------------------------------------------
 // The fitness plans, which is the one that was actually broken.
 //
 // fitness_plans answered 400 to every read for as long as anyone knows, so the app fell back to
