@@ -4847,6 +4847,19 @@ describe("InBody sheet", () => {
       const anon = sourceBetween("_dbAnon(){", "\n  }");
       eq(/window\.__vxSendingAnon/.test(anon), true, "which _curTok already sets, and nothing asked");
     });
+    // The first version of that guard asked only __vxSendingAnon, which means "signed in, but
+    // sending the anon key" and is deliberately FALSE when there is no session at all. That is
+    // exactly the window between signing out and the new token landing — when signing in fires
+    // every fetch at once. So the seeds ran again and the club's report was precise: Retry
+    // cleared it, and signing out and back in brought the same thirty straight back.
+    it("no session at all counts as anonymous, not as signed in", () => {
+      const anon = sourceBetween("_dbAnon(){", "\n  }");
+      eq(/const a=window\.__VX_AUTH;/.test(anon), true, "it looks at the session itself");
+      eq(/return !\(a && a\.token && a\.exp && Date\.now\(\) < a\.exp\);/.test(anon), true,
+         "anything other than a live token of our own is anonymous");
+      eq(/catch\(e\)\{ return true;/.test(anon), true,
+         "and unsure is the same as no, when the cost is overwriting a club");
+    });
     // The app knew, and said nothing useful. __vxAuthDead only goes true once the refresh token
     // itself is finished, so for hours before that the banner named a table and said "retrying
     // automatically" — sending this club to check an allowlist that was right all along.

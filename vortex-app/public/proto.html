@@ -6466,7 +6466,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-16b';
+const VX_BUILD='2026-08-16c';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -7202,8 +7202,23 @@ class Component extends DCLogic {
   // So: an anonymous read carries no information whatsoever about what is in the database, and
   // nothing may act on one. "Empty" and "invisible to you" are not the same answer, and treating
   // them as the same is how an app decides to overwrite a database it cannot see.
+  // Broader than __vxSendingAnon, on purpose. That flag means "signed in, but sending the anon
+  // key", and it is deliberately false when there is no session AT ALL — which is precisely the
+  // window between signing out and the new token landing. Signing in fires every fetch at once,
+  // all of them read as an anonymous visitor, every read comes back empty rather than refused,
+  // and the seeds run again. Sign out, sign back in, and the same thirty came straight back —
+  // which is exactly what the club reported after the first fix appeared to work.
+  //
+  // Reading is not messaging. The banner is right to tell a signed-out coach something different
+  // from an expired one, but for deciding whether an empty list means anything, no session and a
+  // dead session are the same answer. Anything other than a live token of our own is one.
   _dbAnon(){
-    try{ return !!(typeof window!=='undefined' && window.__vxSendingAnon); }catch(e){ return false; }
+    try{
+      if(typeof window==='undefined') return true;
+      if(window.__vxSendingAnon) return true;
+      const a=window.__VX_AUTH;
+      return !(a && a.token && a.exp && Date.now() < a.exp);
+    }catch(e){ return true; }   // unsure is the same as no, when the cost is overwriting a club
   }
   _policyHold(key){
     this._polHeld = this._polHeld || {};
