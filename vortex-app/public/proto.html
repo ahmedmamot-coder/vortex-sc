@@ -6508,7 +6508,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-16f';
+const VX_BUILD='2026-08-16g';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -14996,8 +14996,14 @@ class Component extends DCLogic {
     let swFlat=this.allSwimmersFlat();
     if(S.swSquadFilter!=='all') swFlat=swFlat.filter(sw=>sw.squadId===S.swSquadFilter);
     if(swQ) swFlat=swFlat.filter(sw=>sw.name.toLowerCase().includes(swQ));
-    const swMissingDobCount = swFlat.filter(sw=>!sw.dob).length;
-    if(S.swDobFilter) swFlat=swFlat.filter(sw=>!sw.dob);
+    // Asked the same way the rest of the app asks it. This counted a swimmer as HAVING a date if
+    // the field held any text at all, while every screen that shows a birthday reads it through
+    // _dobParts — so 08/20/2014, which is not a date this app can read, was missing everywhere
+    // except here, where it looked filed. The list of who still needs one has to be the list of
+    // who the club can actually wish a happy birthday.
+    const swNoDob = (sw)=>!this._bdayISO(sw);
+    const swMissingDobCount = swFlat.filter(swNoDob).length;
+    if(S.swDobFilter) swFlat=swFlat.filter(swNoDob);
     swFlat=swFlat.slice().sort((a,b)=>a.name.localeCompare(b.name));
     // No cap — show the whole roster so "All" lists everyone (and newly added swimmers appear).
     const swRows=swFlat.map(sw=>{ const editing=S.swEditId===(sw.squadId+'::'+sw.id); const gm=this.genMeta(sw.gender); const sq=this.squadById[sw.squadId];

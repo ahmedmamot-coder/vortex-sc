@@ -4528,6 +4528,14 @@ describe("InBody sheet", () => {
       eq(c._dobParts("31/02/2014"), null, "31 February is nobody's birthday");
       eq(c._dobParts(""), null);
     });
+    // "Missing DOB" asked whether the field held any text; every screen that shows a birthday
+    // asks _dobParts. So a swimmer whose date the app cannot read counted as filed on the one
+    // list whose whole job is naming who still needs one.
+    it("the list of who still needs a date asks the same question as the birthday screen", () => {
+      eq(/const swNoDob = \(sw\)=>!this\._bdayISO\(sw\);/.test(SOURCE), true,
+         "one question, so the count and the cards cannot disagree");
+      eq(/swFlat\.filter\(sw=>!sw\.dob\)/.test(SOURCE), false, "not raw text");
+    });
   });
 
   // The club had 304 dates of birth in the database and a screen saying 123 were missing.
