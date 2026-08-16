@@ -47,8 +47,9 @@ for (let i = 0; i < 40; i++) {
   spawnSync("sleep", ["0.25"]);
 }
 
-let failed = 0;
+let failed = 0, checks = 0;
 const check = (name, fn) => {
+  checks++;
   try { const note = fn(); console.log("  ok   " + name + (note ? "  — " + note : "")); }
   catch (e) { failed++; console.log("  FAIL " + name + "\n       " + String(e.message).trim().split("\n").slice(0, 4).join("\n       ")); }
 };
@@ -81,7 +82,7 @@ console.log("");
 
 // Every file here reads the catalogue and can run against any database, which is the whole point
 // of them — they are what says what the club's database actually IS.
-for (const f of ["advisor_fixes.sql", "duplicate_indexes.sql", "preflight_audit.sql"]) {
+for (const f of ["advisor_fixes.sql", "duplicate_indexes.sql", "preflight_audit.sql", "search_path_remaining.sql"]) {
   check(f + " runs without erroring", () => {
     const r = psql(["-f", join(SUPA, f)]);
     if (r.status !== 0) throw new Error(r.stderr || r.stdout);
@@ -127,7 +128,25 @@ check("the fixture really does reproduce the bug that was shipped", () => {
   return "old form still errors, as it did for the club";
 });
 
+// The trigger function the advisor moved on to after the 12 were pinned: not security definer, so
+// advisor_fixes.sql leaves it alone on purpose. search_path_remaining.sql has to say so plainly,
+// because "12 pinned and the advisor still complaining" reads like the fix did nothing.
+check("search_path_remaining separates the dangerous ones from the tidy-up", () => {
+  const r = psql(["-tAc", "select proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace "
+    + "where n.nspname='public' and not p.prosecdef and not exists "
+    + "(select 1 from unnest(coalesce(p.proconfig,'{}'::text[])) c where c like 'search\\_path=%')"]);
+  if (!r.stdout.includes("not_definer")) throw new Error("the fixture has no unpinned caller-run function to report on");
+  const out = psql(["-f", join(SUPA, "search_path_remaining.sql")]);
+  if (out.status !== 0) throw new Error(out.stderr);
+  if (!/not_definer/.test(out.stdout)) throw new Error("it did not list the unpinned caller-run function");
+  if (!/tidy-up only/.test(out.stdout)) throw new Error("it did not say that one is tidy-up rather than a risk");
+  // And section 2 must still be commented out, or reading the report would already have run it.
+  const nd = psql(["-tAc", "select coalesce(array_to_string(proconfig,','),'none') from pg_proc where proname='not_definer'"]);
+  if (nd.stdout.trim() !== "none") throw new Error("section 2 ran on its own — it must stay commented out");
+  return "reports it, calls it tidy-up, and changes nothing";
+});
+
 asPg(`${join(BIN, "pg_ctl")} -D ${DATA} stop`);
 try { rmSync(DATA, { recursive: true, force: true }); } catch {}
-console.log("\n  " + (4 + 2 - failed) + " passed, " + failed + " failed\n");
+console.log("\n  " + (checks - failed) + " passed, " + failed + " failed\n");
 process.exit(failed ? 1 : 0);

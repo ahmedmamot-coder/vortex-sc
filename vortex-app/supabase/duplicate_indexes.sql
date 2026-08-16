@@ -68,3 +68,32 @@ select table_name,
 -- on its own, not pasted in with anything else.
 --
 -- Nothing at all comes back if there are no duplicates left to find.
+
+-- ------------------------------------------------------------------- and the same thing, readable
+-- The table above has six columns and the one that matters is the last, so in a browser it is cut
+-- off exactly where the index name would be — which is the one word somebody has to copy. This
+-- returns nothing but the statements, one per row, with nothing to the right of them to truncate.
+with idx as (
+  select ci.relname as index_name, ct.relname as table_name,
+         pg_get_indexdef(i.indexrelid) as def, pg_relation_size(i.indexrelid) as bytes,
+         (select string_agg(c.conname, ', ') from pg_constraint c
+           where c.conindid = i.indexrelid and c.contype in ('p','u','x')) as backs_constraint
+    from pg_index i
+    join pg_class ci on ci.oid = i.indexrelid
+    join pg_class ct on ct.oid = i.indrelid
+    join pg_namespace ns on ns.oid = ci.relnamespace
+   where ns.nspname = 'public'
+),
+shaped as (select *, regexp_replace(def, '^CREATE (UNIQUE )?INDEX [^ ]+ ON ', '') as shape from idx),
+dupes as (
+  select table_name,
+         array_agg(index_name       order by (backs_constraint is not null) desc, bytes desc, index_name) as names,
+         array_agg(backs_constraint order by (backs_constraint is not null) desc, bytes desc, index_name) as cons
+    from shaped group by table_name, shape having count(*) > 1
+)
+select case when cons[2] is not null
+            then '-- ' || names[2] || ' backs constraint ' || cons[2] || ' — leave it alone'
+            else 'drop index concurrently public.' || names[2] || ';'
+       end as run_these_one_at_a_time
+  from dupes
+ order by 1;
