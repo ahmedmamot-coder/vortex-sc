@@ -6508,7 +6508,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-16m';
+const VX_BUILD='2026-08-16n';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -8887,6 +8887,21 @@ class Component extends DCLogic {
     // Any one of them is enough. A head coach who also helps with fitness does not lose the
     // run of the club by taking on the second job.
     return this._rolesOf(a).some(r=>this._isFullAccessRole(r));
+  }
+  // Is this address one of the club's own staff, rather than a parent's?
+  //
+  // The family list lets an admin delete an account, and it used to refuse only two addresses,
+  // written out by hand: ahmedmamot@gmail.com and sameh@vortexswimmingclub.com. The second is not
+  // the address Sameh signs in with — that is mosame7100@gmail.com — so the guard meant to protect
+  // him protected nobody, and Mary was never in it at all. Deleting one of those removes the
+  // sign-in, and the person it belongs to is locked out of their own club.
+  //
+  // Asked of the staff list instead, it covers every coach and every admin, including the ones
+  // added next month, and needs nobody to remember to edit a list.
+  _isStaffEmail(email){
+    const e=String(email||'').trim().toLowerCase();
+    if(!e) return false;
+    return (this.accounts||[]).some(a=>String(a.email||'').trim().toLowerCase()===e);
   }
   // Whether a role, as a person actually typed it, means full access.
   //
@@ -16686,7 +16701,7 @@ class Component extends DCLogic {
                   onPick:()=>this.famAdminLink(f.id, s.squadId+'::'+s.id) })) : [],
               addHint: swq.length>=2 ? '' : 'Type at least 2 letters of the child’s name',
               // Only a manager, and never on the two manager accounts themselves.
-              canDelete: this._isFullAccess() && !['ahmedmamot@gmail.com','sameh@vortexswimmingclub.com'].includes((f.email||'').trim().toLowerCase()),
+              canDelete: this._isFullAccess() && !this._isStaffEmail(f.email),
               deleteLabel: ids.length ? ('Delete account · '+ids.length+' child'+(ids.length===1?'':'ren')) : 'Delete account',
               onDeleteAccount:()=>this.famAdminDelete(f.id)
             };

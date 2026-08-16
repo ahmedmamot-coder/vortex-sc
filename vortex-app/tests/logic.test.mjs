@@ -2852,6 +2852,45 @@ describe("InBody sheet", () => {
     });
   });
 
+  // Deleting a family account must never delete a coach's own sign-in.
+  //
+  // The guard used to be two addresses written out by hand — ahmedmamot@gmail.com and
+  // sameh@vortexswimmingclub.com. The second is not the address Sameh signs in with; his is
+  // mosame7100@gmail.com, on his staff row. So the line meant to protect him protected nobody,
+  // Mary was never in it, and neither was any coach. Deleting one of those takes away the sign-in
+  // and locks that person out of their own club.
+  describe("a staff sign-in cannot be deleted from the family list", () => {
+    const ctx = () => {
+      const c = { accounts: [
+        { id: "ahmed", email: "ahmedmamot@gmail.com" },
+        { id: "s1",    email: "mosame7100@gmail.com" },     // Sameh, as he really signs in
+        { id: "m1",    email: "marycrispcleopas@gmail.com" },
+        { id: "w1",    email: "jabeurwassim82@gmail.com" },
+        { id: "n1",    email: "" },                          // a staff row with no email
+      ] };
+      c._isStaffEmail = bind("_isStaffEmail", c);
+      return c;
+    };
+    for (const [who, email] of [["Ahmed", "ahmedmamot@gmail.com"],
+                                ["Sameh, at the address he actually uses", "mosame7100@gmail.com"],
+                                ["Mary", "marycrispcleopas@gmail.com"],
+                                ["a coach", "jabeurwassim82@gmail.com"]])
+      it(who + " is protected", () => eq(ctx()._isStaffEmail(email), true));
+
+    it("is not fooled by spacing or capitals", () =>
+      eq(ctx()._isStaffEmail("  MaryCrispCleopas@Gmail.COM "), true));
+    it("still lets a real parent be deleted", () =>
+      eq(ctx()._isStaffEmail("a.parent@example.com"), false));
+    // A staff row with no email must not make every blank-email family record undeletable.
+    it("an empty address matches nobody", () =>
+      eq(ctx()._isStaffEmail("") || ctx()._isStaffEmail("   "), false));
+    // And the hardcoded pair must not come back.
+    it("no address is written into the guard by hand", () => {
+      const code = SOURCE.replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+      eq(/canDelete:[^,]*@/.test(code), false, "an email address is hardcoded in the delete guard again");
+    });
+  });
+
   // A security-definer function with no pinned search_path.
   //
   // `security definer` means the function runs with its owner's privileges, not the caller's —
@@ -3533,8 +3572,13 @@ describe("InBody sheet", () => {
     it("a manager cannot delete themselves or the other manager", () => {
       eq(/email === who\.email/.test(route), true);
       eq(/that is a manager's account and cannot be deleted here/.test(route), true);
-      eq(/'sameh@vortexswimmingclub\.com'\]\.includes/.test(SOURCE), true,
-         "and the button is hidden on those rows too");
+      // The button is hidden on those rows too — but by asking the staff list, not by naming two
+      // addresses. The pair that used to be written here was ahmedmamot@gmail.com and
+      // sameh@vortexswimmingclub.com, and the second is not the address Sameh signs in with, so
+      // the client-side half of this guard was protecting nobody. The server route below was
+      // always right; it is the screen that was wrong.
+      eq(/canDelete: this\._isFullAccess\(\) && !this\._isStaffEmail\(f\.email\)/.test(SOURCE), true,
+         "the row's delete button must ask the staff list");
     });
     it("the confirmation says how many children are attached", () => {
       const fn = sourceBetween("async famAdminDelete(famId){", "\n  famAdminUnlink(");
