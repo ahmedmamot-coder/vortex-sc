@@ -268,6 +268,38 @@ scene("marking a swimmer on the register reaches the attendance table", async (b
 });
 
 // ---------------------------------------------------------------------------------------------
+// The fitness plans, which is the one that was actually broken.
+//
+// fitness_plans answered 400 to every read for as long as anyone knows, so the app fell back to
+// the copy on the device and every coach's plan stayed on the phone it was typed on. The columns
+// are back now. This is the check that the writing half works — because the read being fixed and
+// the write reaching Supabase are two different claims, and only one of them was tested.
+// ---------------------------------------------------------------------------------------------
+scene("editing a fitness plan reaches the fitness_plans table", async (browser) => {
+  const page = await openLive(browser);
+  await tap(page, "Tools & AI");
+  await tap(page, "Fitness Plan");
+  const box = await page.$('input[placeholder="Exercise name"]');
+  if (!box) throw new Error("the fitness plan opened with nowhere to type an exercise");
+  page.writes.length = 0;
+  await box.click();
+  await box.type("Goblet squat", { delay: 25 });
+  // _fitPlanPush debounces by 400ms so a coach typing a name does not send a row per keystroke.
+  await page.waitForTimeout(2200);
+
+  const plans = page.writes.filter((w) => w.table === "fitness_plans");
+  eq(plans.length > 0, true,
+     "typed into the plan and nothing was sent — tables written: "
+     + ([...new Set(page.writes.map((w) => w.table))].join(", ") || "none"));
+  eq(plans.some((w) => w.body.includes("Goblet squat")), true, "a write went out without the exercise in it");
+  // One row per squad, not the whole club's plans in a blob — that is what stops two coaches
+  // editing two squads from overwriting each other.
+  eq(plans.every((w) => { try { return JSON.parse(w.body).length === 1; } catch { return false; } }), true,
+     "a plan write carried more than one squad's row");
+  return plans.length + " write(s), one squad's row each, carrying the exercise";
+});
+
+// ---------------------------------------------------------------------------------------------
 // Sitting on a screen and touching nothing must not write to the database.
 //
 // Found by accident, while a fake database was answering every read with an empty list: the app
