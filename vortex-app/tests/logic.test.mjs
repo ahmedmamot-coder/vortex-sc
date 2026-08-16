@@ -1,7 +1,7 @@
 // Tests for the logic that has actually caused problems for the club.
 // Every case here is a real bug that reached coaches or parents.
 
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { bind, methodSource, describe, it, itAsync, eq, report, SOURCE, sourceBetween, runInSandbox } from "./harness.mjs";
 // The real route module. Node strips the types, so these tests run the filter that ships
 // rather than a regex-mangled copy of it.
@@ -1454,12 +1454,43 @@ describe("expired session", () => {
     });
     it("hands back the call that undoes it", () =>
       eq(/undo: `POST \/api\/backup\/restore-roster\?file=\$\{encodeURIComponent\(undoName\)\}/.test(route), true));
-    it("the button never offers today's copy, which is the one that went wrong", () =>
-      eq(/files\.find\(n=>n\.indexOf\(today\)<0\)/.test(check), true));
-    it("and asks, naming what it replaces", () => {
+    it("the button never offers today's nightly copy, which is the one that went wrong", () =>
+      eq(/nights=all\.filter\(b=>!this\._rbIsUndo\(b\.name\) && String\(b\.name\)\.indexOf\(today\)<0\)/.test(check), true));
+    // The undo copy is written today, always — so the rule "skip anything with today's date in
+    // it" made the one file that undoes a bad restore the one file the button could not reach.
+    it("but does offer the undo copy, which is always written today", () => {
+      eq(/_rbIsUndo\(b\.name\) && fresh\(b\)/.test(check), true, "an undo copy from the last day, ahead of the nights");
+      eq(/undo\[0\]\|\|nights\.find/.test(check), true);
+    });
+    it("prefers the copy carrying the most dates of birth, not simply the newest", () =>
+      eq(/nights\.reduce\(\(m,b\)=>Math\.max\(m, b\.dobs\|\|0\), 0\)/.test(check), true));
+    // Dates of birth are what this club has actually lost. A night's copy holding fewer than the
+    // roster holds now is not a recovery, and is not offered at all.
+    it("refuses a night's copy that holds fewer dates than the roster does now", () => {
+      eq(/lost > 0 && !this\._rbIsUndo\(pick\)/.test(check), true, "refused in the check, so no plan is ever offered");
+      eq(/would take '\+lost\+' away/.test(check), true, "and says how many, not just that it refused");
+      eq(/rbPlan:null/.test(check.slice(0, check.indexOf("rbPlan:{"))), true, "and leaves nothing to press");
+    });
+    it("says nothing to put back rather than writing an identical roster", () =>
+      eq(/willBe\.swimmers===g\.isNow\.swimmers && g\.willBe\.dates===g\.isNow\.dates/.test(check), true));
+    it("and asks, leading with what would be lost", () => {
       eq(/window\.confirm/.test(run), true);
+      eq(/Dates of birth: '\+p\.dNow\+' now/.test(run), true, "dates first — the count alone reads like a success");
+      eq(/are not in that copy\. They will go/.test(run), true);
       eq(/including anything typed today/.test(run), true);
       eq(/can be undone/.test(run), true);
+    });
+    // The plan on the screen can be minutes old, and a pull in between changes what is here.
+    it("reads it again after the confirm, and stops if the answer moved", () => {
+      eq(/const lost=g\.isNow\.dates - g\.willBe\.dates/.test(run), true);
+      eq(/Nothing was changed — check again/.test(run), true);
+      eq(/confirm='\+g\.willBe\.swimmers/.test(run), true, "confirms the fresh count, not the stale one");
+    });
+    // The client can be wrong, out of date, or bypassed entirely — this is the guard that holds.
+    it("the route itself refuses to drop dates unless told the exact number", () => {
+      eq(/const drops = p\.isNow\.dates - p\.willBe\.dates/.test(route), true);
+      eq(/drops > 0 && owned !== drops/.test(route), true);
+      eq(/dropdates/.test(route), true);
     });
   });
 
@@ -2770,6 +2801,157 @@ describe("InBody sheet", () => {
   // undeclared variable is not a syntax error, it is a runtime one, and the runtime here is a
   // coach's phone at the poolside.
   //
+  // A security-definer function with no pinned search_path.
+  //
+  // `security definer` means the function runs with its owner's privileges, not the caller's —
+  // which is the whole point of is_staff(): a parent must not be able to read the profiles table,
+  // but the policy guarding their child's row still has to ask it who they are. The cost is that
+  // an unqualified name inside the function is resolved with the CALLER's search_path, so
+  // `profiles` means whatever table comes first on that path. Anyone who can create a table in an
+  // earlier schema decides what "is this person staff" answers, while running as the owner.
+  //
+  // security_4_roles.sql pinned vx_is_staff() and the three in 0001_init.sql were missed, so this
+  // club ran with one hardened staff check and one that was not — and the one that was not is
+  // what the family policies call. Supabase's own advisor found it; this repo had not.
+  describe("no security-definer function is left with a mutable search path", () => {
+    const dir = new URL("../supabase/", import.meta.url);
+    const files = readdirSync(dir).filter((f) => f.endsWith(".sql"))
+      .concat(readdirSync(new URL("migrations/", dir)).map((f) => "migrations/" + f).filter((f) => f.endsWith(".sql")));
+    for (const f of files) {
+      const sql = readFileSync(new URL(f, dir), "utf8");
+      // Comments discuss `security definer` at length; only the declarations count.
+      const code = sql.replace(/^\s*--[^\n]*$/gm, "");
+      const decls = [...code.matchAll(/security\s+definer([^$]*?)as\s*\$/gi)];
+      if (!decls.length) continue;
+      it(f + " pins search_path on every one", () => {
+        const bare = decls.filter((m) => !/set\s+search_path\s*=/i.test(m[1])).length;
+        eq(bare, 0, bare + " security-definer function(s) here resolve names with the caller's path");
+      });
+    }
+    // And the file that repairs a database already carrying them.
+    it("ships a repair for a database where they are already unpinned", () => {
+      const fix = readFileSync(new URL("advisor_fixes.sql", dir), "utf8");
+      eq(/p\.prosecdef/.test(fix) && /alter function .* set search_path/i.test(fix), true,
+         "the repair must find them itself, not name the three we happen to know about");
+    });
+  });
+
+  // Filling an empty table for the first time, without filling it for ever.
+  //
+  // Both seeds are reached the same way: the fetch reads the table, finds it empty, seeds it, and
+  // — because the write was accepted — reads again. If that read still comes back empty, it seeds
+  // again. Accepted write, empty read, is not hypothetical: it is what a table whose INSERT
+  // policy and SELECT policy disagree does, and this club has already had one policy written the
+  // permissive way and the other not. Caught by a browser sitting still: three hundred writes to
+  // vx_squads_t in two seconds, with nothing on screen to say so on any device.
+  describe("seeding an empty table happens once, not for ever", () => {
+    for (const [fn, latch, table] of [
+      ["_squadsSeed", "_squadsSeeded", "vx_squads_t"],
+      ["_videosSeed", "_videosSeeded", "vx_video_analyses"],
+    ]) {
+      const body = methodSource(fn).body;
+      it(fn + " gives up after one accepted fill", () => {
+        eq(new RegExp("if\\(this\\." + latch + "\\) return;").test(body), true,
+           "nothing stops the second run, so an empty read starts the whole loop again");
+        // The latch has to be set where the write SUCCEEDED. Setting it earlier would mean a
+        // refused first attempt is never retried once the policy is fixed.
+        eq(new RegExp("if\\(ok\\)\\{ this\\." + latch + "=true; return this\\.").test(body), true,
+           "the latch must be set on success, and only on success");
+      });
+      it(fn + " still refuses to fill " + table + " anonymously", () =>
+        eq(/_dbAnon\(\)\) return;/.test(body) && /_isFullAccess\(\)\) return;/.test(body), true));
+    }
+  });
+
+  // "Every click must save in the database, not on the device."
+  //
+  // Saving to localStorage and saving to Supabase look identical from the screen: both are
+  // instant, both survive a refresh on THAT phone, and only one of them is still there when the
+  // coach opens their tablet — or when the phone is replaced. The club has already lost work to
+  // exactly this, and the fault is never visible at the moment it happens.
+  //
+  // So every key the app writes to the device has to be accounted for, one of three ways. A key
+  // that is none of them is data living on one phone, and this fails until somebody says which
+  // it is. Adding a fourth category is a decision; forgetting to is not.
+  describe("nothing is saved to the device alone", () => {
+    const SYNC = JSON.parse(SOURCE.match(/var SYNC = (\[[^\]]*\])/)[1]);
+
+    // 1. Written for this device and no other, on purpose. Each says why, because "it is only a
+    //    preference" is exactly what would be said about a key that should have been synced.
+    const DEVICE_ONLY = {
+      vx_auth: "the Supabase token itself — sending it anywhere is the bug, not the fix",
+      vx_session: "who is signed in on THIS phone; the tablet has its own",
+      vx_nav: "which screen this device was last on",
+      vx_theme: "light or dark on this device",
+      vx_lang: "the language this device reads in",
+      vx_push_on: "this browser's own push permission (the subscription itself goes to push_subscriptions)",
+      vx_alert_read: "which notices this device has read",
+      vx_alert_hidden: "which notices this device has dismissed",
+      vx_fam_refused: "a note that this device's family write was refused, so it can say so",
+    };
+    // 2. A local copy of a database table, so the screen can draw before the read comes back.
+    //    The table is the truth; losing the copy costs nothing.
+    const CACHE_OF = {
+      vx_attend_log: "attendance_marks",
+      vx_family: "family_accounts",
+      vx_staff_accounts: "staff_accounts",
+      vx_account_ovr: "staff_accounts",
+      vx_fitness_plans: "fitness_plans",
+      vx_plans: "squad_plans",
+      vx_season: "season_plans",
+      vx_saved_plans: "plan_sessions",
+      vx_docs_cache: "swimmer_docs",
+      vx_photos_cache: "swimmer_docs",
+      vx_hrsets_cache: "hr_sets",
+      vx_wear_cache: "inbody_readings",
+      vx_wellness_cache: "inbody_readings",
+      vx_plan_custom: "club_state",
+    };
+
+    const written = new Set();
+    for (const m of SOURCE.matchAll(
+      /(?:_saveJSON|_saveLocalOnly|__vxsetlocal|localStorage\.setItem)\(\s*['"](vx_[a-zA-Z0-9_]+)['"]/g))
+      written.add(m[1]);
+
+    it("every key written to this device is accounted for", () => {
+      const stray = [...written].filter((k) => !SYNC.includes(k) && !DEVICE_ONLY[k] && !CACHE_OF[k]).sort();
+      eq(stray.join(", "), "",
+         "written to the device and nowhere else — either sync it, or add it above and say why");
+    });
+    // The other direction: a key listed as synced that nothing ever writes is a screen whose
+    // save was quietly renamed, and the sync list still swearing it is covered.
+    it("every synced key is one something actually writes", () =>
+      eq(SYNC.filter((k) => !written.has(k)).join(", "), "", "in the sync list but never written"));
+
+    // A cache is only a cache if the table behind it is really being written. Naming one above
+    // is a claim, and this is what checks it.
+    for (const [key, table] of Object.entries(CACHE_OF))
+      it(key + " has " + table + " actually written behind it", () =>
+        eq(new RegExp("__vx(?:Upsert|Insert)\\(\\s*['\"]" + table + "['\"]").test(SOURCE), true,
+           "nothing ever writes " + table + ", so " + key + " is not a cache — it is the only copy"));
+
+    // Neither list may quietly grow to cover a real save.
+    it("the device-only list stays small enough to read", () =>
+      eq(Object.keys(DEVICE_ONLY).length <= 12, true, "if this needs to grow, the reason needs an argument"));
+  });
+
+  // Before any of that: the file has to parse. A stray brace anywhere in 16,000 lines takes the
+  // whole app down on every device at once, and the club's only way back is a build that parses.
+  // Every other test here reads the source as text and would pass happily on a file that cannot
+  // run at all.
+  it("every script in the page parses", () => {
+    let n = 0;
+    for (const m of SOURCE.matchAll(/<script(?![^>]*src=)[^>]*>([\s\S]*?)<\/script>/g)) {
+      if (/type="[^"]*(json|template)/.test(m[0])) continue;
+      n++;
+      // new Function parses without running: a syntax error throws here, at the line it is on.
+      try { new Function(m[1]); } catch (e) {
+        eq(String(e), "", "script #" + n + " does not parse — this is a white screen for the whole club");
+      }
+    }
+    eq(n >= 1, true, "the page must still have scripts to check");
+  });
+
   // renderVals() builds every value the page renders and is where these locals live. They are
   // written with a leading underscore by convention, which makes them findable: each one used
   // must be declared in the same function.
@@ -2800,6 +2982,57 @@ describe("InBody sheet", () => {
 
     const missing = [...used].filter((n) => !declared.has(n));
     eq(missing.join(", "), "", "used in renderVals but never declared there");
+  });
+
+  // The console on a working build was a wall of "printSheet.accent never resolved" and SVG parse
+  // errors from `<path d="undefined">`, on every render, on every screen. None of it was a fault;
+  // all of it was screens that only build their own values when they are open. The cost was that
+  // a real error had nowhere to be seen — which is how a 400 on fitness_plans went unnoticed for
+  // as long as it did. So every one of them gets a harmless default, and anything still shouting
+  // in that console is worth reading.
+  describe("the console says nothing on a screen that is fine", () => {
+    const body = (() => {
+      const s = SOURCE.indexOf("  renderVals(){");
+      return SOURCE.slice(s, SOURCE.indexOf("\n  }\n", s));
+    })();
+    // The defaults have to come FIRST: later keys in the same object literal win, so a screen
+    // that IS open still overrides its own default rather than being flattened by it. That
+    // ordering is the whole fix, so the test checks the ordering and not merely the presence.
+    for (const k of ["printSheet", "famChart", "lcmChart", "scmChart"]) {
+      const at = [...body.matchAll(new RegExp("\\b" + k + ":\\s*\\{", "g"))].map((m) => m.index);
+      it(k + " has a default, and it comes before the real one", () => {
+        eq(at.length >= 1, true, "no " + k + " in renderVals at all");
+        // Two sites, default then real — or one, if that screen's builder has gone away.
+        if (at.length > 1) eq(at[0] < at[1], true, "a default placed after the real value silently wins over it");
+        eq(/(accent:'#2733D6'|hasData:false)/.test(body.slice(at[0], at[0] + 120)), true,
+           "the first " + k + " must be the harmless default");
+      });
+    }
+    it("the chart defaults draw nothing rather than a path of 'undefined'", () => {
+      const i = body.indexOf("famChart:{");
+      eq(/hasData:false, ?noData:true/.test(body.slice(i, i + 200)), true);
+      eq(/linePts:''/.test(body.slice(i, i + 200)), true, "an empty path draws nothing; 'undefined' is an SVG parse error");
+    });
+  });
+
+  // fitness_plans exists in the club's database, holds a row, and answered 400 to
+  // `select=id,plan,ts,updated_at` every single time — one of those columns is not there. The read
+  // failed, the app fell back to the copy on the device, and every coach's fitness plan stayed on
+  // the phone it was typed on. Naming columns couples a read to a schema the club may not have;
+  // a missing column should cost that field, not the whole read.
+  describe("reading the plan tables cannot be broken by one missing column", () => {
+    for (const t of ["fitness_plans", "squad_plans", "season_plans"])
+      it(t + " is read with select=*", () => {
+        const m = SOURCE.match(new RegExp("__vxSelect\\(\\s*'" + t + "'\\s*,\\s*'([^']*)'"));
+        eq(!!m, true, "the read must still be findable");
+        eq(m[1], "select=*", "naming columns here is what silently stopped the writes reaching anyone");
+      });
+    // And the migration that adds them back, for a database that is already wrong.
+    it("ships the repair for a database missing them", () => {
+      const sql = readFileSync(new URL("../supabase/plan_tables_repair.sql", import.meta.url), "utf8");
+      eq(/add column if not exists/.test(sql), true, "safe to run twice, and on a database already correct");
+      eq(/notify pgrst/.test(sql), true, "PostgREST caches the schema; without this the 400 continues");
+    });
   });
 
   // A build that throws while drawing the screen takes the whole interface with it — including

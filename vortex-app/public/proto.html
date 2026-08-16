@@ -5914,7 +5914,7 @@ if ('serviceWorker' in navigator) {
                            wrong, refusing leaves nowhere to go. -->
                       <div style="background:#FFF7E8;border:1px solid #F0D9A8;border-radius:16px;padding:15px">
                         <p style="margin:0 0 4px;font-size:13px;font-weight:700;color:#7A5A0C">Put the roster back to a night</p>
-                        <p style="margin:0 0 10px;font-size:11.5px;color:#7A5A0C;line-height:1.5">When the swimmer count itself is wrong, this replaces the whole roster with a night's copy — swimmers, dates and all. It says what the result will be before it does anything, and keeps a copy of today first, so it can be undone. Everything else on this screen deliberately cannot change the count; this can, which is why it asks twice.</p>
+                        <p style="margin:0 0 10px;font-size:11.5px;color:#7A5A0C;line-height:1.5">When the swimmer count itself is wrong, this replaces the whole roster with a night's copy — swimmers, dates and all. It says what the result will be before it does anything, and keeps a copy of today first, so it can be undone from here. It will not offer a night's copy holding fewer dates of birth than the roster holds now, and it names every swimmer and date that would go before it asks. Everything else on this screen deliberately cannot change the count; this can, which is why it asks twice.</p>
                         <div style="display:flex;gap:7px;flex-wrap:wrap">
                           <button onclick="{{ onRbCheck }}" style="flex:1;min-width:150px;background:#fff;color:#7A5A0C;border:1px solid #F0D9A8;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">{{ rbCheckLabel }}</button>
                           <sc-if value="{{ rbCanRun }}" hint-placeholder-val="{{ false }}">
@@ -6508,7 +6508,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-16h';
+const VX_BUILD='2026-08-16j';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -7573,10 +7573,20 @@ class Component extends DCLogic {
     // as work the club has lost. It has not lost anything: the squads are on the device and in
     // the old document, and the table is simply not accepting them yet.
     if(this._policyHeld('squads')) return;
+    // Seed once per run of the app, and never again — including when the write is accepted.
+    //
+    // The loop this closes: seed writes the rows, the write is accepted, so it re-reads; if that
+    // read still comes back empty it seeds again, is accepted again, re-reads again. A write that
+    // succeeds and a read that returns nothing is not a hypothetical here — it is precisely what a
+    // table whose INSERT policy and SELECT policy disagree does, and this club has already had one
+    // policy written the permissive way and the other not. There is nothing on screen to say it is
+    // happening; it is simply the app writing to Supabase without pause for as long as the tab is
+    // open, on every staff device at once.
+    if(this._squadsSeeded) return;
     const rows=(this.squads||[]).map((sq,i)=>this._squadRow(sq, i));
     if(!rows.length) return;
     const ok=await window.__vxUpsert('vx_squads_t', rows);
-    if(ok) return this._squadsFetch();
+    if(ok){ this._squadsSeeded=true; return this._squadsFetch(); }
     if(this._policyRefused(window.__vxLastWriteErr)) this._policyHold('squads');
   }
   _squadRow(sq, sort){
@@ -7946,31 +7956,80 @@ class Component extends DCLogic {
   // Putting the whole roster back to a chosen night. This is the one operation that changes how
   // many swimmers there are, which is why everything else refuses to — and why it says what the
   // result will be, refuses any other number, and keeps today's copy before replacing it.
+  // A copy is either one of the nightly ones, `backup-2026-08-14.json`, or the copy this screen
+  // keeps just before it replaces the roster, `before-restore-<timestamp>.json`. The second kind
+  // is the undo, and it is what makes the sentence "so it can be undone" true.
+  _rbIsUndo(n){ return String(n||'').indexOf('before-restore-')===0; }
+  _rbLabel(n){
+    const s=String(n||'').replace(/\.json$/,'');
+    if(this._rbIsUndo(s)) return 'the copy kept just before the last restore';
+    return 'the night of '+s.replace(/^backup-/,'');
+  }
   async rollbackCheck(){
     this.setState({rbBusy:true, rbMsg:'Reading the nightly copies…', rbOk:true, rbPlan:null});
     try{
       const l=await fetch('/api/backup/list', {cache:'no-store'}).then(r=>r.json());
-      const files=((l&&l.backups)||[]).map(b=>b&&b.name).filter(Boolean);
-      if(!files.length) return this.setState({rbBusy:false, rbOk:false, rbMsg:(l&&l.hint)||'There are no nightly copies to read yet.'});
-      // The newest copy that is not today's: today's is the one that already went wrong.
+      const all=((l&&l.backups)||[]).filter(b=>b&&b.name);
+      if(!all.length) return this.setState({rbBusy:false, rbOk:false, rbMsg:(l&&l.hint)||'There are no nightly copies to read yet.'});
       const today=new Date().toISOString().slice(0,10);
-      const pick=files.find(n=>n.indexOf(today)<0) || files[0];
+      // An undo copy from the last day comes first, and this is the guard that was missing: the
+      // old code picked `files.find(n=>n.indexOf(today)<0)`, and every undo copy is written today,
+      // so the one file that could put back what a restore had just taken away was the one file
+      // this button could never reach. Somebody whose roster had gone backwards was told it could
+      // be undone, and then could not undo it.
+      const day=86400000, now=Date.now();
+      const fresh=(b)=>{ const t=Date.parse(b.takenAt||''); return !isNaN(t) && (now-t) <= day; };
+      const undo=all.filter(b=>this._rbIsUndo(b.name) && fresh(b));
+      // Otherwise the nightly copies, never today's — today's is the one that already went wrong.
+      // Among those, the copy carrying the most dates of birth, and the newest of those. Dates
+      // only ever accumulate, so this is usually simply the newest; when a night lost some, it
+      // steps over that night rather than handing it back.
+      const nights=all.filter(b=>!this._rbIsUndo(b.name) && String(b.name).indexOf(today)<0);
+      const most=nights.reduce((m,b)=>Math.max(m, b.dobs||0), 0);
+      const pick=(undo[0]||nights.find(b=>(b.dobs||0)>=most)||nights[0]||all[0]).name;
       const g=await fetch('/api/backup/restore-roster?file='+encodeURIComponent(pick), {cache:'no-store'}).then(r=>r.json());
       if(!g || g.error) return this.setState({rbBusy:false, rbOk:false, rbMsg:(g&&g.error)||'That copy could not be read.'});
-      this.setState({rbBusy:false, rbOk:true, rbPlan:{file:pick, n:g.willBe.swimmers, d:g.willBe.dates},
-        rbMsg:'The copy from '+String(pick).replace(/^backup-|\.json$/g,'')+' has '+g.willBe.swimmers+' swimmers and '
-          +g.willBe.dates+' dates of birth. Here now: '+g.isNow.swimmers+' swimmers, '+g.isNow.dates+' dates.'});
+      const label=this._rbLabel(pick), lost=g.isNow.dates - g.willBe.dates;
+      if(!g.willBe.swimmers && !g.willBe.dates) return this.setState({rbBusy:false, rbOk:false,
+        rbMsg:'Refused. '+label+' carries no roster at all. Nothing was changed.'});
+      if(g.willBe.swimmers===g.isNow.swimmers && g.willBe.dates===g.isNow.dates) return this.setState({rbBusy:false, rbOk:true,
+        rbMsg:label+' matches the roster as it is now — '+g.isNow.swimmers+' swimmers, '+g.isNow.dates+' dates of birth. There is nothing to put back.'});
+      // The whole harm this club has taken has been dates of birth going missing. A nightly copy
+      // holding fewer than the roster holds now is not offered at all, however it is confirmed.
+      // The undo copy is the exception, because losing what a bad restore added is the point of
+      // it — and it says the number out loud instead.
+      if(lost > 0 && !this._rbIsUndo(pick)) return this.setState({rbBusy:false, rbOk:false,
+        rbMsg:'Refused. '+label+' holds '+g.willBe.dates+' dates of birth and the roster holds '+g.isNow.dates+' now, so putting it back would take '+lost+' away. Nothing was changed.'});
+      this.setState({rbBusy:false, rbOk:true,
+        rbPlan:{file:pick, label:label, n:g.willBe.swimmers, d:g.willBe.dates, nNow:g.isNow.swimmers, dNow:g.isNow.dates, drop:Math.max(0,lost)},
+        rbMsg:'Dates of birth: '+g.isNow.dates+' now → '+g.willBe.dates+' after. Swimmers: '+g.isNow.swimmers+' now → '+g.willBe.swimmers+' after. From '+label+'.'
+          +(g.willBe.swimmers < g.isNow.swimmers ? ' '+(g.isNow.swimmers-g.willBe.swimmers)+' swimmers on the roster now are not in that copy and would go.' : '')
+          +(lost>0 ? ' It would also take away '+lost+' dates of birth.' : '')});
     }catch(e){ this.setState({rbBusy:false, rbOk:false, rbMsg:'Could not reach the backups.'}); }
   }
   async rollbackRun(){
     const p=this.state.rbPlan; if(!p) return;
-    if(!window.confirm('Put the whole roster back to '+String(p.file).replace(/^backup-|\.json$/g,'')+'?\n\n'
-      +p.n+' swimmers and '+p.d+' dates of birth, on every device.\n\n'
-      +'This replaces the roster as it is now, including anything typed today. A copy of today is '
-      +'kept first, so it can be undone.')) return;
+    // What would be lost, first — the count on its own reads like a success even when it is a
+    // roster going backwards.
+    const lines=['Put the whole roster back to '+(p.label||p.file)+'?', '',
+      'Dates of birth: '+p.dNow+' now → '+p.d+' after.',
+      'Swimmers: '+p.nNow+' now → '+p.n+' after.'];
+    if(p.n < p.nNow) lines.push('', (p.nNow-p.n)+' swimmers on the roster now are not in that copy. They will go, on every device.');
+    if(p.drop > 0) lines.push('', p.drop+' dates of birth will be taken away.');
+    lines.push('', 'This replaces the roster as it is now, including anything typed today. A copy of '
+      +'today is kept first, so it can be undone from this same screen.');
+    if(!window.confirm(lines.join('\n'))) return;
     this.setState({rbBusy:true, rbMsg:'Putting it back…', rbOk:true});
     try{
-      const r=await fetch('/api/backup/restore-roster?file='+encodeURIComponent(p.file)+'&confirm='+p.n, {method:'POST'});
+      // Read it once more before writing. The plan on the screen may be minutes old, and a pull
+      // in between could have changed what is here — the server checks the swimmer count for the
+      // same reason, and the dates deserve the same check.
+      const g=await fetch('/api/backup/restore-roster?file='+encodeURIComponent(p.file), {cache:'no-store'}).then(r=>r.json()).catch(()=>null);
+      if(!g || g.error) return this.setState({rbBusy:false, rbOk:false, rbMsg:(g&&g.error)||'That copy could not be read again, so nothing was changed.'});
+      const lost=g.isNow.dates - g.willBe.dates;
+      if(lost > 0 && !this._rbIsUndo(p.file)) return this.setState({rbBusy:false, rbOk:false, rbPlan:null,
+        rbMsg:'Stopped. The roster changed while that was on the screen, and putting this copy back would now take '+lost+' dates of birth away. Nothing was changed — check again.'});
+      const r=await fetch('/api/backup/restore-roster?file='+encodeURIComponent(p.file)+'&confirm='+g.willBe.swimmers+'&dropdates='+Math.max(0,lost), {method:'POST'});
       const j=await r.json().catch(()=>null);
       if(!r.ok || (j&&j.error)) return this.setState({rbBusy:false, rbOk:false,
         rbMsg:(j&&(j.error||j.hint))||('It was refused (HTTP '+r.status+').')});
@@ -11148,6 +11207,9 @@ class Component extends DCLogic {
     // the banner as work it has lost. It has not lost any of it — every clip is on the device and
     // in the old document, which is still what the app reads until this table has rows.
     if(this._policyHeld('videos')) return;
+    // Once per run, for the same reason as the squad seed above: accepted-write plus empty-read
+    // is an unbroken write loop, and nothing on screen would ever say so.
+    if(this._videosSeeded) return;
     const seen={}, rows=[];
     (this.videoLib||[]).forEach(v=>{
       if(!v || !v.id || v._isBlob || seen[v.id]) return;    // never the same id twice in one batch
@@ -11155,7 +11217,7 @@ class Component extends DCLogic {
     });
     if(!rows.length) return;
     const ok=await window.__vxUpsert('vx_video_analyses', rows);
-    if(ok) return this._videosFetch();
+    if(ok){ this._videosSeeded=true; return this._videosFetch(); }
     // The first fill is often the first write this club's table has ever taken, so it is also
     // where a missing column shows up first. Filling in the older shape is what puts the club's
     // library in the database at all; without this it would sit here refused until somebody
@@ -11679,8 +11741,14 @@ class Component extends DCLogic {
   _fitPlanPush(id){ if(!window.__vxUpsert || id==null) return; this._fpTimers=this._fpTimers||{}; clearTimeout(this._fpTimers[id]);
     this._fpTimers[id]=setTimeout(()=>{ const plan=(this.fitnessPlans||{})[id]; if(plan==null) return;
       try{ window.__vxUpsert('fitness_plans', [{id:String(id), plan:plan, ts:Date.now(), updated_at:new Date().toISOString()}]); }catch(e){} }, 400); }
+  // select=* on purpose. Naming the columns couples this read to a schema the club's database
+  // may not have: fitness_plans exists here with a row in it, and select=id,plan,ts,updated_at
+  // answered 400 every time, so every coach's fitness plan stayed on the phone it was typed on,
+  // silently, with the error scrolling past in a console nobody had open. A missing column should
+  // cost that field, not the whole read — and squad_plans and season_plans were one migration
+  // away from the same thing.
   async _fitPlansFetch(){ if(!window.__vxSelect) return;
-    const rows=await window.__vxSelect('fitness_plans', 'select=id,plan,ts,updated_at'); if(!rows || !Array.isArray(rows)) return;
+    const rows=await window.__vxSelect('fitness_plans', 'select=*'); if(!rows || !Array.isArray(rows)) return;
     const edited=this._editedFitSquads||{}; const plans={...(this.fitnessPlans||{})}; let changed=false;
     rows.forEach(r=>{ if(!r || !r.id || r.plan==null) return; if(edited[r.id]) return; // don't clobber a squad this device is editing
       plans[r.id]=r.plan; changed=true; });
@@ -12662,7 +12730,7 @@ class Component extends DCLogic {
     this._spTimers[id]=setTimeout(()=>{ const plan=(this.state.plans||{})[id]; if(plan==null) return; this._spLocalTs=this._spLocalTs||{}; this._spLocalTs[id]=Date.now();
       try{ window.__vxUpsert('squad_plans', [{id:String(id), plan:plan, ts:Date.now(), updated_at:new Date().toISOString()}]); }catch(e){} }, 500); }
   async _squadPlansFetch(){ if(!window.__vxSelect) return;
-    const rows=await window.__vxSelect('squad_plans', 'select=id,plan,ts,updated_at'); if(!rows || !Array.isArray(rows)) return;
+    const rows=await window.__vxSelect('squad_plans', 'select=*'); if(!rows || !Array.isArray(rows)) return;
     const state={...(this.state.plans||{})};
     const blobLocalTs=parseInt(localStorage.getItem('__vxts_vx_plans')||'0',10)||0;
     const editing=(this.state.view==='squad' && this.state.tab==='plans') ? this.state.squadId : null;
@@ -12795,7 +12863,7 @@ class Component extends DCLogic {
   getSeason(squadId){ const s=(this.seasonPlans||{})[squadId]; const d=this.makeDefaultSeason(); if(!s) return d; return {name:s.name||d.name, start:s.start||d.start, phases:(Array.isArray(s.phases)&&s.phases.length)?s.phases:d.phases, targets:Array.isArray(s.targets)?s.targets:[]}; }
   mutateSeason(squadId, fn){ this._editedSeasons=this._editedSeasons||{}; this._editedSeasons[squadId]=true; const all={...(this.seasonPlans||{})}; const cur=JSON.parse(JSON.stringify(this.getSeason(squadId))); fn(cur); all[squadId]=cur; this.seasonPlans=all; try{ (window.__vxsetlocal||localStorage.setItem.bind(localStorage))('vx_season', JSON.stringify(all)); }catch(e){} this.setState({}); this._seasonPush(squadId); }
   _seasonPush(id){ if(!window.__vxUpsert||id==null) return; this._seaTimers=this._seaTimers||{}; clearTimeout(this._seaTimers[id]); this._seaTimers[id]=setTimeout(()=>{ const season=(this.seasonPlans||{})[id]; if(season==null) return; try{ window.__vxUpsert('season_plans',[{id:String(id), season:season, ts:Date.now(), updated_at:new Date().toISOString()}]); }catch(e){} }, 500); }
-  async _seasonFetch(){ if(!window.__vxSelect) return; const rows=await window.__vxSelect('season_plans','select=id,season,ts,updated_at'); if(!rows||!Array.isArray(rows)) return; const all={...(this.seasonPlans||{})}; const edited=this._editedSeasons||{}; let changed=false; rows.forEach(r=>{ if(!r||!r.id||r.season==null) return; if(edited[r.id]) return; if(JSON.stringify(all[r.id])!==JSON.stringify(r.season)){ all[r.id]=r.season; changed=true; } }); if(changed){ this.seasonPlans=all; try{ (window.__vxsetlocal||localStorage.setItem.bind(localStorage))('vx_season', JSON.stringify(all)); }catch(e){} this.setState({}); } }
+  async _seasonFetch(){ if(!window.__vxSelect) return; const rows=await window.__vxSelect('season_plans','select=*'); if(!rows||!Array.isArray(rows)) return; const all={...(this.seasonPlans||{})}; const edited=this._editedSeasons||{}; let changed=false; rows.forEach(r=>{ if(!r||!r.id||r.season==null) return; if(edited[r.id]) return; if(JSON.stringify(all[r.id])!==JSON.stringify(r.season)){ all[r.id]=r.season; changed=true; } }); if(changed){ this.seasonPlans=all; try{ (window.__vxsetlocal||localStorage.setItem.bind(localStorage))('vx_season', JSON.stringify(all)); }catch(e){} this.setState({}); } }
   setSeasonField(squadId, field, val){ this.mutateSeason(squadId, s=>{ s[field]=val; }); }
   // Pick a season year: sets the name and the start (first Monday on/after 1 Sep of that year).
   seasonChoose(squadId, startY){ const sep=this._weekStartISO(startY+'-09-01'); this.mutateSeason(squadId, s=>{ s.name=startY+' / '+(startY+1)+' Season'; s.start=sep; }); }
@@ -15223,6 +15291,21 @@ class Component extends DCLogic {
     };
 
     return {
+      // Defaults for the templates that sit in the DOM on every screen but only get their data on
+      // one of them — the print sheet, and the three progress charts. Everything below this line
+      // overrides them, because a later key in an object literal wins.
+      //
+      // Without these, every load logged a page of "{{ psec.startLabel }} never resolved" and SVG
+      // parse errors for points="{{ famChart.lineArea }}". None of it was a broken screen: the
+      // print sheet sits in the DOM with no plan behind it, and sc-for draws placeholder rows
+      // whose loop variable does not exist yet. But it filled the console, and a console full of
+      // harmless red is where a real error goes to hide — the 400 that stopped every coach's
+      // fitness plan reaching the database had been scrolling past in exactly that noise.
+      printSheet:{ accent:'#2733D6', clubName:'', squadName:'', printDate:'', zoneLabel:'',
+                   title:'', coach:'', total:'', sections:[] },
+      famChart:{ hasData:false, noData:true, best:'\u2014', linePts:'', lineArea:'', dots:[], caption:'', drop:'', swims:'' },
+      lcmChart:{ hasData:false, noData:true, best:'\u2014', linePts:'', lineArea:'', dots:[], caption:'', drop:'', swims:'' },
+      scmChart:{ hasData:false, noData:true, best:'\u2014', linePts:'', lineArea:'', dots:[], caption:'', drop:'', swims:'' },
       tx:this._strings(),
       langIsAr: this._lang()==='ar', langIsEn: this._lang()!=='ar',
       onLangEn:()=>this.setLang('en'), onLangAr:()=>this.setLang('ar'),
@@ -16257,7 +16340,7 @@ class Component extends DCLogic {
       onRbCheck: ()=>this.rollbackCheck(),
       rbCheckLabel: S.rbBusy ? 'Working…' : (S.rbPlan ? 'Check again' : 'What did last night have?'),
       rbCanRun: !!S.rbPlan && !S.rbBusy,
-      rbRunLabel: S.rbPlan ? ('Put back '+S.rbPlan.n+' swimmers') : 'Put the roster back',
+      rbRunLabel: S.rbPlan ? ('Put back '+S.rbPlan.n+' swimmers, '+S.rbPlan.d+' dates') : 'Put the roster back',
       onRbRun: ()=>this.rollbackRun(),
       rbMsg: S.rbMsg||'', rbMsgShow: !!S.rbMsg, rbMsgColor: S.rbOk ? '#0C7A4F' : '#B42318',
       onDobCheck: ()=>this.dobCheck(),
