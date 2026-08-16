@@ -39,12 +39,43 @@ Vercel builds it and gives you a URL like `vortex-sc-git-staging-….vercel.app`
 swimmers.
 
 1. Supabase → **New project** (free tier), call it `vortex-staging`
-2. In the new project's SQL Editor, run, in order:
+2. In the new project's SQL Editor, run **in this order**. The order is not cosmetic —
+   see the warning below it.
+
+   **a. The tables**
    - `supabase/all_tables.sql`
    - `supabase/family_accounts_final_fix.sql`
    - `supabase/run_all_pending.sql`
-   - `supabase/security_1_admins.sql`, `security_2_lockdown.sql`
-   - `supabase/security_family_read_lockdown.sql`
+   - `vortex-app/supabase/memberships_and_entries.sql`
+   - `vortex-app/supabase/invoices.sql`
+   - `vortex-app/supabase/inbody_readings.sql`
+   - `vortex-app/supabase/media_private.sql`
+
+   **b. Who counts as staff — BEFORE anything in (c)**
+   - `vortex-app/supabase/security_4_roles.sql`
+   - `vortex-app/supabase/staff_access_repair.sql`
+
+   **c. The tables that were split out of the shared document, one row each**
+   - `vortex-app/supabase/squads.sql`
+   - `vortex-app/supabase/video_analyses.sql`
+   - `vortex-app/supabase/audit_log.sql`
+
+> ### Why (b) has to come before (c)
+>
+> Every file in (c) ends with a block that reads: *if `vx_is_staff()` exists, make this
+> table writable by staff; otherwise make it writable by anyone signed in, and say so.*
+>
+> Run them before (b) and they take the second branch. The club then has tables that any
+> parent can write to, and a `NOTICE` nobody read scrolled past in the Messages tab. Worse,
+> re-running (b) afterwards does **not** go back and tighten them — the policies were
+> already created, and they stay as they were made.
+>
+> This is exactly what happened to the live club: `vx_squads_t` was seeded while its policy
+> was still the permissive one, which is why it looked like writes worked and then didn't.
+>
+> **After running (c), check the Messages tab.** Each file prints one of two notices. You
+> want the one ending "writable by staff". If you see "writable by ANY signed-in user",
+> run (b) and then that file again.
 3. Vercel → Settings → Environment Variables. For each Supabase variable, add a second
    value scoped to **Preview** only, using the staging project's URL and keys:
    - `NEXT_PUBLIC_SUPABASE_URL`

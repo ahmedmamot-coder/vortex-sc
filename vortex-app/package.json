@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "seed": "tsx scripts/seed.ts",
-    "test": "node tests/logic.test.mjs"
+    "test": "node tests/logic.test.mjs",
+    "drive": "node tests/drive.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
