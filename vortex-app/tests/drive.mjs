@@ -457,6 +457,30 @@ scene("editing a squad reaches the squads table", async (browser) => {
 });
 
 // ---------------------------------------------------------------------------------------------
+// The season plan — phases, weeks, taper and peak. One row per squad, like the fitness plans, and
+// for the same reason: two coaches planning two squads must not overwrite each other.
+// ---------------------------------------------------------------------------------------------
+scene("editing a season plan reaches the season_plans table", async (browser) => {
+  const page = await openLive(browser);
+  await tap(page, "Tools & AI");
+  await tap(page, "Season Plan");
+  const box = await page.$('input[placeholder="Season name"]');
+  if (!box) throw new Error("the season plan opened with no season name to type");
+  await box.click();
+  await box.type(" 2026-27", { delay: 25 });
+  page.writes.length = 0;
+  await page.waitForTimeout(2200);        // _seasonPush debounces, like the fitness plan
+
+  const rows = page.writes.filter((w) => w.table === "season_plans");
+  eq(rows.length > 0, true, "the season was named on this phone and nothing was sent — tables written: "
+     + ([...new Set(page.writes.map((w) => w.table))].join(", ") || "none"));
+  eq(rows.some((w) => w.body.includes("2026-27")), true, "a write went out without the season name in it");
+  eq(rows.every((w) => { try { return JSON.parse(w.body).length === 1; } catch { return false; } }), true,
+     "a season write carried more than one squad's row");
+  return rows.length + " write(s) to season_plans, one squad's row each";
+});
+
+// ---------------------------------------------------------------------------------------------
 // Sitting on a screen and touching nothing must not write to the database.
 //
 // Found by accident, while a fake database was answering every read with an empty list: the app
