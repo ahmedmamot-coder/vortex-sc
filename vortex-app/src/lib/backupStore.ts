@@ -35,6 +35,8 @@ export type Snapshot = {
   takenAt?: string;
   counts?: Record<string, number>;
   data?: Record<string, unknown[]>;
+  /** The undo copies restore-roster writes for itself: club_state as key → value, not as rows. */
+  club_state?: Record<string, unknown>;
 };
 
 export async function listBackups() {
@@ -72,8 +74,33 @@ export async function readBackup(name: string): Promise<Snapshot | null> {
   }
 }
 
-/** club_state is a key/value table; this pulls one key's value out of a snapshot. */
+/**
+ * club_state is a key/value table; this pulls one key's value out of a snapshot.
+ *
+ * TWO shapes, because there are two kinds of file here and only one of them was ever read.
+ *
+ * A nightly snapshot holds `data.club_state` as an array of rows, the way the table comes back
+ * off the wire. But the undo copy that restore-roster writes before it replaces anything — the
+ * copy that makes the whole operation reversible — is written as `club_state: {key: value}`. It
+ * had no reader. So the file was created faithfully every time, and the restore that promises
+ * "a copy of today is kept first, so it can be undone" answered 502 when asked for it.
+ *
+ * A club found that out at the worst possible moment: 317 swimmers on the screen, 123 dates of
+ * birth gone, and the one file that could put it back sitting in the bucket, unreadable.
+ */
 export function clubStateKey(snap: Snapshot | null, key: string): unknown {
+  const direct = snap && snap.club_state;
+  if (direct && typeof direct === "object" && !Array.isArray(direct) && key in direct) {
+    const v = (direct as Record<string, unknown>)[key];
+    if (typeof v === "string") {
+      try {
+        return JSON.parse(v);
+      } catch {
+        return null;
+      }
+    }
+    return v ?? null;
+  }
   const rows = (snap && snap.data && snap.data["club_state"]) || [];
   for (const row of rows as Array<{ key?: string; value?: unknown }>) {
     if (row && row.key === key) {

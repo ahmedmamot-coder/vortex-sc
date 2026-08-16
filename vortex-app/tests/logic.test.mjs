@@ -1373,6 +1373,27 @@ describe("expired session", () => {
   // asset is not one assignment: it is window.VX_ROSTER={…};window.VX_MEETS=[…];, and reading it
   // as "everything after the first =" swallowed the meets too, so the parse threw on the first
   // character of the second statement. On a server and on a laptop alike.
+  // The restore promises "a copy of today is kept first, so it can be undone". It wrote that copy
+  // faithfully every time — as club_state: {key: value} — and read backups as data.club_state:
+  // [rows]. Two shapes, one reader. So the undo answered 502 when asked for it, and a club found
+  // that out with 317 swimmers on the screen, 123 dates of birth gone, and the one file that
+  // could put it back sitting in the bucket, unreadable.
+  describe("the undo copy a restore writes for itself", () => {
+    const lib = readFileSync(new URL("../src/lib/backupStore.ts", import.meta.url), "utf8");
+    it("is read back by the same function that reads a nightly one", () => {
+      const fn = lib.slice(lib.indexOf("export function clubStateKey"));
+      const body = fn.slice(0, fn.indexOf("\n}\n"));
+      eq(/snap && snap\.club_state/.test(body), true, "the shape the restore actually writes");
+      eq(/snap\.data && snap\.data\["club_state"\]/.test(body), true, "and the nightly one still");
+    });
+    // The shape is not incidental — it is what restore-roster puts in the bucket.
+    it("is written in the shape it is read in", () => {
+      const route = readFileSync(new URL("../src/app/api/backup/restore-roster/route.ts", import.meta.url), "utf8");
+      eq(/club_state: \{ vx_roster_edits: p\.live \}/.test(route), true,
+         "if this line changes, clubStateKey has to change with it");
+    });
+  });
+
   describe("reading the club's own roster out of the asset", () => {
     const lib = readFileSync(new URL("../src/lib/backupStore.ts", import.meta.url), "utf8");
     const asset = readFileSync(new URL("../public/assets/roster.js", import.meta.url), "utf8");
