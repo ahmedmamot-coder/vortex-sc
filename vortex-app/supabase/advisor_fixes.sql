@@ -18,9 +18,14 @@
 -- schema earlier on that path decides what "profiles" means while running as the owner. The
 -- function's whole job is answering "is this person staff", so the answer is the thing at stake.
 --
--- is_admin_or_head() and my_swimmer_ids() have the same shape and the same gap. This pins every
--- security-definer function in `public` that is missing one, rather than the three we know about,
--- because the next one added will be missing it too.
+-- is_staff() is not alone. is_admin_or_head(), linked_swimmer_ids() and search_swimmers() have the
+-- same shape and the same gap — and search_swimmers is the one to look at hardest, because it is
+-- granted to `authenticated`, so every parent in the club can call it, and it resolves `swimmers`
+-- and `squads` unqualified while running as the owner.
+--
+-- Two of those four were found by this file, not by reading the code, which is why it pins every
+-- security-definer function in `public` that is missing a path rather than naming the ones we
+-- happen to know about. The next one added would be missing it too.
 --
 -- Idempotent: a function already pinned is skipped. Changes no logic and no data.
 

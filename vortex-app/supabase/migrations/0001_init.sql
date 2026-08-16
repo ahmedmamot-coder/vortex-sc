@@ -300,8 +300,19 @@ create table academy_fees (
 -- ============================================================
 -- Helper functions for RLS
 -- ============================================================
+-- Every one of these is `security definer`, which means it runs with the privileges of whoever
+-- created it rather than whoever called it. That is the point: a parent must not be able to read
+-- the profiles table, but the policy protecting their child's row still has to ask it who they
+-- are. The cost is that an unqualified name inside one of these is resolved with the CALLER's
+-- search_path — so `profiles` means whatever table comes first on that path, and anyone able to
+-- create a table in an earlier schema decides what "is this person staff" answers, while running
+-- as the owner. Supabase's advisor calls this "Function Search Path Mutable".
+--
+-- Pinning it is one clause and there is no reason ever to leave it off. security_4_roles.sql
+-- pinned vx_is_staff() and these three were missed, so the club had one hardened staff check and
+-- one that was not, answering for the family policies.
 create or replace function is_staff()
-returns boolean language sql stable security definer as $$
+returns boolean language sql stable security definer set search_path = public, pg_temp as $$
   select exists (
     select 1 from profiles
     where id = auth.uid()
@@ -310,7 +321,7 @@ returns boolean language sql stable security definer as $$
 $$;
 
 create or replace function is_admin_or_head()
-returns boolean language sql stable security definer as $$
+returns boolean language sql stable security definer set search_path = public, pg_temp as $$
   select exists (
     select 1 from profiles
     where id = auth.uid()
@@ -319,7 +330,7 @@ returns boolean language sql stable security definer as $$
 $$;
 
 create or replace function linked_swimmer_ids()
-returns setof uuid language sql stable security definer as $$
+returns setof uuid language sql stable security definer set search_path = public, pg_temp as $$
   select swimmer_id from family_links where family_account_id = auth.uid();
 $$;
 

@@ -1,7 +1,7 @@
 // Tests for the logic that has actually caused problems for the club.
 // Every case here is a real bug that reached coaches or parents.
 
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { bind, methodSource, describe, it, itAsync, eq, report, SOURCE, sourceBetween, runInSandbox } from "./harness.mjs";
 // The real route module. Node strips the types, so these tests run the filter that ships
 // rather than a regex-mangled copy of it.
@@ -2801,6 +2801,41 @@ describe("InBody sheet", () => {
   // undeclared variable is not a syntax error, it is a runtime one, and the runtime here is a
   // coach's phone at the poolside.
   //
+  // A security-definer function with no pinned search_path.
+  //
+  // `security definer` means the function runs with its owner's privileges, not the caller's —
+  // which is the whole point of is_staff(): a parent must not be able to read the profiles table,
+  // but the policy guarding their child's row still has to ask it who they are. The cost is that
+  // an unqualified name inside the function is resolved with the CALLER's search_path, so
+  // `profiles` means whatever table comes first on that path. Anyone who can create a table in an
+  // earlier schema decides what "is this person staff" answers, while running as the owner.
+  //
+  // security_4_roles.sql pinned vx_is_staff() and the three in 0001_init.sql were missed, so this
+  // club ran with one hardened staff check and one that was not — and the one that was not is
+  // what the family policies call. Supabase's own advisor found it; this repo had not.
+  describe("no security-definer function is left with a mutable search path", () => {
+    const dir = new URL("../supabase/", import.meta.url);
+    const files = readdirSync(dir).filter((f) => f.endsWith(".sql"))
+      .concat(readdirSync(new URL("migrations/", dir)).map((f) => "migrations/" + f).filter((f) => f.endsWith(".sql")));
+    for (const f of files) {
+      const sql = readFileSync(new URL(f, dir), "utf8");
+      // Comments discuss `security definer` at length; only the declarations count.
+      const code = sql.replace(/^\s*--[^\n]*$/gm, "");
+      const decls = [...code.matchAll(/security\s+definer([^$]*?)as\s*\$/gi)];
+      if (!decls.length) continue;
+      it(f + " pins search_path on every one", () => {
+        const bare = decls.filter((m) => !/set\s+search_path\s*=/i.test(m[1])).length;
+        eq(bare, 0, bare + " security-definer function(s) here resolve names with the caller's path");
+      });
+    }
+    // And the file that repairs a database already carrying them.
+    it("ships a repair for a database where they are already unpinned", () => {
+      const fix = readFileSync(new URL("advisor_fixes.sql", dir), "utf8");
+      eq(/p\.prosecdef/.test(fix) && /alter function .* set search_path/i.test(fix), true,
+         "the repair must find them itself, not name the three we happen to know about");
+    });
+  });
+
   // Filling an empty table for the first time, without filling it for ever.
   //
   // Both seeds are reached the same way: the fetch reads the table, finds it empty, seeds it, and
