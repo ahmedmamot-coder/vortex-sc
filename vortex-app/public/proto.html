@@ -9784,12 +9784,28 @@ class Component extends DCLogic {
     const b=back(st.to);
     return 'Away up to and including '+this._fmtDMY(st.to)+' \u2014 back in the register on '+this._fmtDMY(b)+'.';
   }
+  // The log is read by people, not by the database: a row saying "r131 · Break" is not a record
+  // anybody can act on a month later.
+  _swName(swId){
+    try{ for(const sq in (this.roster||{})){ const hit=(this.roster[sq]||[]).find(x=>x && x.id===swId); if(hit && hit.name) return hit.name; } }catch(e){}
+    return swId;
+  }
   _swStatus(swId){ const s=(this.swimmerStatus||{})[swId]; return s ? {active:s.active!==false, reason:s.reason||'', from:s.from||s.since||'', to:s.to||''} : {active:true, reason:'', from:'', to:''}; }
   setSwStatus(swId, active, reason){ const m={...(this.swimmerStatus||{})}; if(active){ delete m[swId]; } else { const prev=m[swId]||{}; m[swId]={active:false, reason:reason||prev.reason||'break', from:prev.from||prev.since||this.todayISO(), to:prev.to||''}; }
     this.swimmerStatus=m; this._saveJSON('vx_sw_status', m); this.forceUpdate();
+    // The log's own heading promises "every sign-in and every change", and this was not in it.
+    // Marking a child away changes who is expected at every session from that day on, and who
+    // shows as absent in every figure the club reports — that belongs in a record nobody can
+    // edit, alongside who did it and when.
+    try{ const _w=m[swId];
+      this.audit('swimmer.status', this._swName(swId)+' \u00b7 '+(active?'Active':this._statusLabel((reason||(_w&&_w.reason))||'break')),
+        {swimmer:swId, status:(active?'active':((reason||(_w&&_w.reason))||'break')),
+         from:(_w&&_w.from)||'', to:(_w&&_w.to)||''}); }catch(e){}
     try{ this._swStatusSaved(swId, active?'Active':(reason||'Status')); }catch(e){} }
   setSwStatusDate(swId, which, val){ const m={...(this.swimmerStatus||{})}; const cur=m[swId]||{active:false, reason:'break', from:this.todayISO(), to:''}; cur.active=false; cur[which]=val; m[swId]=cur;
     this.swimmerStatus=m; this._saveJSON('vx_sw_status', m); this.forceUpdate();
+    try{ this.audit('swimmer.status.dates', this._swName(swId)+' \u00b7 '+(which==='from'?'from ':'to ')+(val||'(cleared)'),
+      {swimmer:swId, status:cur.reason||'break', from:cur.from||'', to:cur.to||''}); }catch(e){}
     try{ this._swStatusSaved(swId, which==='from'?'Start date':'End date'); }catch(e){} }
   toggleSponsor(swId){ const on=!this._swMeta(swId).sponsored; const m={...(this.sponsoredMap||{})};
     if(on) m[swId]=true; else delete m[swId];

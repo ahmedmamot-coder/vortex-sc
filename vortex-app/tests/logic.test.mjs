@@ -3251,6 +3251,37 @@ describe("InBody sheet", () => {
     });
   });
 
+  // "also not saved in the log what i did to omar" — and it never had been.
+  //
+  // The Activity log's own heading says "Every sign-in and every change", and putting a swimmer
+  // on break was in neither. That change decides who is expected at every session from that day
+  // on and who counts as absent in every figure the club reports, and it was recorded nowhere.
+  describe("a swimmer's status in the activity log", () => {
+    it("is recorded when somebody changes it", () => {
+      const body = methodSource("setSwStatus").body;
+      eq(/this\.audit\('swimmer\.status'/.test(body), true, "changing a status wrote nothing to the log");
+    });
+    it("and when somebody changes the dates it runs between", () => {
+      const body = methodSource("setSwStatusDate").body;
+      eq(/this\.audit\('swimmer\.status\.dates'/.test(body), true);
+    });
+    // A log of ids is not a record anybody can act on a month later.
+    it("names the swimmer rather than their id", () => {
+      const name = bind("_swName", { roster: { legend: [{ id: "r131", name: "Omar Abu Rezeq" }] } });
+      eq(name("r131"), "Omar Abu Rezeq");
+      eq(name("nobody"), "nobody", "an id nobody knows is better than an empty line");
+      eq(bind("_swName", { roster: null })("r131"), "r131", "and a missing roster must not throw");
+    });
+    // What it says has to be enough to act on: which swimmer, what status, and the dates.
+    it("carries the dates, because those are what decide who is expected", () => {
+      for (const m of ["setSwStatus", "setSwStatusDate"]) {
+        const body = methodSource(m).body;
+        eq(/from:/.test(body) && /to:/.test(body), true, m + " logged a status with no dates");
+        eq(/swimmer:swId/.test(body), true, m + " logged no swimmer id");
+      }
+    });
+  });
+
   // The route behind that row.
   describe("asking Supabase which staff addresses can sign in", () => {
     const route = readFileSync(new URL("../src/app/api/staff/sign-in-status/route.ts", import.meta.url), "utf8");

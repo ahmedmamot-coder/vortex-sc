@@ -84,6 +84,11 @@ insert into club_state (key, value) values ('vx_sw_status', jsonb_build_object(
   'r3',  jsonb_build_object('active', false, 'reason', 'injured', 'from', to_char(current_date -  10, 'YYYY-MM-DD'), 'to', ''),
   'r4',  jsonb_build_object('active', false, 'reason', 'travel',  'from', to_char(current_date -  60, 'YYYY-MM-DD'), 'to', to_char(current_date - 50, 'YYYY-MM-DD')),
   'r5',  jsonb_build_object('active', true)));
+insert into club_state (key, value) values ('vx_fitness_media', jsonb_build_object(
+  'ex1', jsonb_build_object('photo', 'data:image/jpeg;base64,' || repeat('A', 620000), 'video', 'https://youtu.be/abc'),
+  'ex2', jsonb_build_object('photo', 'data:image/jpeg;base64,' || repeat('B', 620000), 'video', ''),
+  'ex3', jsonb_build_object('photo', 'https://vx-media/ok.jpg', 'video', 'https://youtu.be/def')));
+insert into club_state (key, value) values ('vx_brand', jsonb_build_object('name','Vortex'));
 create schema if not exists auth;
 create table auth.users (id serial primary key, email text, last_sign_in_at timestamptz);
 create table vx_staff_emails (email text primary key);
@@ -112,7 +117,8 @@ console.log("");
 // Every file here reads the catalogue and can run against any database, which is the whole point
 // of them — they are what says what the club's database actually IS.
 for (const f of ["advisor_fixes.sql", "duplicate_indexes.sql", "preflight_audit.sql", "search_path_remaining.sql",
-                 "staff_access_check.sql", "staff_email_characters.sql", "breaks_that_never_end.sql"]) {
+                 "staff_access_check.sql", "staff_email_characters.sql", "breaks_that_never_end.sql",
+                 "oversized_records.sql"]) {
   check(f + " runs without erroring", () => {
     const r = psql(["-f", join(SUPA, f)]);
     if (r.status !== 0) throw new Error(r.stderr || r.stdout);
@@ -286,6 +292,40 @@ check("the repair in section 3 ends the old ones and leaves the rest alone", () 
   if (!r4) throw new Error("it wiped the end date off a status that already had one");
   if (r5 !== "true") throw new Error("it touched a swimmer who was active");
   return "closed the two old ones, left the recent one, the dated one and the active one";
+});
+
+// The record that was stopping every save on the club's Mac. It has to be found by size, and
+// the repair has to take the images out without touching anything else — the video links are
+// the only thing in there that survives, and losing them would be a second outage.
+check("oversized_records finds the record that blocks the device", () => {
+  const r = psql(["-f", join(SUPA, "oversized_records.sql")]);
+  if (r.status !== 0) throw new Error(r.stderr);
+  const out = r.stdout;
+  if (!/vx_fitness_media[^\n]*too large to sync/.test(out)) throw new Error("did not flag the oversized record");
+  if (/vx_brand[^\n]*too large/.test(out)) throw new Error("flagged a record that is perfectly small");
+  if (!/\b2\b/.test(out)) throw new Error("did not count how many exercises carry an image");
+  const after = psql(["-tAc", "select length(value->'ex1'->>'photo') from club_state where key='vx_fitness_media'"]);
+  if (parseInt(after.stdout.trim(), 10) < 100000) throw new Error("section 2 ran on its own — it must stay commented out");
+  return "named it, sized it, and changed nothing";
+});
+
+check("the repair in section 2 takes out the images and nothing else", () => {
+  const src = readFileSync(join(SUPA, "oversized_records.sql"), "utf8");
+  const start = src.indexOf("-- update public.club_state");
+  if (start === -1) throw new Error("section 2 is not where the report says it is");
+  const stmt = src.slice(start).split(";")[0].split("\n").map((l) => l.replace(/^-- ?/, "")).join("\n") + ";";
+  const r = psql(["-c", stmt]);
+  if (r.status !== 0) throw new Error(r.stderr);
+  const got = psql(["-tAc",
+    `select coalesce(value->'ex1'->>'photo','?') || '|' || coalesce(value->'ex1'->>'video','?') || '|' ||
+            coalesce(value->'ex3'->>'photo','?') || '|' || (octet_length(value::text) < 5000)::text
+       from club_state where key='vx_fitness_media'`]);
+  const [photo, video, kept, small] = got.stdout.trim().split("|");
+  if (photo !== "") throw new Error("the inline image is still there: " + photo.slice(0, 40));
+  if (video !== "https://youtu.be/abc") throw new Error("it lost the video link, which was the only thing worth keeping");
+  if (kept !== "https://vx-media/ok.jpg") throw new Error("it wiped a photo that was a proper URL, not an image");
+  if (small !== "true") throw new Error("the record is still too big to sync");
+  return "images gone, video links kept, URL photos untouched, record back under a kilobyte";
 });
 
 asPg(`${join(BIN, "pg_ctl")} -D ${DATA} stop`);
