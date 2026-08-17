@@ -6508,7 +6508,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-16j';
+const VX_BUILD='2026-08-17c';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -6527,7 +6527,7 @@ class Component extends DCLogic {
     this.PH = PH;
     this._baseAccounts = [
       {id:'ahmed', user:'ahmed', label:'Ahmed Mamo', role:'Technical Director · full access', accent:'#067EEA', photo:'assets/director-ahmed.jpg', initials:'AM', recommended:true, email:'ahmedmamot@gmail.com'},
-      {id:'sameh', user:'sameh', label:'Sameh', role:'Administrator · full access', accent:'#3B23C7', photo:'', initials:'S', email:'sameh@vortexswimmingclub.com'},
+      {id:'sameh', user:'sameh', label:'Sameh', role:'Administrator \u00b7 full access', accent:'#3B23C7', photo:'', initials:'S', email:'mosame7100@gmail.com'},
       {id:'fathy', user:'fathy', label:'Coach Fathy', role:'Pre-Team coach', accent:'#22C1DA', photo:'assets/coach-fathy.jpg', initials:'CF', squadId:'preteam', email:'fathy@vortexswimmingclub.com'},
       {id:'matuze', user:'matuze', label:'Coach Matuze', role:'Advanced B coach', accent:'#1BA5E6', photo:'', initials:'CM', squadId:'advb', email:'matuze@vortexswimmingclub.com'},
       {id:'sherif', user:'sherif', label:'Coach Sherif', role:'Advanced A coach', accent:'#067EEA', photo:'', initials:'CS', squadId:'adva', email:'sherif@vortexswimmingclub.com'},
@@ -8886,7 +8886,69 @@ class Component extends DCLogic {
     if(a.id==='ahmed' || a.id==='sameh') return true;
     // Any one of them is enough. A head coach who also helps with fitness does not lose the
     // run of the club by taking on the second job.
-    return this._rolesOf(a).some(r=>VX_FULL_ACCESS_ROLES.indexOf(r)>=0);
+    return this._rolesOf(a).some(r=>this._isFullAccessRole(r));
+  }
+  // What the header says about somebody — decided by the app, not repeated from a box.
+  //
+  // This printed the role text exactly as typed. Mary's read "ADMINISTRATOR · FULL ACCESS" while
+  // the app was giving her a coach's screen with no Club Administration on it: the header
+  // promising access that the very same render had already refused, on the same screen, in the
+  // same second. Anybody reading that believes the header and reports the tiles as broken, and
+  // the one number that would have explained it — what the app actually decided — was nowhere.
+  //
+  // The job title is theirs to write. The half after the dot is not: it is what this app is doing.
+  _accessLine(acct){
+    const a=acct||this._me()||{};
+    // Every position they hold, spelled out. Somebody can be Assistant Coach and Fitness Coach at
+    // once, and showing only the first would be its own small lie — which taking the text before
+    // the first dot did, until a test that already existed caught it.
+    const parts=this._rolesOf(a)
+      .map(r=>String(r).split('\u00b7')[0].trim())      // "Administrator · full access" -> "Administrator"
+      .filter(Boolean)
+      .filter(r=>!/^(full|squad) access$/i.test(r));     // never repeat a claim about access
+    const title=parts.length ? parts.join(' \u00b7 ') : 'Staff';
+    return title+' \u00b7 '+(this._isFullAccess(a) ? 'full access' : 'squad access');
+  }
+  // Is this address one of the club's own staff, rather than a parent's?
+  //
+  // The family list lets an admin delete an account, and it used to refuse only two addresses,
+  // written out by hand: ahmedmamot@gmail.com and sameh@vortexswimmingclub.com. The second is not
+  // the address Sameh signs in with — that is mosame7100@gmail.com — so the guard meant to protect
+  // him protected nobody, and Mary was never in it at all. Deleting one of those removes the
+  // sign-in, and the person it belongs to is locked out of their own club.
+  //
+  // Asked of the staff list instead, it covers every coach and every admin, including the ones
+  // added next month, and needs nobody to remember to edit a list.
+  _isStaffEmail(email){
+    const e=String(email||'').trim().toLowerCase();
+    if(!e) return false;
+    return (this.accounts||[]).some(a=>String(a.email||'').trim().toLowerCase()===e);
+  }
+  // Whether a role, as a person actually typed it, means full access.
+  //
+  // This used to be `VX_FULL_ACCESS_ROLES.indexOf(role) >= 0` — exact string equality against a
+  // list of seven. Neither of the club's two admins matches that list:
+  //
+  //   Ahmed  · "Technical Director · full access"   the list says "Technical Manager"
+  //   Sameh  · "Administrator · full access"        the list says "Admin"
+  //
+  // Both had full access only because their account ids are hardcoded two lines above. Anybody
+  // else — Mary, or Sameh himself signing in through a staff account created in the Staff screen
+  // rather than the built-in one — gets an id the hardcode does not know, a role that matches
+  // nothing, and no access, with nothing on screen saying why. The role box is free text typed by
+  // a person; "Administrator" and "Admin" are the same job and the app has to know that.
+  _isFullAccessRole(role){
+    const raw=String(role||'').toLowerCase();
+    // It says full access. It has said so on both admins since the app was built. Believe it.
+    if(/full access/.test(raw)) return true;
+    // Everything before a "·" is the job; anything after is a note about it.
+    const title=raw.split('·')[0].replace(/[^a-z ]+/g,' ').replace(/\s+/g,' ').trim();
+    if(!title) return false;
+    // Whole words, so "Pre-Team coach" can never be read as "ceo" and a coach never inherits the
+    // run of the club from a substring.
+    if(!/\b(owner|ceo|admin|administrator|manager|director|head coach)\b/.test(title)) return false;
+    // An assistant to the manager is not the manager.
+    return !/\b(assistant|deputy|trainee|intern)\b/.test(title);
   }
   _rebuildAccounts(){
     // Rebuild this.accounts from the base staff + synced custom staff + per-account overrides.
@@ -10234,7 +10296,27 @@ class Component extends DCLogic {
   }
   _promoMeta(swId){ return this.promoStore[swId] || {lastReview:null, suggested:false, suggestedAt:null}; }
   _savePromo(swId, meta){ this.promoStore={...this.promoStore, [swId]:meta}; this._saveJSON('vx_promo', this.promoStore); this.forceUpdate(); }
-  promoNextSquad(sqid){ const order=['preteam','advb','adva','junior','seniorb','seniora','vortexb','vortexa','legend']; const i=order.indexOf(sqid); return i>=0 && i<order.length-1 ? order[i+1] : null; }
+  // The next squad up, and it has to be one that still exists.
+  //
+  // This returned order[i+1] whether or not that squad was still there. Club Administration lets
+  // a squad be deleted, and the moment one is, renderVals reads `.name` off undefined — which is
+  // not a broken promotion panel, it is the entire app replaced by an error screen, on every
+  // device at once, until somebody puts the squad back. Deleting one of nine did it.
+  promoNextSquad(sqid){
+    const order=['preteam','advb','adva','junior','seniorb','seniora','vortexb','vortexa','legend'];
+    const here=this.squadById||{};
+    const i=order.indexOf(sqid);
+    if(i>=0){
+      // Step over any that have gone. A club that removes Senior B should promote Junior to
+      // Senior A, not to a squad that is not there.
+      for(let k=i+1;k<order.length;k++){ if(here[order[k]]) return order[k]; }
+      return null;                                   // nothing above this one is left
+    }
+    // A squad the ladder has never heard of, because the club added it. Use their own order.
+    const list=(this.squads||[]).map(s=>s.id);
+    const j=list.indexOf(sqid);
+    return (j>=0 && j<list.length-1) ? list[j+1] : null;
+  }
   promoMarkReviewed(swId){ const m=this._promoMeta(swId); this._savePromo(swId, {...m, lastReview:new Date().toISOString().slice(0,10)}); }
   promoSuggest(swId){ const m=this._promoMeta(swId); this._savePromo(swId, {...m, suggested:true, suggestedAt:new Date().toISOString().slice(0,10), lastReview:new Date().toISOString().slice(0,10)}); }
   promoDismiss(swId){ const m=this._promoMeta(swId); this._savePromo(swId, {...m, suggested:false}); }
@@ -14459,7 +14541,7 @@ class Component extends DCLogic {
         const reviewDue = daysSince>=90;
         if(reviewDue) reasons.push(meta.lastReview?'Quarterly review due':'Never reviewed');
         if(!reasons.length) return;
-        promoCandidates.push({ sw, sqid:sq.id, sqName:sq.name, accent:sq.accent, nextSq, nextSqName: nextSq?this.squadById[nextSq].name:null, reasons, suggested:meta.suggested, reviewDue });
+        promoCandidates.push({ sw, sqid:sq.id, sqName:sq.name, accent:sq.accent, nextSq, nextSqName: (this.squadById[nextSq]||{}).name||null, reasons, suggested:meta.suggested, reviewDue });
       });
     });
     promoCandidates.sort((a,b)=> (b.suggested-a.suggested) || (b.reasons.length-a.reasons.length));
@@ -15243,7 +15325,10 @@ class Component extends DCLogic {
           const all=picked.length===0;
           const roles=String(d.role!=null?d.role:(a.role||'')).split(',').map(x=>x.trim()).filter(Boolean);
           const role=roles.length?roles.join(' \u00b7 '):'no position yet';
-          const full=(a.id==='ahmed'||a.id==='sameh')||roles.some(r=>VX_FULL_ACCESS_ROLES.indexOf(r)>=0);
+          // The same question as _isFullAccess, and it must be asked the same way — this is the
+          // sentence that TELLS somebody what their role gets them. Answered differently, it says
+          // "full access" to a person the app then refuses, or the reverse.
+          const full=this._isFullAccess(a);
           return {
             editAllBg: all?'var(--vx-blue)':'#fff', editAllFg: all?'#fff':'#3A4152',
             editAllBorder: all?'var(--vx-blue)':'#E5E9F0',
@@ -15517,7 +15602,7 @@ class Component extends DCLogic {
         // unread: swimmers whose last family message awaits a coach reply
         let unread=0; const fm=this.famMessages||{}; scopeSw.forEach(sw=>{ const t=fm[sw.id]; if(t&&t.length&&t[t.length-1].sender==='family') unread++; });
         return {
-          hubUserName: acc.label||'', hubUserRole: this._roleLabel(acc)||'', hubUserAvatar: this.av(acc.photo||null, acc.initials||'?', 54, 15, acc.accent||'#067EEA', '#fff', 20),
+          hubUserName: acc.label||'', hubUserRole: this._accessLine(acc), hubUserAvatar: this.av(acc.photo||null, acc.initials||'?', 54, 15, acc.accent||'#067EEA', '#fff', 20),
           clubStatLine: isAdm ? (this.allSwimmersFlat().length+' swimmers across '+this.squads.length+' squads · '+this.allMeets().length+' meets on record.')
             : (lockSq ? (lockSq.count+' swimmers · '+lockSq.name+' · '+lockSq.coach) : 'Welcome back.'),
           toolsSpan: isAdm ? 'auto' : 'span 2',
@@ -15753,7 +15838,14 @@ class Component extends DCLogic {
       printPreviewOpen:S.printPreviewOpen,
       printSheet:{ accent:squad.accent, clubName:this.brandConfig.clubName||'Vortex Swimming Club', squadName:squad.name, printDate:new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}), zoneLabel:(zoneRows[zi]?zoneRows[zi].code+' \u00b7 '+zoneRows[zi].name:zName), title:sessionTitle||'Session', coach:squad.coach, total:planTotalN.toLocaleString(),
         timeWindow:this._fmtClockAmPm(planClock.startSec)+' \u2013 '+this._fmtClockAmPm(planClock.endSec)+' \u00b7 '+this._fmtDur(planClock.endSec-planClock.startSec),
-        sections: planSections.map(ps=>({ title:ps.title, dot:ps.dot, subtotal:ps.subtotal, isRounds:ps.isRounds, roundsLabel:ps.roundsLabel, sets: ps.sets.map(st=>{ const onEquip=(st.equip||[]).filter(e=>e.on).map(e=>e.label); const onTypes=(st.types||[]).filter(e=>e.on).map(e=>e.label); const onStrokes=(st.strokes||[]).filter(e=>e.on).map(e=>e.label); const onLabels=(st.labels||[]).filter(e=>e.on).map(e=>e.label); const setSw=(st.setSwimmers||[]).map(e=>e.name); const onGroups=(st.setGroups||[]).filter(e=>e.on).map(e=>e.label); const rounds=Number(st.circuit)||1; return {dist:(rounds>1?(rounds+'×('+(st.reps>1?(st.reps+'×'+st.dist):st.dist)+')'):(st.reps>1?(st.reps+'×'+st.dist):st.dist)), hasDistSend:!!st.sendoffVal, distSend:('@ '+(st.sendoffVal||'')), timeLabel:st.timeLabel, setMetres:(Number(st.setMetres)||0).toLocaleString(), txt:st.txt, hasStrokes:onStrokes.length>0, strokesStr:onStrokes.join('/'), hasTypes:onTypes.length>0, typesStr:onTypes.join(', '), hasLabels:onLabels.length>0, labelsStr:onLabels.join(', '), hasGroups:onGroups.length>0, groupsStr:onGroups.join(', '), hasSwimmers:setSw.length>0, swimmersStr:setSw.join(', '), hasEquip:onEquip.length>0, equipStr:onEquip.join(', '), hasSendoff:!!st.sendoffVal, sendoffStr:st.sendoffVal||'', hasRest:!!st.rest, restStr:st.rest||'', hasHr:!!(st.hrFromVal||st.hrToVal), hrStr:(st.hrFromVal||st.hrToVal)?('HR '+(st.hrFromVal||'?')+(st.hrToVal?('-'+st.hrToVal):'')):'', zoneCode:st.zone||'', hasZone:!!st.zone, zoneStr:st.zone||''}; }) })) },
+        // startLabel is the section's start time, and the printed sheet has a slot for it on every
+        // section heading. It was never copied out of planSections, so that slot has always
+        // printed blank — and the same omission is why the console said "{{ psec.startLabel }}
+        // never resolved" on every single load. The four fields below it are the same story: they
+        // are the only ones in this mapper copied without a fallback, and they are exactly the
+        // four the console named. A coach printing a session got blank distances and blank
+        // descriptions wherever the underlying set had not been filled in.
+        sections: planSections.map(ps=>({ title:ps.title, dot:ps.dot, subtotal:ps.subtotal, isRounds:ps.isRounds, roundsLabel:ps.roundsLabel, startLabel:ps.startLabel||'', sets: (ps.sets||[]).map(st=>{ const onEquip=(st.equip||[]).filter(e=>e.on).map(e=>e.label); const onTypes=(st.types||[]).filter(e=>e.on).map(e=>e.label); const onStrokes=(st.strokes||[]).filter(e=>e.on).map(e=>e.label); const onLabels=(st.labels||[]).filter(e=>e.on).map(e=>e.label); const setSw=(st.setSwimmers||[]).map(e=>e.name); const onGroups=(st.setGroups||[]).filter(e=>e.on).map(e=>e.label); const rounds=Number(st.circuit)||1; return {dist:(rounds>1?(rounds+'×('+(st.reps>1?(st.reps+'×'+st.dist):st.dist)+')'):(st.reps>1?(st.reps+'×'+st.dist):st.dist))||'', hasDistSend:!!st.sendoffVal, distSend:('@ '+(st.sendoffVal||'')), timeLabel:st.timeLabel||'', setMetres:(Number(st.setMetres)||0).toLocaleString(), txt:st.txt||'', hasStrokes:onStrokes.length>0, strokesStr:onStrokes.join('/'), hasTypes:onTypes.length>0, typesStr:onTypes.join(', '), hasLabels:onLabels.length>0, labelsStr:onLabels.join(', '), hasGroups:onGroups.length>0, groupsStr:onGroups.join(', '), hasSwimmers:setSw.length>0, swimmersStr:setSw.join(', '), hasEquip:onEquip.length>0, equipStr:onEquip.join(', '), hasSendoff:!!st.sendoffVal, sendoffStr:st.sendoffVal||'', hasRest:!!st.rest, restStr:st.rest||'', hasHr:!!(st.hrFromVal||st.hrToVal), hrStr:(st.hrFromVal||st.hrToVal)?('HR '+(st.hrFromVal||'?')+(st.hrToVal?('-'+st.hrToVal):'')):'', zoneCode:st.zone||'', hasZone:!!st.zone, zoneStr:st.zone||''}; }) })) },
       onImportPdfClick:()=>{ const el=document.getElementById('vx-pdf-input'); if(el) el.click(); },
       pdfImportBusy:S.pdfImportBusy, pdfImportMsg:S.pdfImportMsg, pdfImportMsgColor: S.pdfImportOk?'#0C7A4F':'#B42318',
       onPdfFileChange:(e)=>this.handlePdfImport(e, S.squadId),
@@ -16650,7 +16742,7 @@ class Component extends DCLogic {
                   onPick:()=>this.famAdminLink(f.id, s.squadId+'::'+s.id) })) : [],
               addHint: swq.length>=2 ? '' : 'Type at least 2 letters of the child’s name',
               // Only a manager, and never on the two manager accounts themselves.
-              canDelete: this._isFullAccess() && !['ahmedmamot@gmail.com','sameh@vortexswimmingclub.com'].includes((f.email||'').trim().toLowerCase()),
+              canDelete: this._isFullAccess() && !this._isStaffEmail(f.email),
               deleteLabel: ids.length ? ('Delete account · '+ids.length+' child'+(ids.length===1?'':'ren')) : 'Delete account',
               onDeleteAccount:()=>this.famAdminDelete(f.id)
             };
@@ -16739,7 +16831,9 @@ class Component extends DCLogic {
         const all=picked.length===0;
         const roles=String((S.staffAddForm&&S.staffAddForm.role)||'').split(',').map(x=>x.trim()).filter(Boolean);
         const role=roles.length?roles.join(' \u00b7 '):'no position yet';
-        const full=roles.some(r=>VX_FULL_ACCESS_ROLES.indexOf(r)>=0);
+        // The role being typed into the form, not an existing account — there is no `a` here.
+        // Same question, same answer, asked through the same helper.
+        const full=roles.some(r=>this._isFullAccessRole(r));
         return {
           staffSquadAllBg: all?'var(--vx-blue)':'#fff', staffSquadAllFg: all?'#fff':'#3A4152',
           staffSquadAllBorder: all?'var(--vx-blue)':'#E5E9F0',

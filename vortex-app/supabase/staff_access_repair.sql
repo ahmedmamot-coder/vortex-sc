@@ -20,7 +20,8 @@ on conflict (email) do nothing;
 -- above picks them up.
 insert into public.vx_staff_emails (email) values
   (lower('ahmedmamot@gmail.com')),
-  (lower('sameh@vortexswimmingclub.com')),
+  (lower('sameh@vortexswimmingclub.com'),
+  ('mosame7100@gmail.com')),
   (lower('Sameh4142@gmail.com'))
 on conflict (email) do nothing;
 

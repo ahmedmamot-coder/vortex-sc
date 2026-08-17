@@ -14,8 +14,7 @@
 // on the admin list. A stolen anon key is not enough.
 
 import { SB_URL, SB_SERVICE, haveService } from "@/lib/wearable";
-
-const ADMIN_EMAILS = ["ahmedmamot@gmail.com", "sameh@vortexswimmingclub.com"];
+import { isClubAdmin } from "@/lib/clubAdmins";
 
 async function callerIsAdmin(request: Request): Promise<{ ok: boolean; email?: string; reason?: string }> {
   const auth = request.headers.get("authorization") || "";
@@ -29,7 +28,7 @@ async function callerIsAdmin(request: Request): Promise<{ ok: boolean; email?: s
   const u = await r.json().catch(() => null);
   const email = (u && u.email ? String(u.email) : "").toLowerCase();
   if (!email) return { ok: false, reason: "session has no email" };
-  if (!ADMIN_EMAILS.includes(email)) return { ok: false, email, reason: "only an admin can set staff passwords" };
+  if (!(await isClubAdmin(email))) return { ok: false, email, reason: "only an admin can set staff passwords" };
   return { ok: true, email };
 }
 

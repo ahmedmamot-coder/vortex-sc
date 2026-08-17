@@ -2674,7 +2674,8 @@ describe("InBody sheet", () => {
       c._canSeeSquad = bind("_canSeeSquad", c);
       c._rolesOf = bind("_rolesOf", c, ["_me"]);
       c._roleLabel = bind("_roleLabel", c, ["_rolesOf"]);
-      c._isFullAccess = bind("_isFullAccess", c, ["_me", "_rolesOf"]);
+      c._isFullAccessRole = bind("_isFullAccessRole", c);
+      c._isFullAccess = bind("_isFullAccess", c, ["_me", "_rolesOf", "_isFullAccessRole"]);
       return c;
     };
 
@@ -2801,6 +2802,248 @@ describe("InBody sheet", () => {
   // undeclared variable is not a syntax error, it is a runtime one, and the runtime here is a
   // coach's phone at the poolside.
   //
+  // Who counts as an admin, judged on what somebody actually typed in the role box.
+  //
+  // This was `VX_FULL_ACCESS_ROLES.indexOf(role) >= 0` — exact string equality against a list of
+  // seven — and NEITHER of the club's two admins matches that list:
+  //
+  //   Ahmed  "Technical Director · full access"   the list says "Technical Manager"
+  //   Sameh  "Administrator · full access"        the list says "Admin"
+  //
+  // Both worked only because their account ids are hardcoded. Anyone else with the same job —
+  // Mary, or Sameh himself signing in through a staff account made in the Staff screen instead of
+  // the built-in one — gets an id the hardcode does not know and a role that matches nothing, and
+  // is refused with nothing on screen saying why. They are the two people running this club.
+  describe("an admin is an admin however the role was typed", () => {
+    const src = methodSource("_isFullAccessRole").body;
+    // Compiled and run, not read: the point is the answers, not the wording.
+    const isFull = new Function("role", src.slice(src.indexOf("{") + 1, src.lastIndexOf("}")));
+
+    // Exactly the strings in this club's own account list.
+    for (const role of ["Technical Director · full access", "Administrator · full access"])
+      it('"' + role + '" is full access', () => eq(isFull(role), true));
+    // And the shapes somebody would plausibly type for the same job.
+    for (const role of ["Admin", "admin", "Administrator", "Manager", "Club Manager", "Owner",
+                        "CEO", "Head Coach", "head coach", "Aquatic Director", "Technical Manager"])
+      it('"' + role + '" is full access', () => eq(isFull(role), true));
+
+    // And the ones that must not be, including every coach role the club actually uses.
+    for (const role of ["Pre-Team coach", "Advanced B coach", "Advanced A coach", "Junior coach",
+                        "Senior B coach", "Senior A coach", "Vortex B coach", "Vortex A coach",
+                        "Legend coach", "Fitness coach", "Coach", "", "Assistant Manager",
+                        "Deputy Head Coach", "Trainee Admin"])
+      it('"' + role + '" is not', () => eq(isFull(role), false));
+
+    // A substring must never do it: "ceo" hides inside ordinary words.
+    it("does not read a job title out of the middle of a word", () =>
+      eq(isFull("Receptionist") || isFull("Ceramics") || isFull("Administrative assistant"), false));
+
+    // The three places that ask this question have to give the same answer. One of them is the
+    // sentence that TELLS somebody what their role gets them — answered differently, it promises
+    // full access to a person the app then refuses.
+    it("is asked in one place, not three", () => {
+      // Comments in the source explain what the old check was, and a mention in prose is not a
+      // check that still runs — strip them before counting, or this fails on its own footnote.
+      const code = SOURCE.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+      const stray = [...code.matchAll(/VX_FULL_ACCESS_ROLES\.indexOf/g)].length;
+      eq(stray, 0, "a copy of the old exact-match check is still deciding access somewhere");
+      eq((SOURCE.match(/_isFullAccessRole\(/g) || []).length >= 3, true,
+         "every caller must go through the one helper");
+    });
+  });
+
+  // "only an admin can set staff passwords" — said to Sameh, who runs the club.
+  //
+  // Two server routes decided who counts as an admin from a pair of addresses written into the
+  // files: ahmedmamot@gmail.com and sameh@vortexswimmingclub.com. The second is not the address
+  // Sameh signs in with; his is on his staff row and it is a different one. So setting a staff
+  // password and deleting an account both refused him, on a screen whose header said
+  // ADMINISTRATOR · FULL ACCESS.
+  //
+  // That is the third copy of the same mistake in this codebase — the family list had it, the
+  // role check in the app had it — and each was found separately, weeks apart, by somebody being
+  // stopped from doing their job.
+  describe("who the server lets set a password or delete an account", () => {
+    const lib = readFileSync(new URL("../src/lib/clubAdmins.ts", import.meta.url), "utf8");
+    // The real function, compiled out of the file rather than copied here — a copy would keep
+    // passing after somebody changed the one that runs.
+    const grants = new Function("role",
+      lib.split("export function grantsFullAccess(role: string): boolean {")[1].split("\n}")[0]);
+
+    it("says yes to the roles this club's admins actually carry", () => {
+      for (const r of ["Administrator · full access", "Technical Director · full access", "Admin", "Head Coach", "CEO"])
+        eq(grants(r), true, r + " should be full access");
+    });
+    it("says no to the coaches", () => {
+      for (const r of ["Coach", "Senior B coach", "Fitness Coach", "Marketing Team", "", "Assistant Manager"])
+        eq(grants(r), false, r + " must not be able to set another person's password");
+    });
+
+    // The app and the server must answer this identically. proto.html is served to the browser
+    // and cannot import from src/, so the rule is written twice on purpose — and two copies that
+    // drift are how somebody ends up admin on one screen and refused on the next, which is
+    // exactly what happened to Sameh.
+    it("the app and the server agree, role for role", () => {
+      const appFn = new Function("role", (() => {
+        const b = methodSource("_isFullAccessRole").body;
+        return b.slice(b.indexOf("{") + 1, b.lastIndexOf("}"));
+      })());
+      for (const r of ["Administrator · full access", "Technical Director · full access", "Admin",
+                       "administrator", "Head Coach", "CEO", "Owner", "Manager", "Aquatic Director",
+                       "Coach", "Senior B coach", "Fitness Coach", "Marketing Team",
+                       "Assistant Manager", "Deputy Head Coach", "Receptionist", ""])
+        eq(grants(r), appFn(r), "the app and the server disagree about " + JSON.stringify(r));
+    });
+
+    it("neither route decides it from a list written into the file", () => {
+      for (const f of ["../src/app/api/staff/set-password/route.ts", "../src/app/api/family/delete/route.ts"]) {
+        const src = readFileSync(new URL(f, import.meta.url), "utf8").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+        eq(/ADMIN_EMAILS\s*=\s*\[/.test(src), false, f + " still has the addresses written into it");
+        eq(/isClubAdmin\(/.test(src), true, f + " must ask the one check");
+      }
+    });
+    // A route that sets somebody's password must refuse when it cannot tell, not allow.
+    it("refuses when it cannot read who the admins are", () =>
+      eq(/if \(!r\.ok\) return false;/.test(lib), true,
+         "an unreadable staff table must not open the password route to everybody"));
+  });
+
+  // The header must never promise access the same screen is refusing.
+  //
+  // Mary opened the app to "ADMINISTRATOR · FULL ACCESS" above her name and a hub with no Club
+  // Administration on it and Tools & AI reading "Your squad". The header was printing her role
+  // text exactly as somebody had typed it into a box; the tiles were asking _isFullAccess. They
+  // disagreed, on the same screen, in the same render.
+  //
+  // That is worse than either answer being wrong, because it hides which one is. She read the
+  // header, believed it, and reported the tiles as broken — and the thing that would have
+  // explained it in one glance, what the app had actually decided, was nowhere on the screen.
+  //
+  // The job title stays hers to write. The half after the dot is now the app's answer.
+  describe("the header says what the app decided, not what was typed", () => {
+    const ctx = () => {
+      const c = { _me: () => null };
+      c._rolesOf = bind("_rolesOf", c, ["_me"]);
+      c._roleLabel = bind("_roleLabel", c, ["_rolesOf"]);
+      c._isFullAccessRole = bind("_isFullAccessRole", c);
+      c._isFullAccess = bind("_isFullAccess", c, ["_me", "_rolesOf", "_isFullAccessRole"]);
+      c._accessLine = bind("_accessLine", c, ["_me", "_roleLabel", "_isFullAccess"]);
+      return c;
+    };
+    it("an admin reads as full access", () =>
+      eq(ctx()._accessLine({ id: "m1", role: "Administrator · full access" }), "Administrator · full access"));
+    it("Mary's shorter spelling reads the same", () =>
+      eq(ctx()._accessLine({ id: "m1", role: "Admin" }), "Admin · full access"));
+    it("a squad coach reads as squad access, whatever the title says", () =>
+      eq(ctx()._accessLine({ id: "c1", role: "Senior B coach" }), "Senior B coach · squad access"));
+    // The case that started this: a role claiming full access that the app does not grant must
+    // say so out loud rather than repeat the claim.
+    it("a role that claims access the app refuses cannot say full access", () => {
+      const c = ctx();
+      c._isFullAccess = () => false;             // as an older build would have answered
+      const line = c._accessLine({ id: "m1", role: "Administrator · full access" });
+      eq(/full access/.test(line), false, "the header repeated a claim the app was refusing");
+      eq(line, "Administrator · squad access");
+    });
+    // Two positions at once, which is why this may not simply take the text before the first dot.
+    it("keeps every position somebody holds", () =>
+      eq(ctx()._accessLine({ id: "s1", role: "Fitness Coach,Assistant Coach" }),
+         "Fitness Coach \u00b7 Assistant Coach \u00b7 squad access"));
+    it("somebody with no role at all still reads sensibly", () =>
+      eq(ctx()._accessLine({ id: "x" }), "Staff · squad access"));
+    it("the hub uses it rather than the raw role text", () =>
+      eq(/hubUserRole: this\._accessLine\(acc\)/.test(SOURCE), true));
+  });
+
+  // Deleting a squad must not take the app down.
+  //
+  // Club Administration can delete a squad. promoNextSquad returned the next id from a fixed
+  // ladder of the nine this club started with, whether or not that squad still existed — and
+  // renderVals then read `.name` off it. That is not a broken promotion panel; it is the whole
+  // interface replaced by "Cannot read properties of undefined", on every device, until somebody
+  // puts the squad back. Removing one of the nine did it.
+  describe("the promotion ladder only ever names a squad that exists", () => {
+    const LADDER = ["preteam", "advb", "adva", "junior", "seniorb", "seniora", "vortexb", "vortexa", "legend"];
+    const ctx = (ids) => {
+      const c = { squads: ids.map((id) => ({ id })), squadById: Object.fromEntries(ids.map((id) => [id, { id, name: id }])) };
+      c.promoNextSquad = bind("promoNextSquad", c);
+      return c;
+    };
+    it("with every squad present, the ladder is unchanged", () => {
+      const c = ctx(LADDER);
+      for (let i = 0; i < LADDER.length - 1; i++) eq(c.promoNextSquad(LADDER[i]), LADDER[i + 1]);
+      eq(c.promoNextSquad("legend"), null, "the top of the ladder goes nowhere");
+    });
+    it("steps over a squad that has been deleted", () => {
+      // Senior B removed: Junior should promote to Senior A, not to a squad that is not there.
+      const c = ctx(LADDER.filter((s) => s !== "seniorb"));
+      eq(c.promoNextSquad("junior"), "seniora");
+    });
+    it("returns nothing rather than a squad that has gone", () => {
+      const c = ctx(["preteam", "junior"]);
+      eq(c.promoNextSquad("junior"), null, "nothing above Junior is left");
+      eq(c.promoNextSquad("preteam"), "junior", "and it finds the one that is");
+    });
+    it("never names a squad the club does not have", () => {
+      for (const keep of [LADDER, LADDER.slice(0, 4), ["junior"], ["preteam", "legend"]]) {
+        const c = ctx(keep);
+        for (const id of keep) {
+          const next = c.promoNextSquad(id);
+          eq(next === null || keep.includes(next), true,
+             "promoNextSquad(" + id + ") returned " + next + ", which is not a squad this club has");
+        }
+      }
+    });
+    // A squad the club added themselves is not on the ladder at all.
+    it("follows the club's own order for a squad it has never heard of", () => {
+      const c = ctx(["masters", "elite", "legend"]);
+      eq(c.promoNextSquad("masters"), "elite");
+      eq(c.promoNextSquad("legend"), null);
+    });
+    // And the call site must not reach into a squad without checking either.
+    it("the screen does not read .name off a missing squad", () =>
+      eq(/nextSqName: \(this\.squadById\[nextSq\]\|\|\{\}\)\.name\|\|null/.test(SOURCE), true));
+  });
+
+  // Deleting a family account must never delete a coach's own sign-in.
+  //
+  // The guard used to be two addresses written out by hand — ahmedmamot@gmail.com and
+  // sameh@vortexswimmingclub.com. The second is not the address Sameh signs in with; his is
+  // mosame7100@gmail.com, on his staff row. So the line meant to protect him protected nobody,
+  // Mary was never in it, and neither was any coach. Deleting one of those takes away the sign-in
+  // and locks that person out of their own club.
+  describe("a staff sign-in cannot be deleted from the family list", () => {
+    const ctx = () => {
+      const c = { accounts: [
+        { id: "ahmed", email: "ahmedmamot@gmail.com" },
+        { id: "s1",    email: "mosame7100@gmail.com" },     // Sameh, as he really signs in
+        { id: "m1",    email: "marycrispcleopas@gmail.com" },
+        { id: "w1",    email: "jabeurwassim82@gmail.com" },
+        { id: "n1",    email: "" },                          // a staff row with no email
+      ] };
+      c._isStaffEmail = bind("_isStaffEmail", c);
+      return c;
+    };
+    for (const [who, email] of [["Ahmed", "ahmedmamot@gmail.com"],
+                                ["Sameh, at the address he actually uses", "mosame7100@gmail.com"],
+                                ["Mary", "marycrispcleopas@gmail.com"],
+                                ["a coach", "jabeurwassim82@gmail.com"]])
+      it(who + " is protected", () => eq(ctx()._isStaffEmail(email), true));
+
+    it("is not fooled by spacing or capitals", () =>
+      eq(ctx()._isStaffEmail("  MaryCrispCleopas@Gmail.COM "), true));
+    it("still lets a real parent be deleted", () =>
+      eq(ctx()._isStaffEmail("a.parent@example.com"), false));
+    // A staff row with no email must not make every blank-email family record undeletable.
+    it("an empty address matches nobody", () =>
+      eq(ctx()._isStaffEmail("") || ctx()._isStaffEmail("   "), false));
+    // And the hardcoded pair must not come back.
+    it("no address is written into the guard by hand", () => {
+      const code = SOURCE.replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+      eq(/canDelete:[^,]*@/.test(code), false, "an email address is hardcoded in the delete guard again");
+    });
+  });
+
   // A security-definer function with no pinned search_path.
   //
   // `security definer` means the function runs with its owner's privileges, not the caller's —
@@ -3458,7 +3701,9 @@ describe("InBody sheet", () => {
     const route = readFileSync(new URL("../src/app/api/family/delete/route.ts", import.meta.url), "utf8");
 
     it("only a manager may ask for it", () => {
-      eq(/ADMIN_EMAILS\.includes\(email\)/.test(route), true, "the caller's own token is checked");
+      // isClubAdmin now, not a pair of addresses written into the file — one of which was not
+      // the address Sameh signs in with, so this route refused the person who runs the club.
+      eq(/isClubAdmin\(email\)/.test(route), true, "the caller's own token is checked");
       eq(/status: 403/.test(route), true);
       eq(/this\._isFullAccess\(\) &&/.test(SOURCE), true, "and the button is not shown to a coach");
     });
@@ -3482,8 +3727,13 @@ describe("InBody sheet", () => {
     it("a manager cannot delete themselves or the other manager", () => {
       eq(/email === who\.email/.test(route), true);
       eq(/that is a manager's account and cannot be deleted here/.test(route), true);
-      eq(/'sameh@vortexswimmingclub\.com'\]\.includes/.test(SOURCE), true,
-         "and the button is hidden on those rows too");
+      // The button is hidden on those rows too — but by asking the staff list, not by naming two
+      // addresses. The pair that used to be written here was ahmedmamot@gmail.com and
+      // sameh@vortexswimmingclub.com, and the second is not the address Sameh signs in with, so
+      // the client-side half of this guard was protecting nobody. The server route below was
+      // always right; it is the screen that was wrong.
+      eq(/canDelete: this\._isFullAccess\(\) && !this\._isStaffEmail\(f\.email\)/.test(SOURCE), true,
+         "the row's delete button must ask the staff list");
     });
     it("the confirmation says how many children are attached", () => {
       const fn = sourceBetween("async famAdminDelete(famId){", "\n  famAdminUnlink(");
@@ -5499,7 +5749,11 @@ describe("InBody sheet", () => {
         eq(/\{email:\(rec\.email\|\|''\)\.toLowerCase\(\)/.test(SOURCE), true, "family sign-in has the same problem");
       });
       it("the position is spelled out, not comma-jammed", () => {
-        eq(/hubUserRole: this\._roleLabel\(acc\)/.test(SOURCE), true,
+        // _accessLine builds this now — it spells the positions out the same way _roleLabel did,
+        // and then says what the app actually granted instead of repeating what was typed. The
+        // first attempt at it took the text before the first dot and silently dropped the second
+        // position, which is exactly what this test exists to stop.
+        eq(/hubUserRole: this\._accessLine\(acc\)/.test(SOURCE), true,
            "the header read 'ASSISTANT COACH,FITNESS COACH' straight from storage");
       });
     });

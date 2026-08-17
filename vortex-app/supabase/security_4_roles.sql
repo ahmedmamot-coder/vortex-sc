@@ -44,7 +44,8 @@ create table if not exists vx_staff_emails (
 insert into vx_staff_emails (email) values
   ('ahmedmamot@gmail.com'),
   ('sameh4142@gmail.com'),
-  ('sameh@vortexswimmingclub.com')
+  ('sameh@vortexswimmingclub.com'),
+  ('mosame7100@gmail.com')
 on conflict (email) do nothing;
 
 -- Everyone in staff_accounts with an email, brought across.
@@ -383,7 +384,8 @@ end $$;
 insert into vx_staff_emails (email) values
   ('ahmedmamot@gmail.com'),
   ('sameh4142@gmail.com'),
-  ('sameh@vortexswimmingclub.com')
+  ('sameh@vortexswimmingclub.com'),
+  ('mosame7100@gmail.com')
 on conflict (email) do nothing;
 
 commit;
