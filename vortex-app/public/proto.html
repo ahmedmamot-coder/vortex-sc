@@ -1042,6 +1042,12 @@ if ('serviceWorker' in navigator) {
   @font-face{font-family:"Funnel Display";src:url("assets/ccbe262f.ttf") format("truetype");font-weight:600;font-display:swap}
   @font-face{font-family:"Funnel Display";src:url("assets/a8e6b0d8.ttf") format("truetype");font-weight:700;font-display:swap}
   *{box-sizing:border-box}
+  /* An icon whose NAME is decided at render time. It stays an <i> that React owns, and the
+     picture is drawn inside it rather than in place of it — see _drawDynamicIcons. The host
+     carries the size and the colour; the svg fills it and inherits currentColor, so a colour
+     that changes between renders follows without anything being redrawn. */
+  i[data-vx-icon]{display:inline-flex;align-items:center;justify-content:center}
+  i[data-vx-icon]>svg{width:100%;height:100%;display:block}
   body{margin:0;font-family:"Funnel Display",system-ui,sans-serif;background:#070C16;-webkit-font-smoothing:antialiased}
   /* Arabic. Funnel Display has no Arabic glyphs, so without a fallback every Arabic string
      renders as boxes. The direction itself is set on <html>, which lets the browser's own
@@ -1420,7 +1426,7 @@ if ('serviceWorker' in navigator) {
                   <p style="margin:0;font-size:11.5px;font-weight:600;height:14px;color:{{ pinMsgColor }}">{{ pinMsg }}</p>
                   <div style="display:grid;grid-template-columns:repeat(3,66px);gap:11px;margin-top:2px">
                     <sc-for list="{{ padKeys }}" as="k" hint-placeholder-count="12">
-                      <button onclick="{{ k.onClick }}" style="height:56px;border-radius:17px;border:1px solid {{ k.border }};background:{{ k.bg }};color:#fff;font-size:22px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center">{{ k.label }}<sc-if value="{{ k.icon }}" hint-placeholder-val="{{ false }}"><i data-lucide="{{ k.icon }}" style="width:21px;height:21px"></i></sc-if></button>
+                      <button onclick="{{ k.onClick }}" style="height:56px;border-radius:17px;border:1px solid {{ k.border }};background:{{ k.bg }};color:#fff;font-size:22px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center">{{ k.label }}<sc-if value="{{ k.icon }}" hint-placeholder-val="{{ false }}"><i data-vx-icon="{{ k.icon }}" style="width:21px;height:21px"></i></sc-if></button>
                     </sc-for>
                   </div>
                 </div>
@@ -1597,7 +1603,7 @@ if ('serviceWorker' in navigator) {
                     <div style="background:#fff;border:1px solid #E5E9F0;border-radius:18px;padding:6px 6px 8px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
                       <sc-for list="{{ adminRows }}" as="r" hint-placeholder-count="4">
                         <button onclick="{{ r.onClick }}" style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:none;border:none;padding:11px 10px;cursor:pointer;border-bottom:1px solid {{ r.divider }}">
-                          <span style="width:38px;height:38px;flex:none;border-radius:12px;background:linear-gradient(140deg,#3F9CFF,#0768D6);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 14px rgba(7,104,214,.28)"><i data-lucide="{{ r.icon }}" style="width:18px;height:18px"></i></span>
+                          <span style="width:38px;height:38px;flex:none;border-radius:12px;background:linear-gradient(140deg,#3F9CFF,#0768D6);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 14px rgba(7,104,214,.28)"><i data-vx-icon="{{ r.icon }}" style="width:18px;height:18px"></i></span>
                           <span style="flex:1"><span style="display:block;font-weight:600;font-size:14px;color:#0C1116">{{ r.title }}</span><span style="display:block;font-size:11.5px;color:#7A8296">{{ r.sub }}</span></span>
                           <i data-lucide="chevron-right" style="width:16px;height:16px;color:#C7CDDA"></i>
                         </button>
@@ -1648,7 +1654,7 @@ if ('serviceWorker' in navigator) {
                   <div style="padding:16px 15px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
                     <sc-for list="{{ toolTiles }}" as="t" hint-placeholder-count="8">
                       <button onclick="{{ t.onClick }}" style="text-align:left;background:#fff;border:1px solid #EEF1F5;border-radius:20px;padding:15px;box-shadow:0 10px 26px rgba(11,20,40,.07);cursor:pointer;display:flex;flex-direction:column;gap:20px;min-height:116px">
-                        <span style="width:44px;height:44px;border-radius:14px;background:{{ t.grad }};color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:{{ t.glow }}"><i data-lucide="{{ t.icon }}" style="width:21px;height:21px"></i></span>
+                        <span style="width:44px;height:44px;border-radius:14px;background:{{ t.grad }};color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:{{ t.glow }}"><i data-vx-icon="{{ t.icon }}" style="width:21px;height:21px"></i></span>
                         <span><span style="display:block;font-weight:700;font-size:14px;color:#0C1116">{{ t.title }}</span><span style="display:block;font-size:11px;color:#7A8296;margin-top:2px;line-height:1.3">{{ t.sub }}</span></span>
                       </button>
                     </sc-for>
@@ -1671,9 +1677,9 @@ if ('serviceWorker' in navigator) {
                     <sc-for list="{{ handbookCards }}" as="c" hint-placeholder-count="8">
                       <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;box-shadow:0 2px 7px rgba(11,20,40,.05);overflow:hidden">
                         <button onclick="{{ c.onToggle }}" style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:none;border:none;padding:14px;cursor:pointer;font-family:inherit">
-                          <span style="width:42px;height:42px;flex:none;border-radius:14px;background:linear-gradient(140deg,#3F9CFF,#0768D6);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(7,104,214,.3)"><i data-lucide="{{ c.icon }}" style="width:20px;height:20px"></i></span>
+                          <span style="width:42px;height:42px;flex:none;border-radius:14px;background:linear-gradient(140deg,#3F9CFF,#0768D6);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(7,104,214,.3)"><i data-vx-icon="{{ c.icon }}" style="width:20px;height:20px"></i></span>
                           <span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:14.5px;color:#0C1116">{{ c.title }}</span><span style="display:block;font-size:11.5px;color:#7A8296;margin-top:1px">{{ c.summary }}</span></span>
-                          <i data-lucide="{{ c.chevron }}" style="width:18px;height:18px;color:#AEB6C7"></i>
+                          <i data-vx-icon="{{ c.chevron }}" style="width:18px;height:18px;color:#AEB6C7"></i>
                         </button>
                         <sc-if value="{{ c.expanded }}" hint-placeholder-val="{{ false }}">
                           <div style="padding:0 15px 15px;display:flex;flex-direction:column;gap:13px">
@@ -1952,7 +1958,7 @@ if ('serviceWorker' in navigator) {
                           <input id="{{ d.inputId }}" type="file" accept="application/pdf,image/*" onchange="{{ d.onUpload }}" style="display:none">
                           <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
                             <div style="display:flex;align-items:center;gap:11px">
-                              <span style="flex:none;width:38px;height:38px;border-radius:11px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);display:flex;align-items:center;justify-content:center"><i data-lucide="{{ d.icon }}" style="width:18px;height:18px"></i></span>
+                              <span style="flex:none;width:38px;height:38px;border-radius:11px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);display:flex;align-items:center;justify-content:center"><i data-vx-icon="{{ d.icon }}" style="width:18px;height:18px"></i></span>
                               <span style="flex:1;min-width:0"><span style="display:block;font-size:13px;font-weight:700;color:#0C1116">{{ d.label }}</span><span style="display:block;font-size:11px;color:#7A8296;margin-top:1px">{{ d.fileName }}</span></span>
                               <span style="flex:none;background:{{ d.statusBg }};color:{{ d.statusFg }};border-radius:7px;padding:3px 9px;font-size:10.5px;font-weight:700">{{ d.statusLabel }}</span>
                             </div>
@@ -2666,7 +2672,7 @@ if ('serviceWorker' in navigator) {
                             <div style="display:flex;align-items:center;gap:9px;width:100%;background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:9px 11px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
                               <span style="width:34px;height:34px;flex:none;border-radius:10px;background:{{ a.avBg }};color:{{ a.avFg }};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px">{{ a.initials }}</span>
                               <span style="flex:1;min-width:0"><span style="display:block;font-weight:600;font-size:14px;color:#0C1116;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ a.name }}</span><sc-if value="{{ a.inactive }}" hint-placeholder-val="{{ false }}"><span style="display:block;font-size:10.5px;color:#B4690E;font-weight:700;margin-top:1px">{{ a.statusText }}</span></sc-if></span>
-                              <button onclick="{{ a.onToggleActive }}" title="Toggle active / inactive" style="display:flex;align-items:center;gap:5px;flex:none;background:{{ a.activeBg }};color:{{ a.activeColor }};border:none;padding:6px 10px;border-radius:999px;font-weight:700;font-size:11.5px;cursor:pointer"><i data-lucide="{{ a.activeIcon }}" style="width:13px;height:13px"></i>{{ a.activeLabel }}</button>
+                              <button onclick="{{ a.onToggleActive }}" title="Toggle active / inactive" style="display:flex;align-items:center;gap:5px;flex:none;background:{{ a.activeBg }};color:{{ a.activeColor }};border:none;padding:6px 10px;border-radius:999px;font-weight:700;font-size:11.5px;cursor:pointer"><i data-vx-icon="{{ a.activeIcon }}" style="width:13px;height:13px"></i>{{ a.activeLabel }}</button>
                               <button onclick="{{ a.onCycle }}" style="display:flex;align-items:center;gap:6px;flex:none;background:{{ a.statusBg }};color:{{ a.statusColor }};padding:6px 11px;border:none;border-radius:999px;font-weight:700;font-size:12px;cursor:pointer">
                                 <sc-if value="{{ a.isPresent }}" hint-placeholder-val="{{ true }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><polyline points="20 6 9 17 4 12"></polyline></svg></sc-if>
                                 <sc-if value="{{ a.isAbsent }}" hint-placeholder-val="{{ false }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></sc-if>
@@ -2764,7 +2770,7 @@ if ('serviceWorker' in navigator) {
                       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
                         <sc-for list="{{ toolTiles }}" as="t" hint-placeholder-count="8">
                           <button onclick="{{ t.onClick }}" style="text-align:left;background:#fff;border:1px solid #E5E9F0;border-radius:17px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05);cursor:pointer;display:flex;flex-direction:column;gap:20px;min-height:112px">
-                            <span style="width:40px;height:40px;border-radius:12px;background:{{ t.tint }};color:{{ t.color }};display:flex;align-items:center;justify-content:center"><i data-lucide="{{ t.icon }}" style="width:20px;height:20px"></i></span>
+                            <span style="width:40px;height:40px;border-radius:12px;background:{{ t.tint }};color:{{ t.color }};display:flex;align-items:center;justify-content:center"><i data-vx-icon="{{ t.icon }}" style="width:20px;height:20px"></i></span>
                             <span><span style="display:block;font-weight:700;font-size:14px;color:#0C1116">{{ t.title }}</span><span style="display:block;font-size:11px;color:#7A8296;margin-top:2px;line-height:1.3">{{ t.sub }}</span></span>
                           </button>
                         </sc-for>
@@ -3314,7 +3320,7 @@ if ('serviceWorker' in navigator) {
                             <p style="margin:3px 0 0;font-size:11.5px;color:rgba(255,255,255,.75);line-height:1.4">{{ aiSugg.nutritionTip }}</p>
                           </div>
                           <div style="border-top:1px solid rgba(255,255,255,.12);padding-top:11px">
-                            <button onclick="{{ onSwAiAsk }}" style="width:100%;display:flex;align-items:center;justify-content:center;gap:7px;background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.22);border-radius:11px;padding:10px;cursor:pointer;font-family:inherit;font-weight:700;font-size:12px"><i data-lucide="{{ swAiBtnIcon }}" style="width:15px;height:15px" class="{{ swAiSpin }}"></i>{{ swAiBtnLabel }}</button>
+                            <button onclick="{{ onSwAiAsk }}" style="width:100%;display:flex;align-items:center;justify-content:center;gap:7px;background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.22);border-radius:11px;padding:10px;cursor:pointer;font-family:inherit;font-weight:700;font-size:12px"><i data-vx-icon="{{ swAiBtnIcon }}" style="width:15px;height:15px" class="{{ swAiSpin }}"></i>{{ swAiBtnLabel }}</button>
                             <p style="margin:7px 2px 0;font-size:10.5px;color:rgba(255,255,255,.45);line-height:1.4">Everything above is worked out on this device from their own times, load and attendance. This asks Claude to read the same numbers — no name or date of birth is sent.</p>
                             <sc-if value="{{ swAiErrShow }}" hint-placeholder-val="{{ false }}"><p style="margin:8px 2px 0;font-size:11.5px;font-weight:600;color:var(--vx-danger-dark-bg);line-height:1.45">{{ swAiErr }}</p></sc-if>
                             <sc-if value="{{ swAiHasOut }}" hint-placeholder-val="{{ false }}">
@@ -3379,7 +3385,7 @@ if ('serviceWorker' in navigator) {
                   </span>
                   <sc-for list="{{ navItems }}" as="n" hint-placeholder-count="5">
                     <button onclick="{{ n.onClick }}" style="position:relative;z-index:2;flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:4px 2px 2px;background:none;border:none;cursor:pointer;color:{{ n.color }};font-family:inherit;transform:{{ n.lift }};transition:transform .4s cubic-bezier(.34,1.4,.5,1),color .3s ease">
-                      <i data-lucide="{{ n.icon }}" style="width:20px;height:20px"></i>
+                      <i data-vx-icon="{{ n.icon }}" style="width:20px;height:20px"></i>
                       <span style="font-size:9.5px;font-weight:750;letter-spacing:.01em;opacity:{{ n.labelOpacity }};white-space:nowrap">{{ n.label }}</span>
                     </button>
                   </sc-for>
@@ -3406,7 +3412,7 @@ if ('serviceWorker' in navigator) {
                     <div style="display:flex;flex-direction:column;gap:8px">
                       <sc-for list="{{ notifRows }}" as="n" hint-placeholder-count="4">
                         <div style="background:#fff;border:1px solid {{ n.border }};border-radius:14px;padding:12px 13px;box-shadow:0 1px 4px rgba(11,20,40,.04);display:flex;gap:11px;align-items:flex-start">
-                          <span style="flex:none;width:34px;height:34px;border-radius:10px;background:{{ n.iconBg }};color:{{ n.iconFg }};display:flex;align-items:center;justify-content:center"><i data-lucide="{{ n.icon }}" style="width:16px;height:16px"></i></span>
+                          <span style="flex:none;width:34px;height:34px;border-radius:10px;background:{{ n.iconBg }};color:{{ n.iconFg }};display:flex;align-items:center;justify-content:center"><i data-vx-icon="{{ n.icon }}" style="width:16px;height:16px"></i></span>
                           <span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:13px;color:#0C1116">{{ n.title }}</span><span style="display:block;font-size:12px;color:#3A4152;margin-top:2px;line-height:1.4">{{ n.body }}</span><span style="display:block;font-size:10.5px;color:#9AA2B4;margin-top:5px">{{ n.when }}</span></span>
                           <sc-if value="{{ n.unread }}" hint-placeholder-val="{{ false }}"><span style="flex:none;width:8px;height:8px;border-radius:50%;background:#067EEA;margin-top:5px"></span></sc-if>
                         </div>
@@ -3751,7 +3757,7 @@ if ('serviceWorker' in navigator) {
                         </div>
                         <div style="display:flex;gap:10px">
                           <button onclick="{{ onClockPrev }}" style="flex:none;width:52px;height:52px;border-radius:15px;background:#fff;border:1px solid #E5E9F0;cursor:pointer;color:#0C1116;display:flex;align-items:center;justify-content:center"><i data-lucide="skip-back" style="width:20px;height:20px"></i></button>
-                          <button onclick="{{ onClockToggle }}" style="flex:1;height:52px;border-radius:15px;background:var(--vx-blue);border:none;cursor:pointer;color:#fff;font-family:inherit;font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px"><i data-lucide="{{ clockBtnIcon }}" style="width:20px;height:20px"></i>{{ clockBtnLabel }}</button>
+                          <button onclick="{{ onClockToggle }}" style="flex:1;height:52px;border-radius:15px;background:var(--vx-blue);border:none;cursor:pointer;color:#fff;font-family:inherit;font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px"><i data-vx-icon="{{ clockBtnIcon }}" style="width:20px;height:20px"></i>{{ clockBtnLabel }}</button>
                           <button onclick="{{ onClockReset }}" style="flex:none;width:52px;height:52px;border-radius:15px;background:#fff;border:1px solid #E5E9F0;cursor:pointer;color:#0C1116;display:flex;align-items:center;justify-content:center"><i data-lucide="rotate-ccw" style="width:20px;height:20px"></i></button>
                           <button onclick="{{ onClockNext }}" style="flex:none;width:52px;height:52px;border-radius:15px;background:#fff;border:1px solid #E5E9F0;cursor:pointer;color:#0C1116;display:flex;align-items:center;justify-content:center"><i data-lucide="skip-forward" style="width:20px;height:20px"></i></button>
                         </div>
@@ -3783,12 +3789,12 @@ if ('serviceWorker' in navigator) {
                         <div style="display:flex;flex-direction:column;gap:9px">
                           <sc-for list="{{ reviewChecksV }}" as="c" hint-placeholder-count="4">
                             <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:12px 13px;box-shadow:0 1px 4px rgba(11,20,40,.04);display:flex;gap:11px;align-items:flex-start">
-                              <span style="flex:none;width:26px;height:26px;border-radius:8px;background:{{ c.bg }};color:{{ c.fg }};display:flex;align-items:center;justify-content:center"><i data-lucide="{{ c.ic }}" style="width:15px;height:15px"></i></span>
+                              <span style="flex:none;width:26px;height:26px;border-radius:8px;background:{{ c.bg }};color:{{ c.fg }};display:flex;align-items:center;justify-content:center"><i data-vx-icon="{{ c.ic }}" style="width:15px;height:15px"></i></span>
                               <span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:13px;color:#0C1116">{{ c.label }}</span><span style="display:block;font-size:12px;color:#3A4152;margin-top:2px;line-height:1.45">{{ c.msg }}</span></span>
                             </div>
                           </sc-for>
                         </div>
-                        <button onclick="{{ onReviewAi }}" style="width:100%;margin-top:2px;display:flex;align-items:center;justify-content:center;gap:7px;background:#0A0F1A;color:#fff;border:none;border-radius:11px;padding:11px;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px"><i data-lucide="{{ reviewAiIcon }}" style="width:15px;height:15px" class="{{ reviewAiSpin }}"></i>{{ reviewAiLabel }}</button>
+                        <button onclick="{{ onReviewAi }}" style="width:100%;margin-top:2px;display:flex;align-items:center;justify-content:center;gap:7px;background:#0A0F1A;color:#fff;border:none;border-radius:11px;padding:11px;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px"><i data-vx-icon="{{ reviewAiIcon }}" style="width:15px;height:15px" class="{{ reviewAiSpin }}"></i>{{ reviewAiLabel }}</button>
                         <sc-if value="{{ reviewAiErrShow }}" hint-placeholder-val="{{ false }}"><p style="margin:2px 4px;font-size:11.5px;font-weight:600;color:#B42318;line-height:1.45">{{ reviewAiErr }}</p></sc-if>
                         <sc-if value="{{ reviewAiHasOut }}" hint-placeholder-val="{{ false }}">
                           <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:13px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
@@ -3849,12 +3855,12 @@ if ('serviceWorker' in navigator) {
                       </sc-if>
                       <sc-if value="{{ videoFolderHas }}" hint-placeholder-val="{{ true }}">
                         <button onclick="{{ onVideoFolderToggle }}" style="display:flex;align-items:center;gap:9px;width:100%;background:#fff;border:1.5px solid #E5E9F0;border-radius:13px;padding:11px 13px;cursor:pointer;font-family:inherit;text-align:left;box-shadow:0 2px 7px rgba(11,20,40,.05)">
-                          <span style="flex:none;width:30px;height:30px;border-radius:9px;background:var(--brand-tint);color:var(--color-brand);display:flex;align-items:center;justify-content:center"><i data-lucide="{{ videoFolderIcon }}" style="width:16px;height:16px"></i></span>
+                          <span style="flex:none;width:30px;height:30px;border-radius:9px;background:var(--brand-tint);color:var(--color-brand);display:flex;align-items:center;justify-content:center"><i data-vx-icon="{{ videoFolderIcon }}" style="width:16px;height:16px"></i></span>
                           <span style="flex:1;min-width:0">
                             <span style="display:block;font-size:13px;font-weight:800;color:#0C1116">Saved analyses</span>
                             <span style="display:block;font-size:10.5px;color:#9AA2B4">{{ videoFolderBtnSub }}</span>
                           </span>
-                          <i data-lucide="{{ videoFolderChevron }}" style="width:16px;height:16px;color:#9AA2B4;flex:none"></i>
+                          <i data-vx-icon="{{ videoFolderChevron }}" style="width:16px;height:16px;color:#9AA2B4;flex:none"></i>
                         </button>
                       </sc-if>
                       <sc-if value="{{ videoChips }}" hint-placeholder-val="{{ true }}">
@@ -3909,7 +3915,7 @@ if ('serviceWorker' in navigator) {
                           <p style="position:relative;margin:0;font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ac-cyan);font-weight:700">Race clock</p>
                           <div ref="{{ onStopwatchMount }}" style="position:relative;font-family:var(--font-mono);font-size:46px;line-height:1.05;font-weight:800;letter-spacing:-.03em;color:#9AA2B4">0.00</div>
                           <div style="display:flex;gap:7px;margin-top:11px">
-                            <button onclick="{{ onVideoFindStart }}" style="flex:1.4;display:flex;align-items:center;justify-content:center;gap:7px;background:#22D7D7;color:#04222A;border:none;border-radius:11px;padding:12px 8px;font-family:inherit;font-weight:800;font-size:12.5px;cursor:pointer"><i data-lucide="{{ videoStartFindIcon }}" class="{{ videoStartFindSpin }}" style="width:16px;height:16px"></i> {{ videoStartFindLabel }}</button>
+                            <button onclick="{{ onVideoFindStart }}" style="flex:1.4;display:flex;align-items:center;justify-content:center;gap:7px;background:#22D7D7;color:#04222A;border:none;border-radius:11px;padding:12px 8px;font-family:inherit;font-weight:800;font-size:12.5px;cursor:pointer"><i data-vx-icon="{{ videoStartFindIcon }}" class="{{ videoStartFindSpin }}" style="width:16px;height:16px"></i> {{ videoStartFindLabel }}</button>
                             <button onclick="{{ onVideoSetStartHere }}" style="flex:1;background:rgba(255,255,255,.1);color:#fff;border:none;border-radius:11px;padding:12px 8px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer">Set start here</button>
                           </div>
                           <sc-if value="{{ videoStartFound }}" hint-placeholder-val="{{ false }}">
@@ -3956,7 +3962,7 @@ if ('serviceWorker' in navigator) {
                                club they swim for, which is all the coach typed. -->
                           <sc-if value="{{ videoSwBadgeShow }}" hint-placeholder-val="{{ false }}">
                             <div class="vx-lanebadge" style="background:{{ videoSwBadgeBg }};border-color:{{ videoSwBadgeEdge }}">
-                              <i data-lucide="{{ videoSwBadgeIcon }}" style="width:14px;height:14px;flex:none;color:{{ videoSwBadgeFg }}"></i>
+                              <i data-vx-icon="{{ videoSwBadgeIcon }}" style="width:14px;height:14px;flex:none;color:{{ videoSwBadgeFg }}"></i>
                               <span style="flex:1;min-width:0;font-size:11.5px;font-weight:700;color:{{ videoSwBadgeFg }}">{{ videoSwBadgeText }}</span>
                               <sc-if value="{{ videoSwIsOurs }}" hint-placeholder-val="{{ false }}">
                                 <button onclick="{{ onVideoSwUnlink }}" style="flex:none;background:none;border:none;padding:0;cursor:pointer;font-family:inherit;font-size:10.5px;font-weight:700;color:{{ videoSwBadgeFg }};opacity:.7;text-decoration:underline">Unlink</button>
@@ -4195,7 +4201,7 @@ if ('serviceWorker' in navigator) {
                             <span style="font-size:10.5px;color:rgba(255,255,255,.45);text-align:right">{{ videoAiLane }}</span>
                           </div>
                           <p style="position:relative;margin:0 0 10px;font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ac-cyan);font-weight:700">Coach's read</p>
-                          <button onclick="{{ onVideoAiAsk }}" style="position:relative;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--ac-cyan);color:var(--teal-ink);border:none;border-radius:12px;padding:12px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer"><i data-lucide="{{ videoAiBtnIcon }}" class="{{ videoAiSpin }}" style="width:16px;height:16px"></i> {{ videoAiBtnLabel }}</button>
+                          <button onclick="{{ onVideoAiAsk }}" style="position:relative;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--ac-cyan);color:var(--teal-ink);border:none;border-radius:12px;padding:12px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer"><i data-vx-icon="{{ videoAiBtnIcon }}" class="{{ videoAiSpin }}" style="width:16px;height:16px"></i> {{ videoAiBtnLabel }}</button>
                           <sc-if value="{{ videoAiErrShow }}" hint-placeholder-val="{{ false }}">
                             <p style="position:relative;margin:9px 0 0;font-size:11.5px;font-weight:600;color:var(--vx-danger-dark-bg);line-height:1.45">{{ videoAiErr }}</p>
                           </sc-if>
@@ -4270,7 +4276,7 @@ if ('serviceWorker' in navigator) {
                           <div style="display:flex;flex-direction:column;gap:7px">
                             <sc-for list="{{ videoSavedRows }}" as="sv" hint-placeholder-count="3">
                               <div style="display:flex;align-items:center;gap:9px;background:{{ sv.rowBg }};border:1px solid #EEF1F5;border-radius:11px;padding:9px 10px">
-                                <button onclick="{{ sv.onCompare }}" style="flex:none;width:26px;height:26px;border-radius:8px;border:none;background:{{ sv.pickBg }};color:{{ sv.pickFg }};cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="{{ sv.pickIcon }}" style="width:13px;height:13px"></i></button>
+                                <button onclick="{{ sv.onCompare }}" style="flex:none;width:26px;height:26px;border-radius:8px;border:none;background:{{ sv.pickBg }};color:{{ sv.pickFg }};cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-vx-icon="{{ sv.pickIcon }}" style="width:13px;height:13px"></i></button>
                                 <button onclick="{{ sv.onOpen }}" style="flex:1;min-width:0;text-align:left;background:none;border:none;padding:0;cursor:pointer;font-family:inherit">
                                   <span style="display:block;font-size:12.5px;font-weight:700;color:#0C1116;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ sv.title }}</span>
                                   <span style="display:block;font-size:10.5px;color:#9AA2B4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ sv.meta }}</span>
@@ -5044,7 +5050,7 @@ if ('serviceWorker' in navigator) {
                                   <span style="display:block;font-size:10px;font-weight:800;color:{{ w.loadColor }};text-transform:uppercase;letter-spacing:.04em">{{ w.loadLabel }}</span>
                                   <sc-if value="{{ w.hasSessions }}" hint-placeholder-val="{{ false }}"><span style="display:block;font-size:10.5px;color:#7A8296;margin-top:2px">{{ w.sessionCount }} sess · {{ w.sessionM }}m</span></sc-if>
                                 </span>
-                                <i data-lucide="{{ w.chevron }}" style="width:16px;height:16px;color:#C7CDDA;flex:none"></i>
+                                <i data-vx-icon="{{ w.chevron }}" style="width:16px;height:16px;color:#C7CDDA;flex:none"></i>
                               </button>
                               <sc-if value="{{ w.hasMeets }}" hint-placeholder-val="{{ false }}">
                                 <div style="display:flex;flex-wrap:wrap;gap:5px;padding:0 12px 9px 57px">
@@ -5229,11 +5235,11 @@ if ('serviceWorker' in navigator) {
                   <sc-if value="{{ toolAi }}" hint-placeholder-val="{{ true }}">
                     <div>
                       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
-                        <sc-for list="{{ aiKinds }}" as="k" hint-placeholder-count="4"><button onclick="{{ k.onClick }}" style="display:flex;align-items:center;gap:9px;background:{{ k.bg }};color:{{ k.fg }};border:1px solid {{ k.border }};border-radius:13px;padding:11px;cursor:pointer;text-align:left"><i data-lucide="{{ k.icon }}" style="width:18px;height:18px"></i><span style="font-size:12px;font-weight:700;line-height:1.15">{{ k.label }}</span></button></sc-for>
+                        <sc-for list="{{ aiKinds }}" as="k" hint-placeholder-count="4"><button onclick="{{ k.onClick }}" style="display:flex;align-items:center;gap:9px;background:{{ k.bg }};color:{{ k.fg }};border:1px solid {{ k.border }};border-radius:13px;padding:11px;cursor:pointer;text-align:left"><i data-vx-icon="{{ k.icon }}" style="width:18px;height:18px"></i><span style="font-size:12px;font-weight:700;line-height:1.15">{{ k.label }}</span></button></sc-for>
                       </div>
                       <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
                         <textarea value="{{ aiPrompt }}" oninput="{{ onAiPrompt }}" placeholder="{{ aiPlaceholder }}" style="width:100%;border:none;outline:none;resize:none;font-family:inherit;font-size:13.5px;color:#0C1116;background:none;min-height:52px;line-height:1.4"></textarea>
-                        <button onclick="{{ onGenerate }}" style="width:100%;margin-top:8px;height:44px;border-radius:12px;background:var(--vx-ink);color:#fff;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap"><i data-lucide="{{ aiBtnIcon }}" style="width:17px;height:17px" class="{{ aiSpin }}"></i>{{ aiBtnLabel }}</button>
+                        <button onclick="{{ onGenerate }}" style="width:100%;margin-top:8px;height:44px;border-radius:12px;background:var(--vx-ink);color:#fff;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap"><i data-vx-icon="{{ aiBtnIcon }}" style="width:17px;height:17px" class="{{ aiSpin }}"></i>{{ aiBtnLabel }}</button>
                       </div>
                       <sc-if value="{{ aiErrShow }}" hint-placeholder-val="{{ false }}"><p style="margin:9px 3px 0;font-size:11.5px;font-weight:600;color:#B42318;line-height:1.45">{{ aiErr }}</p></sc-if>
                       <sc-if value="{{ aiHasOut }}" hint-placeholder-val="{{ false }}">
@@ -5407,7 +5413,7 @@ if ('serviceWorker' in navigator) {
                       <button onclick="{{ onMeetImportToggle }}" style="display:flex;align-items:center;gap:11px;background:#0A0F1A;color:#fff;border:none;border-radius:15px;padding:14px;cursor:pointer;font-family:inherit;text-align:left">
                         <span style="width:38px;height:38px;flex:none;border-radius:11px;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center"><i data-lucide="upload" style="width:18px;height:18px"></i></span>
                         <span style="flex:1"><span style="display:block;font-weight:700;font-size:13.5px">Import Hy-Tek results</span><span style="display:block;font-size:11.5px;opacity:.6;margin-top:1px">Paste text, or upload a PDF / Hy-Tek .hy3 / results .zip — merges swimmers &amp; PBs</span></span>
-                        <i data-lucide="{{ meetImportChevron }}" style="width:18px;height:18px;opacity:.5"></i>
+                        <i data-vx-icon="{{ meetImportChevron }}" style="width:18px;height:18px;opacity:.5"></i>
                       </button>
 
                       <sc-if value="{{ meetImportOpen }}" hint-placeholder-val="{{ false }}">
@@ -5430,7 +5436,7 @@ if ('serviceWorker' in navigator) {
                       <button onclick="{{ onCalOpenToggle }}" style="display:flex;align-items:center;gap:11px;background:#fff;border:1px solid #E5E9F0;border-radius:15px;padding:14px;cursor:pointer;font-family:inherit;text-align:left;box-shadow:0 2px 7px rgba(11,20,40,.05)">
                         <span style="width:38px;height:38px;flex:none;border-radius:11px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);display:flex;align-items:center;justify-content:center"><i data-lucide="calendar-plus" style="width:18px;height:18px"></i></span>
                         <span style="flex:1"><span style="display:block;font-weight:700;font-size:13.5px;color:#0C1116">Add to Vortex Calendar</span><span style="display:block;font-size:11.5px;color:#7A8296;margin-top:1px">Name, location &amp; date — no results needed yet</span></span>
-                        <i data-lucide="{{ calOpenChevron }}" style="width:18px;height:18px;color:#AEB6C7"></i>
+                        <i data-vx-icon="{{ calOpenChevron }}" style="width:18px;height:18px;color:#AEB6C7"></i>
                       </button>
                       <sc-if value="{{ calOpen }}" hint-placeholder-val="{{ false }}">
                         <div style="background:#fff;border:1px solid #E5E9F0;border-radius:15px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05);display:flex;flex-direction:column;gap:9px">
@@ -5448,7 +5454,7 @@ if ('serviceWorker' in navigator) {
                       <button onclick="{{ onCompBuildToggle }}" style="display:flex;align-items:center;gap:11px;background:#0A0F1A;color:#fff;border:none;border-radius:15px;padding:14px;cursor:pointer;font-family:inherit;text-align:left">
                         <span style="width:38px;height:38px;flex:none;border-radius:11px;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center"><i data-lucide="trophy" style="width:18px;height:18px"></i></span>
                         <span style="flex:1"><span style="display:block;font-weight:700;font-size:13.5px">Build a Competition</span><span style="display:block;font-size:11.5px;opacity:.6;margin-top:1px">Full event program from scratch — then add entries</span></span>
-                        <i data-lucide="{{ compBuildChevron }}" style="width:18px;height:18px;opacity:.5"></i>
+                        <i data-vx-icon="{{ compBuildChevron }}" style="width:18px;height:18px;opacity:.5"></i>
                       </button>
                       <sc-if value="{{ compBuildOpen }}" hint-placeholder-val="{{ false }}">
                         <div style="background:#fff;border:1px solid #E5E9F0;border-radius:15px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05);display:flex;flex-direction:column;gap:9px">
@@ -5475,7 +5481,7 @@ if ('serviceWorker' in navigator) {
                             <button onclick="{{ m.onToggle }}" style="display:flex;align-items:center;gap:11px;width:100%;text-align:left;background:none;border:none;padding:12px 13px;cursor:pointer">
                               <span style="width:36px;height:36px;flex:none;border-radius:10px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);display:flex;align-items:center;justify-content:center"><i data-lucide="medal" style="width:17px;height:17px"></i></span>
                               <span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:13px;color:#0C1116">{{ m.name }}</span><span style="display:block;font-size:11px;color:#7A8296;margin-top:1px">{{ m.meta }}</span></span>
-                              <i data-lucide="{{ m.chevron }}" style="width:16px;height:16px;color:#AEB6C7"></i>
+                              <i data-vx-icon="{{ m.chevron }}" style="width:16px;height:16px;color:#AEB6C7"></i>
                             </button>
                             <div style="padding:0 13px 10px"><button onclick="{{ m.onCycleStatus }}" style="background:{{ m.statusBg }};color:{{ m.statusFg }};border:none;border-radius:7px;padding:4px 10px;font-family:inherit;font-weight:700;font-size:10.5px;cursor:pointer">{{ m.status }}</button></div>
                             <sc-if value="{{ m.expanded }}" hint-placeholder-val="{{ false }}">
@@ -5621,7 +5627,7 @@ if ('serviceWorker' in navigator) {
                       <sc-for list="{{ staffAllRows }}" as="s" hint-placeholder-count="11">
                         <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:12px 13px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
                           <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
-                            <i data-lucide="{{ s.signInIcon }}" style="width:13px;height:13px;flex:none;color:{{ s.signInFg }}"></i>
+                            <i data-vx-icon="{{ s.signInIcon }}" style="width:13px;height:13px;flex:none;color:{{ s.signInFg }}"></i>
                             <span style="font-size:11px;font-weight:700;color:{{ s.signInFg }}">{{ s.signInText }}</span>
                           </div>
                           <div style="display:flex;gap:7px;margin-bottom:9px">
@@ -6032,7 +6038,7 @@ if ('serviceWorker' in navigator) {
                 <p style="margin:5px 0 0;font-size:15.5px;color:#fff;font-weight:600;text-align:center;max-width:520px">{{ clockView.setTxt }}</p>
                 <div style="display:flex;gap:14px;margin-top:34px">
                   <button onclick="{{ onClockPrev }}" style="width:62px;height:62px;border-radius:16px;background:rgba(255,255,255,.1);border:none;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center"><i data-lucide="skip-back" style="width:24px;height:24px"></i></button>
-                  <button onclick="{{ onClockToggle }}" style="min-width:150px;height:62px;padding:0 26px;border-radius:16px;background:var(--vx-blue);border:none;cursor:pointer;color:#fff;font-family:inherit;font-weight:700;font-size:17px;display:flex;align-items:center;justify-content:center;gap:9px"><i data-lucide="{{ clockBtnIcon }}" style="width:22px;height:22px"></i>{{ clockBtnLabel }}</button>
+                  <button onclick="{{ onClockToggle }}" style="min-width:150px;height:62px;padding:0 26px;border-radius:16px;background:var(--vx-blue);border:none;cursor:pointer;color:#fff;font-family:inherit;font-weight:700;font-size:17px;display:flex;align-items:center;justify-content:center;gap:9px"><i data-vx-icon="{{ clockBtnIcon }}" style="width:22px;height:22px"></i>{{ clockBtnLabel }}</button>
                   <button onclick="{{ onClockReset }}" style="width:62px;height:62px;border-radius:16px;background:rgba(255,255,255,.1);border:none;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center"><i data-lucide="rotate-ccw" style="width:24px;height:24px"></i></button>
                   <button onclick="{{ onClockNext }}" style="width:62px;height:62px;border-radius:16px;background:rgba(255,255,255,.1);border:none;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center"><i data-lucide="skip-forward" style="width:24px;height:24px"></i></button>
                 </div>
@@ -6508,7 +6514,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-17f';
+const VX_BUILD='2026-08-17g';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -13742,32 +13748,44 @@ class Component extends DCLogic {
       el.replaceWith(svg);
     });
   }
-  // An icon whose name changed after it was drawn keeps the old picture.
+  // An icon whose name is decided at render time.
   //
-  // lucide replaces <i data-lucide="x"> with <svg class="lucide lucide-x">, so from then on the
-  // element in the page is not the one the template believes is there. When the name changes —
-  // a chevron flipping, a play button becoming pause, a staff row going from "no email" to "can
-  // sign in" — the new name lands on the svg's data-lucide attribute and nothing redraws it.
+  // lucide replaces <i data-lucide="x"> with <svg class="lucide lucide-x">. The page is rendered
+  // by React, so React is still holding the <i> it created — an element that is no longer in the
+  // document. Every later render writes the new name to that detached <i>, and the svg on screen
+  // never hears about it. The name and the picture drift apart for as long as the screen is open.
   //
-  // That is why a staff row showed a red warning beside green text saying the password was set.
-  // The red icon was drawn when that row had no email address, and it never changed back. There
-  // are 29 icons in this app whose name is decided at render time, so this was never one row.
+  // That is why a staff row showed an amber key beside green text saying the password was set:
+  // the key was drawn when that row had no sign-in account, and nothing redrew it. 29 icons in
+  // this app are named at render time, so it was never one row.
   //
-  // The svg keeps its data-lucide, and its class still names what was actually drawn. The two
-  // disagreeing is the whole signal: put an <i> back and let lucide draw it again.
-  _refreshStaleIcons(){
-    const svgs=document.querySelectorAll('svg.lucide[data-lucide]');
-    for(let i=0;i<svgs.length;i++){
-      const el=svgs[i], want=el.getAttribute('data-lucide')||'';
-      if(!want || el.classList.contains('lucide-'+want)) continue;
-      const rep=document.createElement('i');
-      rep.setAttribute('data-lucide', want);
-      const st=el.getAttribute('style'); if(st) rep.setAttribute('style', st);
-      const tpl=el.getAttribute('data-dc-tpl'); if(tpl) rep.setAttribute('data-dc-tpl', tpl);
-      if(el.parentNode) el.parentNode.replaceChild(rep, el);
+  // I had already "fixed" this once, by looking for an svg whose class disagreed with its
+  // data-lucide attribute. That never fires, because the attribute on the svg is not the one
+  // React updates — and the test I wrote for it set the attribute by hand, which is not what
+  // happens. It passed, and the bug shipped.
+  //
+  // So the element React owns now stays in the document. <i data-vx-icon="..."> is a host that
+  // lucide does not touch; the picture is drawn INSIDE it, from a seed that is ours to replace.
+  // React keeps the host's attribute current, this reads it, and the two cannot drift.
+  _drawDynamicIcons(){
+    const hosts=document.querySelectorAll('i[data-vx-icon]');
+    for(let i=0;i<hosts.length;i++){
+      const host=hosts[i], want=String(host.getAttribute('data-vx-icon')||'');
+      if(host.getAttribute('data-vx-drawn')===want) continue;   // already showing this one
+      host.setAttribute('data-vx-drawn', want);
+      while(host.firstChild) host.removeChild(host.firstChild);
+      if(!want) continue;                                       // a binding with no icon: empty
+      // No style on the seed. The host carries the size and the colour, the CSS makes the svg
+      // fill it, and stroke="currentColor" inherits — so a row that goes from amber to green
+      // changes colour without being redrawn at all.
+      const seed=document.createElement('i');
+      seed.setAttribute('data-lucide', want);
+      host.appendChild(seed);
     }
   }
-  _icons(){ clearTimeout(this._t); this._t=setTimeout(()=>{ try{ this._customIcons(); }catch(e){} try{ this._refreshStaleIcons(); }catch(e){} try{ window.lucide && window.lucide.createIcons(); }catch(e){} }, 30); }
+  // Seeds first, so the two passes below draw them: _customIcons for the club's own glyphs,
+  // lucide for the rest. Both look for [data-lucide], which is what a seed is.
+  _icons(){ clearTimeout(this._t); this._t=setTimeout(()=>{ try{ this._drawDynamicIcons(); }catch(e){} try{ this._customIcons(); }catch(e){} try{ window.lucide && window.lucide.createIcons(); }catch(e){} }, 30); }
 
   parseSet(txt, dist){ txt=String(txt||''); let reps=1; const rm=txt.match(/(\d+)\s*[\u00d7xX]\s*(\d+)/); if(rm) reps=parseInt(rm[1])||1; let interval=null; const im=txt.match(/@\s*(\d+):(\d{2})/); if(im) interval=parseInt(im[1])*60+parseInt(im[2]); else { const im2=txt.match(/@\s*:(\d{2})/); if(im2) interval=parseInt(im2[1]); } if(!interval){ const per = reps>1 ? Math.round((+dist||100)/reps) : (+dist||100); interval = Math.max(20, Math.round(per*1.6)); } return {reps, interval}; }
   clockSeq(){ const plan=this.getPlan(this.state.squadId); const seq=[]; (plan.sections||[]).forEach(sec=>{ (sec.sets||[]).forEach(st=>{ const p=this.parseSet(st.txt, st.dist); seq.push({section:sec.title, dist:st.dist, txt:st.txt, reps:p.reps, interval:p.interval}); }); }); return seq; }

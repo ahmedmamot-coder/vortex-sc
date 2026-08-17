@@ -630,44 +630,77 @@ scene("the app survives data that is wrong in the usual ways", async (browser) =
 // marks. This was never one row.
 // ---------------------------------------------------------------------------------------------
 scene("an icon redraws when what it means changes", async (browser) => {
-  const page = await openLive(browser);
-  const out = await page.evaluate(async () => {
-    const el = document.querySelector("svg.lucide[data-lucide]");
-    if (!el) return { skip: true };
-    const was = el.getAttribute("data-lucide"), drawn = el.getAttribute("class") || "";
-    // Exactly what the template does when an icon's meaning changes: set the name. Nothing here
-    // touches the picture — that is the whole point.
-    el.setAttribute("data-lucide", "check-circle-2");
-    const btn = el.closest("button");
-    if (btn) btn.click();                       // any render; _icons() runs after every one
-    await new Promise((r) => setTimeout(r, 1000));
-    const now = document.querySelector('[data-lucide="check-circle-2"]');
-    return { was, drawn, nowClass: now ? (now.getAttribute("class") || "") : "gone" };
+  // The version of this scene that shipped a broken fix set data-lucide on the live svg by hand
+  // and watched it redraw. Nothing in the app ever does that. The page is rendered by React, so
+  // React writes the new name to the <i> it created — which lucide replaced and removed from the
+  // document — and the svg on screen is never told. The scene passed and the bug shipped: a
+  // staff row showed an amber key beside green text saying the password was set.
+  //
+  // So this changes what the app KNOWS and looks at what is drawn, which is the only version of
+  // the question worth asking.
+  const page = await openLive(browser, null, {
+    staff_accounts: [{ id: "st_nabil", name: "Coach Nabil", username: "nabil", role: "Coach",
+                       squad_id: "adva", email: "nabil@club.test", is_custom: true }],
   });
-  if (out.skip) throw new Error("no lucide icon on the hub to test with");
-  eq(/lucide-check-circle-2/.test(out.nowClass), true,
-     "the icon still shows " + out.drawn + " after its name changed to check-circle-2");
-  // And nothing anywhere should be showing a picture that disagrees with its name.
+  const have = new Set();
+  await page.route("**/api/staff/sign-in-status", (route) => {
+    const asked = JSON.parse(route.request().postData() || "{}").emails || [];
+    const accounts = {};
+    for (const e of asked) if (have.has(e)) accounts[e] = { lastSignIn: null, createdAt: "2026-08-10T00:00:00Z", confirmed: true };
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, accounts }) });
+  });
+  await page.route("**/api/staff/set-password", (route) => {
+    have.add(JSON.parse(route.request().postData() || "{}").email);
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, action: "created" }) });
+  });
+
+  const drawn = () => page.evaluate((find) => {
+    const hit = eval(find)("Coach Nabil");
+    if (!hit) return null;
+    const host = hit.card.querySelector("i[data-vx-icon]");
+    const svg = host && host.querySelector("svg");
+    return { name: host && host.getAttribute("data-vx-icon"),
+             picture: svg ? (svg.getAttribute("class") || "vx-glyph") : "nothing drawn" };
+  }, STAFF_CARD);
+
+  await tap(page, "Club Administration");
+  await tap(page, "sign-in & access");
+  await page.waitForTimeout(1600);
+
+  const before = await drawn();
+  if (!before) throw new Error("could not find the staff row to read an icon off");
+  eq(before.name, "key-round", "the row should start with no sign-in account");
+  eq(/lucide-key-round/.test(before.picture), true, "drawn as " + before.picture);
+
+  await page.evaluate((find) => {
+    const hit = eval(find)("Coach Nabil");
+    const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+    set.call(hit.input, "a-long-enough-one");
+    hit.input.dispatchEvent(new Event("input", { bubbles: true }));
+    setTimeout(() => hit.btn.click(), 250);
+  }, STAFF_CARD);
+  await page.waitForTimeout(2400);
+
+  const after = await drawn();
+  eq(after.name, "check-circle-2", "the row's icon should have changed meaning");
+  eq(/lucide-check-circle-2/.test(after.picture), true,
+     "the name changed to " + after.name + " and the picture is still " + after.picture);
+
+  // And nothing anywhere on the screen showing a picture that disagrees with its name.
   const stale = await page.evaluate(() =>
-    [...document.querySelectorAll("svg.lucide[data-lucide]")]
-      .filter((e) => !e.classList.contains("lucide-" + e.getAttribute("data-lucide")))
-      .map((e) => e.getAttribute("data-lucide") + " drawn as " + e.getAttribute("class")));
+    [...document.querySelectorAll("i[data-vx-icon]")]
+      .map((h) => {
+        const want = h.getAttribute("data-vx-icon") || "", svg = h.querySelector("svg");
+        if (!want) return null;
+        const cls = svg ? (svg.getAttribute("class") || "") : "nothing drawn";
+        if (cls === "vx-glyph") return null;                    // one of the club's own glyphs
+        return cls.includes("lucide-" + want) ? null : want + " drawn as " + cls;
+      })
+      .filter(Boolean));
   eq(stale.join(", "), "", "icons on screen whose picture does not match their name");
-  return "redrawn from " + out.was + " to check-circle-2, and nothing left stale";
+  return "key-round → check-circle-2 from a real state change, and nothing left stale";
 });
 
-// ---------------------------------------------------------------------------------------------
-// Sitting on a screen and touching nothing must not write to the database.
-//
-// Found by accident, while a fake database was answering every read with an empty list: the app
-// posted the squad table three hundred times in two seconds and would have gone on until the tab
-// was closed. The seed writes the rows, the write is accepted, so it re-reads — and if that read
-// still comes back empty it seeds again, for ever. A write that succeeds and a read that returns
-// nothing is what a table whose INSERT and SELECT policies disagree does, and this club has
-// already had one policy written the permissive way and the other not.
-//
-// Nothing on screen would ever have said so. It would have looked like a slow app and a large bill.
-// ---------------------------------------------------------------------------------------------
 scene("an idle screen does not write to the database over and over", async (browser) => {
   // Every read answers empty — the state that turned one seed into an unbroken loop.
   const page = await openLive(browser);

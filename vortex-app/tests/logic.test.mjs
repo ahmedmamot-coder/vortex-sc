@@ -418,6 +418,47 @@ describe("icon glyphs", () => {
     const theirs = body.indexOf("lucide.createIcons");
     eq(mine > -1 && theirs > mine, true, "custom glyphs must be drawn before lucide runs");
   });
+  // An icon whose name is decided at render time must not be one lucide can take away.
+  //
+  // lucide replaces <i data-lucide="x"> with an svg. React is still holding the <i> it created —
+  // now out of the document — so every later render writes the new name to a node nobody can see,
+  // and the picture on screen never changes. A staff row showed an amber key beside green text
+  // saying the password was set, and 29 icons in this app are named at render time.
+  //
+  // The host has to survive, so a dynamic icon is <i data-vx-icon="{{ ... }}"> and the picture is
+  // drawn inside it. This is the check that stops the next one being written the old way.
+  describe("icons whose meaning changes", () => {
+    it("no dynamic icon is left where lucide can replace the element React owns", () => {
+      const stray = [...SOURCE.matchAll(/data-lucide="\{\{[^"]*"/g)].map((m) => m[0]);
+      eq(stray.join(", "), "", "these would stop redrawing the moment their meaning changed");
+    });
+    it("and there are still dynamic icons, so the check above is not passing on an empty set", () =>
+      eq([...SOURCE.matchAll(/data-vx-icon="\{\{/g)].length >= 25, true));
+    it("the seed is drawn before either pass that turns a seed into a picture", () => {
+      const body = SOURCE.slice(SOURCE.indexOf("  _icons(){"));
+      const seed = body.indexOf("this._drawDynamicIcons()");
+      const mine = body.indexOf("this._customIcons()");
+      const theirs = body.indexOf("lucide.createIcons");
+      eq(seed > -1 && seed < mine && mine < theirs, true,
+         "seeds must exist before _customIcons and lucide look for them");
+    });
+    // Redrawing every icon on every render would be a lot of DOM for no reason, so it only
+    // redraws when the name actually changed — and that shortcut is the thing that could
+    // silently stop it working, so it is named here.
+    it("only redraws the ones whose name actually changed", () => {
+      const body = methodSource("_drawDynamicIcons").body;
+      eq(/getAttribute\('data-vx-drawn'\)===want/.test(body), true);
+      eq(/setAttribute\('data-vx-drawn', want\)/.test(body), true);
+    });
+    // The colour changes far more often than the name — amber to green on the same icon. It has
+    // to follow without a redraw, which it does only if the seed carries no colour of its own.
+    it("leaves the colour to the host, so a colour change needs no redraw at all", () => {
+      const body = methodSource("_drawDynamicIcons").body;
+      eq(/seed\.setAttribute\('style'/.test(body), false,
+         "a style on the seed would freeze the colour the icon was first drawn in");
+    });
+  });
+
   it("tool tiles use the 2027 gradient", () =>
     eq(/tint:this\._gradTile\(t\.color\), color:'#fff'/.test(SOURCE), true));
 });
