@@ -3195,6 +3195,62 @@ describe("InBody sheet", () => {
       eq(/exportDailyAttendanceCsv\(day, sqRows\.filter\(r=>r\.taken\)\)/.test(block), true));
   });
 
+  // "3 changes have not been saved — club_state (vx_fitness_media) · no connection", and from
+  // that moment nothing else on the device saves either.
+  //
+  // A fitness photo belongs in Storage, leaving a URL behind. When Storage was unavailable the
+  // app fell back to putting the image itself, base64-encoded, into the shared vx_fitness_media
+  // record — the exact thing the comment above that code says it exists to avoid. A few of those
+  // and the record is megabytes and the write never completes.
+  //
+  // That on its own is a slow screen. What makes it a broken app is the retry: the queue is
+  // replayed in order every 45 seconds, so a write that can never finish sits in front of every
+  // other write for ever. A coach presses Active, the change queues behind a megabyte of
+  // photographs, and nothing they do saves again.
+  describe("a record too large to send", () => {
+    const push = sourceBetween("var MAX_ROW =", "\n  function pull(");
+
+    it("is refused rather than retried for ever", () => {
+      eq(/v\.length > MAX_ROW/.test(push), true, "nothing measured the record at all");
+      eq(/return Promise\.resolve\(\{ok:false, status:413/.test(push), true,
+         "it has to stop, not fall through and be queued");
+    });
+    // 413 is in the list of answers no retry can fix, which is what takes it out of the loop and
+    // lets everything queued behind it through.
+    it("is recorded as settled, so the queue behind it moves again", () => {
+      eq(/413/.test(push), true);
+      // _permanent decides it, and it is the real function rather than a description of one:
+      // 413 must come out permanent, and the codes that a retry genuinely fixes must not.
+      const permanent = new Function("status",
+        sourceBetween("function _permanent(status){", "\n  }").replace("function _permanent(status){", ""));
+      eq(permanent(413), true, "413 would go straight back on the 45-second loop");
+      eq(permanent(401), false, "an expired token is fixed by refreshing it");
+      eq(permanent(429), false, "busy means ask again");
+      eq(permanent(503), false, "a server having a bad moment is worth retrying");
+    });
+    it("says how big it is and what put it there", () => {
+      eq(/MB, which is too large for one record/.test(push), true);
+      eq(/photo/.test(push), true, "the cause is nearly always a photo, and naming it saves an afternoon");
+      eq(/Nothing else on this device can save until it is cleared/.test(push), true,
+         "the consequence is the part that matters to whoever reads it");
+    });
+    // And the limit has to leave real records alone. The largest thing this club legitimately
+    // syncs is the roster overlay for 302 swimmers, which is tens of kilobytes.
+    it("is set well above anything the club legitimately stores", () => {
+      const max = parseInt((push.match(/MAX_ROW = (\d+)/) || [])[1], 10);
+      eq(max > 300000 && max < 2000000, true, "MAX_ROW is " + max);
+    });
+
+    // The other half: stop making them.
+    it("a photo that cannot be uploaded is not smuggled into the shared record", () => {
+      const body = methodSource("fitUploadPhoto").body;
+      eq(/fallback: inline image/.test(body), false, "the fallback that caused this is still there");
+      eq(/val=await this\._resizeImage\(f, 900/.test(body), false,
+         "it still encodes the image into the record when Storage is unavailable");
+      eq(/storage bucket is not set up/.test(body), true, "and it must say so rather than fail quietly");
+    });
+  });
+
   // The route behind that row.
   describe("asking Supabase which staff addresses can sign in", () => {
     const route = readFileSync(new URL("../src/app/api/staff/sign-in-status/route.ts", import.meta.url), "utf8");
@@ -5884,8 +5940,16 @@ describe("InBody sheet", () => {
       // saying so is what put "24 changes have not been saved" in front of a coach who had
       // just signed in successfully.
       eq(/waiting for the sign-in to land/.test(push), true, "and it is not reported as lost");
-      eq(/_failAdd\("push"/.test(push.split("if(!_haveTok()){")[0] || ""), false,
-         "nothing is recorded as failed before the token is even checked");
+      // The rule is about WHY, not about position: a write must never be called lost merely
+      // because nobody has signed in yet — a sign-in fixes it. A record too large to send is the
+      // opposite: no sign-in makes it smaller, so refusing it early is right, and refusing it
+      // early is the whole point (it is what stops it blocking every other write behind it).
+      const beforeTok = push.split("if(!_haveTok()){")[0] || "";
+      for (const call of beforeTok.match(/_failAdd\("push"[^;]*/g) || [])
+        eq(/413/.test(call), true,
+           "only a record that can never be sent may be recorded as failed before the token check: " + call.slice(0, 90));
+      eq(/_failAdd\("push"[^;]*NOTSENT/.test(beforeTok), false,
+         "a write waiting for a sign-in must not be recorded as lost");
     });
     // A date of birth typed in twice and still missing after a refresh. persistRosterEdits
     // refuses when the database's copy is newer than the last time THIS device wrote — but the

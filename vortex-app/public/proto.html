@@ -561,8 +561,32 @@ if ('serviceWorker' in navigator) {
   // or dropped looked exactly like one that worked — right up until a refresh, when the record
   // was simply not there. Something that says it saved must be able to say where.
   window.__vxLastPush = window.__vxLastPush || {};
+  // A shared record is a document. Something has put a photo inside one.
+  //
+  // A fitness photo is meant to go to Storage and leave a URL behind. When Storage is not
+  // available the app fell back to putting the image itself, base64-encoded, into the shared
+  // vx_fitness_media record — the one thing the comment above that code says it exists to avoid.
+  // A few of those and the record is megabytes, the POST does not complete, and it is recorded
+  // as "no connection".
+  //
+  // That alone would be a slow screen. What made it a broken app is the retry: the queue is
+  // replayed in order, every 45 seconds, so a write that can never finish sits in front of every
+  // other write on the device for ever. A coach sets a swimmer to Active, the change goes on the
+  // queue behind a megabyte of photographs, and nothing they do saves again.
+  //
+  // So it is refused here, once, with the size in the message. That empties the queue behind it.
+  var MAX_ROW = 900000;   // ~0.9 MB of JSON. The largest legitimate record in this club is far below it.
   function pushKey(k, v){
     if (SYNC.indexOf(k) === -1) return Promise.resolve({ok:false, why:"this is not a synced key"});
+    if (typeof v === "string" && v.length > MAX_ROW){
+      var mb=(v.length/1048576).toFixed(1);
+      var why="it is "+mb+" MB, which is too large for one record \u2014 this is almost always a photo "
+        +"stored inside it rather than in Storage. Nothing else on this device can save until it is cleared.";
+      try{ console.warn("vx sync refusing "+k+": "+mb+" MB"); }catch(e){}
+      // Recorded as refused, so the retry loop leaves it alone and the rest of the queue moves.
+      _failAdd("push", "club_state ("+k+")", {key:k, value:null, tooBig:v.length}, 413, JSON.stringify({message:why}));
+      return Promise.resolve({ok:false, status:413, why:why});
+    }
     var val; try { val = JSON.parse(v); } catch(e){ return Promise.resolve({ok:false, why:"could not be read back"}); }
     window.__vxWriteTs[k] = Date.now();
     // See _haveTok. Sending this now would be refused for being anonymous and land on the
@@ -6518,7 +6542,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-17j';
+const VX_BUILD='2026-08-17k';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -12014,10 +12038,15 @@ class Component extends DCLogic {
     this.setState({fitBusy:'photo:'+exId}); let val='';
     try{ const blob=await this._resizeImageBlob(f, 1100, 0.75);
       if(blob && window.__vxUploadFile){ const u=await this._uploadMedia(blob, 'fitphoto', exId, 'jpg'); if(u) val=u; }
-      if(!val){ val=await this._resizeImage(f, 900, 0.72); } // fallback: inline image if storage isn't set up
-    }catch(err){ try{ val=await this._resizeImage(f, 900, 0.72); }catch(e2){} }
+      // No inline fallback. This used to fall back to putting the image itself into the shared
+      // vx_fitness_media record when Storage was unavailable — which is what the comment above
+      // this section says it exists to prevent. A few of those made that record megabytes, the
+      // write never completed, and every other write on the device queued behind it for ever.
+      // A photo that cannot be stored is a photo that is not saved, and saying so is the honest
+      // outcome; quietly wedging the club's sync is not.
+    }catch(err){ /* reported below */ }
     this.setState({fitBusy:null});
-    if(!val) return; const m={...(this.fitnessMedia||{})}; m[exId]={...(m[exId]||{}), photo:val}; this._saveFitMedia(m); }
+    if(!val) return this.setState({fitMediaMsg:'The photo could not be uploaded \u2014 the vx-media storage bucket is not set up, and a photo cannot be kept inside the plan.'}); const m={...(this.fitnessMedia||{})}; m[exId]={...(m[exId]||{}), photo:val}; this._saveFitMedia(m); }
   async fitUploadVideo(e, exId){ const f=e.target.files && e.target.files[0]; e.target.value=''; if(!f) return;
     if(!window.__vxUploadFile){ this.setState({fitMediaMsg:'Video upload needs the vx-media storage bucket - set it up first.'}); return; }
     this.setState({fitBusy:'video:'+exId, fitMediaMsg:''});
