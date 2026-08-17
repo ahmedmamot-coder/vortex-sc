@@ -2852,6 +2852,31 @@ describe("InBody sheet", () => {
     });
   });
 
+  // Finding somebody's sign-in account when the club has more people than one page.
+  //
+  // This read one page of 200 users and stopped. This club has over three hundred families, so
+  // anybody created after the first two hundred was simply not found — and not-found here does
+  // not mean "no account". It means the route stops trying to UPDATE their password and tries to
+  // CREATE one on an address that already has an account, and what comes back is an error about
+  // the address, which reads like the address is wrong when it is not.
+  describe("setting a password finds the account however far down the list it is", () => {
+    const route = readFileSync(new URL("../src/app/api/staff/set-password/route.ts", import.meta.url), "utf8");
+    it("reads past the first page", () => {
+      eq(/for \(let page = 1; page <= \d+; page\+\+\)/.test(route), true, "still stops after one page");
+      eq(/page=\$\{page\}/.test(route), true, "the page number has to actually change");
+    });
+    it("stops on a short page rather than spinning", () =>
+      eq(/if \(users\.length < PER\) return null;/.test(route), true));
+    it("cannot loop for ever if the pager misbehaves", () =>
+      eq(/page <= 25/.test(route), true, "an unbounded loop against Auth is its own outage"));
+    // "Unable to validate email address: invalid format", about an address that looks ordinary,
+    // is unanswerable from a screenshot unless the address itself is in the message.
+    it("says which address was refused, with hidden characters visible", () => {
+      eq(/could not create \$\{JSON\.stringify\(email\)\}/.test(route), true);
+      eq(/could not update \$\{JSON\.stringify\(email\)\}/.test(route), true);
+    });
+  });
+
   // "only an admin can set staff passwords" — said to Sameh, who runs the club.
   //
   // Two server routes decided who counts as an admin from a pair of addresses written into the

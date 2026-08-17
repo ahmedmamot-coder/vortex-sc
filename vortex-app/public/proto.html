@@ -6508,7 +6508,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-17c';
+const VX_BUILD='2026-08-17d';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -6541,7 +6541,7 @@ class Component extends DCLogic {
     try { this.customStaff = JSON.parse(localStorage.getItem('vx_staff_accounts')||'[]'); } catch(e){ this.customStaff = []; }
     try { this.accountOvr = JSON.parse(localStorage.getItem('vx_account_ovr')||'{}'); } catch(e){ this.accountOvr = {}; }
     this._rebuildAccounts();
-    try { this.meetsCal = JSON.parse(localStorage.getItem('vx_meets_cal')||'[]'); } catch(e){ this.meetsCal = []; }
+    try { const _mc = JSON.parse(localStorage.getItem('vx_meets_cal')||'[]'); this.meetsCal = Array.isArray(_mc) ? _mc : []; } catch(e){ this.meetsCal = []; }
     // The nine the club started with. Editing never touches this list: a change is an overlay
     // on top of it, so an id — which every register mark, plan, invoice, membership, meet entry
     // and coach's access is keyed to — can never move under the data pointing at it. Renaming
@@ -7537,9 +7537,27 @@ class Component extends DCLogic {
   }
   // Read from the in-memory database mirror first (authoritative), then localStorage (offline
   // cache), then the fallback — so a full browser storage can never hide data saved in Supabase.
+  // A value of the wrong shape is worse than a missing one.
+  //
+  // A missing value falls back and the screen draws. A string where a list belongs does not fail
+  // where it is read — it fails deep inside a render, as "forEach is not a function" or "cannot
+  // read properties of undefined", which is the whole app replaced by an error message. And this
+  // data lives in club_state, shared by every device, so one bad write takes the club down
+  // everywhere at once rather than on one phone.
+  //
+  // Four of these were found in one pass: a roster overlay stored as a string, an overlay missing
+  // one of its three keys, a swimmer filed under a squad that no longer exists, and the meets
+  // calendar arriving as text. None of them is exotic — they are what a half-finished write, an
+  // older build, or a hand-edited restore leaves behind.
+  _shaped(v, fallback){
+    if(v==null) return fallback;
+    if(Array.isArray(fallback)) return Array.isArray(v) ? v : fallback;
+    if(fallback && typeof fallback==='object') return (v && typeof v==='object' && !Array.isArray(v)) ? v : fallback;
+    return v;
+  }
   _loadJSON(key, fallback){
-    try{ const P=window.__VX_PULLED; if(P && Object.prototype.hasOwnProperty.call(P, key) && P[key]!=null){ return JSON.parse(JSON.stringify(P[key])); } }catch(e){}
-    try{ const v=localStorage.getItem(key); return v==null?fallback:JSON.parse(v); }catch(e){ return fallback; }
+    try{ const P=window.__VX_PULLED; if(P && Object.prototype.hasOwnProperty.call(P, key) && P[key]!=null){ return this._shaped(JSON.parse(JSON.stringify(P[key])), fallback); } }catch(e){}
+    try{ const v=localStorage.getItem(key); return v==null?fallback:this._shaped(JSON.parse(v), fallback); }catch(e){ return fallback; }
   }
   _saveJSON(key, val){
     try{ if(window.__VX_PULLED) window.__VX_PULLED[key]=val; }catch(e){}   // keep the mirror current for in-session reads
@@ -7851,7 +7869,15 @@ class Component extends DCLogic {
   }
   rebuildRoster(){
     const base = window.VX_ROSTER || {};
-    const ed = this.rosterEdits;
+    // Whatever arrived, this has three parts. An overlay written by an older build, or half
+    // written, or restored by hand, can be missing one — and `ed.deleted[sq.id]` on a missing
+    // `deleted` is not a wrong roster, it is a white screen on every device.
+    const _e = this.rosterEdits;
+    const ed = { edits:{}, deleted:{}, added:{},
+                 ...((_e && typeof _e==='object' && !Array.isArray(_e)) ? _e : {}) };
+    if(!ed.edits   || typeof ed.edits   !== 'object') ed.edits   = {};
+    if(!ed.deleted || typeof ed.deleted !== 'object') ed.deleted = {};
+    if(!ed.added   || typeof ed.added   !== 'object') ed.added   = {};
     const anywhere = this._patchAnywhere(ed);
     // The swimmer's current squad wins field by field; a squad they have left only fills what is
     // still blank, so a date typed today is never replaced by one typed before the move.
@@ -13553,7 +13579,7 @@ class Component extends DCLogic {
     // Re-read shared stores from localStorage (freshly pulled) and re-render. We intentionally do
     // NOT touch the plan currently open in the editor (this.state.plans) to avoid clobbering an edit.
     const J=(k,d)=>{ try{ const P=window.__VX_PULLED; if(P && Object.prototype.hasOwnProperty.call(P,k) && P[k]!=null) return JSON.parse(JSON.stringify(P[k])); }catch(e){} try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return d; } };
-    const g=(k,d)=>{ const v=J(k,undefined); return v==null?d:v; };
+    const g=(k,d)=>this._shaped(J(k,undefined), d);   // same shape check as _loadJSON, same reason
     this.customStaff=g('vx_staff_accounts', this.customStaff);
     this.accountOvr=g('vx_account_ovr', this.accountOvr);
     this._rebuildAccounts();

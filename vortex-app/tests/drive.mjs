@@ -547,6 +547,62 @@ scene("the app still opens after a squad is deleted", async (browser) => {
 });
 
 // ---------------------------------------------------------------------------------------------
+// Data that is wrong in the ways a club's data actually goes wrong.
+//
+// The squad-deletion white screen was found by accident, seeding a table oddly in another test.
+// So this asks the question on purpose — and found four more in one pass: a roster overlay stored
+// as a string, an overlay missing one of its three parts, a swimmer filed under a squad that no
+// longer exists, and the meets calendar arriving as text.
+//
+// None of those is exotic. They are what a half-finished write, an older build, or a restore
+// somebody edited by hand leaves behind. And all of it lives in club_state, which every device
+// shares — so one bad value is not one broken phone, it is the whole club looking at "Cannot read
+// properties of undefined" at the same moment, ten days before six hundred people arrive.
+// ---------------------------------------------------------------------------------------------
+scene("the app survives data that is wrong in the usual ways", async (browser) => {
+  const SQ = ["preteam", "advb", "adva", "junior", "seniorb", "seniora", "vortexb", "vortexa", "legend"];
+  const sq = (ids) => ids.map((id, i) => ({ id, name: id, ages: "", accent: "#2733D6", short: id.slice(0, 3), coach: "", sort: i }));
+  const CASES = [
+    ["a squad renamed to an empty string", null, sq(SQ).map((r, i) => (i === 3 ? { ...r, name: "" } : r))],
+    ["a squad row with no id at all", null, [...sq(SQ), { name: "Ghost", sort: 9 }]],
+    ["two squads sharing one id", null, [...sq(SQ), { id: "junior", name: "Junior 2", sort: 9 }]],
+    ["the roster overlay stored as a string", { vx_roster_edits: '"nonsense"' }, sq(SQ)],
+    ["the roster overlay as broken json", { vx_roster_edits: '{"edits":' }, sq(SQ)],
+    ["an overlay missing one of its three parts",
+     { vx_roster_edits: JSON.stringify({ edits: {}, added: { nosuchsquad: [{ id: "zz", name: "Ghost" }] } }) }, sq(SQ)],
+    ["a swimmer with no name", { vx_roster_edits: JSON.stringify({ edits: { junior: { r1: { name: "" } } } }) }, sq(SQ)],
+    ["the brand config as a number", { vx_brand: "42" }, sq(SQ)],
+    ["the meets calendar as text", { vx_meets_cal: '"soon"' }, sq(SQ)],
+  ];
+  const broke = [];
+  for (const [label, seed, rows] of CASES) {
+    const page = await (await browser.newContext({ viewport: { width: 1280, height: 1000 } })).newPage();
+    await page.route("**/rest/v1/**", (r) => {
+      const m = r.request().method();
+      const t = (new URL(r.request().url()).pathname.split("/rest/v1/")[1] || "").split("?")[0];
+      return r.fulfill({ status: m === "GET" ? 200 : 201, contentType: "application/json",
+                         body: JSON.stringify(m === "GET" && t === "vx_squads_t" ? rows : []) });
+    });
+    await page.addInitScript((s) => {
+      localStorage.setItem("vx_session", JSON.stringify({ type: "staff", id: "ahmed" }));
+      localStorage.setItem("vx_auth", JSON.stringify({ token: "drive-fake", refresh: "drive-fake", exp: Date.now() + 3600000 }));
+      localStorage.removeItem("vx_nav");
+      // Written raw on purpose: the point is a value that is already wrong in storage.
+      for (const [k, v] of Object.entries(s || {})) localStorage.setItem(k, v);
+    }, seed || {});
+    await page.goto("http://127.0.0.1:" + PORT + "/proto.html?rough=" + Date.now(), { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(2600);
+    const txt = await page.evaluate(() => (document.body.innerText || "").replace(/\s+/g, " "));
+    if (/Cannot read propert|renderVals\(\):|is not a function|undefined is not|missing \) after/.test(txt))
+      broke.push(label + " — " + txt.slice(0, 80));
+    else if (!/swimmers across \d+ squad/.test(txt)) broke.push(label + " — the hub never drew");
+    await page.close();
+  }
+  eq(broke.join(" | "), "", "the app came up broken on data a club can really have");
+  return CASES.length + " kinds of bad data, all survivable";
+});
+
+// ---------------------------------------------------------------------------------------------
 // Sitting on a screen and touching nothing must not write to the database.
 //
 // Found by accident, while a fake database was answering every read with an empty list: the app
