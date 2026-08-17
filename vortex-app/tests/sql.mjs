@@ -77,6 +77,13 @@ create function not_definer() returns boolean language sql stable as $$ select t
 -- The staff-access check reads auth.users and the club's staff tables. Sameh is here twice on
 -- purpose: signed in with one address, carrying another on his staff row, which is exactly the
 -- shape that leaves somebody able to open the app and unable to save anything in it.
+create table club_state (key text primary key, value jsonb, updated_at timestamptz default now());
+insert into club_state (key, value) values ('vx_sw_status', jsonb_build_object(
+  'r1',  jsonb_build_object('active', false, 'reason', 'break',   'from', to_char(current_date - 120, 'YYYY-MM-DD'), 'to', ''),
+  'r2',  jsonb_build_object('active', false, 'reason', 'break',   'from', to_char(current_date -  90, 'YYYY-MM-DD'), 'to', ''),
+  'r3',  jsonb_build_object('active', false, 'reason', 'injured', 'from', to_char(current_date -  10, 'YYYY-MM-DD'), 'to', ''),
+  'r4',  jsonb_build_object('active', false, 'reason', 'travel',  'from', to_char(current_date -  60, 'YYYY-MM-DD'), 'to', to_char(current_date - 50, 'YYYY-MM-DD')),
+  'r5',  jsonb_build_object('active', true)));
 create schema if not exists auth;
 create table auth.users (id serial primary key, email text, last_sign_in_at timestamptz);
 create table vx_staff_emails (email text primary key);
@@ -105,7 +112,7 @@ console.log("");
 // Every file here reads the catalogue and can run against any database, which is the whole point
 // of them — they are what says what the club's database actually IS.
 for (const f of ["advisor_fixes.sql", "duplicate_indexes.sql", "preflight_audit.sql", "search_path_remaining.sql",
-                 "staff_access_check.sql", "staff_email_characters.sql"]) {
+                 "staff_access_check.sql", "staff_email_characters.sql", "breaks_that_never_end.sql"]) {
   check(f + " runs without erroring", () => {
     const r = psql(["-f", join(SUPA, f)]);
     if (r.status !== 0) throw new Error(r.stderr || r.stdout);
@@ -237,6 +244,48 @@ check("the repair in section 2 actually repairs, and only what is broken", () =>
   const untouched = psql(["-tAc", "select email from staff_accounts where id='a'"]);
   if (untouched.stdout.trim() !== "ahmed@club.test") throw new Error("it changed an address that was fine");
   return "both cleaned to the right address, the plain ones untouched";
+});
+
+// A status that is not Active makes a swimmer absent every day, and the end date is optional —
+// so a break set in the summer is still marking them absent in August. 191 of this club's 302
+// swimmers are in that state, which is what puts club attendance at 37% on a day nobody marked.
+check("breaks_that_never_end separates the ones that end from the ones that do not", () => {
+  const r = psql(["-f", join(SUPA, "breaks_that_never_end.sql")]);
+  if (r.status !== 0) throw new Error(r.stderr);
+  const out = r.stdout;
+  if (!/no end date . never ends/.test(out)) throw new Error("did not name the ones that never end");
+  if (!/. ends /.test(out)) throw new Error("did not distinguish the one that does end");
+  // Three never end, one does, and the active swimmer is not a status at all.
+  for (const id of ["r1", "r2", "r3"]) if (!new RegExp("\\b" + id + "\\b").test(out)) throw new Error("did not list " + id);
+  if (/\br4\b/.test(out)) throw new Error("listed a break that already has an end date");
+  if (/\br5\b/.test(out)) throw new Error("listed a swimmer who is active");
+  // And reading the report must not change anybody's status.
+  const after = psql(["-tAc", "select value->'r1'->>'to' from club_state where key='vx_sw_status'"]);
+  if (after.stdout.trim() !== "") throw new Error("section 3 ran on its own — it must stay commented out");
+  return "3 never end, 1 does, and it changed nothing";
+});
+
+// Section 3 is handed over commented out, which also means nothing would notice if it were
+// wrong. Run it here, uncommented, and require it to end the old ones and only the old ones.
+check("the repair in section 3 ends the old ones and leaves the rest alone", () => {
+  const src = readFileSync(join(SUPA, "breaks_that_never_end.sql"), "utf8");
+  const start = src.indexOf("-- update public.club_state");
+  if (start === -1) throw new Error("section 3 is not where the report says it is");
+  const stmt = src.slice(start).split(";")[0].split("\n")
+    .map((l) => l.replace(/^-- ?/, "")).join("\n") + ";";
+  const r = psql(["-c", stmt]);
+  if (r.status !== 0) throw new Error(r.stderr);
+  const got = psql(["-tAc",
+    `select (value->'r1'->>'to' <> '')::text || ',' || (value->'r2'->>'to' <> '')::text || ',' ||
+            (value->'r3'->>'to' = '')::text  || ',' || (value->'r4'->>'to') || ',' ||
+            coalesce(value->'r5'->>'active','?')
+       from club_state where key='vx_sw_status'`]);
+  const [r1, r2, r3, r4, r5] = got.stdout.trim().split(",");
+  if (r1 !== "true" || r2 !== "true") throw new Error("it left an old open-ended break running: " + got.stdout.trim());
+  if (r3 !== "true") throw new Error("it closed an injury that started 10 days ago — too recent to guess at");
+  if (!r4) throw new Error("it wiped the end date off a status that already had one");
+  if (r5 !== "true") throw new Error("it touched a swimmer who was active");
+  return "closed the two old ones, left the recent one, the dated one and the active one";
 });
 
 asPg(`${join(BIN, "pg_ctl")} -D ${DATA} stop`);
