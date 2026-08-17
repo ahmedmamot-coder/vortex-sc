@@ -575,7 +575,16 @@ if ('serviceWorker' in navigator) {
   // queue behind a megabyte of photographs, and nothing they do saves again.
   //
   // So it is refused here, once, with the size in the message. That empties the queue behind it.
-  var MAX_ROW = 900000;   // ~0.9 MB of JSON. The largest legitimate record in this club is far below it.
+  // The limit was 900 KB, chosen from an assumption I did not check: that the club's largest
+  // legitimate record was far below it. It is not. vx_roster_edits — every name, date of birth
+  // and squad edit this club has made — is 1.27 MB in their database right now. A guard at
+  // 900 KB would have refused to save the roster, which is the single worst thing in this file
+  // to break, and I would have shipped it.
+  //
+  // So it is set where it can only catch a record that is genuinely pathological: a base64 image
+  // inside a shared document runs to tens of megabytes, while the roster has room to more than
+  // triple. A guard that fires on real data is worse than no guard at all.
+  var MAX_ROW = 6000000;   // 6 MB. vx_roster_edits is 1.3 MB today; PostgREST takes far more than this.
   function pushKey(k, v){
     if (SYNC.indexOf(k) === -1) return Promise.resolve({ok:false, why:"this is not a synced key"});
     if (typeof v === "string" && v.length > MAX_ROW){

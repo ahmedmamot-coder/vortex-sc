@@ -3236,9 +3236,16 @@ describe("InBody sheet", () => {
     });
     // And the limit has to leave real records alone. The largest thing this club legitimately
     // syncs is the roster overlay for 302 swimmers, which is tens of kilobytes.
-    it("is set well above anything the club legitimately stores", () => {
+    // This test said "300 KB to 2 MB" and passed, on a limit of 900 KB, while the club's own
+    // roster overlay was 1.27 MB — so the guard would have refused to save every name, date of
+    // birth and squad edit they have. The number has to be checked against what the club
+    // actually stores, not against a range that sounded reasonable.
+    it("cannot fire on the club's real records", () => {
       const max = parseInt((push.match(/MAX_ROW = (\d+)/) || [])[1], 10);
-      eq(max > 300000 && max < 2000000, true, "MAX_ROW is " + max);
+      const ROSTER_TODAY = 1304831;   // vx_roster_edits, measured in their database
+      eq(max > ROSTER_TODAY * 3, true,
+         "MAX_ROW is " + max + ", and the roster alone is " + ROSTER_TODAY + " — it needs room to grow");
+      eq(max < 20000000, true, "and it still has to catch a document with images inside it");
     });
 
     // The other half: stop making them.
