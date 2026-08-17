@@ -138,6 +138,22 @@ async function openLive(browser, seed, db) {
   return page;
 }
 
+// The staff card for one person, found by the thing that makes it a staff card rather than by a
+// style rule that can be edited: it is the nearest ancestor of their name that also holds their
+// Set password button. Returns { status, input, button } as a handle inside the page.
+const STAFF_CARD = `(function(name){
+  for (const el of document.querySelectorAll("span")) {
+    if ((el.innerText || "").trim() !== name) continue;
+    let card = el;
+    for (let i = 0; i < 8 && card; i++) {
+      const btn = [...card.querySelectorAll("button")].find((b) => /set password/i.test(b.innerText || ""));
+      if (btn) return { card, btn, input: card.querySelector("input[type=text]") };
+      card = card.parentElement;
+    }
+  }
+  return null;
+})`;
+
 const scenes = [];
 const scene = (name, fn) => scenes.push({ name, fn });
 const eq = (got, want, why) => {
@@ -725,10 +741,12 @@ scene("no write leaves the device while there is no session", async (browser) =>
 // which is the club's actual situation - Reda's could not be created at all.
 // ---------------------------------------------------------------------------------------------
 scene("the staff list says who can sign in, from Supabase and not from a note on this phone", async (browser) => {
+  // Two names the club has no coach under, so the rows this scene reads are unambiguously the
+  // ones it seeded — the base list already has a Sherif and a Reda.
   const STAFF = [
-    { id: "st_sherif", name: "Coach Sherif", username: "sherif", role: "Coach", squad_id: "junior",
-      email: "sherif@club.test", is_custom: true },
-    { id: "st_reda", name: "Coach Reda", username: "reda", role: "Coach", squad_id: "adva",
+    { id: "st_yara", name: "Coach Yara", username: "yara", role: "Coach", squad_id: "junior",
+      email: "yara@club.test", is_custom: true },
+    { id: "st_nabil", name: "Coach Nabil", username: "nabil", role: "Coach", squad_id: "adva",
       email: "redazizo29@gmail.com", is_custom: true },
   ];
   const page = await openLive(browser, null, { staff_accounts: STAFF });
@@ -736,7 +754,7 @@ scene("the staff list says who can sign in, from Supabase and not from a note on
   // Supabase's side of it, kept in one place so setting a password actually changes the answer -
   // an account that appears out of the set-password call and not out of the status call would
   // let a broken loop pass.
-  const haveAccounts = new Set(["sherif@club.test"]);
+  const haveAccounts = new Set(["yara@club.test"]);
   let asked = null;
   await page.route("**/api/staff/sign-in-status", async (route) => {
     asked = (JSON.parse(route.request().postData() || "{}").emails) || [];
@@ -753,61 +771,51 @@ scene("the staff list says who can sign in, from Supabase and not from a note on
                           body: JSON.stringify({ ok: true, action: "created", email: b.email }) });
   });
 
-  const readRows = () => page.evaluate(() => {
+  const readRows = () => page.evaluate((find) => {
     const out = {};
-    for (const el of document.querySelectorAll("span")) {
-      const t = (el.innerText || "").trim();
-      if (t !== "Coach Sherif" && t !== "Coach Reda") continue;
-      let card = el;
-      while (card && !/border-radius:13px/.test(card.getAttribute("style") || "")) card = card.parentElement;
-      if (card) out[t] = (card.innerText || "").split("\n")[0].trim();
+    for (const name of ["Coach Yara", "Coach Nabil"]) {
+      const hit = eval(find)(name);
+      if (hit) out[name] = (hit.card.innerText || "").split("\n")[0].trim();
     }
     return out;
-  });
+  }, STAFF_CARD);
 
   await tap(page, "Club Administration");
   await tap(page, "sign-in & access");            // the Staff row, by its own subtitle
   await page.waitForTimeout(1600);
 
   if (!asked) throw new Error("the staff screen never asked Supabase who can sign in");
-  eq(asked.includes("redazizo29@gmail.com") && asked.includes("sherif@club.test"), true,
+  eq(asked.includes("redazizo29@gmail.com") && asked.includes("yara@club.test"), true,
      "it must ask about every staff address, not only the ones it has a note for");
 
   const before = await readRows();
-  if (!before["Coach Sherif"] || !before["Coach Reda"]) throw new Error("the staff rows did not render: " + JSON.stringify(before));
-  eq(/Can sign in/.test(before["Coach Sherif"]), true,
-     "a coach WITH an account still reads: " + JSON.stringify(before["Coach Sherif"]));
-  eq(/set a password below/.test(before["Coach Sherif"]), false,
+  if (!before["Coach Yara"] || !before["Coach Nabil"]) throw new Error("the staff rows did not render: " + JSON.stringify(before));
+  eq(/Can sign in/.test(before["Coach Yara"]), true,
+     "a coach WITH an account still reads: " + JSON.stringify(before["Coach Yara"]));
+  eq(/set a password below/.test(before["Coach Yara"]), false,
      "this is the sentence that would not go away");
-  eq(/No sign-in account yet/.test(before["Coach Reda"]), true,
-     "a coach with no account should be told so: " + JSON.stringify(before["Coach Reda"]));
+  eq(/No sign-in account yet/.test(before["Coach Nabil"]), true,
+     "a coach with no account should be told so: " + JSON.stringify(before["Coach Nabil"]));
 
   // Now set one, on the row that has none, and watch that row change without a reload.
-  const typed = await page.evaluate(() => {
-    for (const el of document.querySelectorAll("span")) {
-      if ((el.innerText || "").trim() !== "Coach Reda") continue;
-      let card = el;
-      while (card && !/border-radius:13px/.test(card.getAttribute("style") || "")) card = card.parentElement;
-      const input = card && card.querySelector("input[type=text]");
-      const btn = card && [...card.querySelectorAll("button")].find((b) => /set password/i.test(b.innerText || ""));
-      if (!input || !btn) return false;
-      const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-      set.call(input, "a-long-enough-one");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-      setTimeout(() => btn.click(), 250);
-      return true;
-    }
-    return false;
-  });
-  if (!typed) throw new Error("could not find the password box on Reda's row");
-  await page.waitForTimeout(2200);
+  const typed = await page.evaluate((find) => {
+    const hit = eval(find)("Coach Nabil");
+    if (!hit || !hit.input) return false;
+    const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+    set.call(hit.input, "a-long-enough-one");
+    hit.input.dispatchEvent(new Event("input", { bubbles: true }));
+    setTimeout(() => hit.btn.click(), 250);
+    return true;
+  }, STAFF_CARD);
+  if (!typed) throw new Error("could not find the password box on Nabil's row");
+  await page.waitForTimeout(2400);
 
   eq(sent, ["redazizo29@gmail.com"], "the password went to the wrong address, or nowhere");
   const after = await readRows();
-  eq(/Can sign in/.test(after["Coach Reda"] || ""), true,
-     "the row still says: " + JSON.stringify(after["Coach Reda"]));
-  return "asked about " + asked.length + " addresses; Reda's row went "
-       + JSON.stringify(before["Coach Reda"]) + " -> " + JSON.stringify(after["Coach Reda"]);
+  eq(/Can sign in/.test(after["Coach Nabil"] || ""), true,
+     "the row still says: " + JSON.stringify(after["Coach Nabil"]));
+  return "asked about " + asked.length + " addresses; the row went "
+       + JSON.stringify(before["Coach Nabil"]) + " -> " + JSON.stringify(after["Coach Nabil"]);
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -818,7 +826,7 @@ scene("the staff list says who can sign in, from Supabase and not from a note on
 // ---------------------------------------------------------------------------------------------
 scene("an invisible character in an address never leaves the phone", async (browser) => {
   const page = await openLive(browser, null, {
-    staff_accounts: [{ id: "st_reda", name: "Coach Reda", username: "reda", role: "Coach",
+    staff_accounts: [{ id: "st_nabil", name: "Coach Nabil", username: "nabil", role: "Coach",
                        squad_id: "adva", email: "redazizo29@gmail.com" + "\u200f", is_custom: true }],
   });
   await page.route("**/api/staff/sign-in-status", (route) =>
@@ -831,23 +839,16 @@ scene("an invisible character in an address never leaves the phone", async (brow
   await tap(page, "Club Administration");
   await tap(page, "sign-in & access");
   await page.waitForTimeout(1400);
-  const ok = await page.evaluate(() => {
-    for (const el of document.querySelectorAll("span")) {
-      if ((el.innerText || "").trim() !== "Coach Reda") continue;
-      let card = el;
-      while (card && !/border-radius:13px/.test(card.getAttribute("style") || "")) card = card.parentElement;
-      const input = card && card.querySelector("input[type=text]");
-      const btn = card && [...card.querySelectorAll("button")].find((b) => /set password/i.test(b.innerText || ""));
-      if (!input || !btn) return false;
-      const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-      set.call(input, "a-long-enough-one");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-      setTimeout(() => btn.click(), 250);
-      return true;
-    }
-    return false;
-  });
-  if (!ok) throw new Error("could not find Reda's password box");
+  const ok = await page.evaluate((find) => {
+    const hit = eval(find)("Coach Nabil");
+    if (!hit || !hit.input) return false;
+    const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+    set.call(hit.input, "a-long-enough-one");
+    hit.input.dispatchEvent(new Event("input", { bubbles: true }));
+    setTimeout(() => hit.btn.click(), 250);
+    return true;
+  }, STAFF_CARD);
+  if (!ok) throw new Error("could not find the password box on that row");
   await page.waitForTimeout(1800);
   eq(sent, ["redazizo29@gmail.com"],
      "what left the phone was " + JSON.stringify(sent) + " - Auth refuses that, and nothing on screen says why");

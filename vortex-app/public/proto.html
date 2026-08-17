@@ -7153,6 +7153,20 @@ class Component extends DCLogic {
       const j=await r.json().catch(()=>({}));
       if(!r.ok) return say((j&&j.error)||('Failed (HTTP '+r.status+')'), false);
       try{ this.audit('staff.password', acct.label||email, {account:acct.id||'', email:email}); }catch(e){}
+      // The address stored on the staff row can still be the broken one — that is how it got
+      // here. Auth now has the clean address, and vx_is_staff() compares the staff row to the
+      // address somebody signs in with, so leaving the row alone would give this coach a working
+      // login and refuse every save they made. Correct the row too, once, and only ever by
+      // removing characters that are invisible.
+      const _stored=String(acct.email||'').trim();
+      if(_stored && _stored.toLowerCase()!==email){
+        const _o={...(this.accountOvr[acct.id]||{}), email:email};
+        this.accountOvr[acct.id]=_o;
+        if(this.customStaff) this.customStaff=this.customStaff.map(c=>c.id===acct.id?{...c, email:email}:c);
+        this._rebuildAccounts();
+        try{ this.audit('staff.email.repair', acct.label||email, {account:acct.id||'', was:JSON.stringify(_stored), now:email}); }catch(e){}
+        if(window.__vxUpsert){ window.__vxUpsert('staff_accounts', [this._staffRow(acct.id, _o, (''+acct.id).indexOf('st_')===0)]); }
+      }
       // Recorded so the row can say so afterwards. The password box is empty again by design —
       // a password is never shown back — and without this the row looked exactly as it did
       // before it was set.

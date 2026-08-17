@@ -3028,6 +3028,78 @@ describe("InBody sheet", () => {
     });
   });
 
+  // Setting the password is not the end of it.
+  //
+  // Auth gets the clean address. The staff row can still be holding the broken one - that is how
+  // it got here - and vx_is_staff() compares the staff row to the address somebody signs in with.
+  // Leave the row alone and this coach gets a login that works and a register that refuses every
+  // mark they make, which is the worst of the three possible outcomes because it looks fine.
+  describe("setting a password also repairs the address stored on the staff row", () => {
+    const run = async (storedEmail) => {
+      const upserts = [], saved = {};
+      const ctx = {
+        state: { staffPwDrafts: {} },
+        staffPwSet: {}, staffAuth: {}, staffAuthAt: 0,
+        accountOvr: { st_reda: { label: "Coach Reda", user: "reda", email: storedEmail } },
+        customStaff: [{ id: "st_reda", name: "Coach Reda", email: storedEmail }],
+        setState(o) { Object.assign(this.state, o); },
+        audit() {},
+        _saveJSON(k, v) { saved[k] = v; },
+        _rebuildAccounts() {},
+        _staffAuthFetch() {},
+        _staffRow: (id, o) => ({ id, email: o.email }),
+      };
+      const before = { fetch: globalThis.fetch, window: globalThis.window };
+      globalThis.fetch = async () => ({ ok: true, json: async () => ({ ok: true, action: "created" }) });
+      globalThis.window = {
+        __VX_AUTH: { token: "t" },
+        __vxUpsert: async (table, rows) => { upserts.push({ table, rows }); return true; },
+      };
+      try {
+        await bind("staffSetPassword", ctx, ["_cleanEmail"])(
+          { id: "st_reda", label: "Coach Reda", email: storedEmail }, "a-long-enough-one");
+      } finally {
+        globalThis.fetch = before.fetch;
+        globalThis.window = before.window;
+      }
+      return { ctx, upserts, saved };
+    };
+
+    itAsync("writes the cleaned address back when the row was carrying an invisible character", async () => {
+      const { ctx, upserts } = await run("redazizo29@gmail.com‏");
+      eq(ctx.accountOvr.st_reda.email, "redazizo29@gmail.com", "the row kept the broken address");
+      eq(ctx.customStaff[0].email, "redazizo29@gmail.com");
+      const rows = upserts.filter((u) => u.table === "staff_accounts");
+      eq(rows.length, 1, "the correction never reached the table the database checks");
+      eq(rows[0].rows[0].email, "redazizo29@gmail.com");
+    });
+
+    // A row that is already right must not be rewritten. An upsert per password set, on every
+    // account, is a write the club did not ask for and a chance to get something wrong.
+    itAsync("leaves a row that is already correct completely alone", async () => {
+      const { upserts } = await run("martin@club.test");
+      eq(upserts.length, 0, "it wrote to the table for an address that needed nothing");
+    });
+
+    // Capitals are not damage, and this is the line between the two. The comparison is
+    // case-insensitive, so a row typed "Redazizo29@Gmail.com" is left exactly as somebody typed
+    // it — while the address that goes to Auth is still the lowercased one, because that is what
+    // Auth matches on. Rewriting the row for a capital would be a write the club never asked for.
+    itAsync("does not rewrite a row just because somebody typed a capital", async () => {
+      const { ctx, upserts } = await run("  Redazizo29@Gmail.com  ");
+      eq(upserts.length, 0, "a capital letter is not damage and must not cause a write");
+      eq(ctx.accountOvr.st_reda.email, "  Redazizo29@Gmail.com  ", "it changed a row it had no reason to touch");
+      eq(/redazizo29@gmail\.com can sign in/.test(ctx.state.staffPwMsg || ""), true,
+         "what went to Auth must still be the lowercased address: " + ctx.state.staffPwMsg);
+    });
+
+    it("records the repair in the activity log rather than doing it quietly", () => {
+      const body = methodSource("staffSetPassword").body;
+      eq(/audit\('staff\.email\.repair'/.test(body), true,
+         "a change to somebody's sign-in address has to be answerable for");
+    });
+  });
+
   // The route behind that row.
   describe("asking Supabase which staff addresses can sign in", () => {
     const route = readFileSync(new URL("../src/app/api/staff/sign-in-status/route.ts", import.meta.url), "utf8");
