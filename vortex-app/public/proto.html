@@ -1377,7 +1377,7 @@ if ('serviceWorker' in navigator) {
                           <input value="{{ famVerifyInput }}" oninput="{{ onFamVerifyInput }}" placeholder="{{ famVerifyPlaceholder }}" style="width:100%;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.18);border-radius:10px;padding:10px 12px;color:#fff;font-family:var(--font-mono);font-size:13px;outline:none;box-sizing:border-box;margin-bottom:8px">
                           <sc-if value="{{ famVerifyErrShow }}" hint-placeholder-val="{{ false }}"><p style="margin:0 0 8px;font-size:11px;color:#FF8A8D;font-weight:600;line-height:1.4">{{ famVerifyErr }}</p></sc-if>
                           <div style="display:flex;gap:7px">
-                            <button onclick="{{ onFamVerifyConfirm }}" style="flex:1;background:var(--vx-blue);color:#fff;border:none;border-radius:10px;padding:10px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer">{{ tx.confirmLink }}</button>
+                            <button onclick="{{ onFamVerifyConfirm }}" style="flex:1;background:var(--vx-blue);color:#fff;border:none;border-radius:10px;padding:10px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer">{{ famVerifyBtnLabel }}</button>
                             <button onclick="{{ onFamVerifyCancel }}" style="flex:none;background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);border:none;border-radius:10px;padding:10px 14px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer">{{ tx.cancel }}</button>
                           </div>
                         </div>
@@ -6514,7 +6514,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-17g';
+const VX_BUILD='2026-08-17h';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -12710,20 +12710,36 @@ class Component extends DCLogic {
   // Both sides of the family-verification check go through the same reader, so a parent
   // typing their child's real date the way the club writes it actually matches.
   _parseDobParts(s){ const p=this._dobParts(s); return p ? {y:p.y, mo:p.mo, d:p.d} : null; }
-  famVerifyConfirm(){ const S=this.state; const v=S.famVerify; if(!v) return;
-    const [sqid,swid]=v.uid.split('::'); const sw=(this.roster[sqid]||[]).find(x=>x.id===swid); if(!sw){ this.setState({famVerify:null}); return; }
-    // Stop repeated guessing at a child's details.
-    this._famTries=this._famTries||{};
-    if((this._famTries[v.uid]||0)>=3) return this.setState({famVerifyErr:'Too many incorrect attempts for this swimmer. Please ask the club to link your child.'});
-    // A swimmer with no date of birth on file can NOT be self-linked: the only remaining
-    // check would be their age, which is easy to guess — that is how a wrong child gets linked.
-    if(!sw.dob) return this.setState({famVerifyErr:'We can’t verify this swimmer automatically (no date of birth on file). Please ask the club to link your child to your account.'});
+  // The club's answer, from the club's records — asked of the server, not of this page.
+  //
+  // This used to compare the typed date against sw.dob in the browser. A parent registering is
+  // not signed in yet, and every table holding a date of birth is closed to anonymous readers,
+  // so the roster this page had was the one that ships inside it: names, squads and ages, no
+  // dates. sw.dob was empty for every child, so every parent was told the club had no date on
+  // file and to ask the club to link their child by hand. Omar Abu Rezeq's date is 28/05/2008
+  // and has been on the admin screen all along.
+  //
+  // The repair that suggests itself — put the dates in the page — is the one that must not be
+  // made: it would publish 300 children's dates of birth to anyone who opens the site. Only the
+  // answer travels, and the attempt limit lives on the server where it cannot be reset by
+  // reloading the page.
+  async famVerifyConfirm(){ const S=this.state; const v=S.famVerify; if(!v || S.famVerifyBusy) return;
     const ans=(S.famVerifyInput||'').trim(); if(!ans) return this.setState({famVerifyErr:'Please answer to confirm.'});
-    const a=this._parseDobParts(ans), b=this._parseDobParts(sw.dob);
-    const ok = !!(a && b && a.y===b.y && a.mo===b.mo && a.d===b.d);
-    if(!ok){
-      this._famTries[v.uid]=(this._famTries[v.uid]||0)+1;
-      const left=Math.max(0, 3-this._famTries[v.uid]);
+    this.setState({famVerifyBusy:true, famVerifyErr:''});
+    let j=null, status=0;
+    try{
+      const r=await fetch('/api/family/verify-child', {method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({swimmerId:v.uid, dob:ans})});
+      status=r.status; j=await r.json().catch(()=>null);
+    }catch(e){ /* handled below as "could not check" */ }
+    this.setState({famVerifyBusy:false});
+    if(!j) return this.setState({famVerifyErr:'We could not check that just now. Please try again in a moment.'});
+    if(j.ok!==true){
+      // A swimmer with no date on file cannot be self-linked: the only remaining check would be
+      // their age, which is easy to guess, and that is how the wrong child gets linked.
+      if(j.noDob) return this.setState({famVerifyErr:v.name+' can’t be linked automatically — there’s no date of birth on file. Please ask the club to link this child to your account.'});
+      if(j.reason) return this.setState({famVerifyErr:j.reason});
+      const left=Math.max(0, Number(j.left)||0);
       return this.setState({famVerifyErr:'That doesn’t match our records for '+v.name+'.'+(left?(' '+left+' attempt'+(left===1?'':'s')+' left.'):' No attempts left — please ask the club to link your child.')});
     }
     const cur=this.state.famPicked.slice(); if(this.state.famRole==='swimmer' && cur.length>=1) cur.splice(0,1); if(cur.indexOf(v.uid)<0) cur.push(v.uid);
@@ -15646,8 +15662,17 @@ class Component extends DCLogic {
       famPickedChips:S.famPicked.map(uid=>{ const [sqid,swid]=uid.split('::'); const sw=(this.roster[sqid]||[]).find(x=>x.id===swid); return {uid, label:sw?sw.name:'?', onRemove:()=>this.famToggleSwimmer(uid)}; }),
       famVerifyShow: !!S.famVerify,
       famVerifyName: S.famVerify ? S.famVerify.name : '',
-      famVerifyQuestion: S.famVerify ? (()=>{ const [sq,sw]=S.famVerify.uid.split('::'); const s=(this.roster[sq]||[]).find(x=>x.id===sw); return (s && s.dob) ? ('Enter '+S.famVerify.name+'’s exact date of birth to confirm you’re their parent/guardian. You must repeat this for each of your children.') : (S.famVerify.name+' can’t be linked automatically — there’s no date of birth on file. Please ask the club to link this child to your account.'); })() : '',
-      famVerifyPlaceholder: S.famVerify ? (()=>{ const [sq,sw]=S.famVerify.uid.split('::'); const s=(this.roster[sq]||[]).find(x=>x.id===sw); return (s && s.dob) ? 'dd/mm/yyyy' : 'Not available'; })() : '',
+      // This used to decide, before the parent typed anything, whether the club had a date for
+      // their child — by looking at a roster that never carries dates for somebody who is not
+      // signed in. So it greeted every parent with "can't be linked automatically" and a box
+      // reading "Not available", and no family could link a child at all. Whether there is a
+      // date on file is the server's answer to give, once, after the parent has answered.
+      famVerifyQuestion: S.famVerify ? ('Enter '+S.famVerify.name+'’s exact date of birth to confirm you’re their parent/guardian. You must repeat this for each of your children.') : '',
+      famVerifyPlaceholder: S.famVerify ? 'dd/mm/yyyy' : '',
+      famVerifyBusy: !!S.famVerifyBusy,
+      // Checking now takes a round trip, so the button has to say something while it waits —
+      // a phone on 5G at the poolside can sit on this for a second or two.
+      famVerifyBtnLabel: S.famVerifyBusy ? 'Checking…' : this._strings().confirmLink,
       famVerifyInput:S.famVerifyInput||'', onFamVerifyInput:(e)=>this.setState({famVerifyInput:e.target.value}),
       famVerifyErr:S.famVerifyErr||'', famVerifyErrShow:!!S.famVerifyErr,
       onFamVerifyConfirm:()=>this.famVerifyConfirm(), onFamVerifyCancel:()=>this.famVerifyCancel(),

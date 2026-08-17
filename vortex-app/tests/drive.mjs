@@ -888,6 +888,89 @@ scene("an invisible character in an address never leaves the phone", async (brow
   return "sent the address without the right-to-left mark";
 });
 
+// ---------------------------------------------------------------------------------------------
+// A parent linking their own child. Any parent, any child — none of them could.
+//
+// The screen said "Omar Abu Rezeq can't be linked automatically — there's no date of birth on
+// file", with the box reading "Not available", about a boy whose date is 28/05/2008 and has been
+// on the admin screen the whole time. It compared the typed date against sw.dob in the browser,
+// and a parent registering is not signed in — so every table holding a date is closed to them,
+// and the roster the page has is the one that ships inside it: names, squads, ages, no dates.
+//
+// This one opens the app the way a parent does: signed out, from the login screen.
+// ---------------------------------------------------------------------------------------------
+scene("a parent can link their own child", async (browser) => {
+  const page = await (await browser.newContext({ viewport: { width: 430, height: 900 } })).newPage();
+  const problems = [];
+  page.on("pageerror", (e) => problems.push(String(e.message)));
+  await page.route("**/rest/v1/**", (r) =>
+    r.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
+  // The club's side of it. The date never reaches the page — the whole point — so the route
+  // answers yes or no and nothing else.
+  let asked = null;
+  await page.route("**/api/family/verify-child", (r) => {
+    asked = JSON.parse(r.request().postData() || "{}");
+    return r.fulfill({ status: 200, contentType: "application/json",
+                       body: JSON.stringify(asked.dob === "28/05/2008" ? { ok: true } : { ok: false, left: 4 }) });
+  });
+  await page.addInitScript(() => localStorage.clear());
+  await page.goto("http://127.0.0.1:" + PORT + "/proto.html?drive=" + Date.now(), { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(2200);
+
+  await tap(page, "Parent or swimmer?");
+  await page.waitForTimeout(700);
+  await tap(page, "Register");
+  await page.waitForTimeout(700);
+
+  const searched = await page.evaluate(() => {
+    const i = [...document.querySelectorAll("input")].find((e) => e.offsetParent && /child/i.test(e.placeholder || ""));
+    if (!i) return false;
+    const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+    set.call(i, "Omar");
+    i.dispatchEvent(new Event("input", { bubbles: true }));
+    return true;
+  });
+  if (!searched) throw new Error("the register screen had no box to search for a child in");
+  await page.waitForTimeout(800);
+
+  const picked = await page.evaluate(() => {
+    const b = [...document.querySelectorAll("button")].find((e) => e.offsetParent && /Omar/.test(e.innerText || ""));
+    if (!b) return null;
+    b.click();
+    return (b.innerText || "").split("\n")[0];
+  });
+  if (!picked) throw new Error("searching for a child found nobody");
+  await page.waitForTimeout(800);
+
+  // What the parent is actually shown. This is the assertion the old behaviour fails.
+  const panel = await page.evaluate(() => {
+    const t = document.body.innerText || "";
+    const i = [...document.querySelectorAll("input")]
+      .find((e) => e.offsetParent && /dd\/mm|Not available/i.test(e.placeholder || ""));
+    return { refused: /can.t be linked automatically/.test(t), placeholder: i ? i.placeholder : "(no date box)" };
+  });
+  eq(panel.refused, false, "every parent was told their child could not be linked, before typing anything");
+  eq(panel.placeholder, "dd/mm/yyyy", "the box read " + JSON.stringify(panel.placeholder));
+
+  await page.evaluate(() => {
+    const i = [...document.querySelectorAll("input")].find((e) => e.offsetParent && /dd\/mm/i.test(e.placeholder || ""));
+    const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+    set.call(i, "28/05/2008");
+    i.dispatchEvent(new Event("input", { bubbles: true }));
+    const btn = [...document.querySelectorAll("button")].find((e) => e.offsetParent && /Confirm/i.test(e.innerText || ""));
+    if (btn) setTimeout(() => btn.click(), 200);
+  });
+  await page.waitForTimeout(1800);
+
+  if (!asked) throw new Error("the date was checked somewhere other than the club's records");
+  eq(asked.dob, "28/05/2008", "what was sent to be checked was " + JSON.stringify(asked.dob));
+  eq(/^[^:]+::.+/.test(String(asked.swimmerId || "")), true,
+     "the child has to be named by squad and id: " + JSON.stringify(asked.swimmerId));
+  eq(problems.length, 0, "the register screen threw: " + problems.slice(0, 2).join(" | "));
+  await page.close();
+  return "picked " + JSON.stringify(picked) + ", asked the club about " + asked.swimmerId;
+});
+
 const TOOLS = [
   "Insights","AI Assistants","Daily Attendance","Activity log","Birthdays","Boards",
   "Club Configuration","Pace Clock","Zone Engine","Meet Entries","Family accounts",

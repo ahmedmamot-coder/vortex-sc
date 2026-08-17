@@ -3156,6 +3156,101 @@ describe("InBody sheet", () => {
       eq(/found === null/.test(route), true));
   });
 
+  // A parent could not link their own child. Any parent, any child.
+  //
+  // The registration screen said "Omar Abu Rezeq can't be linked automatically — there's no date
+  // of birth on file", with the box reading "Not available", about a boy whose date of birth is
+  // 28/05/2008 and has been on the admin screen all along. It was comparing the typed date
+  // against sw.dob in the browser — and a parent registering is not signed in, so every table
+  // holding a date is closed to them and the roster the page had was the one that ships inside
+  // it: names, squads, ages, no dates. sw.dob was empty for every child in the club.
+  //
+  // The repair that suggests itself is to put the dates in the page. That would publish 300
+  // children's dates of birth to anyone who opens the site, so the comparison moved to the
+  // server and only the answer comes back.
+  describe("a parent linking their own child", () => {
+    const route = readFileSync(new URL("../src/app/api/family/verify-child/route.ts", import.meta.url), "utf8");
+    const fn = (name) => {
+      const at = route.indexOf("export function " + name + "(");
+      const lineEnd = route.indexOf("\n", at);
+      const sig = route.slice(at, lineEnd);
+      const args = [...sig.slice(sig.indexOf("(") + 1, sig.lastIndexOf(")"))
+        .matchAll(/(?:^|,)\s*([A-Za-z_$][\w$]*)\s*:/g)].map((m) => m[1]);
+      const rest = route.slice(lineEnd + 1);
+      let depth = 1, i = 0;
+      for (; i < rest.length && depth > 0; i++) {
+        if (rest[i] === "{") depth++;
+        else if (rest[i] === "}") depth--;
+      }
+      return new Function(...args, rest.slice(0, i - 1));
+    };
+    const parts = fn("parts");
+
+    it("reads the club's own format and the one a parent is likely to type", () => {
+      eq(parts("28/05/2008"), { y: 2008, m: 5, d: 28 });
+      eq(parts("2008-05-28"), { y: 2008, m: 5, d: 28 });
+      eq(parts("28-05-2008"), { y: 2008, m: 5, d: 28 });
+      eq(parts("8/5/2008"), { y: 2008, m: 5, d: 8 }, "a single digit is still a date");
+      eq(parts(""), null);
+      eq(parts("Omar"), null);
+      eq(parts("28/05"), null, "half a date must not read as one");
+    });
+
+    // The whole point of the route: the date lives in the overlay, which is where every date
+    // typed into the admin screen goes, and it wins over the roster that ships with the page.
+    it("finds the date wherever the club actually keeps it", () => {
+      const dobOf = fn("dobOf");
+      const base = { legend: [{ id: "r1", name: "Omar Abu Rezeq" }] };
+      eq(dobOf(base, null, "legend", "r1"), "", "the shipped roster has no dates, which is the fault");
+      eq(dobOf(base, { edits: { legend: { r1: { dob: "28/05/2008" } } } }, "legend", "r1"), "28/05/2008");
+      eq(dobOf(base, { added: { legend: [{ id: "r9", dob: "01/02/2010" }] } }, "legend", "r9"), "01/02/2010",
+         "a swimmer added after the roster shipped has their date in the overlay too");
+      eq(dobOf(base, { edits: { legend: { r1: { dob: "  " } } } }, "legend", "r1"), "",
+         "a blank date is no date, not a date of blank");
+    });
+
+    // Everything below is what stops an unauthenticated route being a way to read a child's
+    // date of birth. It has no sign-in because the person asking has no account yet.
+    it("never sends a date of birth back, in any answer it can give", () => {
+      const answers = [...route.matchAll(/Response\.json\(\{[^}]*\}/g)].map((m) => m[0]);
+      eq(answers.length > 0, true, "the route must answer something");
+      for (const a of answers)
+        eq(/\bdob\b/.test(a), false, "an answer carries the date back to the browser: " + a);
+      eq(/ok: true \}/.test(route), true, "a match must answer with yes and nothing else");
+    });
+    it("counts wrong answers on the server, where reloading the page cannot reset them", () => {
+      eq(/const tries = new Map/.test(route), true);
+      eq(/countWrong\(uid\)/.test(route), true);
+      eq(/if \(tooMany\(uid\)\)/.test(route), true);
+      eq(/MAX = 5/.test(route), true);
+    });
+    // A child with no date on file is not the parent's fault and no amount of trying will help,
+    // so it must not burn their attempts — and it must not be mistaken for a wrong answer.
+    it("tells a parent no date is on file without charging them an attempt", () => {
+      const after = route.slice(route.indexOf("const dob = dobOf("));
+      const noDobAt = after.indexOf("noDob: true");
+      const countAt = after.indexOf("countWrong(uid)");
+      eq(noDobAt > -1 && countAt > noDobAt, true, "the no-date answer must come before anything is counted");
+    });
+    it("only accepts a child named the way the registration screen names one", () =>
+      eq(/bits\.length !== 2/.test(route), true, "an id with no squad would search the whole club"));
+
+    // And the app must ask the server rather than looking at a roster it does not have.
+    it("the app asks the server instead of reading a date it was never given", () => {
+      const body = methodSource("famVerifyConfirm").body;
+      eq(/\/api\/family\/verify-child/.test(body), true, "it must ask");
+      eq(/sw\.dob|\.dob\b/.test(body), false, "nothing in the browser may read a child's date");
+    });
+    // And it must stop pre-judging, before the parent has typed anything, whether a date exists.
+    it("stops telling every parent their child cannot be linked before they have typed a thing", () => {
+      const src = SOURCE.replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+      eq(/famVerifyPlaceholder[^\n]*Not available/.test(src), false,
+         "the box read 'Not available' for every child in the club");
+      eq(/famVerifyQuestion[^\n]*can’t be linked automatically/.test(src), false,
+         "this greeted every parent before the server had been asked anything");
+    });
+  });
+
   // "only an admin can set staff passwords" — said to Sameh, who runs the club.
   //
   // Two server routes decided who counts as an admin from a pair of addresses written into the
