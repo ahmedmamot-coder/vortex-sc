@@ -6508,7 +6508,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-17a';
+const VX_BUILD='2026-08-17b';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -8887,6 +8887,27 @@ class Component extends DCLogic {
     // Any one of them is enough. A head coach who also helps with fitness does not lose the
     // run of the club by taking on the second job.
     return this._rolesOf(a).some(r=>this._isFullAccessRole(r));
+  }
+  // What the header says about somebody — decided by the app, not repeated from a box.
+  //
+  // This printed the role text exactly as typed. Mary's read "ADMINISTRATOR · FULL ACCESS" while
+  // the app was giving her a coach's screen with no Club Administration on it: the header
+  // promising access that the very same render had already refused, on the same screen, in the
+  // same second. Anybody reading that believes the header and reports the tiles as broken, and
+  // the one number that would have explained it — what the app actually decided — was nowhere.
+  //
+  // The job title is theirs to write. The half after the dot is not: it is what this app is doing.
+  _accessLine(acct){
+    const a=acct||this._me()||{};
+    // Every position they hold, spelled out. Somebody can be Assistant Coach and Fitness Coach at
+    // once, and showing only the first would be its own small lie — which taking the text before
+    // the first dot did, until a test that already existed caught it.
+    const parts=this._rolesOf(a)
+      .map(r=>String(r).split('\u00b7')[0].trim())      // "Administrator · full access" -> "Administrator"
+      .filter(Boolean)
+      .filter(r=>!/^(full|squad) access$/i.test(r));     // never repeat a claim about access
+    const title=parts.length ? parts.join(' \u00b7 ') : 'Staff';
+    return title+' \u00b7 '+(this._isFullAccess(a) ? 'full access' : 'squad access');
   }
   // Is this address one of the club's own staff, rather than a parent's?
   //
@@ -15581,7 +15602,7 @@ class Component extends DCLogic {
         // unread: swimmers whose last family message awaits a coach reply
         let unread=0; const fm=this.famMessages||{}; scopeSw.forEach(sw=>{ const t=fm[sw.id]; if(t&&t.length&&t[t.length-1].sender==='family') unread++; });
         return {
-          hubUserName: acc.label||'', hubUserRole: this._roleLabel(acc)||'', hubUserAvatar: this.av(acc.photo||null, acc.initials||'?', 54, 15, acc.accent||'#067EEA', '#fff', 20),
+          hubUserName: acc.label||'', hubUserRole: this._accessLine(acc), hubUserAvatar: this.av(acc.photo||null, acc.initials||'?', 54, 15, acc.accent||'#067EEA', '#fff', 20),
           clubStatLine: isAdm ? (this.allSwimmersFlat().length+' swimmers across '+this.squads.length+' squads · '+this.allMeets().length+' meets on record.')
             : (lockSq ? (lockSq.count+' swimmers · '+lockSq.name+' · '+lockSq.coach) : 'Welcome back.'),
           toolsSpan: isAdm ? 'auto' : 'span 2',

@@ -2852,6 +2852,53 @@ describe("InBody sheet", () => {
     });
   });
 
+  // The header must never promise access the same screen is refusing.
+  //
+  // Mary opened the app to "ADMINISTRATOR · FULL ACCESS" above her name and a hub with no Club
+  // Administration on it and Tools & AI reading "Your squad". The header was printing her role
+  // text exactly as somebody had typed it into a box; the tiles were asking _isFullAccess. They
+  // disagreed, on the same screen, in the same render.
+  //
+  // That is worse than either answer being wrong, because it hides which one is. She read the
+  // header, believed it, and reported the tiles as broken — and the thing that would have
+  // explained it in one glance, what the app had actually decided, was nowhere on the screen.
+  //
+  // The job title stays hers to write. The half after the dot is now the app's answer.
+  describe("the header says what the app decided, not what was typed", () => {
+    const ctx = () => {
+      const c = { _me: () => null };
+      c._rolesOf = bind("_rolesOf", c, ["_me"]);
+      c._roleLabel = bind("_roleLabel", c, ["_rolesOf"]);
+      c._isFullAccessRole = bind("_isFullAccessRole", c);
+      c._isFullAccess = bind("_isFullAccess", c, ["_me", "_rolesOf", "_isFullAccessRole"]);
+      c._accessLine = bind("_accessLine", c, ["_me", "_roleLabel", "_isFullAccess"]);
+      return c;
+    };
+    it("an admin reads as full access", () =>
+      eq(ctx()._accessLine({ id: "m1", role: "Administrator · full access" }), "Administrator · full access"));
+    it("Mary's shorter spelling reads the same", () =>
+      eq(ctx()._accessLine({ id: "m1", role: "Admin" }), "Admin · full access"));
+    it("a squad coach reads as squad access, whatever the title says", () =>
+      eq(ctx()._accessLine({ id: "c1", role: "Senior B coach" }), "Senior B coach · squad access"));
+    // The case that started this: a role claiming full access that the app does not grant must
+    // say so out loud rather than repeat the claim.
+    it("a role that claims access the app refuses cannot say full access", () => {
+      const c = ctx();
+      c._isFullAccess = () => false;             // as an older build would have answered
+      const line = c._accessLine({ id: "m1", role: "Administrator · full access" });
+      eq(/full access/.test(line), false, "the header repeated a claim the app was refusing");
+      eq(line, "Administrator · squad access");
+    });
+    // Two positions at once, which is why this may not simply take the text before the first dot.
+    it("keeps every position somebody holds", () =>
+      eq(ctx()._accessLine({ id: "s1", role: "Fitness Coach,Assistant Coach" }),
+         "Fitness Coach \u00b7 Assistant Coach \u00b7 squad access"));
+    it("somebody with no role at all still reads sensibly", () =>
+      eq(ctx()._accessLine({ id: "x" }), "Staff · squad access"));
+    it("the hub uses it rather than the raw role text", () =>
+      eq(/hubUserRole: this\._accessLine\(acc\)/.test(SOURCE), true));
+  });
+
   // Deleting a squad must not take the app down.
   //
   // Club Administration can delete a squad. promoNextSquad returned the next id from a fixed
@@ -5644,7 +5691,11 @@ describe("InBody sheet", () => {
         eq(/\{email:\(rec\.email\|\|''\)\.toLowerCase\(\)/.test(SOURCE), true, "family sign-in has the same problem");
       });
       it("the position is spelled out, not comma-jammed", () => {
-        eq(/hubUserRole: this\._roleLabel\(acc\)/.test(SOURCE), true,
+        // _accessLine builds this now — it spells the positions out the same way _roleLabel did,
+        // and then says what the app actually granted instead of repeating what was typed. The
+        // first attempt at it took the text before the first dot and silently dropped the second
+        // position, which is exactly what this test exists to stop.
+        eq(/hubUserRole: this\._accessLine\(acc\)/.test(SOURCE), true,
            "the header read 'ASSISTANT COACH,FITNESS COACH' straight from storage");
       });
     });
