@@ -32,16 +32,30 @@ async function callerIsAdmin(request: Request): Promise<{ ok: boolean; email?: s
   return { ok: true, email };
 }
 
+// Find the sign-in account for an address, however far down the list it is.
+//
+// This read one page of 200 and stopped. This club has over three hundred families, so anybody
+// whose account was created after the first two hundred simply was not found — and "not found"
+// here does not mean "no account", it means the route stops trying to UPDATE a password and
+// tries to CREATE one instead, on an address that already has an account. What comes back then
+// is an error about the address, which reads like the address is wrong when it is not.
+//
+// Every page now, until a short one says there are no more. Capped so a broken pager cannot spin.
 async function findUserByEmail(email: string): Promise<string | null> {
-  const r = await fetch(`${SB_URL}/auth/v1/admin/users?page=1&per_page=200`, {
-    headers: { apikey: SB_SERVICE, Authorization: "Bearer " + SB_SERVICE },
-    cache: "no-store",
-  });
-  if (!r.ok) return null;
-  const j = await r.json().catch(() => null);
-  const users: Array<{ id: string; email?: string }> = (j && (j.users || j)) || [];
-  const hit = users.find((u) => (u.email || "").toLowerCase() === email);
-  return hit ? hit.id : null;
+  const PER = 200;
+  for (let page = 1; page <= 25; page++) {
+    const r = await fetch(`${SB_URL}/auth/v1/admin/users?page=${page}&per_page=${PER}`, {
+      headers: { apikey: SB_SERVICE, Authorization: "Bearer " + SB_SERVICE },
+      cache: "no-store",
+    });
+    if (!r.ok) return null;
+    const j = await r.json().catch(() => null);
+    const users: Array<{ id: string; email?: string }> = (j && (j.users || j)) || [];
+    const hit = users.find((u) => (u.email || "").toLowerCase() === email);
+    if (hit) return hit.id;
+    if (users.length < PER) return null;          // that was the last page
+  }
+  return null;
 }
 
 export async function POST(request: Request) {
@@ -67,7 +81,10 @@ export async function POST(request: Request) {
       headers: { apikey: SB_SERVICE, Authorization: "Bearer " + SB_SERVICE, "Content-Type": "application/json" },
       body: JSON.stringify({ password, email_confirm: true, user_metadata: { name, role: "staff" } }),
     });
-    if (!r.ok) return Response.json({ error: `could not update: ${(await r.text().catch(() => "")).slice(0, 200)}` }, { status: 502 });
+    if (!r.ok) {
+      const said = (await r.text().catch(() => "")).slice(0, 200);
+      return Response.json({ error: `could not update ${JSON.stringify(email)}: ${said}` }, { status: 502 });
+    }
     return Response.json({ ok: true, action: "updated", email, by: who.email });
   }
 
@@ -76,6 +93,12 @@ export async function POST(request: Request) {
     headers: { apikey: SB_SERVICE, Authorization: "Bearer " + SB_SERVICE, "Content-Type": "application/json" },
     body: JSON.stringify({ email, password, email_confirm: true, user_metadata: { name, role: "staff" } }),
   });
-  if (!r.ok) return Response.json({ error: `could not create: ${(await r.text().catch(() => "")).slice(0, 200)}` }, { status: 502 });
+  if (!r.ok) {
+    // JSON.stringify so a stray space, a non-breaking space or a lookalike character is visible
+    // rather than invisible. "invalid format" about an address that looks perfectly ordinary is
+    // otherwise unanswerable from a screenshot.
+    const said = (await r.text().catch(() => "")).slice(0, 200);
+    return Response.json({ error: `could not create ${JSON.stringify(email)}: ${said}` }, { status: 502 });
+  }
   return Response.json({ ok: true, action: "created", email, by: who.email });
 }
