@@ -24,8 +24,8 @@
 //   body:    { email }
 
 import { SB_URL, SB_SERVICE, haveService } from "@/lib/wearable";
+import { isClubAdmin } from "@/lib/clubAdmins";
 
-const ADMIN_EMAILS = ["ahmedmamot@gmail.com", "sameh@vortexswimmingclub.com"];
 
 async function callerIsAdmin(request: Request): Promise<{ ok: boolean; email?: string; reason?: string }> {
   const auth = request.headers.get("authorization") || "";
@@ -39,7 +39,7 @@ async function callerIsAdmin(request: Request): Promise<{ ok: boolean; email?: s
   const u = await r.json().catch(() => null);
   const email = (u && u.email ? String(u.email) : "").toLowerCase();
   if (!email) return { ok: false, reason: "session has no email" };
-  if (!ADMIN_EMAILS.includes(email)) return { ok: false, email, reason: "only an admin can delete an account" };
+  if (!(await isClubAdmin(email))) return { ok: false, email, reason: "only an admin can delete an account" };
   return { ok: true, email };
 }
 
@@ -82,7 +82,7 @@ export async function POST(request: Request) {
   if (email === who.email) {
     return Response.json({ error: "that is your own account" }, { status: 400 });
   }
-  if (ADMIN_EMAILS.includes(email)) {
+  if (await isClubAdmin(email)) {
     return Response.json({ error: "that is a manager's account and cannot be deleted here" }, { status: 400 });
   }
 

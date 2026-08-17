@@ -2852,6 +2852,62 @@ describe("InBody sheet", () => {
     });
   });
 
+  // "only an admin can set staff passwords" — said to Sameh, who runs the club.
+  //
+  // Two server routes decided who counts as an admin from a pair of addresses written into the
+  // files: ahmedmamot@gmail.com and sameh@vortexswimmingclub.com. The second is not the address
+  // Sameh signs in with; his is on his staff row and it is a different one. So setting a staff
+  // password and deleting an account both refused him, on a screen whose header said
+  // ADMINISTRATOR · FULL ACCESS.
+  //
+  // That is the third copy of the same mistake in this codebase — the family list had it, the
+  // role check in the app had it — and each was found separately, weeks apart, by somebody being
+  // stopped from doing their job.
+  describe("who the server lets set a password or delete an account", () => {
+    const lib = readFileSync(new URL("../src/lib/clubAdmins.ts", import.meta.url), "utf8");
+    // The real function, compiled out of the file rather than copied here — a copy would keep
+    // passing after somebody changed the one that runs.
+    const grants = new Function("role",
+      lib.split("export function grantsFullAccess(role: string): boolean {")[1].split("\n}")[0]);
+
+    it("says yes to the roles this club's admins actually carry", () => {
+      for (const r of ["Administrator · full access", "Technical Director · full access", "Admin", "Head Coach", "CEO"])
+        eq(grants(r), true, r + " should be full access");
+    });
+    it("says no to the coaches", () => {
+      for (const r of ["Coach", "Senior B coach", "Fitness Coach", "Marketing Team", "", "Assistant Manager"])
+        eq(grants(r), false, r + " must not be able to set another person's password");
+    });
+
+    // The app and the server must answer this identically. proto.html is served to the browser
+    // and cannot import from src/, so the rule is written twice on purpose — and two copies that
+    // drift are how somebody ends up admin on one screen and refused on the next, which is
+    // exactly what happened to Sameh.
+    it("the app and the server agree, role for role", () => {
+      const appFn = new Function("role", (() => {
+        const b = methodSource("_isFullAccessRole").body;
+        return b.slice(b.indexOf("{") + 1, b.lastIndexOf("}"));
+      })());
+      for (const r of ["Administrator · full access", "Technical Director · full access", "Admin",
+                       "administrator", "Head Coach", "CEO", "Owner", "Manager", "Aquatic Director",
+                       "Coach", "Senior B coach", "Fitness Coach", "Marketing Team",
+                       "Assistant Manager", "Deputy Head Coach", "Receptionist", ""])
+        eq(grants(r), appFn(r), "the app and the server disagree about " + JSON.stringify(r));
+    });
+
+    it("neither route decides it from a list written into the file", () => {
+      for (const f of ["../src/app/api/staff/set-password/route.ts", "../src/app/api/family/delete/route.ts"]) {
+        const src = readFileSync(new URL(f, import.meta.url), "utf8").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+        eq(/ADMIN_EMAILS\s*=\s*\[/.test(src), false, f + " still has the addresses written into it");
+        eq(/isClubAdmin\(/.test(src), true, f + " must ask the one check");
+      }
+    });
+    // A route that sets somebody's password must refuse when it cannot tell, not allow.
+    it("refuses when it cannot read who the admins are", () =>
+      eq(/if \(!r\.ok\) return false;/.test(lib), true,
+         "an unreadable staff table must not open the password route to everybody"));
+  });
+
   // The header must never promise access the same screen is refusing.
   //
   // Mary opened the app to "ADMINISTRATOR · FULL ACCESS" above her name and a hub with no Club
@@ -3645,7 +3701,9 @@ describe("InBody sheet", () => {
     const route = readFileSync(new URL("../src/app/api/family/delete/route.ts", import.meta.url), "utf8");
 
     it("only a manager may ask for it", () => {
-      eq(/ADMIN_EMAILS\.includes\(email\)/.test(route), true, "the caller's own token is checked");
+      // isClubAdmin now, not a pair of addresses written into the file — one of which was not
+      // the address Sameh signs in with, so this route refused the person who runs the club.
+      eq(/isClubAdmin\(email\)/.test(route), true, "the caller's own token is checked");
       eq(/status: 403/.test(route), true);
       eq(/this\._isFullAccess\(\) &&/.test(SOURCE), true, "and the button is not shown to a coach");
     });
