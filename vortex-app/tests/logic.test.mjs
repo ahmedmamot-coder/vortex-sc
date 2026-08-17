@@ -3289,6 +3289,45 @@ describe("InBody sheet", () => {
     });
   });
 
+  // A write that can never finish must not hold every other write behind it.
+  //
+  // The failed queue is replayed in order, every 45 seconds. One write that fails the same way
+  // for ever therefore sits in front of everything else on that device: a coach presses Active,
+  // the change queues behind it, and from then on nothing they do saves — with a banner naming
+  // one key they have never heard of.
+  //
+  // My first attempt at this was a size limit, and it was the wrong tool. The club's roster is
+  // 1.27 MB of perfectly good data: a limit low enough to catch a stuck write refuses the
+  // roster, and a limit high enough to be safe catches nothing. What matters is not how big a
+  // write is — it is that it has failed the same way over and over.
+  describe("a write that keeps failing", () => {
+    const add = sourceBetween("var _prior = 0;", "_failSave(a);\n    window.__vxLastError");
+
+    it("counts its own attempts rather than being re-queued as if it were new", () => {
+      eq(/x\.sig===sig/.test(add), true, "it has to recognise the same write coming back");
+      eq(/_tries = _prior \+ 1/.test(add), true);
+    });
+    it("is set aside once it is clearly not going to work", () =>
+      eq(/_tries >= 10/.test(add), true, "nothing ever takes it off the retry path"));
+    // Set aside, not discarded — the club's work is not thrown away, it is moved off the path
+    // that everything else is queued on, and named so somebody can act on it.
+    it("is moved off the retry path rather than deleted", () => {
+      eq(/_blockAdd\(sig, table, payload/.test(add), true, "it must be kept and named");
+      eq(/_failSave\(a\)/.test(add), true, "and the rest of the queue saved without it");
+    });
+    it("says why it stopped trying, and what that means for everything else", () => {
+      eq(/tried "\+_tries/.test(add), true, "the count is the evidence");
+      eq(/not held up behind it/.test(add), true,
+         "the consequence is the part the person reading it needs");
+    });
+    // Ten attempts at 45 seconds is most of ten minutes — long enough that a real outage
+    // recovers on its own and nothing is set aside for a dropped connection.
+    it("gives a real outage time to recover first", () => {
+      const tries = parseInt((add.match(/_tries >= (\d+)/) || [])[1], 10);
+      eq(tries >= 5 && tries <= 20, true, "it gives up after " + tries + " attempts");
+    });
+  });
+
   // The route behind that row.
   describe("asking Supabase which staff addresses can sign in", () => {
     const route = readFileSync(new URL("../src/app/api/staff/sign-in-status/route.ts", import.meta.url), "utf8");

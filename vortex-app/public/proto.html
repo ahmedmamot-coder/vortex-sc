@@ -291,9 +291,33 @@ if ('serviceWorker' in navigator) {
       try{ window.dispatchEvent(new CustomEvent("vx-write-failed")); }catch(e){}
       return;
     }
+    // How many times this same write has already come back here.
+    //
+    // A size limit was the wrong tool for this. The club's roster is 1.27 MB of perfectly good
+    // data and a limit low enough to catch a stuck write would have refused it; a limit high
+    // enough to be safe catches nothing. What actually matters is not how big a write is, it is
+    // that it has failed the same way over and over — and the queue is replayed in order, so one
+    // write that can never finish sits in front of everything else on that device for ever. That
+    // is how a coach ends up unable to save anything at all, with a banner blaming one key they
+    // have never heard of.
+    //
+    // Ten attempts is generous for a real outage: the retry runs every 45 seconds, so this is
+    // most of ten minutes of trying before it is set aside — and set aside is not discarded, it
+    // is moved off the retry path and named, so the queue behind it moves.
+    var _prior = 0;
+    try{ var _was = a.filter(function(x){ return x && x.sig===sig; })[0]; _prior = (_was && _was.tries) || 0; }catch(e){}
+    var _tries = _prior + 1;
     a=a.filter(function(x){ return x && x.sig !== sig; });
+    if(_tries >= 10){
+      _blockAdd(sig, table, payload, (said||"it could not be sent")+" \u2014 tried "+_tries
+        +" times and set aside, so the rest of this device's saves are not held up behind it");
+      _failSave(a);
+      window.__vxLastError = { table:table, status:status, body:String(body||"").slice(0,300), ts:Date.now() };
+      try{ window.dispatchEvent(new CustomEvent("vx-write-failed")); }catch(e){}
+      return;
+    }
     a.push({ id:Date.now()+"_"+Math.random().toString(36).slice(2,7), op:op, table:table, payload:payload,
-             sig:sig, status:status||0, refused:_permanent(status), said:said||"",
+             sig:sig, status:status||0, refused:_permanent(status), said:said||"", tries:_tries,
              body:String(body||"").slice(0,300), ts:Date.now() });
     _failSave(a);
     window.__vxLastError = { table:table, status:status, body:String(body||"").slice(0,300), ts:Date.now() };
@@ -6551,7 +6575,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-17k';
+const VX_BUILD='2026-08-17m';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
