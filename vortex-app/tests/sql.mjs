@@ -87,6 +87,15 @@ insert into auth.users (email, last_sign_in_at) values
 insert into staff_accounts (id, name, email) values
   ('a','Ahmed','ahmed@club.test'), ('m','Mary','mary@club.test'),
   ('s','Sameh','sameh.work@club.test'), ('n','No Email','');
+-- Reda and Samer: addresses that are correct as written and that Auth refuses, because something
+-- invisible came along with the paste. This is the shape, planted deliberately — a right-to-left
+-- mark on one, a zero-width space on the other.
+insert into staff_accounts (id, name, email) values
+  ('r','Coach Reda',  E'redazizo29@gmail.com\u200f'),
+  ('sa','Coach Samer', E'samer_alawad\u200b@hotmail.com');
+create table family_accounts (id text primary key, full_name text, email text);
+insert into family_accounts (id, full_name, email) values
+  ('f1','A Parent','parent@club.test'), ('f2','Another Parent', E'other\u200b@club.test');
 `;
 const built = psql(["-q"], FIXTURE);
 if (built.status !== 0) { console.log("could not build the fixture:\n" + built.stderr); process.exit(1); }
@@ -95,7 +104,8 @@ console.log("");
 
 // Every file here reads the catalogue and can run against any database, which is the whole point
 // of them — they are what says what the club's database actually IS.
-for (const f of ["advisor_fixes.sql", "duplicate_indexes.sql", "preflight_audit.sql", "search_path_remaining.sql", "staff_access_check.sql"]) {
+for (const f of ["advisor_fixes.sql", "duplicate_indexes.sql", "preflight_audit.sql", "search_path_remaining.sql",
+                 "staff_access_check.sql", "staff_email_characters.sql"]) {
   check(f + " runs without erroring", () => {
     const r = psql(["-f", join(SUPA, f)]);
     if (r.status !== 0) throw new Error(r.stderr || r.stdout);
@@ -182,6 +192,51 @@ check("staff_access_check names who can sign in but cannot write", () => {
   const after = psql(["-tAc", "select count(*) from vx_staff_emails"]);
   if (after.stdout.trim() !== "1") throw new Error("reading the report granted access to somebody");
   return "flags the refused, the mismatched and the empty, and grants nothing";
+});
+
+// "Unable to validate email address: invalid format" about redazizo29@gmail.com is
+// unanswerable from a screenshot: the address is right, and whatever is wrong with it is
+// invisible in the field, in the list and in the error. This file makes it visible — so it has
+// to actually find one, and it must not fix anything just because somebody read the report.
+check("staff_email_characters finds the address that is not what it looks like", () => {
+  const r = psql(["-f", join(SUPA, "staff_email_characters.sql")]);
+  if (r.status !== 0) throw new Error(r.stderr);
+  const out = r.stdout;
+  for (const who of ["Coach Reda", "Coach Samer"])
+    if (!new RegExp(who + "[^\\n]*not plain ASCII").test(out)) throw new Error("did not flag " + who);
+  // And the ones that are fine must not be dragged in with them.
+  if (/Ahmed[^\n]*not plain ASCII/.test(out)) throw new Error("flagged an address that is perfectly plain");
+  // The bytes have to be in the report, or it names a problem it cannot prove.
+  if (!/e2808f/.test(out)) throw new Error("did not print the bytes of the right-to-left mark");
+  // Section 3: the same paste reaches the parents, and a parent who cannot sign up at all is
+  // the same fault wearing different clothes.
+  if (!/Another Parent/.test(out)) throw new Error("did not ask the same question of family_accounts");
+  // Section 2 must still be commented out — reading a report must never change data.
+  const after = psql(["-tAc", "select email from staff_accounts where id='r'"]);
+  if (!/\u200f/.test(after.stdout)) throw new Error("section 2 ran on its own — it must stay commented out");
+  return "flags both, proves it with the bytes, and changes nothing";
+});
+
+// The repair itself. It is handed over commented out, which means nobody runs it before it is
+// read — and also means nothing would notice if it were wrong. So run it here, uncommented,
+// against the planted rows: it has to clean exactly the two broken addresses, leave every good
+// one alone, and leave a working address in place of each broken one.
+check("the repair in section 2 actually repairs, and only what is broken", () => {
+  const src = readFileSync(join(SUPA, "staff_email_characters.sql"), "utf8");
+  const start = src.indexOf("-- update public.staff_accounts");
+  if (start === -1) throw new Error("section 2 is not where the report says it is");
+  const stmt = src.slice(start).split(";")[0].split("\n")
+    .map((l) => l.replace(/^-- ?/, "")).join("\n") + ";";
+  const r = psql(["-c", stmt]);
+  if (r.status !== 0) throw new Error(r.stderr);
+  const left = psql(["-tAc", "select count(*) from staff_accounts where email ~ '[^\\x20-\\x7E]'"]);
+  if (left.stdout.trim() !== "0") throw new Error("it left " + left.stdout.trim() + " broken address(es) behind");
+  const fixed = psql(["-tAc", "select email from staff_accounts where id in ('r','sa') order by id"]);
+  if (fixed.stdout.trim().split("\n").join(",") !== "redazizo29@gmail.com,samer_alawad@hotmail.com")
+    throw new Error("the cleaned addresses are not the ones the coaches actually use: " + fixed.stdout.trim());
+  const untouched = psql(["-tAc", "select email from staff_accounts where id='a'"]);
+  if (untouched.stdout.trim() !== "ahmed@club.test") throw new Error("it changed an address that was fine");
+  return "both cleaned to the right address, the plain ones untouched";
 });
 
 asPg(`${join(BIN, "pg_ctl")} -D ${DATA} stop`);

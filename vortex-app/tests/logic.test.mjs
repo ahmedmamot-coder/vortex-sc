@@ -409,8 +409,15 @@ describe("icon glyphs", () => {
     for (const n of ["clipboard-check", "trophy", "heart-pulse", "list-ordered", "medal"])
       eq(entries.some(([, k]) => k === n), true, `${n} missing`);
   });
-  it("custom glyphs render before lucide", () =>
-    eq(/this\._customIcons\(\);[\s\S]{0,80}lucide\.createIcons/.test(SOURCE), true));
+  // Order, not proximity. This measured a window of 80 characters and broke when a third step —
+  // redrawing icons whose meaning had changed — was added between the two, which is a passing
+  // test failing on something it was never about.
+  it("custom glyphs render before lucide", () => {
+    const body = SOURCE.slice(SOURCE.indexOf("  _icons(){"));
+    const mine = body.indexOf("this._customIcons()");
+    const theirs = body.indexOf("lucide.createIcons");
+    eq(mine > -1 && theirs > mine, true, "custom glyphs must be drawn before lucide runs");
+  });
   it("tool tiles use the 2027 gradient", () =>
     eq(/tint:this\._gradTile\(t\.color\), color:'#fff'/.test(SOURCE), true));
 });
@@ -2861,20 +2868,179 @@ describe("InBody sheet", () => {
   // the address, which reads like the address is wrong when it is not.
   describe("setting a password finds the account however far down the list it is", () => {
     const route = readFileSync(new URL("../src/app/api/staff/set-password/route.ts", import.meta.url), "utf8");
+    const auth = readFileSync(new URL("../src/lib/staffAuth.ts", import.meta.url), "utf8");
     it("reads past the first page", () => {
-      eq(/for \(let page = 1; page <= \d+; page\+\+\)/.test(route), true, "still stops after one page");
-      eq(/page=\$\{page\}/.test(route), true, "the page number has to actually change");
+      eq(/for \(let page = 1; page <= \d+; page\+\+\)/.test(auth), true, "still stops after one page");
+      eq(/page=\$\{page\}/.test(auth), true, "the page number has to actually change");
     });
     it("stops on a short page rather than spinning", () =>
-      eq(/if \(users\.length < PER\) return null;/.test(route), true));
+      eq(/if \(users\.length < PER\) break;/.test(auth), true));
     it("cannot loop for ever if the pager misbehaves", () =>
-      eq(/page <= 25/.test(route), true, "an unbounded loop against Auth is its own outage"));
+      eq(/page <= 25/.test(auth), true, "an unbounded loop against Auth is its own outage"));
+    // "could not read" and "there is no account" are different answers and must stay different:
+    // one means try again, the other means create one. Flattening them is what made the route
+    // try to CREATE an account on an address that already had one.
+    it("an unreadable Auth is not the same answer as an empty one", () => {
+      eq(/if \(!r\.ok\) return null;/.test(auth), true, "a failed page must not read as 'no users'");
+      eq(/accounts === null/.test(route), true, "the route has to notice and stop, not carry on and create");
+    });
     // "Unable to validate email address: invalid format", about an address that looks ordinary,
     // is unanswerable from a screenshot unless the address itself is in the message.
-    it("says which address was refused, with hidden characters visible", () => {
-      eq(/could not create \$\{JSON\.stringify\(email\)\}/.test(route), true);
-      eq(/could not update \$\{JSON\.stringify\(email\)\}/.test(route), true);
+    it("says which address was refused, and names any character that is not what it looks like", () => {
+      eq(/could not create \$\{describe\(email\)\}/.test(route), true);
+      eq(/could not update \$\{describe\(email\)\}/.test(route), true);
+      // JSON.stringify alone was not enough: it leaves a Cyrillic "а" looking exactly like a
+      // Latin one, which is how an ordinary-looking address gets refused as "invalid format".
+      const describe_ = new Function("email",
+        auth.split("export function describe(email: string): string {")[1].split("\n}")[0].replace(/: string\[\]|: string/g, ""));
+      eq(describe_("samer@hotmail.com"), '"samer@hotmail.com"', "a clean address reads plainly");
+      eq(/U\+0430/.test(describe_("s\u0430mer@hotmail.com")), true, "a Cyrillic lookalike must be named");
+      eq(/position 6/.test(describe_("samer\u00a0@hotmail.com")), true, "a non-breaking space must be named");
     });
+  });
+
+  // Two coaches could not be given a password at all. Supabase answered "Unable to validate
+  // email address: invalid format" about redazizo29@gmail.com and samer_alawad@hotmail.com —
+  // addresses that read as completely ordinary in the field, in the staff list, and in the
+  // error message itself. Both belong to people typing on an Arabic keyboard, and a right-to-left
+  // mark or a zero-width space travels with a paste and is invisible in every one of those
+  // places, including JSON.stringify.
+  //
+  // The app must not send what it cannot see. These code points carry no meaning inside an email
+  // address, so taking them out cannot break an address that was already right.
+  describe("an address that is not what it looks like", () => {
+    const auth = readFileSync(new URL("../src/lib/staffAuth.ts", import.meta.url), "utf8");
+    // Both copies of the rule, compiled from the files that run — the server's and the app's.
+    const server = (() => {
+      const body = auth.split("export function cleanEmail(email: unknown): string {")[1].split("\n}")[0];
+      const helpers = auth.slice(auth.indexOf("const INVISIBLE"), auth.indexOf("/** An address with"));
+      return new Function("email", helpers.replace(/: Array<\[number, number\]>|: number|: string|: boolean/g, "") + body);
+    })();
+    const app = bind("_cleanEmail");
+
+    const cases = [
+      ["a right-to-left mark", "redazizo29@gmail.com\u200f", "redazizo29@gmail.com"],
+      ["a left-to-right mark in the middle", "reda\u200ezizo29@gmail.com", "redazizo29@gmail.com"],
+      ["a zero-width space", "samer_alawad\u200b@hotmail.com", "samer_alawad@hotmail.com"],
+      ["a byte-order mark from a spreadsheet", "\ufeffsamer_alawad@hotmail.com", "samer_alawad@hotmail.com"],
+      ["a non-breaking space", "samer_alawad\u00a0@hotmail.com", "samer_alawad@hotmail.com"],
+      ["a bidi isolate", "\u2066mary@club.test\u2069", "mary@club.test"],
+      ["capitals and spaces, as before", "  Redazizo29@Gmail.com  ", "redazizo29@gmail.com"],
+      ["nothing wrong with it at all", "mosame7100@gmail.com", "mosame7100@gmail.com"],
+      ["an underscore, which is legal and must survive", "samer_alawad@hotmail.com", "samer_alawad@hotmail.com"],
+      ["a plus address, which is also legal", "ahmed+club@gmail.com", "ahmed+club@gmail.com"],
+    ];
+    for (const [what, dirty, want] of cases) {
+      it("the server takes out " + what, () => eq(server(dirty), want));
+      it("and the app takes out " + what + " before it is ever sent", () => eq(app(dirty), want));
+    }
+
+    // A Cyrillic "а" looks identical and might genuinely be somebody's address, so it is named
+    // rather than silently removed — the two are different jobs and must not be confused.
+    it("does not silently rewrite a lookalike letter it cannot be sure about", () => {
+      eq(server("s\u0430mer@hotmail.com"), "s\u0430mer@hotmail.com");
+      eq(app("s\u0430mer@hotmail.com"), "s\u0430mer@hotmail.com");
+    });
+
+    // Every place the app puts an address into staff_accounts or sends it to Auth.
+    it("is used everywhere an address is saved or sent, not only in one of them", () => {
+      const src = SOURCE.replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+      eq(/staffSetPassword\([\s\S]{0,400}?_cleanEmail\(acct\.email\)/.test(src), true,
+         "setting a password must send the cleaned address");
+      eq(/_cleanEmail\(f\.email\)/.test(src), true, "adding a coach must clean what was typed");
+      eq(/email=this\._cleanEmail\(d\.email\)/.test(src), true, "editing a coach must clean what was typed");
+    });
+  });
+
+  // "why after setting the password this message still showing in each account"
+  //
+  // The staff row said "Email ready · set a password below so they can sign in" for accounts
+  // that had a working password. It was reading a note the app wrote to itself the moment
+  // somebody pressed the button — {accountId: date} in localStorage — and that note answers a
+  // different question from the one on the row. It knows nothing about a password set on the
+  // other manager's phone, set last month, or set in the Supabase dashboard, and if the write
+  // never left the device it knows nothing at all. So the amber line stayed up for ever and
+  // read, correctly enough, as "it did not save".
+  //
+  // The row asks Supabase now. These are the four answers it can give and the order they are
+  // decided in, run out of the shipped source rather than described.
+  describe("whether a staff row says this person can sign in", () => {
+    const src = sourceBetween("const _email=this._cleanEmail(a.email);", "const isCustom=(''+a.id)");
+    const decide = (acct, ctx) => {
+      const self = {
+        _cleanEmail: bind("_cleanEmail"),
+        shortDateISO: (d) => "on " + d,
+        staffPwSet: ctx.staffPwSet || {},
+        staffAuth: ctx.staffAuth || {},
+        staffAuthAt: ctx.staffAuthAt || 0,
+      };
+      return new Function("a", src + "\n return signIn;").call(self, acct);
+    };
+    const AMBER = "#B4690E", GREEN = "#0C7A4F", RED = "#B42318";
+
+    it("no email at all is red, whatever else is known", () =>
+      eq(decide({ id: "chafik", email: "" }, { staffAuth: { "x@y.z": {} }, staffAuthAt: 1 }).fg, RED));
+
+    it("Supabase has the account and they have used it — green, with the date", () => {
+      const r = decide({ id: "sherif", email: "Sherif@club.test" },
+                       { staffAuth: { "sherif@club.test": { lastSignIn: "2026-08-14T09:00:00Z" } }, staffAuthAt: 1 });
+      eq(r.fg, GREEN);
+      eq(/last signed in on 2026-08-14/.test(r.text), true, r.text);
+    });
+
+    // The case that was reported. The password is set, they have not opened the app yet, and the
+    // row has to say so — "not used yet" is a different sentence from "go and set one".
+    it("Supabase has the account and they have not signed in yet — still green", () => {
+      const r = decide({ id: "sherif", email: "sherif@club.test" },
+                       { staffAuth: { "sherif@club.test": { lastSignIn: null } }, staffAuthAt: 1 });
+      eq(r.fg, GREEN);
+      eq(/password set, not used yet/.test(r.text), true, r.text);
+      eq(/set a password below/.test(r.text), false, "this is the sentence that would not go away");
+    });
+
+    // Reda and Samer: Auth refused to create the account, so there is genuinely nothing to sign
+    // in with, and the row must keep saying so.
+    it("Supabase answered and has no account for them — amber", () => {
+      const r = decide({ id: "reda", email: "redazizo29@gmail.com" },
+                       { staffAuth: { "sherif@club.test": {} }, staffAuthAt: 1 });
+      eq(r.fg, AMBER);
+      eq(/No sign-in account yet/.test(r.text), true, r.text);
+    });
+
+    // A coach opening this screen is not an admin, so the route refuses them and there is no
+    // answer. Turning every row amber on that would be inventing a problem out of a permission.
+    it("no answer from Supabase falls back to the old note rather than claiming nobody has an account", () => {
+      const noted = decide({ id: "martin", email: "martin@club.test" },
+                           { staffPwSet: { martin: "2026-08-16T10:00:00Z" }, staffAuthAt: 0 });
+      eq(noted.fg, GREEN);
+      eq(/Password set on 2026-08-16/.test(noted.text), true, noted.text);
+      const blank = decide({ id: "new", email: "new@club.test" }, { staffAuthAt: 0 });
+      eq(blank.fg, AMBER);
+    });
+
+    // The note is keyed by account id, Supabase by address, and the addresses on these rows are
+    // typed by people — so the lookup has to be on the cleaned address or a stray capital puts
+    // a working account back on amber.
+    it("matches on the cleaned address, not on whatever capitals were typed", () => {
+      const r = decide({ id: "reda", email: "  Redazizo29@Gmail.com\u200f " },
+                       { staffAuth: { "redazizo29@gmail.com": { lastSignIn: null } }, staffAuthAt: 1 });
+      eq(r.fg, GREEN, r.text);
+    });
+  });
+
+  // The route behind that row.
+  describe("asking Supabase which staff addresses can sign in", () => {
+    const route = readFileSync(new URL("../src/app/api/staff/sign-in-status/route.ts", import.meta.url), "utf8");
+    it("is admin-only, like the route that sets the passwords", () =>
+      eq(/callerIsAdmin\(request\)/.test(route), true));
+    it("answers only about the addresses it was asked about", () =>
+      eq(/for \(const e of asked\)/.test(route), true, "it must not hand back the club's whole auth table"));
+    it("never returns a user id", () =>
+      eq(/\ba\.id\b/.test(route), false, "the staff screen needs yes-or-no, not Supabase internals"));
+    // If Auth could not be read, saying "none of them have accounts" would turn every green row
+    // amber on a blip and send somebody resetting passwords that were fine.
+    it("says it could not read rather than saying nobody has an account", () =>
+      eq(/found === null/.test(route), true));
   });
 
   // "only an admin can set staff passwords" — said to Sameh, who runs the club.
@@ -2924,8 +3090,16 @@ describe("InBody sheet", () => {
       for (const f of ["../src/app/api/staff/set-password/route.ts", "../src/app/api/family/delete/route.ts"]) {
         const src = readFileSync(new URL(f, import.meta.url), "utf8").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
         eq(/ADMIN_EMAILS\s*=\s*\[/.test(src), false, f + " still has the addresses written into it");
-        eq(/isClubAdmin\(/.test(src), true, f + " must ask the one check");
+        // set-password reaches it through callerIsAdmin, which does nothing else — follow the
+        // chain rather than insisting on the name, but prove the chain actually arrives.
+        eq(/isClubAdmin\(|callerIsAdmin\(/.test(src), true, f + " must ask the one check");
       }
+    });
+    it("and callerIsAdmin is that chain, not a second opinion", () => {
+      const auth = readFileSync(new URL("../src/lib/staffAuth.ts", import.meta.url), "utf8")
+        .replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+      eq(/ADMIN_EMAILS\s*=\s*\[/.test(auth), false, "the addresses must not reappear here");
+      eq(/await isClubAdmin\(email\)/.test(auth), true, "callerIsAdmin must end at the one check");
     });
     // A route that sets somebody's password must refuse when it cannot tell, not allow.
     it("refuses when it cannot read who the admins are", () =>

@@ -6508,7 +6508,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-17d';
+const VX_BUILD='2026-08-17f';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -6700,6 +6700,8 @@ class Component extends DCLogic {
     // not saving" gets reported about a password that saved. Shared, so a manager on another
     // phone sees it too.
     this.staffPwSet=this._loadJSON('vx_staff_pw_set', {});    // {accountId: ISO date}
+    this.staffAuth={};        // {email: {lastSignIn, createdAt, confirmed}} — from Supabase, never stored
+    this.staffAuthAt=0;       // 0 = never answered, so the rows fall back to staffPwSet
     this.academySchedule={preteam:'Mon/Wed/Fri · 4:00–5:00pm', advb:'Mon/Wed/Fri · 4:00–5:30pm', adva:'Mon–Fri · 4:00–5:30pm', junior:'Mon–Fri · 4:00–6:00pm', seniorb:'Mon–Sat · 4:00–6:00pm', seniora:'Mon–Sat · 4:00–6:30pm', vortexb:'Mon–Sat · 5:00–7:00pm', vortexa:'Mon–Sat · 5:00–7:30pm', legend:'Mon–Sat · 5:30–8:00pm'};
     this.videoLib=this._loadJSON('vx_videos', []).filter(v=>v && v.url && /^https?:\/\//i.test(v.url)).map(v=>({
       ...v,
@@ -7133,7 +7135,7 @@ class Component extends DCLogic {
   }
   async staffSetPassword(acct, pw){
     if(!acct) return;
-    const email=(''+(acct.email||'')).trim().toLowerCase();
+    const email=this._cleanEmail(acct.email);
     // Every one of these carries the account it is about. The answer used to be printed once,
     // above the whole list: press Set password on the eleventh coach and the tick appeared off
     // the top of the screen while the box you were looking at went empty — which reads exactly
@@ -7156,6 +7158,12 @@ class Component extends DCLogic {
       // before it was set.
       const set={...(this.staffPwSet||{})}; set[acct.id]=new Date().toISOString();
       this.staffPwSet=set; try{ this._saveJSON('vx_staff_pw_set', set); }catch(e){}
+      // The row's status comes from Supabase now, so ask it again rather than wait out the poll
+      // — this is the moment somebody is looking at that row to see it change. The optimistic
+      // entry keeps it green in between; the re-read replaces it with what Auth actually says.
+      this.staffAuth={...(this.staffAuth||{}), [email]:{lastSignIn:null, createdAt:new Date().toISOString(), confirmed:true}};
+      if(!this.staffAuthAt) this.staffAuthAt=Date.now();
+      try{ this._staffAuthFetch(true); }catch(e){}
       this.setState({staffPwMsg:'Saved \u2713 '+email+' can sign in with that password now.', staffPwOk:true, staffPwFor:acct.id,
         staffPwDrafts:{...(this.state.staffPwDrafts||{}), [acct.id]:''}});
     }catch(e){ return say('Could not reach the server.', false); }
@@ -7343,6 +7351,52 @@ class Component extends DCLogic {
   // Reset a family account's password in-app (no email needed): verify by the email
   // + phone they registered with, then update the row in the family_accounts table.
   // ---- Supabase Auth (GoTrue) helpers: real confirmation + reset emails ----
+  // An address with the invisible characters taken out.
+  //
+  // Two coaches could not have a password set at all — Supabase answered "Unable to validate
+  // email address: invalid format" about addresses that read as perfectly ordinary in the field,
+  // in the staff list and in the error. A right-to-left mark or a zero-width space travels with
+  // a paste from a message or a spreadsheet, and it is invisible in every one of those places.
+  // These code points carry no meaning inside an email address, so removing them cannot change
+  // an address that was already correct.
+  _cleanEmail(v){
+    const bad=[[0x0000,0x001f],[0x007f,0x009f],[0x00a0,0x00a0],[0x180e,0x180e],[0x200b,0x200f],
+               [0x202a,0x202e],[0x2060,0x2064],[0x2066,0x2069],[0xfeff,0xfeff]];
+    let out='';
+    for(const ch of String(v==null?'':v)){ const c=ch.codePointAt(0);
+      if(!bad.some(r=>c>=r[0]&&c<=r[1])) out+=ch; }
+    return out.trim().toLowerCase();
+  }
+  // Whether each staff address actually has a sign-in account, asked of Supabase rather than
+  // remembered locally. this.staffPwSet only ever knew about button presses made on THIS device,
+  // so a password set last month, or by the other manager on her phone, or in the Supabase
+  // dashboard, left the row saying "set a password below" for ever. staffAuthAt stays 0 until a
+  // real answer arrives, and until it does the row falls back to the old note rather than
+  // claiming nobody has an account.
+  async _staffAuthFetch(force){
+    const now=Date.now();
+    if(!force && this._staffAuthBusy) return;
+    if(!force && this.staffAuthAt && (now-this.staffAuthAt)<60000) return;
+    const emails=[...new Set((this.accounts||[]).map(a=>this._cleanEmail(a.email)).filter(e=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)))];
+    if(!emails.length) return;
+    let tok=''; try{ tok=(window.__VX_AUTH&&window.__VX_AUTH.token)||''; }catch(e){}
+    if(!tok) return;
+    this._staffAuthBusy=true;
+    try{
+      const r=await fetch('/api/staff/sign-in-status', {method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok},
+        body:JSON.stringify({emails})});
+      if(r.ok){
+        const j=await r.json().catch(()=>null);
+        if(j && j.accounts && typeof j.accounts==='object'){
+          this.staffAuth=j.accounts; this.staffAuthAt=Date.now(); this.setState({});
+        }
+      }
+      // A 403 is the ordinary case for a coach opening their own profile: they are not an admin,
+      // so they get no answer and the row keeps the local note. Nothing to report.
+    }catch(e){}
+    this._staffAuthBusy=false;
+  }
   _sbAuthUrl(){ const sb=window.__VX_SB||{}; return (sb.url||'')+'/auth/v1'; }
   _sbAnon(){ const sb=window.__VX_SB||{}; return sb.anon||''; }
   async _authPost(path, body){ try{ const r=await fetch(this._sbAuthUrl()+path, {method:'POST', headers:{'apikey':this._sbAnon(),'Authorization':'Bearer '+this._sbAnon(),'Content-Type':'application/json'}, body:JSON.stringify(body||{})}); let j={}; try{ j=await r.json(); }catch(e){} return {ok:r.ok, status:r.status, j}; }catch(e){ return {ok:false, status:0, j:{}, netfail:true}; } }
@@ -8834,7 +8888,7 @@ class Component extends DCLogic {
   async staffAddCreate(){
     const f=this.state.staffAddForm||{};
     const name=(f.name||'').trim();
-    const email=(f.email||'').trim().toLowerCase();
+    const email=this._cleanEmail(f.email);
     const pass=(f.pass||'');
     const user=(f.user||'').trim().toLowerCase();
     const bad=(m)=>this.setState({staffAddMsg:m, staffAddOk:false});
@@ -9000,7 +9054,7 @@ class Component extends DCLogic {
     // PINs are gone (sign-in is a server-checked password now), so a missing PIN must not
     // block saving — this guard used to make "Save profile" silently do nothing.
     if(!label||!user){ return this.setState({profileMsg:'Name and username are both required.', profileOk:false}); }
-    const role=(d.role||'Coach'), squadId=(d.squadId||''), photo=(d.photo||''), phone=(d.phone||'').trim(), email=(d.email||'').trim(), bio=(d.bio||'').trim();
+    const role=(d.role||'Coach'), squadId=(d.squadId||''), photo=(d.photo||''), phone=(d.phone||'').trim(), email=this._cleanEmail(d.email), bio=(d.bio||'').trim();
     const o={label:label, user:user, pin:pin, role:role, squadId:squadId, photo:photo, phone:phone, email:email, bio:bio};
     this.accountOvr[id]=o;
     const isCustom=(''+id).indexOf('st_')===0;
@@ -13526,7 +13580,7 @@ class Component extends DCLogic {
     this._plansInt=setInterval(()=>{ if(this.state.view==='squad' && this.state.tab==='plans'){ this._plansFetch(); this._squadPlansFetch(); } }, 8000);
     // Staff accounts live in their own table (staff_accounts).
     this._staffFetch();
-    this._staffInt=setInterval(()=>{ if(this.state.view==='admin' && this.state.adminSection==='staff') this._staffFetch(); }, 12000);
+    this._staffInt=setInterval(()=>{ if(this.state.view==='admin' && this.state.adminSection==='staff'){ this._staffFetch(); this._staffAuthFetch(); } }, 12000);
     // Family/parent accounts live in their own table too.
     this._familyFetch();
   }
@@ -13674,7 +13728,32 @@ class Component extends DCLogic {
       el.replaceWith(svg);
     });
   }
-  _icons(){ clearTimeout(this._t); this._t=setTimeout(()=>{ try{ this._customIcons(); }catch(e){} try{ window.lucide && window.lucide.createIcons(); }catch(e){} }, 30); }
+  // An icon whose name changed after it was drawn keeps the old picture.
+  //
+  // lucide replaces <i data-lucide="x"> with <svg class="lucide lucide-x">, so from then on the
+  // element in the page is not the one the template believes is there. When the name changes —
+  // a chevron flipping, a play button becoming pause, a staff row going from "no email" to "can
+  // sign in" — the new name lands on the svg's data-lucide attribute and nothing redraws it.
+  //
+  // That is why a staff row showed a red warning beside green text saying the password was set.
+  // The red icon was drawn when that row had no email address, and it never changed back. There
+  // are 29 icons in this app whose name is decided at render time, so this was never one row.
+  //
+  // The svg keeps its data-lucide, and its class still names what was actually drawn. The two
+  // disagreeing is the whole signal: put an <i> back and let lucide draw it again.
+  _refreshStaleIcons(){
+    const svgs=document.querySelectorAll('svg.lucide[data-lucide]');
+    for(let i=0;i<svgs.length;i++){
+      const el=svgs[i], want=el.getAttribute('data-lucide')||'';
+      if(!want || el.classList.contains('lucide-'+want)) continue;
+      const rep=document.createElement('i');
+      rep.setAttribute('data-lucide', want);
+      const st=el.getAttribute('style'); if(st) rep.setAttribute('style', st);
+      const tpl=el.getAttribute('data-dc-tpl'); if(tpl) rep.setAttribute('data-dc-tpl', tpl);
+      if(el.parentNode) el.parentNode.replaceChild(rep, el);
+    }
+  }
+  _icons(){ clearTimeout(this._t); this._t=setTimeout(()=>{ try{ this._customIcons(); }catch(e){} try{ this._refreshStaleIcons(); }catch(e){} try{ window.lucide && window.lucide.createIcons(); }catch(e){} }, 30); }
 
   parseSet(txt, dist){ txt=String(txt||''); let reps=1; const rm=txt.match(/(\d+)\s*[\u00d7xX]\s*(\d+)/); if(rm) reps=parseInt(rm[1])||1; let interval=null; const im=txt.match(/@\s*(\d+):(\d{2})/); if(im) interval=parseInt(im[1])*60+parseInt(im[2]); else { const im2=txt.match(/@\s*:(\d{2})/); if(im2) interval=parseInt(im2[1]); } if(!interval){ const per = reps>1 ? Math.round((+dist||100)/reps) : (+dist||100); interval = Math.max(20, Math.round(per*1.6)); } return {reps, interval}; }
   clockSeq(){ const plan=this.getPlan(this.state.squadId); const seq=[]; (plan.sections||[]).forEach(sec=>{ (sec.sets||[]).forEach(st=>{ const p=this.parseSet(st.txt, st.dist); seq.push({section:sec.title, dist:st.dist, txt:st.txt, reps:p.reps, interval:p.interval}); }); }); return seq; }
@@ -13897,7 +13976,7 @@ class Component extends DCLogic {
       {id:'meets', icon:'medal', title:'Meets', sub:this.allMeets().length+' meets · Hy-Tek & PDF import', divider:'#EEF1F5'},
       {id:'brand', icon:'palette', title:'Club Configuration', sub:'Brand · zone method · locale · currency', divider:'#EEF1F5'},
       {id:'squads', icon:'layout-grid', title:'Squads', sub:this.squads.length+' squads · add, rename, colours', divider:'#EEF1F5'},
-      {id:'staff', icon:'user-cog', title:'Staff', sub:'Coaches · names & PINs', divider:'#EEF1F5'},
+      {id:'staff', icon:'user-cog', title:'Staff', sub:'Coaches · sign-in & access', divider:'#EEF1F5'},
       {id:'families', icon:'users-round', title:'Family accounts', sub:(this.family||[]).length+' parent / swimmer logins · linked children', divider:'#EEF1F5'},
       {id:'audit', icon:'scroll-text', title:'Activity log', sub:'Who signed in, who changed what, and when', divider:'transparent'},
       {id:'settings', icon:'settings', title:'Settings', sub:'AI reader · database · reset data', divider:'transparent'},
@@ -13906,6 +13985,10 @@ class Component extends DCLogic {
       // arrived with a button, so an empty page was the first thing anyone saw and there was no
       // way to tell it from a log that had failed to load.
       if(r.id==='audit'){ try{ this._auditFetch(); }catch(e){} }
+      // Same reason: the staff list says whether each person can sign in, and that answer comes
+      // from Supabase. Asked on the way in, so the rows are right on the first paint instead of
+      // showing the fallback for the first twelve seconds.
+      if(r.id==='staff'){ try{ this._staffAuthFetch(true); }catch(e){} }
       this.setState({adminSection:r.id, famAdminQuery:'', auditQuery:'', auditTestMsg:'', famAdminAddFor:null, famAdminSwQuery:'', famAdminMsg:'', squadMsg:''}); }}));
 
     // ---- move ----
@@ -15302,12 +15385,23 @@ class Component extends DCLogic {
       // empty password box means only that a password is never shown back, and it was being
       // read as "nothing was saved" — while an account with no email cannot sign in at all and
       // said nothing about it.
-      const _hasEmail=/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(a.email||'').trim());
+      const _email=this._cleanEmail(a.email);
+      const _hasEmail=/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(_email);
+      // Supabase first, this device's note only as a fallback. The note recorded "the button was
+      // pressed here", which is not the same question as "can this person sign in" — and it
+      // answered it wrongly on every other device, and for every password set any other way.
+      const _acc=this.staffAuthAt ? (this.staffAuth||{})[_email] : null;
       const _pwAt=(this.staffPwSet||{})[a.id];
+      const _seen=_acc && _acc.lastSignIn ? String(_acc.lastSignIn).slice(0,10) : '';
       const signIn = !_hasEmail
         ? {text:'No email — cannot sign in', fg:'#B42318', icon:'alert-circle'}
-        : (_pwAt ? {text:'Password set '+this.shortDateISO(String(_pwAt).slice(0,10))+' · can sign in', fg:'#0C7A4F', icon:'check-circle-2'}
-                 : {text:'Email ready · set a password below so they can sign in', fg:'#B4690E', icon:'key-round'});
+        : _acc
+          ? {text:(_seen ? 'Can sign in · last signed in '+this.shortDateISO(_seen)
+                         : 'Can sign in · password set, not used yet'), fg:'#0C7A4F', icon:'check-circle-2'}
+          : this.staffAuthAt
+            ? {text:'No sign-in account yet · set a password below', fg:'#B4690E', icon:'key-round'}
+            : (_pwAt ? {text:'Password set '+this.shortDateISO(String(_pwAt).slice(0,10))+' · can sign in', fg:'#0C7A4F', icon:'check-circle-2'}
+                     : {text:'Email ready · set a password below so they can sign in', fg:'#B4690E', icon:'key-round'});
       const isCustom=(''+a.id).indexOf('st_')===0; const isAdminAcc=(a.id==='ahmed'||a.id==='sameh');
       const badge = sq? sq.short : (a.initials||'?'); const accent = sq? sq.accent : (a.accent||'#2733D6');
       const primary = this._roleLabel(a) || (sq? sq.name : ''); const contactBits=[a.phone, a.email, _accessLine].filter(Boolean).join(' · ');

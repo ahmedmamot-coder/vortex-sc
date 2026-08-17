@@ -603,6 +603,44 @@ scene("the app survives data that is wrong in the usual ways", async (browser) =
 });
 
 // ---------------------------------------------------------------------------------------------
+// An icon must show what it currently means, not what it meant when it was first drawn.
+//
+// A staff row showed a red warning beside green text saying the password was set. The red icon
+// had been drawn while that row had no email address, and it never changed back: lucide swaps
+// <i data-lucide="x"> for <svg class="lucide lucide-x">, so the element in the page stops being
+// the one the template thinks it is, and a later name change lands on an attribute nobody redraws.
+//
+// Twenty-nine icons in this app get their name at render time — chevrons, play and pause, status
+// marks. This was never one row.
+// ---------------------------------------------------------------------------------------------
+scene("an icon redraws when what it means changes", async (browser) => {
+  const page = await openLive(browser);
+  const out = await page.evaluate(async () => {
+    const el = document.querySelector("svg.lucide[data-lucide]");
+    if (!el) return { skip: true };
+    const was = el.getAttribute("data-lucide"), drawn = el.getAttribute("class") || "";
+    // Exactly what the template does when an icon's meaning changes: set the name. Nothing here
+    // touches the picture — that is the whole point.
+    el.setAttribute("data-lucide", "check-circle-2");
+    const btn = el.closest("button");
+    if (btn) btn.click();                       // any render; _icons() runs after every one
+    await new Promise((r) => setTimeout(r, 1000));
+    const now = document.querySelector('[data-lucide="check-circle-2"]');
+    return { was, drawn, nowClass: now ? (now.getAttribute("class") || "") : "gone" };
+  });
+  if (out.skip) throw new Error("no lucide icon on the hub to test with");
+  eq(/lucide-check-circle-2/.test(out.nowClass), true,
+     "the icon still shows " + out.drawn + " after its name changed to check-circle-2");
+  // And nothing anywhere should be showing a picture that disagrees with its name.
+  const stale = await page.evaluate(() =>
+    [...document.querySelectorAll("svg.lucide[data-lucide]")]
+      .filter((e) => !e.classList.contains("lucide-" + e.getAttribute("data-lucide")))
+      .map((e) => e.getAttribute("data-lucide") + " drawn as " + e.getAttribute("class")));
+  eq(stale.join(", "), "", "icons on screen whose picture does not match their name");
+  return "redrawn from " + out.was + " to check-circle-2, and nothing left stale";
+});
+
+// ---------------------------------------------------------------------------------------------
 // Sitting on a screen and touching nothing must not write to the database.
 //
 // Found by accident, while a fake database was answering every read with an empty list: the app
@@ -674,6 +712,148 @@ scene("no write leaves the device while there is no session", async (browser) =>
 // them are not tool screens at all — they are the cards on the Coaches Handbook, which expand in
 // place rather than opening — so the sweep reported them "could not be reached" run after run,
 // and that noise sat on top of the real answer. Two lists, each opened the way it actually opens.
+// ---------------------------------------------------------------------------------------------
+// "why after seting the password this message still showing in each account"
+//
+// The staff row said "Email ready - set a password below so they can sign in" for coaches who
+// already had a working password. It was reading a note the app wrote to itself the moment
+// somebody pressed the button, and that note answers a different question from the one printed
+// on the row: it knows about button presses on THIS phone, and nothing about a password set on
+// the other manager's phone, set last month, or set in the Supabase dashboard.
+//
+// So the row asks Supabase now. Two coaches here: one with a sign-in account and one without,
+// which is the club's actual situation - Reda's could not be created at all.
+// ---------------------------------------------------------------------------------------------
+scene("the staff list says who can sign in, from Supabase and not from a note on this phone", async (browser) => {
+  const STAFF = [
+    { id: "st_sherif", name: "Coach Sherif", username: "sherif", role: "Coach", squad_id: "junior",
+      email: "sherif@club.test", is_custom: true },
+    { id: "st_reda", name: "Coach Reda", username: "reda", role: "Coach", squad_id: "adva",
+      email: "redazizo29@gmail.com", is_custom: true },
+  ];
+  const page = await openLive(browser, null, { staff_accounts: STAFF });
+
+  // Supabase's side of it, kept in one place so setting a password actually changes the answer -
+  // an account that appears out of the set-password call and not out of the status call would
+  // let a broken loop pass.
+  const haveAccounts = new Set(["sherif@club.test"]);
+  let asked = null;
+  await page.route("**/api/staff/sign-in-status", async (route) => {
+    asked = (JSON.parse(route.request().postData() || "{}").emails) || [];
+    const accounts = {};
+    for (const e of asked) if (haveAccounts.has(e)) accounts[e] = { lastSignIn: null, createdAt: "2026-08-10T00:00:00Z", confirmed: true };
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, accounts }) });
+  });
+  const sent = [];
+  await page.route("**/api/staff/set-password", async (route) => {
+    const b = JSON.parse(route.request().postData() || "{}");
+    sent.push(b.email);
+    haveAccounts.add(b.email);
+    await route.fulfill({ status: 200, contentType: "application/json",
+                          body: JSON.stringify({ ok: true, action: "created", email: b.email }) });
+  });
+
+  const readRows = () => page.evaluate(() => {
+    const out = {};
+    for (const el of document.querySelectorAll("span")) {
+      const t = (el.innerText || "").trim();
+      if (t !== "Coach Sherif" && t !== "Coach Reda") continue;
+      let card = el;
+      while (card && !/border-radius:13px/.test(card.getAttribute("style") || "")) card = card.parentElement;
+      if (card) out[t] = (card.innerText || "").split("\n")[0].trim();
+    }
+    return out;
+  });
+
+  await tap(page, "Club Administration");
+  await tap(page, "sign-in & access");            // the Staff row, by its own subtitle
+  await page.waitForTimeout(1600);
+
+  if (!asked) throw new Error("the staff screen never asked Supabase who can sign in");
+  eq(asked.includes("redazizo29@gmail.com") && asked.includes("sherif@club.test"), true,
+     "it must ask about every staff address, not only the ones it has a note for");
+
+  const before = await readRows();
+  if (!before["Coach Sherif"] || !before["Coach Reda"]) throw new Error("the staff rows did not render: " + JSON.stringify(before));
+  eq(/Can sign in/.test(before["Coach Sherif"]), true,
+     "a coach WITH an account still reads: " + JSON.stringify(before["Coach Sherif"]));
+  eq(/set a password below/.test(before["Coach Sherif"]), false,
+     "this is the sentence that would not go away");
+  eq(/No sign-in account yet/.test(before["Coach Reda"]), true,
+     "a coach with no account should be told so: " + JSON.stringify(before["Coach Reda"]));
+
+  // Now set one, on the row that has none, and watch that row change without a reload.
+  const typed = await page.evaluate(() => {
+    for (const el of document.querySelectorAll("span")) {
+      if ((el.innerText || "").trim() !== "Coach Reda") continue;
+      let card = el;
+      while (card && !/border-radius:13px/.test(card.getAttribute("style") || "")) card = card.parentElement;
+      const input = card && card.querySelector("input[type=text]");
+      const btn = card && [...card.querySelectorAll("button")].find((b) => /set password/i.test(b.innerText || ""));
+      if (!input || !btn) return false;
+      const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+      set.call(input, "a-long-enough-one");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      setTimeout(() => btn.click(), 250);
+      return true;
+    }
+    return false;
+  });
+  if (!typed) throw new Error("could not find the password box on Reda's row");
+  await page.waitForTimeout(2200);
+
+  eq(sent, ["redazizo29@gmail.com"], "the password went to the wrong address, or nowhere");
+  const after = await readRows();
+  eq(/Can sign in/.test(after["Coach Reda"] || ""), true,
+     "the row still says: " + JSON.stringify(after["Coach Reda"]));
+  return "asked about " + asked.length + " addresses; Reda's row went "
+       + JSON.stringify(before["Coach Reda"]) + " -> " + JSON.stringify(after["Coach Reda"]);
+});
+
+// ---------------------------------------------------------------------------------------------
+// The address that is not what it looks like. Auth refused redazizo29@gmail.com as "invalid
+// format" - correctly, because a right-to-left mark had come along with the paste and is
+// invisible in the field, in the list and in the error. The app must not send what it cannot
+// see, so the address that leaves the phone has to be the clean one.
+// ---------------------------------------------------------------------------------------------
+scene("an invisible character in an address never leaves the phone", async (browser) => {
+  const page = await openLive(browser, null, {
+    staff_accounts: [{ id: "st_reda", name: "Coach Reda", username: "reda", role: "Coach",
+                       squad_id: "adva", email: "redazizo29@gmail.com" + "\u200f", is_custom: true }],
+  });
+  await page.route("**/api/staff/sign-in-status", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, accounts: {} }) }));
+  const sent = [];
+  await page.route("**/api/staff/set-password", async (route) => {
+    sent.push(JSON.parse(route.request().postData() || "{}").email);
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, action: "created" }) });
+  });
+  await tap(page, "Club Administration");
+  await tap(page, "sign-in & access");
+  await page.waitForTimeout(1400);
+  const ok = await page.evaluate(() => {
+    for (const el of document.querySelectorAll("span")) {
+      if ((el.innerText || "").trim() !== "Coach Reda") continue;
+      let card = el;
+      while (card && !/border-radius:13px/.test(card.getAttribute("style") || "")) card = card.parentElement;
+      const input = card && card.querySelector("input[type=text]");
+      const btn = card && [...card.querySelectorAll("button")].find((b) => /set password/i.test(b.innerText || ""));
+      if (!input || !btn) return false;
+      const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+      set.call(input, "a-long-enough-one");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      setTimeout(() => btn.click(), 250);
+      return true;
+    }
+    return false;
+  });
+  if (!ok) throw new Error("could not find Reda's password box");
+  await page.waitForTimeout(1800);
+  eq(sent, ["redazizo29@gmail.com"],
+     "what left the phone was " + JSON.stringify(sent) + " - Auth refuses that, and nothing on screen says why");
+  return "sent the address without the right-to-left mark";
+});
+
 const TOOLS = [
   "Insights","AI Assistants","Daily Attendance","Activity log","Birthdays","Boards",
   "Club Configuration","Pace Clock","Zone Engine","Meet Entries","Family accounts",
