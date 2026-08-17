@@ -6508,7 +6508,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-16n';
+const VX_BUILD='2026-08-17a';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -10275,7 +10275,27 @@ class Component extends DCLogic {
   }
   _promoMeta(swId){ return this.promoStore[swId] || {lastReview:null, suggested:false, suggestedAt:null}; }
   _savePromo(swId, meta){ this.promoStore={...this.promoStore, [swId]:meta}; this._saveJSON('vx_promo', this.promoStore); this.forceUpdate(); }
-  promoNextSquad(sqid){ const order=['preteam','advb','adva','junior','seniorb','seniora','vortexb','vortexa','legend']; const i=order.indexOf(sqid); return i>=0 && i<order.length-1 ? order[i+1] : null; }
+  // The next squad up, and it has to be one that still exists.
+  //
+  // This returned order[i+1] whether or not that squad was still there. Club Administration lets
+  // a squad be deleted, and the moment one is, renderVals reads `.name` off undefined — which is
+  // not a broken promotion panel, it is the entire app replaced by an error screen, on every
+  // device at once, until somebody puts the squad back. Deleting one of nine did it.
+  promoNextSquad(sqid){
+    const order=['preteam','advb','adva','junior','seniorb','seniora','vortexb','vortexa','legend'];
+    const here=this.squadById||{};
+    const i=order.indexOf(sqid);
+    if(i>=0){
+      // Step over any that have gone. A club that removes Senior B should promote Junior to
+      // Senior A, not to a squad that is not there.
+      for(let k=i+1;k<order.length;k++){ if(here[order[k]]) return order[k]; }
+      return null;                                   // nothing above this one is left
+    }
+    // A squad the ladder has never heard of, because the club added it. Use their own order.
+    const list=(this.squads||[]).map(s=>s.id);
+    const j=list.indexOf(sqid);
+    return (j>=0 && j<list.length-1) ? list[j+1] : null;
+  }
   promoMarkReviewed(swId){ const m=this._promoMeta(swId); this._savePromo(swId, {...m, lastReview:new Date().toISOString().slice(0,10)}); }
   promoSuggest(swId){ const m=this._promoMeta(swId); this._savePromo(swId, {...m, suggested:true, suggestedAt:new Date().toISOString().slice(0,10), lastReview:new Date().toISOString().slice(0,10)}); }
   promoDismiss(swId){ const m=this._promoMeta(swId); this._savePromo(swId, {...m, suggested:false}); }
@@ -14500,7 +14520,7 @@ class Component extends DCLogic {
         const reviewDue = daysSince>=90;
         if(reviewDue) reasons.push(meta.lastReview?'Quarterly review due':'Never reviewed');
         if(!reasons.length) return;
-        promoCandidates.push({ sw, sqid:sq.id, sqName:sq.name, accent:sq.accent, nextSq, nextSqName: nextSq?this.squadById[nextSq].name:null, reasons, suggested:meta.suggested, reviewDue });
+        promoCandidates.push({ sw, sqid:sq.id, sqName:sq.name, accent:sq.accent, nextSq, nextSqName: (this.squadById[nextSq]||{}).name||null, reasons, suggested:meta.suggested, reviewDue });
       });
     });
     promoCandidates.sort((a,b)=> (b.suggested-a.suggested) || (b.reasons.length-a.reasons.length));

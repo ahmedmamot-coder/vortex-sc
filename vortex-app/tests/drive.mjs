@@ -514,6 +514,39 @@ scene("entering a swimmer in an event reaches the database", async (browser) => 
 });
 
 // ---------------------------------------------------------------------------------------------
+// The app has to survive a squad being deleted.
+//
+// Club Administration can delete a squad, and doing so replaced the entire interface with
+// "Cannot read properties of undefined (reading 'name')" — on every device, until somebody put
+// the squad back. The promotion ladder was a fixed list of the nine this club started with and
+// handed back the next id whether or not it still existed.
+//
+// The unit test covers the ladder. This covers the thing the unit test cannot: that the app
+// actually boots, because the next unguarded lookup of that kind will be somewhere else.
+// ---------------------------------------------------------------------------------------------
+scene("the app still opens after a squad is deleted", async (browser) => {
+  const LADDER = ["preteam", "advb", "adva", "junior", "seniorb", "seniora", "vortexb", "vortexa", "legend"];
+  const rows = (ids) => ids.map((id, i) => ({ id, name: id, ages: "", accent: "#2733D6",
+                                              short: id.slice(0, 3), coach: "", sort: i }));
+  const results = [];
+  for (const [label, ids] of [["all nine", LADDER],
+                              ["Senior B deleted", LADDER.filter((s) => s !== "seniorb")],
+                              ["only two left", ["junior", "seniora"]]]) {
+    const page = await openLive(browser, null, { vx_squads_t: rows(ids) });
+    await page.waitForTimeout(1200);
+    const txt = await page.evaluate(() => (document.body.innerText || "").replace(/\s+/g, " "));
+    // The roster is still full of swimmers whose squads have gone — that is the point.
+    eq(/Cannot read propert|renderVals\(\):|missing \) after/.test(txt), false,
+       label + ": the app came up as an error screen — " + txt.slice(0, 110));
+    eq(page.problems.length, 0, label + ": it threw — " + page.problems.slice(0, 1).join(""));
+    eq(/swimmers across \d+ squad/.test(txt), true, label + ": the hub never drew");
+    results.push(label + " ✓");
+    await page.close();
+  }
+  return results.join(", ");
+});
+
+// ---------------------------------------------------------------------------------------------
 // Sitting on a screen and touching nothing must not write to the database.
 //
 // Found by accident, while a fake database was answering every read with an empty list: the app

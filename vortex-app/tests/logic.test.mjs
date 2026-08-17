@@ -2852,6 +2852,56 @@ describe("InBody sheet", () => {
     });
   });
 
+  // Deleting a squad must not take the app down.
+  //
+  // Club Administration can delete a squad. promoNextSquad returned the next id from a fixed
+  // ladder of the nine this club started with, whether or not that squad still existed — and
+  // renderVals then read `.name` off it. That is not a broken promotion panel; it is the whole
+  // interface replaced by "Cannot read properties of undefined", on every device, until somebody
+  // puts the squad back. Removing one of the nine did it.
+  describe("the promotion ladder only ever names a squad that exists", () => {
+    const LADDER = ["preteam", "advb", "adva", "junior", "seniorb", "seniora", "vortexb", "vortexa", "legend"];
+    const ctx = (ids) => {
+      const c = { squads: ids.map((id) => ({ id })), squadById: Object.fromEntries(ids.map((id) => [id, { id, name: id }])) };
+      c.promoNextSquad = bind("promoNextSquad", c);
+      return c;
+    };
+    it("with every squad present, the ladder is unchanged", () => {
+      const c = ctx(LADDER);
+      for (let i = 0; i < LADDER.length - 1; i++) eq(c.promoNextSquad(LADDER[i]), LADDER[i + 1]);
+      eq(c.promoNextSquad("legend"), null, "the top of the ladder goes nowhere");
+    });
+    it("steps over a squad that has been deleted", () => {
+      // Senior B removed: Junior should promote to Senior A, not to a squad that is not there.
+      const c = ctx(LADDER.filter((s) => s !== "seniorb"));
+      eq(c.promoNextSquad("junior"), "seniora");
+    });
+    it("returns nothing rather than a squad that has gone", () => {
+      const c = ctx(["preteam", "junior"]);
+      eq(c.promoNextSquad("junior"), null, "nothing above Junior is left");
+      eq(c.promoNextSquad("preteam"), "junior", "and it finds the one that is");
+    });
+    it("never names a squad the club does not have", () => {
+      for (const keep of [LADDER, LADDER.slice(0, 4), ["junior"], ["preteam", "legend"]]) {
+        const c = ctx(keep);
+        for (const id of keep) {
+          const next = c.promoNextSquad(id);
+          eq(next === null || keep.includes(next), true,
+             "promoNextSquad(" + id + ") returned " + next + ", which is not a squad this club has");
+        }
+      }
+    });
+    // A squad the club added themselves is not on the ladder at all.
+    it("follows the club's own order for a squad it has never heard of", () => {
+      const c = ctx(["masters", "elite", "legend"]);
+      eq(c.promoNextSquad("masters"), "elite");
+      eq(c.promoNextSquad("legend"), null);
+    });
+    // And the call site must not reach into a squad without checking either.
+    it("the screen does not read .name off a missing squad", () =>
+      eq(/nextSqName: \(this\.squadById\[nextSq\]\|\|\{\}\)\.name\|\|null/.test(SOURCE), true));
+  });
+
   // Deleting a family account must never delete a coach's own sign-in.
   //
   // The guard used to be two addresses written out by hand — ahmedmamot@gmail.com and
