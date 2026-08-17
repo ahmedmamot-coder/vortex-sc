@@ -971,6 +971,160 @@ scene("a parent can link their own child", async (browser) => {
   return "picked " + JSON.stringify(picked) + ", asked the club about " + asked.swimmerId;
 });
 
+// ---------------------------------------------------------------------------------------------
+// "111 present · 191 absent · 0 late — 37% club attendance", on a morning when no coach had
+// marked anybody. 191 of this club's swimmers are away for the summer and back in September;
+// they are not absent from today's session, because there was no session to be absent from.
+//
+// Two scenes in one: the day nobody registered, and the same day after one squad's register is
+// taken. The second is what proves the first is not simply showing zeroes for everything.
+// ---------------------------------------------------------------------------------------------
+scene("a day nobody registered is not reported as attendance", async (browser) => {
+  // Two swimmers away for the summer, exactly as the club has them: a Break that started weeks
+  // ago with no end date. Their status is true; it is not an absence from a register.
+  const away = { r131: { active: false, reason: "break", from: "2026-07-22", to: "" },
+                 r132: { active: false, reason: "break", from: "2026-07-22", to: "" } };
+  const page = await openLive(browser, { vx_sw_status: away, vx_attend_log: {} });
+
+  await tap(page, "Tools & AI");           // the tile lives here, not on the hub
+  await tap(page, "Daily Attendance");
+  await page.waitForTimeout(1400);
+
+  const read = () => page.evaluate(() => {
+    const t = (document.body.innerText || "").replace(/\s+/g, " ");
+    const pct = (t.match(/(\d+%|—)\s*club attendance/i) || [])[1] || "(none)";
+    return { pct, t };
+  });
+
+  const before = await read();
+  eq(/No register taken/i.test(before.t), true,
+     "the screen must say nobody has registered: " + before.t.slice(0, 160));
+  eq(before.pct, "—", "it reported " + before.pct + " club attendance for a day with no register");
+  eq(/\d+ present · \d+ absent/.test(before.t), false,
+     "it counted swimmers present and absent on a day nobody marked");
+  // And a squad's own line has to say which of the two it is — "0/22 present" and "nobody has
+  // taken this register" look identical and mean opposite things.
+  eq(/Register not taken/i.test(before.t), true);
+
+  return "no register: " + JSON.stringify(before.pct) + ", and it says so in words";
+});
+
+scene("a register that WAS taken is still reported", async (browser) => {
+  // One squad marked, the rest not. The club figure has to cover the squad that was registered
+  // and say so, rather than dividing by the whole club.
+  const log = { junior: { [new Date().toISOString().slice(0, 10)]: { r131: "present", r132: "absent" } } };
+  const page = await openLive(browser, { vx_attend_log: log, vx_sw_status: {} });
+
+  await tap(page, "Tools & AI");
+  await tap(page, "Daily Attendance");
+  await page.waitForTimeout(1400);
+
+  const t = await page.evaluate(() => (document.body.innerText || "").replace(/\s+/g, " "));
+  eq(/squads registered/i.test(t), true,
+     "the club line must say how much of the club this covers: " + t.slice(0, 200));
+  eq(/(\d+)%\s*club attendance/i.test(t), true,
+     "a squad WAS registered, so there is a real figure — screen said: " + t.slice(0, 260));
+  eq(/No register taken yet/i.test(t), false, "it said nobody had registered when somebody had");
+  return "one squad registered, and the figure says so";
+});
+
+// ---------------------------------------------------------------------------------------------
+// "I set him to Active and it did not save."
+//
+// On a clean machine it does: the change is written, pushed, and survives a reload — I drove
+// exactly that and could not make it fail. What was missing is the app saying so. Every other
+// write here that can fail says so; this one was mute, and a refused write and a saved one
+// looked identical, so there was nothing to tell us which had happened.
+//
+// Both answers are driven from what the database actually said, so this scene runs it twice.
+// ---------------------------------------------------------------------------------------------
+async function statusScreen(browser, { refuse }) {
+  const away = { r131: { active: false, reason: "break", from: "2026-07-22", to: "" } };
+  const page = await (await browser.newContext({ viewport: { width: 1280, height: 1000 } })).newPage();
+  const problems = [];
+  page.on("pageerror", (e) => problems.push(String(e.message)));
+  let row = { key: "vx_sw_status", value: away, updated_at: new Date(Date.now() - 3600000).toISOString() };
+  await page.route("**/rest/v1/**", (r) => {
+    const req = r.request(), m = req.method();
+    const table = (new URL(req.url()).pathname.split("/rest/v1/")[1] || "").split("?")[0];
+    if (table === "club_state" && m === "GET")
+      return r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([row]) });
+    if (table === "club_state" && m === "POST") {
+      if (refuse) return r.fulfill({ status: 403, contentType: "application/json",
+                                     body: JSON.stringify({ message: "new row violates row-level security policy" }) });
+      try {
+        for (const w of JSON.parse(req.postData() || "[]"))
+          if (w.key === "vx_sw_status") row = { key: w.key, value: w.value, updated_at: new Date().toISOString() };
+      } catch { /* the assertion below is what catches this */ }
+      return r.fulfill({ status: 201, contentType: "application/json", body: "[]" });
+    }
+    return r.fulfill({ status: m === "GET" ? 200 : 201, contentType: "application/json", body: "[]" });
+  });
+  await page.addInitScript((a) => {
+    localStorage.setItem("vx_session", JSON.stringify({ type: "staff", id: "ahmed" }));
+    localStorage.setItem("vx_auth", JSON.stringify({ token: "drive-fake", refresh: "drive-fake", exp: Date.now() + 3600000 }));
+    localStorage.removeItem("vx_nav");
+    localStorage.setItem("vx_sw_status", JSON.stringify(a));
+  }, away);
+  await page.goto("http://127.0.0.1:" + PORT + "/proto.html?drive=" + Date.now(), { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(2200);
+  await tap(page, "Club Administration");
+  await tap(page, "Roster · add / edit");
+  await page.waitForTimeout(1100);
+  // The swimmer who is actually away, found by the badge rather than by being first in the list.
+  const opened = await page.evaluate(() => {
+    const badge = [...document.querySelectorAll("*")]
+      .find((e) => e.offsetParent && e.children.length === 0 && /ON BREAK/i.test(e.textContent || ""));
+    let c = badge;
+    for (let i = 0; i < 8 && c; i++) {
+      const p = [...c.querySelectorAll("button")].find((b) => b.querySelector('[data-lucide="pencil"],svg.lucide-pencil'));
+      if (p) { p.click(); return true; }
+      c = c.parentElement;
+    }
+    return false;
+  });
+  if (!opened) throw new Error("no swimmer on the roster is showing as away");
+  await page.waitForTimeout(900);
+  const line = (re) => page.evaluate((r) => {
+    const t = (document.body.innerText || "").split("\n");
+    return t.find((l) => new RegExp(r, "i").test(l)) || "";
+  }, re.source);
+  const runsTo = await line(/back in the register|No end date/);
+  await page.evaluate(() => {
+    const all = [...document.querySelectorAll("button")].filter((e) => e.offsetParent && (e.innerText || "").trim() === "Active");
+    const chip = all.find((b) => {
+      const p = b.parentElement; if (!p) return false;
+      const sib = [...p.querySelectorAll("button")].map((x) => (x.innerText || "").trim());
+      return sib.includes("Break") && sib.includes("Injured");
+    });
+    if (chip) chip.click();
+  });
+  await page.waitForTimeout(2400);
+  const said = await line(/saved|Saving/);
+  await page.close();
+  return { runsTo, said, problems, server: JSON.stringify(row.value) };
+}
+
+scene("changing a swimmer's status says whether the database took it", async (browser) => {
+  const ok = await statusScreen(browser, { refuse: false });
+  eq(ok.problems.length, 0, "the roster threw: " + ok.problems.slice(0, 2).join(" | "));
+  // An open-ended break is what 191 of this club's swimmers are on, and the screen said nothing
+  // about it meaning "away every day from now on".
+  eq(/No end date/i.test(ok.runsTo), true, "it said: " + JSON.stringify(ok.runsTo));
+  eq(/✓ saved/.test(ok.said), true, "after a successful write the screen said: " + JSON.stringify(ok.said));
+  eq(ok.server, "{}", "the change did not reach the database: " + ok.server);
+  return "said " + JSON.stringify(ok.said) + ", and the database has " + ok.server;
+});
+
+scene("a status the database refuses is not reported as saved", async (browser) => {
+  const no = await statusScreen(browser, { refuse: true });
+  eq(no.problems.length, 0, "the roster threw: " + no.problems.slice(0, 2).join(" | "));
+  eq(/NOT saved/.test(no.said), true, "a refused write reported: " + JSON.stringify(no.said));
+  eq(/this device only/.test(no.said), true, "it has to say where the change actually is");
+  eq(/✓ saved/.test(no.said), false, "a refused write must never read as saved");
+  return "refused, and said so: " + JSON.stringify(no.said.slice(0, 60));
+});
+
 const TOOLS = [
   "Insights","AI Assistants","Daily Attendance","Activity log","Birthdays","Boards",
   "Club Configuration","Pace Clock","Zone Engine","Meet Entries","Family accounts",

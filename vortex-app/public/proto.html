@@ -4762,13 +4762,13 @@ if ('serviceWorker' in navigator) {
                           <button onclick="{{ attDayPrev }}" style="width:32px;height:32px;flex:none;border-radius:10px;border:none;background:rgba(255,255,255,.16);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="chevron-left" style="width:16px;height:16px"></i></button>
                           <div style="flex:1;text-align:center">
                             <p style="margin:0;font-size:13.5px;font-weight:800">{{ attDayLabel }}</p>
-                            <p style="margin:1px 0 0;font-size:11px;color:rgba(255,255,255,.75)">{{ attDayPresent }} present · {{ attDayAbsent }} absent · {{ attDayLate }} late</p>
+                            <p style="margin:1px 0 0;font-size:11px;color:rgba(255,255,255,.75)">{{ attDayHeadline }}</p>
                           </div>
                           <button onclick="{{ attDayNext }}" style="width:32px;height:32px;flex:none;border-radius:10px;border:none;background:rgba(255,255,255,.16);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="chevron-right" style="width:16px;height:16px"></i></button>
                         </div>
                         <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
                           <span style="font-size:30px;font-weight:800;line-height:1">{{ attDayPct }}</span>
-                          <span style="flex:1"><span style="display:block;font-size:10.5px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.06em">club attendance</span><span style="display:block;font-size:11.5px;color:rgba(255,255,255,.9);margin-top:1px">{{ attDayPresent }} of {{ attDayTotal }} swimmers</span></span>
+                          <span style="flex:1"><span style="display:block;font-size:10.5px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.06em">club attendance</span><span style="display:block;font-size:11.5px;color:rgba(255,255,255,.9);margin-top:1px">{{ attDayCoverLine }}</span></span>
                           <sc-if value="{{ attDayIsToday }}" hint-placeholder-val="{{ true }}">
                             <span style="flex:none;background:rgba(255,255,255,.18);border-radius:999px;padding:4px 10px;font-size:10.5px;font-weight:800">TODAY</span>
                           </sc-if>
@@ -4787,7 +4787,7 @@ if ('serviceWorker' in navigator) {
                             <span style="width:9px;height:9px;flex:none;border-radius:50%;background:{{ ad.accent }}"></span>
                             <span style="flex:1;min-width:0">
                               <span style="display:block;font-size:13.5px;font-weight:800;color:#0C1116">{{ ad.name }}</span>
-                              <span style="display:block;font-size:11px;color:#7A8296;margin-top:1px">{{ ad.present }}/{{ ad.total }} present · {{ ad.absent }} absent · {{ ad.late }} late</span>
+                              <span style="display:block;font-size:11px;color:#7A8296;margin-top:1px">{{ ad.summaryLine }}</span>
                             </span>
                             <span style="flex:none;font-family:var(--font-mono);font-size:14px;font-weight:800;color:{{ ad.accent }}">{{ ad.pct }}</span>
                             <i data-lucide="chevron-down" style="width:16px;height:16px;color:#AEB6C7;flex:none"></i>
@@ -5369,6 +5369,10 @@ if ('serviceWorker' in navigator) {
                                       <span style="font-size:10.5px;color:#7A8296;font-weight:700">To</span>
                                       <input value="{{ r.editStatusTo }}" oninput="{{ r.onEditStatusTo }}" type="date" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:8px;padding:6px 8px;font-family:inherit;font-size:11px;color:#0C1116;outline:none">
                                     </div>
+                                    <p style="margin:5px 0 0;font-size:10.5px;color:#7A8296;line-height:1.45">{{ r.statusRunsTo }}</p>
+                                  </sc-if>
+                                  <sc-if value="{{ r.statusMsgShow }}" hint-placeholder-val="{{ false }}">
+                                    <p style="margin:6px 0 0;font-size:11px;font-weight:700;color:{{ r.statusMsgFg }};line-height:1.45">{{ r.statusMsg }}</p>
                                   </sc-if>
                                 </div>
                                 <div style="display:flex;gap:7px">
@@ -6514,7 +6518,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-17h';
+const VX_BUILD='2026-08-17j';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -7104,6 +7108,23 @@ class Component extends DCLogic {
     const nx = cur==='present'?'absent':(cur==='absent'?'late':'present');
     this.setAttendStatus(sq, date, id, nx);
     this.forceUpdate();
+  }
+  // Did anybody actually open this squad's register on this day?
+  //
+  // Without this the club-wide screen reported "111 present · 191 absent · 37% club attendance"
+  // on a morning when no coach had marked a single swimmer. Two defaults were being read as
+  // facts: an unmarked swimmer counts as present for today, which is right while you are TAKING
+  // a register and a lie when nobody has, and a swimmer whose profile says Break counts as
+  // absent, which is true of their status and says nothing about a session that was never
+  // registered. Then the whole thing went into a percentage and out through Export CSV.
+  //
+  // 191 of this club's swimmers are away for the summer and come back in September. They are not
+  // absent from today's session. There was no session to be absent from.
+  _attendTaken(squadId, dateISO){
+    const day=(this.attendLog||{})[squadId] && this.attendLog[squadId][dateISO];
+    if(!day) return false;
+    for(const k in day){ if(Object.prototype.hasOwnProperty.call(day,k)) return true; }
+    return false;
   }
   attendDayCounts(squadId, dateISO){
     const list=this.roster[squadId]||[]; let p=0,a=0,l=0;
@@ -9709,11 +9730,43 @@ class Component extends DCLogic {
   // Anything other than Active counts as absent in attendance until it is set back to Active.
   _statusLabel(k){ return {inactive:'Inactive', travel:'Traveling', 'break':'On break', sick:'Sick', injured:'Injured', other:'Away'}[k] || 'Away'; }
   _fmtDMY(iso){ if(!iso) return ''; const p=(''+iso).split('-'); if(p.length!==3) return iso; const mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return parseInt(p[2],10)+' '+(mo[parseInt(p[1],10)-1]||'')+' '+p[0]; }
+  // Whether a status change actually reached Supabase, in the place the change was made.
+  //
+  // "I set him to Active and it did not save" is unanswerable from here: on a clean machine the
+  // change is written, pushed, and survives a reload. What was missing is the app saying which
+  // of those happened. Every other write in this app that can fail says so; this one was mute,
+  // so a refused write and a saved one looked exactly alike.
+  //
+  // pushKey hands back a promise that resolves with what the database said, and that is what
+  // this reports — not "we put it in localStorage", which is what "saved" used to mean here.
+  async _swStatusSaved(swId, what){
+    this.setState({swStatusMsgFor:swId, swStatusMsg:'Saving\u2026', swStatusMsgOk:true});
+    let res=null;
+    try{ res=await ((window.__vxLastPush||{})['vx_sw_status']||Promise.resolve({ok:true})); }catch(e){ res={ok:false, why:'it could not be sent from this device'}; }
+    if(res && res.ok===false){
+      return this.setState({swStatusMsgFor:swId, swStatusMsgOk:false,
+        swStatusMsg:'NOT saved \u2014 '+(res.why||'the database refused it')+'. It is on this device only.'});
+    }
+    this.setState({swStatusMsgFor:swId, swStatusMsgOk:true, swStatusMsg:what+' \u2713 saved'});
+  }
+  // What a status actually means for today, spelled out. "To 17/08/2026" was read as "back on
+  // the 17th"; the app treats the last day as a day they are still away, so they return on the
+  // 18th. A coach should not have to work that out from a date box.
+  _swStatusRunsTo(st){
+    if(!st || st.active) return '';
+    const back=(iso)=>{ try{ const d=new Date(iso+'T00:00:00'); d.setDate(d.getDate()+1);
+      return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }catch(e){ return ''; } };
+    if(!st.to) return 'No end date \u2014 away every day from now on, until this is changed.';
+    const b=back(st.to);
+    return 'Away up to and including '+this._fmtDMY(st.to)+' \u2014 back in the register on '+this._fmtDMY(b)+'.';
+  }
   _swStatus(swId){ const s=(this.swimmerStatus||{})[swId]; return s ? {active:s.active!==false, reason:s.reason||'', from:s.from||s.since||'', to:s.to||''} : {active:true, reason:'', from:'', to:''}; }
   setSwStatus(swId, active, reason){ const m={...(this.swimmerStatus||{})}; if(active){ delete m[swId]; } else { const prev=m[swId]||{}; m[swId]={active:false, reason:reason||prev.reason||'break', from:prev.from||prev.since||this.todayISO(), to:prev.to||''}; }
-    this.swimmerStatus=m; this._saveJSON('vx_sw_status', m); this.forceUpdate(); }
+    this.swimmerStatus=m; this._saveJSON('vx_sw_status', m); this.forceUpdate();
+    try{ this._swStatusSaved(swId, active?'Active':(reason||'Status')); }catch(e){} }
   setSwStatusDate(swId, which, val){ const m={...(this.swimmerStatus||{})}; const cur=m[swId]||{active:false, reason:'break', from:this.todayISO(), to:''}; cur.active=false; cur[which]=val; m[swId]=cur;
-    this.swimmerStatus=m; this._saveJSON('vx_sw_status', m); this.forceUpdate(); }
+    this.swimmerStatus=m; this._saveJSON('vx_sw_status', m); this.forceUpdate();
+    try{ this._swStatusSaved(swId, which==='from'?'Start date':'End date'); }catch(e){} }
   toggleSponsor(swId){ const on=!this._swMeta(swId).sponsored; const m={...(this.sponsoredMap||{})};
     if(on) m[swId]=true; else delete m[swId];
     this.sponsoredMap=m; this._saveJSON('vx_sponsored', m); this.forceUpdate(); }
@@ -15362,6 +15415,10 @@ class Component extends DCLogic {
         editStatusOpts: [{key:'active',label:'Active'},{key:'inactive',label:'Inactive'},{key:'travel',label:'Traveling'},{key:'break',label:'Break'},{key:'sick',label:'Sick'},{key:'injured',label:'Injured'}].map(o=>{ const st=this._swStatus(sw.id); const sel = o.key==='active' ? st.active : (!st.active && st.reason===o.key); const isAct=o.key==='active';
           return { label:o.label, sel, bg: sel?(isAct?'#0C7A4F':'#B4690E'):'#F4F6F8', fg: sel?'#fff':'#7A8296', onClick:()=>this.setSwStatus(sw.id, isAct, isAct?'':o.key) }; }),
         statusInactive: !this._swStatus(sw.id).active,
+        statusRunsTo: this._swStatusRunsTo(this._swStatus(sw.id)),
+        statusMsgShow: S.swStatusMsgFor===sw.id && !!S.swStatusMsg,
+        statusMsg: S.swStatusMsgFor===sw.id ? (S.swStatusMsg||'') : '',
+        statusMsgFg: S.swStatusMsgOk===false ? '#B42318' : '#0C7A4F',
         editStatusFrom: this._swStatus(sw.id).from||'', editStatusTo: this._swStatus(sw.id).to||'',
         onEditStatusFrom:(e)=>this.setSwStatusDate(sw.id,'from',e.target.value), onEditStatusTo:(e)=>this.setSwStatusDate(sw.id,'to',e.target.value),
       };
@@ -17104,13 +17161,19 @@ class Component extends DCLogic {
         // Which squads this account may see (a coach stays locked to their own squad).
         const squads=this.squads.filter(sq=>this._canSeeSquad(sq.id));
         let tP=0,tA=0,tL=0;
+        let takenSquads=0, coveredSwimmers=0;
         const sqRows=squads.map(sq=>{
           const list=(this.roster[sq.id]||[]);
+          const taken=this._attendTaken(sq.id, day);
+          if(taken){ takenSquads++; coveredSwimmers+=list.length; }
           let p=0,a=0,l=0;
           const swRows=list.map((sw,idx)=>{
-            const st=this.getAttendStatus(sq.id, day, sw.id, idx);
-            if(st==='unmarked'){} else if(st==='present')p++; else if(st==='absent')a++; else l++;
             const away=this._swAwayOn(sw.id, day);
+            // No register, no attendance. A swimmer who is away still says so — that is their
+            // status and it is true whether or not anybody took a register — but nobody is
+            // counted present or absent for a session that was never marked.
+            const st = taken ? this.getAttendStatus(sq.id, day, sw.id, idx) : (away ? 'absent' : 'unmarked');
+            if(!taken){} else if(st==='unmarked'){} else if(st==='present')p++; else if(st==='absent')a++; else l++;
             const meta={present:{label:'Present',color:'#0C7A4F',bg:'#DCF5EA'},absent:{label:'Absent',color:'#A52A2E',bg:'#FBE2E3'},late:{label:'Late',color:'#9A6206',bg:'#FCEFD6'},unmarked:{label:'Not taken',color:'#7A8296',bg:'#EEF1F5'}}[st];
             return {id:sw.id, name:sw.name, initials:sw.initials, status:st,
               statusLabel: away ? (meta.label+' · '+this._statusLabel(away)) : meta.label,
@@ -17120,16 +17183,25 @@ class Component extends DCLogic {
             .sort((x,y)=>x.name.localeCompare(y.name));
           tP+=p; tA+=a; tL+=l;
           const tot=list.length||1;
+          const _away=list.filter(sw=>this._swAwayOn(sw.id, day)).length;
           return {id:sq.id, name:sq.name, accent:sq.accent, coach:sq.coach,
-            present:p, absent:a, late:l, total:list.length,
-            pct:Math.round((p/tot)*100)+'%',
-            barW:Math.round((p/tot)*100)+'%',
+            present:p, absent:a, late:l, total:list.length, taken,
+            // The line under the squad's name says which of the two it is, because "0/22 present"
+            // and "nobody has taken this register" look identical and mean opposite things.
+            summaryLine: taken
+              ? (p+'/'+list.length+' present \u00b7 '+a+' absent \u00b7 '+l+' late')
+              : ('Register not taken'+(_away?(' \u00b7 '+_away+' away'):'')),
+            pct: taken ? (Math.round((p/tot)*100)+'%') : '\u2014',
+            barW: taken ? (Math.round((p/tot)*100)+'%') : '0%',
             open:S.attDayOpenSquad===sq.id,
             onToggle:()=>this.setState({attDayOpenSquad: S.attDayOpenSquad===sq.id?null:sq.id}),
             rows:swRows, hasRows:swRows.length>0,
             onTakeAttendance:()=>this.setState({tool:null, view:'squad', squadId:sq.id, tab:'attend', attendDateISO:day}) };
         });
-        const grand=tP+tA+tL;
+        // The club's figure covers the squads whose register was taken, and nothing else. It used
+        // to be tP+tA+tL, which on an unmarked day was every swimmer in the club — so the screen
+        // said "111 of 302 swimmers" about a day with no register on it anywhere.
+        const grand=coveredSwimmers;
         const d=new Date(day+'T00:00:00');
         const chip=(k,label,n)=>({label:label+' '+n, on:filt===k, onClick:()=>this.setState({attDayStatus:k}),
           bg: filt===k?'#0C1116':'#fff', fg: filt===k?'#fff':'#3A4152', border: filt===k?'#0C1116':'#E5E9F0'});
@@ -17140,10 +17212,19 @@ class Component extends DCLogic {
           attDayNext:()=>{ if(day>=today) return; const nd=this.shiftDate(day,1); this.setState({attDayISO:nd}); try{ this._attendFetch(nd); }catch(e){} },
           attDayToday:()=>{ this.setState({attDayISO:today}); try{ this._attendFetch(today); }catch(e){} },
           attDayPresent:tP, attDayAbsent:tA, attDayLate:tL, attDayTotal:grand,
-          attDayPct: grand? Math.round(tP/grand*100)+'%' : '—',
+          attDayPct: takenSquads? Math.round(tP/(grand||1)*100)+'%' : '—',
+          attDayTakenSquads: takenSquads,
+          attDayNoneTaken: takenSquads===0,
+          attDayCoverLine: takenSquads
+            ? (takenSquads+' of '+squads.length+' squads registered \u00b7 '+tP+' of '+grand+' swimmers')
+            : 'No register taken yet \u2014 nobody has been marked present or absent',
+          attDayHeadline: takenSquads
+            ? (tP+' present \u00b7 '+tA+' absent \u00b7 '+tL+' late')
+            : 'No register taken on this day',
           attDaySquads:sqRows,
           attDayChips:[chip('all','All',grand), chip('present','Present',tP), chip('absent','Absent',tA), chip('late','Late',tL)],
-          onAttDayExport:()=>this.exportDailyAttendanceCsv(day, sqRows)
+          // Exporting an unmarked day used to hand somebody a spreadsheet of invented attendance.
+          onAttDayExport:()=>this.exportDailyAttendanceCsv(day, sqRows.filter(r=>r.taken))
         };
       })(),
       toolRecovery:S.tool==='recovery', recoveryRows, recoveryEmpty, recoveryScopeLabel:toolScope, recoveryLowCount, recoveryHasLow:recoveryLowCount>0,

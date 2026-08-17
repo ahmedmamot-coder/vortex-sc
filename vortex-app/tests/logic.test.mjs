@@ -3141,6 +3141,60 @@ describe("InBody sheet", () => {
     });
   });
 
+  // "111 present · 191 absent · 37% club attendance", on a morning when no coach had marked a
+  // single swimmer.
+  //
+  // Two defaults were being read as facts. An unmarked swimmer counts as present for today —
+  // right while you are TAKING a register, a lie when nobody has. And a swimmer whose profile
+  // says Break counts as absent — true of their status, and silent about a session that was
+  // never registered. Both went into a club percentage and out through Export CSV.
+  //
+  // 191 of this club's 302 swimmers are away for the summer and back in September. They are not
+  // absent from today's session; there was no session for them to be absent from.
+  describe("a register nobody took", () => {
+    const taken = (log) => bind("_attendTaken", { attendLog: log })("junior", "2026-08-17");
+
+    it("knows the difference between an empty register and a missing one", () => {
+      eq(taken({}), false, "no log at all");
+      eq(taken({ junior: {} }), false, "the squad has never been marked");
+      eq(taken({ junior: { "2026-08-17": {} } }), false, "an empty day is not a register");
+      eq(taken({ junior: { "2026-08-16": { r1: "present" } } }), false, "yesterday is not today");
+      eq(taken({ junior: { "2026-08-17": { r1: "present" } } }), true, "one mark is a register");
+      eq(taken({ junior: { "2026-08-17": { r1: "absent" } } }), true, "so is one absence");
+    });
+    // A blob arriving as a string or a number has taken this app down before, so this must not
+    // be the thing that throws on the club's busiest screen.
+    it("survives a log that is not the shape it should be", () => {
+      eq(taken(null), false);
+      eq(taken({ junior: "nonsense" }), false);
+      eq(taken({ junior: { "2026-08-17": null } }), false);
+    });
+
+    // The club-wide screen, wired to that answer.
+    const block = sourceBetween("let takenSquads=0, coveredSwimmers=0;", "toolRecovery:");
+    it("counts nobody in a squad whose register was never opened", () => {
+      eq(/const taken=this\._attendTaken\(sq\.id, day\)/.test(block), true);
+      eq(/if\(!taken\)\{\}/.test(block), true, "an unmarked squad must add nothing to the totals");
+    });
+    // The status is still true and still shown — it is the attendance that is not.
+    it("still says who is away, because that is their status and not an absence", () =>
+      eq(/taken \? this\.getAttendStatus\([^)]*\) : \(away \? 'absent' : 'unmarked'\)/.test(block), true));
+    it("the club figure covers the squads that were registered, not the whole club", () => {
+      eq(/const grand=coveredSwimmers;/.test(block), true,
+         "grand used to be present+absent+late, which on an unmarked day was every swimmer there is");
+      eq(/attDayPct: takenSquads\?/.test(block), true, "no registers means no percentage");
+    });
+    it("says so in words rather than showing a zero that reads like a real one", () => {
+      eq(/Register not taken/.test(block), true);
+      eq(/No register taken yet/.test(block), true);
+      eq(/No register taken on this day/.test(block), true);
+    });
+    // The spreadsheet outlives the screen, and nobody reading it later can tell that the day
+    // was never marked.
+    it("does not export a day nobody took", () =>
+      eq(/exportDailyAttendanceCsv\(day, sqRows\.filter\(r=>r\.taken\)\)/.test(block), true));
+  });
+
   // The route behind that row.
   describe("asking Supabase which staff addresses can sign in", () => {
     const route = readFileSync(new URL("../src/app/api/staff/sign-in-status/route.ts", import.meta.url), "utf8");
