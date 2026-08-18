@@ -130,6 +130,18 @@ if ('serviceWorker' in navigator) {
       var a=window.__VX_AUTH;
       if(a && a.token && a.exp && Date.now() < (a.exp - 5000)){ window.__vxSendingAnon=false; return true; }
       window.__vxSendingAnon = !!(a && a.token);
+      // Declining is not enough, and this is the half that was missing.
+      //
+      // This gate stops the request before dyn() is ever built, and dyn() -> _curTok was the
+      // only place in the file that noticed a stale token and started a refresh. So on a device
+      // whose token expired while the phone was asleep — iOS suspends the refresh timer, which
+      // is exactly how a session dies overnight — every write reached this line, was put on the
+      // queue, and left the expired token sitting there for the next one to trip over. Nothing
+      // in the write path ever asked for a new token, so nothing ever got one.
+      //
+      // The queue behind this gate is only worth having if the session it is waiting for is
+      // actually being fetched. Ask for it here too.
+      if(a && a.refresh && !window.__vxAuthDead){ try{ _doRefresh(); }catch(e){} }
       // Nothing to wait for: no session and no refresh token means retrying cannot help and the
       // banner must offer a sign-in instead of "retrying automatically".
       if(!a || !a.refresh) window.__vxAuthDead = true;
@@ -147,6 +159,23 @@ if ('serviceWorker' in navigator) {
   // the club has lost — saying so is what put "24 changes have not been saved" in front of a
   // coach one second after a successful sign-in.
   var NOTSENT = -1;
+  // ...for ninety seconds. After that it is unsaved work and the club is told.
+  //
+  // NOTSENT exists for one honest reason: in the second after a sign-in every write in flight is
+  // queued while the token lands, and putting "24 changes have not been saved" in front of a
+  // coach who has just signed in successfully is a lie this app used to tell.
+  //
+  // But the forgiveness had no clock on it, and the same rule that covers one second covers a
+  // session that expired overnight and never came back. Every save on the device filed as
+  // not-yet-sent, every one excluded from the count, the banner counting zero, and a green tick
+  // on screen — while a whole day of registers and roster edits sat on phones and reached
+  // nothing. The app was not wrong about where the writes were. It was silent about it, and
+  // silence here is indistinguishable from working.
+  //
+  // Ninety seconds is far longer than any sign-in takes and far shorter than a morning.
+  var NOTSENT_GRACE = 90000;
+  function _sinceOf(x){ return (x && (x.since || x.ts)) || 0; }
+  function _stillLanding(x){ return !!(x && x.status===NOTSENT && (Date.now() - _sinceOf(x)) < NOTSENT_GRACE); }
   var FAILK = "vx_failed_writes";
   function _failLoad(){ try{ return JSON.parse(localStorage.getItem(FAILK)||"[]")||[]; }catch(e){ return []; } }
   function _failSave(a){ try{ localStorage.setItem(FAILK, JSON.stringify(a.slice(-100))); }catch(e){} }
@@ -304,8 +333,19 @@ if ('serviceWorker' in navigator) {
     // Ten attempts is generous for a real outage: the retry runs every 45 seconds, so this is
     // most of ten minutes of trying before it is set aside — and set aside is not discarded, it
     // is moved off the retry path and named, so the queue behind it moves.
-    var _prior = 0;
-    try{ var _was = a.filter(function(x){ return x && x.sig===sig; })[0]; _prior = (_was && _was.tries) || 0; }catch(e){}
+    var _prior = 0, _since = 0;
+    try{ var _was = a.filter(function(x){ return x && x.sig===sig; })[0];
+      _prior = (_was && _was.tries) || 0;
+      // When this write first found itself with nowhere to go — carried across, not restarted.
+      //
+      // Two pending writes to the same row collapse into the later one, which is right for the
+      // DATA and wrong for the clock. A coach marking a register writes to the same key over and
+      // over, and the app's own 20-second sweep re-pushes it besides; every one of those replaced
+      // the entry and stamped it with the current time. So a write that had been stranded since
+      // breakfast read as one second old all morning, and the ninety-second grace that decides
+      // whether the club is told about it never elapsed once.
+      _since = (_was && (_was.since || _was.ts)) || 0;
+    }catch(e){}
     var _tries = _prior + 1;
     a=a.filter(function(x){ return x && x.sig !== sig; });
     if(_tries >= 10){
@@ -318,7 +358,7 @@ if ('serviceWorker' in navigator) {
     }
     a.push({ id:Date.now()+"_"+Math.random().toString(36).slice(2,7), op:op, table:table, payload:payload,
              sig:sig, status:status||0, refused:_permanent(status), said:said||"", tries:_tries,
-             body:String(body||"").slice(0,300), ts:Date.now() });
+             body:String(body||"").slice(0,300), ts:Date.now(), since:(_since || Date.now()) });
     _failSave(a);
     window.__vxLastError = { table:table, status:status, body:String(body||"").slice(0,300), ts:Date.now() };
     // A 401 means the token died, not that the data was bad. Refresh and replay at once
@@ -355,7 +395,37 @@ if ('serviceWorker' in navigator) {
       if(keep.length!==a.length) _failSave(keep);
     }catch(e){}
   })();
-  window.__vxFailedCount = function(){ return _failLoad().filter(function(x){ return x && x.status!==NOTSENT; }).length; };
+  window.__vxFailedCount = function(){ return _failLoad().filter(function(x){ return x && !_stillLanding(x); }).length; };
+  // The same list the count is made of, so the banner names one of the writes it is counting
+  // rather than filtering to a different set and finding nothing to name.
+  window.__vxFailedShown = function(){ return _failLoad().filter(function(x){ return x && !_stillLanding(x); }); };
+  // One paste that answers "why is nothing saving". Every round of this has been diagnosed by
+  // reading five separate globals in the right order and knowing which of them lie: a token
+  // string exists whether or not it is still valid, and a queue count of zero can mean either
+  // nothing is waiting or everything is. Ask once, in words.
+  window.__vxWhyNotSaving = function(){
+    var a=window.__VX_AUTH, q=_failLoad(), now=Date.now();
+    var un=q.filter(function(x){ return x && x.status===NOTSENT; });
+    var oldest=un.reduce(function(m,x){ var t=_sinceOf(x)||now; return t<m?t:m; }, now);
+    return {
+      signedInToDatabase: !!(a && a.token && a.exp && now < a.exp),
+      tokenExpiredAt: (a && a.exp) ? new Date(a.exp).toString() : "no session on this device",
+      canRefresh: !!(a && a.refresh),
+      sessionFinished: !!window.__vxAuthDead,
+      sendingAsAnonymous: !!window.__vxSendingAnon,
+      waitingToBeSent: un.length,
+      oldestWaitingMinutes: un.length ? Math.round((now-oldest)/60000) : 0,
+      refusedOrFailed: q.length - un.length,
+      setAside: (window.__vxBlocked ? window.__vxBlocked().length : 0),
+      verdict: (a && a.token && a.exp && now < a.exp)
+        ? (q.length ? "signed in — writes are being sent and some are coming back refused; read refusedOrFailed"
+                    : "signed in and nothing is waiting")
+        : (un.length
+            ? "NOT saving: there is no live database sign-in, so "+un.length+" change"+(un.length===1?"":"s")
+              +" have never left this device. Sign out and back in and they send themselves."
+            : "no live database sign-in on this device — sign out and back in")
+    };
+  };
   window.__vxClearFailed = function(){ _failSave([]); try{ window.dispatchEvent(new CustomEvent("vx-write-failed")); }catch(e){} };
   // What the database is refusing outright, for the screen that says so. Never retried.
   window.__vxBlocked = function(){ return _blockLoad(); };
@@ -618,7 +688,9 @@ if ('serviceWorker' in navigator) {
       try{ console.warn("vx sync refusing "+k+": "+mb+" MB"); }catch(e){}
       // Recorded as refused, so the retry loop leaves it alone and the rest of the queue moves.
       _failAdd("push", "club_state ("+k+")", {key:k, value:null, tooBig:v.length}, 413, JSON.stringify({message:why}));
-      return Promise.resolve({ok:false, status:413, why:why});
+      var _big = Promise.resolve({ok:false, status:413, why:why});
+      window.__vxLastPush[k] = _big;
+      return _big;
     }
     var val; try { val = JSON.parse(v); } catch(e){ return Promise.resolve({ok:false, why:"could not be read back"}); }
     window.__vxWriteTs[k] = Date.now();
@@ -631,7 +703,11 @@ if ('serviceWorker' in navigator) {
       // be replayed like any other, while keeping it off the banner — it is not work the club
       // has lost, it is work that has not been sent yet.
       _failAdd("push", "club_state ("+k+")", {key:k, value:v}, NOTSENT, "waiting for the sign-in to land");
-      return Promise.resolve({ok:false, why:"waiting for the sign-in to land"});
+      var _q = Promise.resolve({ok:false, notSent:true, why: window.__vxAuthDead
+        ? "it never left this device \u2014 the database sign-in here has ended"
+        : "it has not left this device yet \u2014 the sign-in has not landed"});
+      window.__vxLastPush[k] = _q;
+      return _q;
     }
     var p;
     try {
@@ -6575,7 +6651,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-17m';
+const VX_BUILD='2026-08-18a';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -7271,7 +7347,11 @@ class Component extends DCLogic {
       const n = window.__vxFailedCount ? window.__vxFailedCount() : 0;
       // The banner names the newest thing it is chasing, and a write that has not been sent
       // yet is not one of them.
-      const list = ((n && window.__vxFailed) ? window.__vxFailed() : []).filter(x=>x && x.status!==-1);
+      // Was window.__vxFailed() filtered to drop every NOTSENT row — a different set from the
+      // one the count above is made of. Once an un-sent write is old enough to be counted, the
+      // banner has to be able to name it, or it says "3 changes have not been saved" with a
+      // blank line underneath.
+      const list = (n && window.__vxFailedShown) ? window.__vxFailedShown() : [];
       const refused = list.filter(x=>x && x.refused).length;
       const last = list.length ? list[list.length-1] : null;
       const dead = !!window.__vxAuthDead;
@@ -7940,8 +8020,11 @@ class Component extends DCLogic {
   async _squadSaveWatch(patch){
     const what=Object.keys(patch||{}).join(', ')||'change';
     try{
+      // No entry means pushKey returned before it recorded one, which is what happens when the
+      // write is not sent at all. Reading that as success is how "Saved" appeared over a change
+      // that was still sitting on the phone.
       const p=(window.__vxLastPush||{})['vx_squads'];
-      const r=p ? await p : null;
+      const r=p ? await p : {ok:false, why:'it never left this device \u2014 there is no database sign-in here'};
       if(r && r.ok===false){
         return this.setState({squadMsg:'Saved on this device, but the database refused it: '
           +(r.why||('HTTP '+(r.status||'?')))+' \u2014 it will be lost when the app is reopened.', squadOk:false});
@@ -9799,10 +9882,20 @@ class Component extends DCLogic {
   async _swStatusSaved(swId, what){
     this.setState({swStatusMsgFor:swId, swStatusMsg:'Saving\u2026', swStatusMsgOk:true});
     let res=null;
-    try{ res=await ((window.__vxLastPush||{})['vx_sw_status']||Promise.resolve({ok:true})); }catch(e){ res={ok:false, why:'it could not be sent from this device'}; }
+    // No entry at all used to mean {ok:true}. It never meant that: it means pushKey returned
+    // before it recorded anything, which is what happens when the write is not sent. Saying so
+    // is the difference between a coach re-marking a register and a coach walking away from one.
+    const _rec=(window.__vxLastPush||{})['vx_sw_status'];
+    if(!_rec) return this.setState({swStatusMsgFor:swId, swStatusMsgOk:false,
+      swStatusMsg:'NOT saved \u2014 it never left this device. Sign out and back in, and it saves itself.'});
+    try{ res=await _rec; }catch(e){ res={ok:false, why:'it could not be sent from this device'}; }
     if(res && res.ok===false){
+      // A refusal and a write that never went are different problems with different answers, and
+      // the coach needs the answer, not the diagnosis. A refusal is somebody else's to fix; a
+      // write still on the phone is fixed by the person holding it, in about four seconds.
       return this.setState({swStatusMsgFor:swId, swStatusMsgOk:false,
-        swStatusMsg:'NOT saved \u2014 '+(res.why||'the database refused it')+'. It is on this device only.'});
+        swStatusMsg:'NOT saved \u2014 '+(res.why||'the database refused it')+'. It is on this device only.'
+          +(res.notSent ? ' Sign out and back in, and it saves itself.' : '')});
     }
     this.setState({swStatusMsgFor:swId, swStatusMsgOk:true, swStatusMsg:what+' \u2713 saved'});
   }
@@ -16823,7 +16916,9 @@ class Component extends DCLogic {
         // and then said the one thing that was not true. A rejected write is one of three
         // different problems and they need three different people: a permission is the club's
         // to change, a rejected shape is the database's, and a bad connection fixes itself.
-        : (S.saveFailLast ? (S.saveFailLast.table+' · '+(S.saveFailLast.status?('HTTP '+S.saveFailLast.status):'no connection')) : '')
+        : (S.saveFailLast ? (S.saveFailLast.table+' · '+(S.saveFailLast.status===-1
+              ? 'it never left this device \u2014 there was no database sign-in to send it with'
+              : S.saveFailLast.status?('HTTP '+S.saveFailLast.status):'no connection')) : '')
           + (!(S.saveRefused>0 && S.saveRefused>=S.saveFailCount)
               // "retrying automatically" and nothing else is what a 401 has said for months.
               // It is true and it is useless: it does not say why the server is refusing, so

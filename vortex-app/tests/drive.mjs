@@ -1038,7 +1038,7 @@ scene("a register that WAS taken is still reported", async (browser) => {
 //
 // Both answers are driven from what the database actually said, so this scene runs it twice.
 // ---------------------------------------------------------------------------------------------
-async function statusScreen(browser, { refuse }) {
+async function statusScreen(browser, { refuse, session }) {
   const away = { r131: { active: false, reason: "break", from: "2026-07-22", to: "" } };
   const page = await (await browser.newContext({ viewport: { width: 1280, height: 1000 } })).newPage();
   const problems = [];
@@ -1060,12 +1060,16 @@ async function statusScreen(browser, { refuse }) {
     }
     return r.fulfill({ status: m === "GET" ? 200 : 201, contentType: "application/json", body: "[]" });
   });
-  await page.addInitScript((a) => {
+  await page.addInitScript((c) => {
     localStorage.setItem("vx_session", JSON.stringify({ type: "staff", id: "ahmed" }));
-    localStorage.setItem("vx_auth", JSON.stringify({ token: "drive-fake", refresh: "drive-fake", exp: Date.now() + 3600000 }));
+    // "gone" is the state this club was actually in: signed into the app, with the database
+    // session finished underneath it. The app looks exactly the same.
+    if (c.session === "gone") localStorage.removeItem("vx_auth");
+    else localStorage.setItem("vx_auth", JSON.stringify({ token: "drive-fake", refresh: "drive-fake", exp: Date.now() + 3600000 }));
     localStorage.removeItem("vx_nav");
-    localStorage.setItem("vx_sw_status", JSON.stringify(a));
-  }, away);
+    localStorage.removeItem("vx_failed_writes");
+    localStorage.setItem("vx_sw_status", JSON.stringify(c.away));
+  }, { away, session });
   await page.goto("http://127.0.0.1:" + PORT + "/proto.html?drive=" + Date.now(), { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(2200);
   await tap(page, "Club Administration");
@@ -1116,6 +1120,26 @@ scene("changing a swimmer's status says whether the database took it", async (br
   return "said " + JSON.stringify(ok.said) + ", and the database has " + ok.server;
 });
 
+scene("a status that never left the phone is not reported as saved", async (browser) => {
+  // The club's whole day, in one click. Signed into the app, no database session underneath,
+  // a coach taps Active and reads "Active \u2713 saved" \u2014 because the code that answers that
+  // question read window.__vxLastPush and treated "no entry" as a yes. There was no entry
+  // because the write had returned before it ever recorded one: it was never sent.
+  const gone = await statusScreen(browser, { refuse: false, session: "gone" });
+  eq(gone.problems.length, 0, "the roster threw: " + gone.problems.slice(0, 2).join(" | "));
+  eq(/\u2713 saved/.test(gone.said), false,
+     "with no database session at all, the screen said: " + JSON.stringify(gone.said));
+  eq(/NOT saved/.test(gone.said), true, "it said: " + JSON.stringify(gone.said));
+  eq(/It is on this device only/.test(gone.said), true,
+     "it has to say where the change actually is: " + JSON.stringify(gone.said));
+  eq(/Sign out and back in/.test(gone.said), true,
+     "and what to do about it, which is not the same as what went wrong: " + JSON.stringify(gone.said));
+  eq(gone.server, JSON.stringify({ r131: { active: false, reason: "break", from: "2026-07-22", to: "" } }),
+     "something reached the database with no session: " + gone.server);
+
+  return "said " + JSON.stringify(gone.said.slice(0, 58));
+});
+
 scene("a status the database refuses is not reported as saved", async (browser) => {
   const no = await statusScreen(browser, { refuse: true });
   eq(no.problems.length, 0, "the roster threw: " + no.problems.slice(0, 2).join(" | "));
@@ -1123,6 +1147,151 @@ scene("a status the database refuses is not reported as saved", async (browser) 
   eq(/this device only/.test(no.said), true, "it has to say where the change actually is");
   eq(/✓ saved/.test(no.said), false, "a refused write must never read as saved");
   return "refused, and said so: " + JSON.stringify(no.said.slice(0, 60));
+});
+
+// ---------------------------------------------------------------------------------------------
+// "The app is not saving anything since yesterday."
+//
+// It was not, and the reason it took a day to find is that the app had no opinion about it. A
+// write it could not send was filed as "not sent yet", and "not sent yet" was excluded from the
+// count on the banner — with no clock on the exclusion. So the count read zero, the screen showed
+// a tick, and a club's registers and roster edits sat on phones for a working day.
+//
+// Two faults, one scene each.
+//
+//   1. Nothing in the write path ever asked for a new token. The gate that holds a write back
+//      when the session is stale returned false and did nothing else; the only code that noticed
+//      a stale token and refreshed it was in building the request headers, which that gate runs
+//      before. Reads went on healing the session as a side effect of their own headers, which is
+//      why this was survivable at all — but a device doing nothing except saving had no route to
+//      a new token from anything it was doing.
+//
+//   2. Ninety seconds of forgiveness is right. A whole morning of it is not.
+// ---------------------------------------------------------------------------------------------
+
+// A signed-in app, its database replaced by a recorder, and an auth server that keeps count.
+async function authScene(browser, { refresh }) {
+  const page = await (await browser.newContext({ viewport: { width: 1280, height: 1000 } })).newPage();
+  const problems = [], writes = [], refreshes = [];
+  page.on("pageerror", (e) => problems.push(String(e.message)));
+  await page.route("**/auth/v1/token**", async (route) => {
+    refreshes.push(Date.now());
+    if (refresh === "refused")
+      return route.fulfill({ status: 400, contentType: "application/json",
+        body: JSON.stringify({ error: "invalid_grant", error_description: "Refresh Token Not Found" }) });
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+      access_token: "fresh-token", refresh_token: "fresh-refresh", expires_in: 3600,
+      user: { id: "u1", email: "a@b.c" } }) });
+  });
+  await page.route("**/rest/v1/**", async (route) => {
+    const req = route.request(), m = req.method();
+    const table = (new URL(req.url()).pathname.split("/rest/v1/")[1] || "").split("?")[0];
+    if (m !== "GET" && m !== "HEAD") {
+      const auth = (await req.allHeaders())["authorization"] || "";
+      let keys = [];
+      try {
+        const body = JSON.parse(req.postData() || "[]");
+        keys = (Array.isArray(body) ? body : [body]).map((r) => r && r.key).filter(Boolean);
+      } catch { /* the assertions read keys, so an unparseable body fails them */ }
+      writes.push({ table, keys, token: auth.replace("Bearer ", "").slice(0, 12) });
+    }
+    return route.fulfill({ status: m === "GET" ? 200 : 201, contentType: "application/json", body: "[]" });
+  });
+  await page.addInitScript((expired) => {
+    localStorage.setItem("vx_session", JSON.stringify({ type: "staff", id: "ahmed" }));
+    localStorage.setItem("vx_auth", JSON.stringify({ token: "stale-token", refresh: "stale-refresh",
+      exp: expired ? Date.now() - 3600000 : Date.now() + 3600000, uid: "u1", email: "a@b.c" }));
+    localStorage.removeItem("vx_nav");
+    localStorage.removeItem("vx_failed_writes");
+  }, refresh === "refused");
+  await page.goto("http://127.0.0.1:" + PORT + "/proto.html?drive=" + Date.now(), { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(2500);
+  page.problems = problems;
+  page.writes = writes;
+  page.refreshes = refreshes;
+  return page;
+}
+
+scene("a save is what refreshes a token that went stale while nothing was happening", async (browser) => {
+  const page = await authScene(browser, { refresh: "works" });
+  // The token expires with the app already open and idle — a phone asleep in a bag, a laptop
+  // shut between sessions. Everything that happens from here is caused by the save and by
+  // nothing else: the app's own 20-second poll is not due for another seventeen.
+  const beforeRefreshes = page.refreshes.length;
+  const beforeWrites = page.writes.length;
+  await page.evaluate(() => { if (window.__VX_AUTH) window.__VX_AUTH.exp = Date.now() - 1000; });
+  const at = Date.now();
+  await page.evaluate(() => window.__vxpush("vx_squads", JSON.stringify({ drive: 1 })));
+  await page.waitForTimeout(4000);
+  const asked = page.refreshes.slice(beforeRefreshes);
+  const landed = page.writes.slice(beforeWrites).filter((w) => w.keys.includes("vx_squads"));
+  eq(page.problems.length, 0, "the app threw: " + page.problems.slice(0, 2).join(" | "));
+  eq(asked.length > 0, true, "the save found the session stale and asked for nothing — it just waited");
+  // How long the save waited before anything was done about the session it needs. The assertion
+  // is on the clock rather than on the fact, and that is the honest shape of this fix.
+  //
+  // Without it the refresh still eventually happened: the next unrelated READ built its own
+  // headers, and building headers is what noticed the stale token. Measured here that took 2.1
+  // seconds, and only because a poll happened to be due. On a screen with no polling read behind
+  // it the wait is the 45-second sweep, and a coach marking a register in that window watches
+  // nothing happen at all. A save must not depend on some other part of the app going first.
+  const waited = asked[0] - at;
+  eq(waited < 1200, true, "the save waited " + waited + "ms for something else to refresh the session");
+  eq(landed.length > 0, true, "the change never reached the database; it is still on the phone");
+  eq(landed[0].token, "fresh-token", "it went out carrying " + JSON.stringify(landed[0].token)
+     + ", which is not the refreshed session");
+  await page.close();
+  return "asked for a new token " + waited + "ms in, and sent itself with it";
+});
+
+scene("a session that cannot be refreshed is counted, not hidden", async (browser) => {
+  const page = await authScene(browser, { refresh: "refused" });
+  await page.evaluate(() => window.__vxpush("vx_sw_status", JSON.stringify({ r1: { active: true } })));
+  await page.waitForTimeout(1500);
+  const mine = (q) => q.filter((x) => String(x.table || "").includes("vx_sw_status"));
+  const fresh = await page.evaluate(() => ({
+    queue: window.__vxFailed() || [], counted: window.__vxFailedCount(), dead: !!window.__vxAuthDead }));
+  eq(mine(fresh.queue).length, 1, "the change was not kept anywhere: " + JSON.stringify(fresh.queue.map(x => x.table)));
+  eq(mine(fresh.queue)[0].status, -1, "it was recorded as a failure rather than as never sent");
+  // Inside the grace period this is right and must stay right. A write made in the second after
+  // a sign-in is queued while the token lands, and "1 change has not been saved" in front of
+  // somebody who has just signed in successfully is the lie this exclusion exists to prevent.
+  eq(fresh.counted, 0, "a write one second old was already being called unsaved work");
+  eq(fresh.dead, true, "a refused refresh was not recognised as the session being finished");
+  // Now the same queue, ten minutes on. Nothing else has changed — same writes, same session.
+  const later = await page.evaluate(() => {
+    const q = JSON.parse(localStorage.getItem("vx_failed_writes") || "[]");
+    // since is when the write first found itself stranded; ts is the last attempt. Ageing both
+    // is what "this has been sitting here for ten minutes" actually looks like on disk.
+    q.forEach((x) => { x.ts = Date.now() - 600000; x.since = Date.now() - 600000; });
+    localStorage.setItem("vx_failed_writes", JSON.stringify(q));
+    return { counted: window.__vxFailedCount(), queued: q.length, why: window.__vxWhyNotSaving() };
+  });
+  eq(later.counted, later.queued,
+     "ten minutes on, " + (later.queued - later.counted) + " of " + later.queued
+     + " changes were still being filed as if the sign-in were about to land");
+  eq(later.why.signedInToDatabase, false, "it reported a live database sign-in: " + JSON.stringify(later.why));
+  eq(later.why.waitingToBeSent >= 1, true, "it did not report the waiting changes: " + JSON.stringify(later.why));
+  eq(later.why.oldestWaitingMinutes, 10, "it did not say how long they had been waiting: "
+     + JSON.stringify(later.why.oldestWaitingMinutes));
+  eq(/NOT saving/.test(later.why.verdict), true, "asked outright, it said: " + JSON.stringify(later.why.verdict));
+  // And the clock does not restart every time the same thing is saved again.
+  //
+  // Writes to one row collapse into the later one, which is right for the data and was wrong for
+  // the clock: a coach marking a register writes the same key over and over, and the app's own
+  // 20-second sweep re-pushes it besides. Each of those used to replace the entry with a
+  // brand-new timestamp, so a change stranded since breakfast read as one second old all
+  // morning and the grace period never once elapsed.
+  const again = await page.evaluate(async () => {
+    await window.__vxpush("vx_sw_status", JSON.stringify({ r1: { active: true }, r2: { active: false } }));
+    return { counted: window.__vxFailedCount(), minutes: window.__vxWhyNotSaving().oldestWaitingMinutes };
+  });
+  eq(again.minutes, 10, "saving again reset how long it had been waiting, to " + again.minutes + " minutes");
+  eq(again.counted, later.counted, "saving again took " + (later.counted - again.counted)
+     + " stranded changes back off the count");
+  eq(page.problems.length, 0, "the app threw: " + page.problems.slice(0, 2).join(" | "));
+  await page.close();
+  return "counted after the grace period: " + JSON.stringify(later.why.verdict.slice(0, 64));
 });
 
 const TOOLS = [

@@ -3212,9 +3212,15 @@ describe("InBody sheet", () => {
 
     it("is refused rather than retried for ever", () => {
       eq(/v\.length > MAX_ROW/.test(push), true, "nothing measured the record at all");
-      eq(/return Promise\.resolve\(\{ok:false, status:413/.test(push), true,
-         "it has to stop, not fall through and be queued");
+      eq(/ok:false, status:413/.test(push), true, "it has to stop, not fall through and be queued");
+      eq(/return _big;/.test(push), true, "and the refusal is what the caller gets back");
     });
+    // Every way out of pushKey has to leave an answer in __vxLastPush, because that is where the
+    // screens read what happened to the last write of a key — and a missing entry used to be
+    // read as a success. A refusal that records nothing is reported to a coach as "Saved".
+    it("leaves its refusal where the screen reading the answer will find it", () =>
+      eq(/window\.__vxLastPush\[k\] = _big;/.test(push), true,
+         "the refusal was returned but never recorded, so the screen fell back to its default"));
     // 413 is in the list of answers no retry can fix, which is what takes it out of the loop and
     // lets everything queued behind it through.
     it("is recorded as settled, so the queue behind it moves again", () => {
@@ -3301,7 +3307,7 @@ describe("InBody sheet", () => {
   // roster, and a limit high enough to be safe catches nothing. What matters is not how big a
   // write is — it is that it has failed the same way over and over.
   describe("a write that keeps failing", () => {
-    const add = sourceBetween("var _prior = 0;", "_failSave(a);\n    window.__vxLastError");
+    const add = sourceBetween("var _prior = 0, _since = 0;", "_failSave(a);\n    window.__vxLastError");
 
     it("counts its own attempts rather than being re-queued as if it were new", () => {
       eq(/x\.sig===sig/.test(add), true, "it has to recognise the same write coming back");
