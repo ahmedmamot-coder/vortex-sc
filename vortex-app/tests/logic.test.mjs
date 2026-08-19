@@ -4391,14 +4391,23 @@ describe("InBody sheet", () => {
     // 304 swimmers became 317: a device holding an older roster changed something and published
     // the lot, replacing every addition and removal every other device had made.
     it("a stale device cannot publish the whole roster over a newer one", () => {
-      const fn = sourceBetween("  persistRosterEdits(){", "\n  }");
-      eq(/_blobIsStale\('vx_roster_edits'\)/.test(fn), true, "it has to check before writing");
-      const guard = fn.slice(0, fn.indexOf("this._saveJSON"));
-      // It reports the refusal to the caller now, so the editor can stay open rather than close
-      // on a save that never happened — but it still stops before _saveJSON, which is the point.
-      eq(/return false;/.test(guard), true, "and stop, not warn and write anyway");
-      eq(/replace every swimmer they added or removed/.test(fn), true,
-         "the person needs to know what was at stake, not just that it did not save");
+      // Still the requirement. No longer the same mechanism, and the change is the point.
+      //
+      // This used to be met by REFUSING the save when another device had written more recently,
+      // which was correct while writing the document replaced it — and which a coach experienced
+      // as "we cannot add swimmers any more": make a change, get told to reload and do it again,
+      // on a screen where everything else saves. The protection was real and so was the cost.
+      //
+      // Sending the roster is a merge now, so a device that is behind cannot destroy what it has
+      // not read, and does not have to be stopped from trying.
+      const push = sourceBetween("function _mergeRoster(mine, theirs){", "\n  window.__vxMergeRoster");
+      eq(/out\.deleted\[sq\]\[sw\]=true/.test(push), true, "deletions have to survive a stale copy");
+      eq(/k==="vx_roster_edits" \? _rosterMergedWith\(v\)/.test(SOURCE), true,
+         "the roster is still being sent as a replacement");
+      // Read from the database at the moment of writing, not from a mirror up to 20s old — which
+      // is exactly long enough for two coaches on poolside to lose each other's work.
+      eq(/select=value&key=eq\.vx_roster_edits/.test(SOURCE), true,
+         "the merge is against a stale mirror rather than what the database holds now");
     });
     it("staleness is judged against what the database actually said", () => {
       eq(/window\.__vxRemoteTs\[r\.key\]=remoteTs/.test(SOURCE), true,
@@ -6262,11 +6271,14 @@ describe("InBody sheet", () => {
     // The refusal above went to rosterFixMsg, which renders in Settings. A coach editing a
     // swimmer saw the panel close and the row look edited, and nothing had been written.
     it("a refused roster edit does not look like a save", () => {
-      const persist = sourceBetween("persistRosterEdits(){", "\n  }");
-      eq(/return false;/.test(persist), true, "it says when it refused");
-      eq(/return true;/.test(persist), true, "and when it did not");
-      eq(/if\(this\.persistRosterEdits\(\)!==false\) this\.setState\(\{swEditId:null\}\);/.test(SOURCE), true,
-         "and the editor stays open on a refusal");
+      // The refusal is no longer synchronous — there is nothing to refuse, because the write is a
+      // merge. What has to stay true is that a coach is told, and told WHERE the change is.
+      const watch = sourceBetween("async _rosterSaved(){", "\n  }");
+      eq(/NOT saved/.test(watch), true, "a roster change the database did not take reads as saved");
+      eq(/this device only/.test(watch), true, "it has to say where the change actually is");
+      eq(/it never left this device/.test(watch), true,
+         "no entry in __vxLastPush means the write was never sent, which never meant success");
+      eq(/Saved/.test(watch), true, "and a save that did land has to say so, or nothing is trustworthy");
     });
     it("no session at all counts as anonymous, not as signed in", () => {
       const anon = sourceBetween("_dbAnon(){", "\n  }");
@@ -6449,13 +6461,16 @@ describe("InBody sheet", () => {
       eq(/if\(VX_ROSTER_ROWS && Array\.isArray\(this\.rosterRows\)\)/.test(persist), true,
          "and the write path is gated on the same flag, not just the fetch");
     });
-    it("the stale-device guard is not applied to rows", () => {
+    it("the rows path still short-circuits before the document path", () => {
+      // The stale-device guard this used to be about is gone entirely — the merge replaced it.
+      // What still matters is the ordering: when the table exists, rows are written and the
+      // single-document write is not reached at all.
       const at = SOURCE.indexOf("  persistRosterEdits(){");
       const fn = SOURCE.slice(at, SOURCE.indexOf("\n  }", at));
       const rowsAt = fn.indexOf("this._rosterPersistRows()");
-      const guardAt = fn.indexOf("_blobIsStale");
-      eq(rowsAt > -1 && rowsAt < guardAt, true,
-         "rows cannot clobber each other, so there is nothing left to guard against");
+      const docAt = fn.indexOf("this._saveJSON('vx_roster_edits'");
+      eq(rowsAt > -1 && rowsAt < docAt, true,
+         "rows cannot clobber each other, and must be written instead of the document, not after it");
     });
     it("a missing table keeps the old behaviour rather than losing the roster", () => {
       const fn = sourceBetween("async _rosterFetch(){", "\n  async _rosterSeed");

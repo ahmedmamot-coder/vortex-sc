@@ -1679,6 +1679,77 @@ scene("a stale device cannot put deleted swimmers back", async (browser) => {
   return "kept all 14 deletions and both dates of birth";
 });
 
+// ---------------------------------------------------------------------------------------------
+// "Every change and edit or delete must save automatically."
+//
+// persistRosterEdits wrote to localStorage, pushed, and told nobody what happened to the push.
+// That is the shape of every silent loss in this app: the screen updates because the DEVICE
+// saved, and whether the CLUB saved is a different question that nobody was asking. Add, edit
+// and delete all go through that one function, so one answer covers all three.
+//
+// It also used to REFUSE the save outright when another device had written more recently —
+// which was right while writing replaced the document, and became "we cannot add swimmers any
+// more" the moment it was not. The merge protects that now; the refusal is gone.
+// ---------------------------------------------------------------------------------------------
+async function rosterSave(browser, { accept }) {
+  const page = await (await browser.newContext({ viewport: { width: 1280, height: 1000 } })).newPage();
+  const problems = [];
+  page.on("pageerror", (e) => problems.push(String(e.message)));
+  await page.route("**/rest/v1/**", async (route) => {
+    const req = route.request(), m = req.method();
+    const table = (new URL(req.url()).pathname.split("/rest/v1/")[1] || "").split("?")[0];
+    if (table === "club_state" && m === "POST" && !accept)
+      return route.fulfill({ status: 403, contentType: "application/json",
+        body: JSON.stringify({ message: "new row violates row-level security policy" }) });
+    return route.fulfill({ status: m === "GET" ? 200 : 201, contentType: "application/json", body: "[]" });
+  });
+  await page.addInitScript(() => {
+    localStorage.setItem("vx_session", JSON.stringify({ type: "staff", id: "ahmed" }));
+    localStorage.setItem("vx_auth", JSON.stringify({ token: "drive-fake", refresh: "drive-fake", exp: Date.now() + 3600000 }));
+    localStorage.removeItem("vx_nav");
+  });
+  await page.goto("http://127.0.0.1:" + PORT + "/proto.html?drive=" + Date.now(), { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(2400);
+  await tap(page, "Club Administration");
+  await tap(page, "Roster · add / edit");
+  await page.waitForTimeout(900);
+  // Delete a swimmer — the change this club has lost most often, and the one that goes through
+  // the same persist as add and edit.
+  const gone = await page.evaluate(() => {
+    const bin = [...document.querySelectorAll("button")]
+      .find((b) => b.offsetParent && b.querySelector('[data-lucide="trash-2"],svg.lucide-trash-2'));
+    if (!bin) return false;
+    window.confirm = () => true;
+    bin.click();
+    return true;
+  });
+  if (!gone) throw new Error("no swimmer on the roster had a delete button");
+  await page.waitForTimeout(2200);
+  const said = await page.evaluate(() => {
+    const t = (document.body.innerText || "").split("\n");
+    return t.find((l) => /saved/i.test(l)) || "";
+  });
+  await page.close();
+  return { said, problems };
+}
+
+scene("deleting a swimmer says whether the database took it", async (browser) => {
+  const ok = await rosterSave(browser, { accept: true });
+  eq(ok.problems.length, 0, "the roster threw: " + ok.problems.slice(0, 2).join(" | "));
+  eq(/Saved ✓/.test(ok.said), true, "after a save the database took, the screen said: " + JSON.stringify(ok.said));
+  eq(/every device/.test(ok.said), true, "saved has to mean saved for the club, not for this phone");
+  return "said " + JSON.stringify(ok.said.slice(0, 50));
+});
+
+scene("a roster change the database refuses is not reported as saved", async (browser) => {
+  const no = await rosterSave(browser, { accept: false });
+  eq(no.problems.length, 0, "the roster threw: " + no.problems.slice(0, 2).join(" | "));
+  eq(/NOT saved/.test(no.said), true, "a refused roster change reported: " + JSON.stringify(no.said));
+  eq(/this device only/.test(no.said), true, "it has to say where the change actually is");
+  eq(/Saved ✓/.test(no.said), false, "a refused change must never read as saved");
+  return "refused, and said so: " + JSON.stringify(no.said.slice(0, 50));
+});
+
 const TOOLS = [
   "Insights","AI Assistants","Daily Attendance","Activity log","Birthdays","Boards",
   "Club Configuration","Pace Clock","Zone Engine","Meet Entries","Family accounts",

@@ -5668,6 +5668,9 @@ if ('serviceWorker' in navigator) {
                       <sc-if value="{{ swDobChipShow }}" hint-placeholder-val="{{ false }}">
                         <button onclick="{{ onToggleDobFilter }}" style="display:flex;align-items:center;gap:7px;align-self:flex-start;background:{{ swDobChipBg }};color:{{ swDobChipFg }};border:1px solid {{ swDobChipBorder }};border-radius:999px;padding:6px 13px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer"><i data-lucide="cake" style="width:13px;height:13px"></i>{{ swDobChipLabel }}</button>
                       </sc-if>
+                      <sc-if value="{{ rosterSaveShow }}" hint-placeholder-val="{{ false }}">
+                        <div style="align-self:stretch;background:{{ rosterSaveBg }};color:{{ rosterSaveFg }};border-radius:11px;padding:9px 12px;font-size:12px;font-weight:600;line-height:1.5">{{ rosterSaveMsg }}</div>
+                      </sc-if>
 
                       <sc-if value="{{ swAddOpen }}" hint-placeholder-val="{{ false }}">
                         <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05);display:flex;flex-direction:column;gap:8px">
@@ -6901,7 +6904,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-19d';
+const VX_BUILD='2026-08-19e';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -8844,16 +8847,40 @@ class Component extends DCLogic {
       this.rebuildRoster(); this.forceUpdate();
       return;
     }
-    if(this._blobIsStale('vx_roster_edits')){
-      this.rebuildRoster(); this.forceUpdate();
-      this.setState({rosterFixOk:false, rosterFixMsg:
-        'Not saved. Another device changed the roster more recently than this one has read, and '
-        +'writing now would replace every swimmer they added or removed. Reload the app to take '
-        +'their copy, then make the change again \u2014 or Settings \u2192 Roster copy if this device is the right one.'});
-      return false;
-    }
+    // The stale-device refusal that used to live here is gone.
+    //
+    // It existed because writing this document REPLACED it, so a device that had not read the
+    // newest copy would wipe whatever another device had just done. That was true, and refusing
+    // was the right call then. It is also exactly what "we cannot add swimmers any more" felt
+    // like from the other side: a coach makes a change and is told to reload and do it again, on
+    // a screen where everything else saves.
+    //
+    // Sending the roster is a merge now: deletions and additions are unions, and a filled field
+    // never loses to an empty one, so a device that is behind can no longer destroy what it has
+    // not read. There is nothing left for the refusal to protect, and refusing a coach's work is
+    // not free.
     this._saveJSON('vx_roster_edits', this.rosterEdits); this.rebuildRoster(); this.forceUpdate();
+    try{ this._rosterSaved(); }catch(e){}
     return true;
+  }
+  // Add, edit, delete: the same answer, from the database, every time.
+  //
+  // persistRosterEdits wrote to localStorage, pushed, and told nobody what happened to the push.
+  // That is the shape of every silent loss in this app: the screen updates because the DEVICE
+  // saved, and whether the CLUB saved is a different question nobody was asking.
+  async _rosterSaved(){
+    this.setState({rosterSaveMsg:'Saving\u2026', rosterSaveOk:true});
+    const rec=(window.__vxLastPush||{})['vx_roster_edits'];
+    // No entry means pushKey returned before it recorded one, which is what happens when the
+    // write is not sent at all. It never meant success.
+    if(!rec) return this.setState({rosterSaveOk:false,
+      rosterSaveMsg:'NOT saved \u2014 it never left this device. Sign out and back in, and it saves itself.'});
+    let res=null;
+    try{ res=await rec; }catch(e){ res={ok:false, why:'it could not be sent from this device'}; }
+    if(res && res.ok===false) return this.setState({rosterSaveOk:false,
+      rosterSaveMsg:'NOT saved \u2014 '+(res.why||'the database refused it')+'. It is on this device only.'
+        +(res.notSent ? ' Sign out and back in, and it saves itself.' : '')});
+    this.setState({rosterSaveOk:true, rosterSaveMsg:'Saved \u2713 every device will show this.'});
   }
   EVENT_CATALOG(){ return ['50 Free','100 Free','200 Free','400 Free','800 Free','1500 Free','50 Back','100 Back','200 Back','50 Breast','100 Breast','200 Breast','50 Fly','100 Fly','200 Fly','100 IM','200 IM','400 IM']; }
   parseTimeStr(t){ t=(t||'').trim(); if(!t) return null; if(t.includes(':')){ const [m,s]=t.split(':'); const sec=parseInt(m,10)*60+parseFloat(s); return isNaN(sec)?null:sec; } const sec=parseFloat(t); return isNaN(sec)?null:sec; }
@@ -17551,6 +17578,10 @@ class Component extends DCLogic {
       swDobChipShow: S.swDobFilter || swMissingDobCount>0,
       onToggleDobFilter:()=>this.setState({swDobFilter:!S.swDobFilter}),
       swDobChipLabel: S.swDobFilter ? ('Showing '+swMissingDobCount+' missing DOB — tap to clear') : ('Missing DOB: '+swMissingDobCount),
+      rosterSaveShow: !!S.rosterSaveMsg,
+      rosterSaveMsg: S.rosterSaveMsg || '',
+      rosterSaveBg: S.rosterSaveOk ? '#DCF5EA' : '#FBE2E3',
+      rosterSaveFg: S.rosterSaveOk ? '#0C7A4F' : '#A52A2E',
       swDobChipBg: S.swDobFilter?'#B4690E':'#FCEFDD', swDobChipFg: S.swDobFilter?'#fff':'#B4690E', swDobChipBorder: S.swDobFilter?'#B4690E':'#F3D9AE',
       swAddOpen:S.swAddOpen, onSwAddOpen:()=>this.setState({swAddOpen:true, swForm:{name:'',age:'',dob:'',gender:'Boys',squadId:(S.swSquadFilter!=='all'?S.swSquadFilter:''),pbs:[]}, swPbCourse:'LCM', swPbMeet:'', swPbMeetDate:''}), onSwAddCancel:()=>this.setState({swAddOpen:false}),
       swForm, swSquadOptions, onSwFormSquad:(e)=>this.setState({swForm:{...S.swForm, squadId:e.target.value}}),
