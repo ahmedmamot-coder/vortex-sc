@@ -2895,6 +2895,15 @@ if ('serviceWorker' in navigator) {
                           <h2 style="font-size:11.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#7A8296;margin:0">{{ attendDayLabel }}</h2>
                           <button onclick="{{ onAttendDayNext }}" style="width:28px;height:28px;flex:none;border-radius:8px;border:1px solid #E5E9F0;background:#fff;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="chevron-right" style="width:15px;height:15px"></i></button>
                         </div>
+                        <sc-if value="{{ attendSendShow }}" hint-placeholder-val="{{ true }}">
+                          <div style="background:{{ attendSendBg }};border:1px solid {{ attendSendBorder }};border-radius:12px;padding:10px 12px;margin:0 0 9px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                            <span style="flex:1;min-width:180px;font-size:11.5px;line-height:1.55;color:{{ attendSendFg }}">{{ attendSendLine }}</span>
+                            <button onclick="{{ onAttendResend }}" style="flex:none;background:#0A0F1A;color:#fff;border:none;border-radius:10px;padding:8px 13px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">{{ attendSendLabel }}</button>
+                            <sc-if value="{{ attendSendMsgShow }}" hint-placeholder-val="{{ true }}">
+                              <span style="flex-basis:100%;font-size:11.5px;font-weight:600;color:{{ attendSendMsgFg }}">{{ attendSendMsg }}</span>
+                            </sc-if>
+                          </div>
+                        </sc-if>
                         <div style="display:flex;flex-direction:column;gap:7px">
                           <sc-for list="{{ attendList }}" as="a" hint-placeholder-count="10">
                             <div style="display:flex;align-items:center;gap:9px;width:100%;background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:9px 11px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
@@ -6746,7 +6755,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-18c';
+const VX_BUILD='2026-08-18d';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -7273,7 +7282,65 @@ class Component extends DCLogic {
     // concurrent coaches/devices can never overwrite each other).
     try{ this._saveLocalOnly('vx_attend_log', this.attendLog); }catch(e){}
     // The real save: one independent row in Supabase.
-    if(window.__vxUpsert){ try{ window.__vxUpsert('attendance_marks', [{ id:squadId+'_'+dateISO+'_'+swId, squad_id:squadId, day:dateISO, sw_id:swId, status:status, ts:Date.now(), updated_at:new Date().toISOString() }]); }catch(e){} }
+    //
+    // This used to be fired and forgotten. __vxUpsert hands back whether the row reached the
+    // database, and nothing read it — so a register taken with no live session went green tap by
+    // tap, forty times, and stayed on that one device. Mary took Monday's register on her laptop:
+    // 75 present there, 1 present everywhere else, and not one thing on screen between the two.
+    //
+    // A register is forty taps and a message per tap is noise, so nothing is said per swimmer.
+    // What is kept is which marks have not landed, per squad and day, on disk so it survives a
+    // reload — and the register screen reports the total and offers to send them again.
+    const _key=squadId+'|'+dateISO;
+    if(window.__vxUpsert){
+      try{
+        Promise.resolve(window.__vxUpsert('attendance_marks', [{ id:squadId+'_'+dateISO+'_'+swId, squad_id:squadId, day:dateISO, sw_id:swId, status:status, ts:Date.now(), updated_at:new Date().toISOString() }]))
+          .then(ok=>this._attendMarkLanded(_key, swId, !!ok))
+          .catch(()=>this._attendMarkLanded(_key, swId, false));
+      }catch(e){ this._attendMarkLanded(_key, swId, false); }
+    } else { this._attendMarkLanded(_key, swId, false); }
+  }
+  // Which marks are still only on this device. { "squad|2026-08-17": { swimmerId: 1 } }
+  _attendUnsent(){ try{ return JSON.parse(localStorage.getItem('vx_attend_unsent')||'{}')||{}; }catch(e){ return {}; } }
+  _attendMarkLanded(key, swId, ok){
+    try{
+      const m=this._attendUnsent();
+      const day=m[key]||{};
+      if(ok) delete day[swId]; else day[swId]=1;
+      if(Object.keys(day).length) m[key]=day; else delete m[key];
+      this._saveLocalOnly('vx_attend_unsent', m);
+    }catch(e){}
+    // Coalesced: forty marks land within a second or two of each other and each one must not
+    // re-render the register.
+    try{ clearTimeout(this._attUnsentT); }catch(e){}
+    this._attUnsentT=setTimeout(()=>{ try{ this.forceUpdate(); }catch(e){} }, 400);
+  }
+  // Send a whole day's register again, from what this device holds.
+  //
+  // Every row is keyed squad_day_swimmer and written as an upsert, so doing this twice changes
+  // nothing — which is what makes it safe to offer for any day, including one taken before this
+  // code existed. That is the case that matters: Monday's register is sitting on a laptop with
+  // no record anywhere that it never sent, and this is the button that puts it in the database.
+  async attendResend(squadId, dateISO){
+    const marks=((this.attendLog||{})[squadId]||{})[dateISO]||{};
+    const ids=Object.keys(marks);
+    if(!ids.length) return this.setState({attendResendMsg:'There are no marks for this day on this device.', attendResendOk:false});
+    this.setState({attendResendBusy:true, attendResendMsg:''});
+    const rows=ids.map(swId=>({ id:squadId+'_'+dateISO+'_'+swId, squad_id:squadId, day:dateISO, sw_id:swId,
+                                status:marks[swId], ts:Date.now(), updated_at:new Date().toISOString() }));
+    let ok=false;
+    try{ ok=!!(window.__vxUpsert && await window.__vxUpsert('attendance_marks', rows)); }catch(e){ ok=false; }
+    const m=this._attendUnsent(); const key=squadId+'|'+dateISO;
+    if(ok){ delete m[key]; } else { const d={}; ids.forEach(i=>{ d[i]=1; }); m[key]=d; }
+    try{ this._saveLocalOnly('vx_attend_unsent', m); }catch(e){}
+    try{ this.audit('attendance.resend', ((this.squadById[squadId]||{}).name||squadId)+' \u00b7 '+dateISO,
+      {squad:squadId, day:dateISO, marks:ids.length, reached:ok}); }catch(e){}
+    this.setState({attendResendBusy:false, attendResendOk:ok,
+      attendResendMsg: ok ? (ids.length+' mark'+(ids.length===1?'':'s')+' sent \u2713 everyone can see this register now.')
+        : ('They still did not reach the database'+(window.__vxAuthDead||window.__vxSendingAnon
+            ? ' \u2014 the database sign-in on this device has ended. Sign out and back in, then press this again.'
+            : ' \u2014 they are still safe on this device.'))});
+    try{ this._attendFetch(dateISO); }catch(e){}
   }
   // Load attendance from the per-row table and overlay it onto the local log (per-row is
   // authoritative, so it can't be clobbered by another device's blob).
@@ -14571,6 +14638,28 @@ class Component extends DCLogic {
         activeBg: isAct?'#DCF5EA':'#FCEFD6', activeColor: isAct?'#0C7A4F':'#B4690E',
         onToggleActive:()=>this.setSwStatus(sw.id, !isAct, isAct?'inactive':'')}; });
     const attendSummary={present:cP, absent:cA, late:cL};
+    // Whether this day's register is actually in the database, said on the register itself.
+    //
+    // The screen showing 75 present and the screen showing 1 present were the same app, the same
+    // day, twelve hours apart. Neither said anything. This is the line that would have.
+    const _attKey=S.squadId+'|'+attendCurDate;
+    const _attMarks=((this.attendLog||{})[S.squadId]||{})[attendCurDate]||{};
+    const _attTaken=Object.keys(_attMarks).length;
+    const _attUnsent=Object.keys((this._attendUnsent()||{})[_attKey]||{}).length;
+    const attendSendShow = _attTaken>0;
+    const attendSendWarn = _attUnsent>0;
+    const attendSendLine = _attUnsent>0
+      ? (_attUnsent+' mark'+(_attUnsent===1?'':'s')+' on this register '+(_attUnsent===1?'has':'have')
+         +' not reached the database. — they are safe on this device, and nobody else can see them yet.')
+      : (_attTaken+' mark'+(_attTaken===1?'':'s')+' taken on this day. If another device is not showing them, send them again — it changes nothing if they are already there.');
+    const attendSendLabel = S.attendResendBusy ? 'Sending…' : (_attUnsent>0 ? 'Send these to the database' : 'Send this register again');
+    const onAttendResend = ()=>this.attendResend(S.squadId, attendCurDate);
+    const attendSendBg = attendSendWarn ? '#FCEFD6' : '#F4F6F8';
+    const attendSendBorder = attendSendWarn ? '#F0D9A8' : '#E5E9F0';
+    const attendSendFg = attendSendWarn ? '#8A5606' : '#3A4152';
+    const attendSendMsg = S.attendResendMsg || '';
+    const attendSendMsgShow = !!S.attendResendMsg;
+    const attendSendMsgFg = S.attendResendOk ? '#0C7A4F' : '#A52A2E';
     const attendDateObj=new Date(attendCurDate+'T00:00:00');
     const dowNames=['SUN','MON','TUE','WED','THU','FRI','SAT'];
     const attendDayLabel = dowNames[attendDateObj.getDay()]+' · '+attendDateObj.toLocaleDateString('en-GB',{day:'numeric',month:'short'})+(attendCurDate===this.todayISO()?' · Today':'');
@@ -16271,6 +16360,8 @@ class Component extends DCLogic {
       attendViewYearBg: attendView==='year'?'#0A0F1A':'transparent', attendViewYearFg: attendView==='year'?'#fff':'#7A8296',
       onAttendViewDay:()=>this.setState({attendView:'day'}), onAttendViewMonth:()=>this.setState({attendView:'month'}), onAttendViewYear:()=>this.setState({attendView:'year'}),
       attendDayLabel, onAttendDayPrev, onAttendDayNext,
+      attendSendShow, attendSendLine, attendSendLabel, onAttendResend, attendSendBg, attendSendBorder,
+      attendSendFg, attendSendMsg, attendSendMsgShow, attendSendMsgFg,
       attendMonthLabel, attendWeekdayLabels, attendMonthCells, attendMonthAvgPct, attendMonthSessions, onAttendMonthPrev, onAttendMonthNext,
       onExportAttendance:()=>this.exportAttendancePdf(S.squadId), onExportResults:()=>this.exportResultsPdf(S.squadId),
       attendFrom:S.attendFrom||(this.todayISO().slice(0,8)+'01'), onAttendFrom:(e)=>this.setState({attendFrom:e.target.value}),

@@ -3799,6 +3799,11 @@ describe("InBody sheet", () => {
       vx_alert_read: "which notices this device has read",
       vx_alert_hidden: "which notices this device has dismissed",
       vx_fam_refused: "a note that this device's family write was refused, so it can say so",
+      // Which of THIS device's register marks the database has not taken. It is about this
+      // device's outbox and nothing else: syncing it would tell the tablet that the laptop is
+      // behind, which is not a fact the tablet can act on or should show. The marks themselves
+      // are in attendance_marks and cached in vx_attend_log, both listed here already.
+      vx_attend_unsent: "which of this device's register marks have not reached the database yet",
     };
     // 2. A local copy of a database table, so the screen can draw before the read comes back.
     //    The table is the truth; losing the copy costs nothing.

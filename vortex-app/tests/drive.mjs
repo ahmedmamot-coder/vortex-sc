@@ -1442,6 +1442,97 @@ scene("an empty roster overlay is not sent, and the screen stops pretending", as
   return "refused the empty overlay, and the screen named it";
 });
 
+// ---------------------------------------------------------------------------------------------
+// "Mary took Monday's register and it did not save."
+//
+// She did take it. Her laptop showed 75 present for Monday 17 August; every other device showed 1,
+// for the same club on the same day. Nothing on either screen said anything was wrong.
+//
+// setAttendStatus fired the write and forgot it. __vxUpsert hands back whether the row reached
+// the database and nobody read the answer, so a register taken with no live session went green
+// tap by tap, forty times, and stayed on that one laptop.
+//
+// A message per tap would be noise on a forty-swimmer register. What the register needs is the
+// total, and a way to send them.
+// ---------------------------------------------------------------------------------------------
+scene("a register the database did not take says so, and can be sent again", async (browser) => {
+  let accept = false;                       // the database is refusing when Mary takes it
+  const landed = [];
+  const page = await (await browser.newContext({ viewport: { width: 1280, height: 1000 } })).newPage();
+  const problems = [];
+  page.on("pageerror", (e) => problems.push(String(e.message)));
+  await page.route("**/rest/v1/**", async (route) => {
+    const req = route.request(), m = req.method();
+    const table = (new URL(req.url()).pathname.split("/rest/v1/")[1] || "").split("?")[0];
+    if (table === "attendance_marks" && m !== "GET" && m !== "HEAD") {
+      if (!accept)
+        return route.fulfill({ status: 403, contentType: "application/json",
+          body: JSON.stringify({ message: "new row violates row-level security policy" }) });
+      try { for (const r of JSON.parse(req.postData() || "[]")) landed.push(r.sw_id); }
+      catch { /* the assertions read landed, so an unparseable body fails them */ }
+      return route.fulfill({ status: 201, contentType: "application/json", body: "[]" });
+    }
+    return route.fulfill({ status: m === "GET" ? 200 : 201, contentType: "application/json", body: "[]" });
+  });
+  await page.addInitScript(() => {
+    localStorage.setItem("vx_session", JSON.stringify({ type: "staff", id: "ahmed" }));
+    localStorage.setItem("vx_auth", JSON.stringify({ token: "drive-fake", refresh: "drive-fake", exp: Date.now() + 3600000 }));
+    localStorage.removeItem("vx_nav");
+    localStorage.removeItem("vx_attend_unsent");
+    localStorage.removeItem("vx_attend_log");
+  });
+  await page.goto("http://127.0.0.1:" + PORT + "/proto.html?drive=" + Date.now(), { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(2200);
+  await tap(page, "Tools & AI");
+  await tap(page, "Daily Attendance");
+  await tap(page, "Pre-Team");
+  await tap(page, "Take / edit this squad");
+  // Three swimmers marked, exactly as a coach does it, into a database that is refusing.
+  for (let i = 0; i < 3; i++) {
+    const hit = await page.evaluate((n) => {
+      const btns = [...document.querySelectorAll("button,[onclick]")]
+        .filter((e) => e.offsetParent && /^(present|absent|late|not taken)$/i.test((e.innerText || "").trim()));
+      if (!btns[n]) return false;
+      btns[n].click();
+      return true;
+    }, i);
+    if (!hit) throw new Error("the register ran out of swimmers to mark at " + i);
+    await page.waitForTimeout(500);
+  }
+  await page.waitForTimeout(1600);
+  const warned = await page.evaluate(() => document.body.innerText || "");
+  eq(problems.length, 0, "the app threw: " + problems.slice(0, 2).join(" | "));
+  eq(/have not reached the database|has not reached the database/i.test(warned), true,
+     "the register said nothing about marks the database refused");
+  eq(landed.length, 0, "the database was refusing, so nothing should have landed: " + JSON.stringify(landed));
+  // The register is still on the device, and the button sends it — now that the database will take it.
+  accept = true;
+  const pressed = await page.evaluate(() => {
+    const b = [...document.querySelectorAll("button")].find(
+      (e) => e.offsetParent && /send these to the database|send this register again/i.test(e.innerText || ""));
+    if (!b) return false;
+    b.click();
+    return true;
+  });
+  eq(pressed, true, "there was no way to send them — the marks are stranded with no action offered");
+  await page.waitForTimeout(2000);
+  const after = await page.evaluate(() => ({
+    text: document.body.innerText || "",
+    unsent: JSON.parse(localStorage.getItem("vx_attend_unsent") || "{}"),
+  }));
+  // On the unique swimmers, not the number of rows. The retry queue replays the refused writes
+  // once the database starts accepting, so the same mark can arrive twice — which is exactly what
+  // every row being keyed squad_day_swimmer and written as an upsert is for. Two arrivals of one
+  // mark is not a fault; a swimmer missing is.
+  eq(new Set(landed).size, 3,
+     "sending again reached the database with " + new Set(landed).size + " of 3 swimmers: " + JSON.stringify(landed));
+  eq(/sent/i.test(after.text), true, "it did not say the register had gone: " + JSON.stringify(after.text.slice(0, 120)));
+  eq(Object.keys(after.unsent).length, 0,
+     "marks that reached the database are still recorded as stranded: " + JSON.stringify(after.unsent));
+  await page.close();
+  return "warned about 3 stranded marks, then sent all 3";
+});
+
 const TOOLS = [
   "Insights","AI Assistants","Daily Attendance","Activity log","Birthdays","Boards",
   "Club Configuration","Pace Clock","Zone Engine","Meet Entries","Family accounts",
