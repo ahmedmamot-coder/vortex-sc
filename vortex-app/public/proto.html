@@ -891,6 +891,62 @@ if ('serviceWorker' in navigator) {
   // In-memory mirror of the database, authoritative over localStorage. The app reads from this so
   // a full/stale browser storage can never hide data that IS saved in Supabase.
   window.__VX_PULLED = window.__VX_PULLED || {};
+  // Keep what a pull is about to replace.
+  //
+  // The roster went back to 317 swimmers with 123 dates of birth missing, again. Both places that
+  // take the server's copy decide it the same way: applyPull takes it when `!localTs`, and the
+  // 20-second sweep takes it when `localTs` is 0 — and localTs is 0 whenever this device has no
+  // __vxts_ marker for that key, which is the ordinary state of a device that has not itself
+  // edited that key since the marker was last written. In that state the server's copy wins
+  // whether it is newer or older, and the copy it lands on is gone.
+  //
+  // That is defensible for data — the database is meant to be the truth. It is not defensible to
+  // do it silently and irreversibly. So the previous copy is kept, once per key, with the count
+  // of what was in it, and __vxRestore(key) puts it back and sends it up.
+  //
+  // This is a net, not a fix for whatever put 317 back on the server. It exists so that the next
+  // time this happens the club's real roster is still on the device that had it, recoverable in
+  // one line, instead of being overwritten at 03:00 by a copy nobody chose.
+  window.__vxKeepReplaced = function(key, oldVal, newVal){ return _keepReplaced(key, oldVal, newVal); };
+  function _keepReplaced(key, oldVal, newVal){
+    try{
+      if(oldVal==null) return;
+      if(oldVal===newVal) return;
+      // Only worth keeping when the two actually differ in size — an identical record rewritten
+      // with a new timestamp is not a loss and must not push the real rescue copy out.
+      origSet('__vxprev_'+key, oldVal);
+      origSet('__vxprevts_'+key, String(Date.now()));
+    }catch(e){}
+  }
+  // What is being held, in the terms a person asks the question in.
+  window.__vxReplaced = function(){
+    var out=[];
+    try{
+      for(var i=0;i<localStorage.length;i++){
+        var k=localStorage.key(i); if(!k || k.indexOf('__vxprev_')!==0) continue;
+        var key=k.slice(9), raw=localStorage.getItem(k)||'', n=0;
+        try{ var v=JSON.parse(raw); n=(v && typeof v==='object') ? Object.keys(v).length : 0; }catch(e){}
+        var now=null; try{ var c=JSON.parse(localStorage.getItem(key)||'null'); now=(c && typeof c==='object')?Object.keys(c).length:0; }catch(e){}
+        out.push({ key:key, entriesInTheKeptCopy:n, entriesNow:now,
+                   keptAt:new Date(parseInt(localStorage.getItem('__vxprevts_'+key)||'0',10)||0).toString(),
+                   restoreWith:'window.__vxRestore("'+key+'")' });
+      }
+    }catch(e){}
+    return out;
+  };
+  window.__vxRestore = function(key){
+    try{
+      var prev=localStorage.getItem('__vxprev_'+key);
+      if(prev==null) return {ok:false, why:'nothing is being held for '+key};
+      origSet(key, prev);
+      try{ window.__VX_PULLED[key]=JSON.parse(prev); }catch(e){}
+      return Promise.resolve(pushKey(key, prev)).then(function(r){
+        try{ window.dispatchEvent(new Event('vx-data-refreshed')); }catch(e){}
+        return (r && r.ok) ? {ok:true, why:'restored and sent to the database \u2014 reload the app'}
+                           : {ok:false, why:'restored on this device, but it did NOT reach the database: '+((r&&r.why)||'unknown')};
+      });
+    }catch(e){ return {ok:false, why:String(e&&e.message)}; }
+  };
   function applyPull(rows, seed){
     var have = {};
     try { (rows||[]).forEach(function(r){ have[r.key]=true; if(r.value==null) return;
@@ -914,8 +970,10 @@ if ('serviceWorker' in navigator) {
       var remoteTs=r.updated_at? Date.parse(r.updated_at) : 0;
       var takeRemote = ((localVal==null && !haveMirror) || !localTs || remoteTs>=localTs);
       if(takeRemote){
+        var _incoming=JSON.stringify(r.value);
+        _keepReplaced(r.key, localVal, _incoming);
         window.__VX_PULLED[r.key]=r.value;      // DB copy → in-memory mirror
-        origSet(r.key, JSON.stringify(r.value));
+        origSet(r.key, _incoming);
       } else if(haveMirror){
         pushKey(r.key, JSON.stringify(mirrored));   // the newest copy, straight back up
       } else {
@@ -6651,7 +6709,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-18a';
+const VX_BUILD='2026-08-18b';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -13862,7 +13920,15 @@ class Component extends DCLogic {
         // Remember what the database said, even when this device's copy is kept — it is the only
         // way a later write can tell it is about to overwrite something newer than what it read.
         try{ window.__vxRemoteTs=window.__vxRemoteTs||{}; window.__vxRemoteTs[r.key]=remoteTs; }catch(e){}
-        const s=JSON.stringify(r.value); if(localStorage.getItem(r.key)!==s){ setLocal(r.key, s); changed=true; }
+        const s=JSON.stringify(r.value);
+        const was=localStorage.getItem(r.key);
+        if(was!==s){
+          // Same net as applyPull. This sweep runs every twenty seconds against every synced key,
+          // so it is the path that actually replaced the roster in the background while somebody
+          // was looking at it, with nothing kept and nothing said.
+          try{ if(window.__vxKeepReplaced) window.__vxKeepReplaced(r.key, was, s); }catch(e){}
+          setLocal(r.key, s); changed=true;
+        }
         // What this device has SEEN, kept well away from __vxts_.
         //
         // __vxts_ means "when this device last WROTE", it is stamped with Date.now(), and

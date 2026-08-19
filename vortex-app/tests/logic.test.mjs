@@ -166,7 +166,7 @@ describe("shipped source", () => {
     const applyPull = (rows, disk, ts) => {
       const store = { ...disk };
       Object.keys(ts).forEach((k) => { store["__vxts_" + k] = String(ts[k]); });
-      const pushed = [];
+      const pushed = [], kept = [];
       const env = {
         localStorage: {
           getItem: (k) => (k in store ? store[k] : null),
@@ -177,11 +177,15 @@ describe("shipped source", () => {
         window: { __VX_PULLED: {} },
         origSet: (k, v) => { store[k] = v; },
         pushKey: (k, v) => pushed.push([k, v]),
+        // The real scope has this; the sandbox has to as well. It is not decoration — applyPull's
+        // whole body sits inside one try/catch, so a name it cannot resolve aborts the pull without
+        // a word, and every assertion below reads "undefined" instead of a copy.
+        _keepReplaced: (k, oldVal, newVal) => { if (oldVal != null && oldVal !== newVal) kept.push([k, oldVal]); },
         SYNC: [],
       };
       const src = sourceBetween("function applyPull(rows, seed){", "\n  // Re-pull the shared club");
       runInSandbox(src + "\napplyPull(rows, false);", { ...env, rows });
-      return { mirror: env.window.__VX_PULLED, disk: store, pushed };
+      return { mirror: env.window.__VX_PULLED, disk: store, pushed, kept };
     };
     const SHEET = { s1: { inbody: [{ date: "2026-07-14", weight: 55.8 }] } };
     const EMPTY = { s1: { inbody: [] } };
@@ -206,6 +210,20 @@ describe("shipped source", () => {
     it("with nothing on this device the server copy is taken", () => {
       const out = applyPull([{ key: "vx_sw_meta", value: SHEET, updated_at: "2026-08-09T14:00:00Z" }], {}, {});
       eq(JSON.stringify(out.mirror.vx_sw_meta), JSON.stringify(SHEET));
+      eq(out.kept.length, 0, "there was nothing here to keep, and keeping an empty copy would push a real one out");
+    });
+    // The roster went back to 317 swimmers with 123 dates of birth missing, twice. With no __vxts_
+    // marker localTs is 0 and the server's copy is taken whether it is newer or older — which is
+    // the design, and is fine right up until the copy it lands on is the club's real roster and is
+    // gone. Taking it is kept. Losing what it replaced is not.
+    it("what the server's copy replaced is kept, so it can be put back", () => {
+      const out = applyPull(
+        [{ key: "vx_roster_edits", value: { a: 1 }, updated_at: "2026-08-18T14:00:00Z" }],
+        { vx_roster_edits: JSON.stringify({ a: 1, b: 2, c: 3 }) },
+        {});
+      eq(JSON.stringify(out.mirror.vx_roster_edits), JSON.stringify({ a: 1 }), "the server's copy still wins");
+      eq(out.kept.length, 1, "the roster it replaced was thrown away with nothing kept");
+      eq(Object.keys(JSON.parse(out.kept[0][1])).length, 3, "what was kept is not the copy that was replaced");
     });
 
     // The marker on disk is only written when the write to disk succeeded, and vx_sw_meta holds
@@ -216,7 +234,7 @@ describe("shipped source", () => {
     const applyPullFull = (rows, diskVal, diskTs, mirror, pushedTs) => {
       const store = diskVal == null ? {} : { vx_sw_meta: diskVal };
       if (diskTs) store["__vxts_vx_sw_meta"] = String(diskTs);
-      const pushed = [];
+      const pushed = [], kept = [];
       const env = {
         localStorage: {
           getItem: (k) => (k in store ? store[k] : null),
@@ -227,11 +245,15 @@ describe("shipped source", () => {
         window: { __VX_PULLED: { ...mirror }, __vxWriteTs: { vx_sw_meta: pushedTs } },
         origSet: (k, v) => { store[k] = v; },
         pushKey: (k, v) => pushed.push([k, v]),
+        // The real scope has this; the sandbox has to as well. It is not decoration — applyPull's
+        // whole body sits inside one try/catch, so a name it cannot resolve aborts the pull without
+        // a word, and every assertion below reads "undefined" instead of a copy.
+        _keepReplaced: (k, oldVal, newVal) => { if (oldVal != null && oldVal !== newVal) kept.push([k, oldVal]); },
         SYNC: [],
       };
       const src = sourceBetween("function applyPull(rows, seed){", "\n  // Re-pull the shared club");
       runInSandbox(src + "\napplyPull(rows, false);", { ...env, rows });
-      return { mirror: env.window.__VX_PULLED, disk: store, pushed };
+      return { mirror: env.window.__VX_PULLED, disk: store, pushed, kept };
     };
 
     it("a sheet the browser had no room to store is still the newest copy", () => {

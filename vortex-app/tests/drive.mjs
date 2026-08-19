@@ -1294,6 +1294,75 @@ scene("a session that cannot be refreshed is counted, not hidden", async (browse
   return "counted after the grace period: " + JSON.stringify(later.why.verdict.slice(0, 64));
 });
 
+// ---------------------------------------------------------------------------------------------
+// "It is back to 317 and 123 dates of birth missing again."
+//
+// Both places that take the database's copy of a shared record decide it the same way, and both
+// have the same hole: when this device has no __vxts_ marker for that key — the ordinary state of
+// a device that has not itself edited it since the marker was written — localTs is 0, and the
+// server's copy is taken whether it is newer or older. The copy it lands on is gone.
+//
+// The database being the truth is right. Overwriting a club's roster in the background with
+// nothing kept and nothing said is not. This is the net: whatever a pull replaces is held, and
+// one line puts it back.
+// ---------------------------------------------------------------------------------------------
+scene("a pull that replaces the roster keeps what it replaced", async (browser) => {
+  // 304 swimmers with their dates of birth on the device; the older, wrong 317 on the server.
+  const good = {}, bad = {};
+  for (let i = 1; i <= 304; i++) good["r" + i] = { name: "S" + i, dob: "2012-01-01" };
+  for (let i = 1; i <= 317; i++) bad["r" + i] = { name: "S" + i };
+  const page = await (await browser.newContext({ viewport: { width: 1280, height: 1000 } })).newPage();
+  const problems = [], sent = [];
+  page.on("pageerror", (e) => problems.push(String(e.message)));
+  await page.route("**/rest/v1/**", async (route) => {
+    const req = route.request(), m = req.method();
+    const table = (new URL(req.url()).pathname.split("/rest/v1/")[1] || "").split("?")[0];
+    if (table === "club_state" && m === "GET")
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(
+        [{ key: "vx_roster_edits", value: bad, updated_at: new Date().toISOString() }]) });
+    if (m !== "GET" && m !== "HEAD") {
+      try {
+        for (const w of JSON.parse(req.postData() || "[]"))
+          if (w && w.key === "vx_roster_edits") sent.push(Object.keys(w.value || {}).length);
+      } catch { /* the assertions read sent, so an unparseable body fails them */ }
+    }
+    return route.fulfill({ status: m === "GET" ? 200 : 201, contentType: "application/json", body: "[]" });
+  });
+  await page.addInitScript((g) => {
+    localStorage.setItem("vx_session", JSON.stringify({ type: "staff", id: "ahmed" }));
+    localStorage.setItem("vx_auth", JSON.stringify({ token: "drive-fake", refresh: "drive-fake", exp: Date.now() + 3600000 }));
+    localStorage.removeItem("vx_nav");
+    localStorage.setItem("vx_roster_edits", JSON.stringify(g));
+    // No __vxts_ marker — which is exactly the state the hole lives in, and the ordinary state
+    // of a device that has not edited this key since the marker was last written.
+    localStorage.removeItem("__vxts_vx_roster_edits");
+  }, good);
+  await page.goto("http://127.0.0.1:" + PORT + "/proto.html?drive=" + Date.now(), { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(3000);
+  const after = await page.evaluate(() => ({
+    onDevice: Object.keys(JSON.parse(localStorage.getItem("vx_roster_edits") || "{}")).length,
+    held: window.__vxReplaced(),
+  }));
+  eq(problems.length, 0, "the app threw: " + problems.slice(0, 2).join(" | "));
+  // The pull still wins — that is the design and this scene is not changing it.
+  eq(after.onDevice, 317, "the server's copy did not land, so this scene is testing nothing");
+  const roster = after.held.filter((h) => h.key === "vx_roster_edits")[0];
+  eq(!!roster, true, "the 304 the device had were overwritten and nothing was kept: "
+     + JSON.stringify(after.held.map((h) => h.key)));
+  eq(roster.entriesInTheKeptCopy, 304, "what was kept is not the copy that was replaced: " + JSON.stringify(roster));
+  // And one line puts it back — on the device and in the database, because a restore that only
+  // fixes the phone is undone by the next sweep.
+  const back = await page.evaluate(() => window.__vxRestore("vx_roster_edits"));
+  await page.waitForTimeout(800);
+  const now = await page.evaluate(() =>
+    Object.keys(JSON.parse(localStorage.getItem("vx_roster_edits") || "{}")).length);
+  eq(back.ok, true, "the restore reported: " + JSON.stringify(back));
+  eq(now, 304, "after restoring, the device holds " + now);
+  eq(sent.includes(304), true, "the restored roster never went to the database, so the next pull takes it away again");
+  await page.close();
+  return "kept the 304 it replaced, and put them back in the database";
+});
+
 const TOOLS = [
   "Insights","AI Assistants","Daily Attendance","Activity log","Birthdays","Boards",
   "Club Configuration","Pace Clock","Zone Engine","Meet Entries","Family accounts",
