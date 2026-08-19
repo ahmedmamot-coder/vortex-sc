@@ -6917,7 +6917,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-19f';
+const VX_BUILD='2026-08-19g';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -8881,7 +8881,7 @@ class Component extends DCLogic {
   // persistRosterEdits wrote to localStorage, pushed, and told nobody what happened to the push.
   // That is the shape of every silent loss in this app: the screen updates because the DEVICE
   // saved, and whether the CLUB saved is a different question nobody was asking.
-  async _rosterSaved(){
+  async _rosterSaved(_again){
     this.setState({rosterSaveMsg:'Saving\u2026', rosterSaveOk:true});
     const rec=(window.__vxLastPush||{})['vx_roster_edits'];
     // No entry means pushKey returned before it recorded one, which is what happens when the
@@ -8908,10 +8908,27 @@ class Component extends DCLogic {
       if(doc) inDb=this._rosterTotalFor(doc);
     }catch(e){}
     const here=this.allSwimmersFlat().length;
+    // It did not stick. Send it again before saying so, because the overwhelmingly likely reason
+    // is another device replacing the document a moment after this one wrote it — and one more
+    // merge, against what the database holds NOW, puts this change back on top of theirs without
+    // taking anything of theirs away.
+    //
+    // Once, not in a loop. If a second device is still on a build old enough to REPLACE the
+    // roster rather than merge it, retrying for ever is two devices fighting over one record and
+    // the club watching the number flicker. Once, then the truth.
+    if(inDb!=null && inDb!==here && !_again){
+      // _saveJSON is synchronous and sets __vxLastPush before it returns, so the second pass
+      // below reads the NEW push rather than the one that just failed to hold.
+      try{ this._saveJSON('vx_roster_edits', this.rosterEdits); }catch(e){}
+      return this._rosterSaved(true);
+    }
     if(inDb!=null && inDb!==here)
       return this.setState({rosterSaveOk:false,
         rosterSaveMsg:'NOT saved \u2014 this device shows '+here+' swimmers and the database now holds '
-          +inDb+'. Your change did not survive. Do not make more changes \u2014 tell whoever looks after the app.'});
+          +inDb+', and sending it again did not hold either. Another device is almost certainly '
+          +'running an older version of the app, which REPLACES the roster instead of merging it. '
+          +'Open the app on every other device, go to Settings and press Get the latest version, '
+          +'then make this change again.'});
     this.setState({rosterSaveOk:true,
       rosterSaveMsg: inDb==null
         ? 'Saved \u2713 (the database took it; its copy could not be read back to double-check).'

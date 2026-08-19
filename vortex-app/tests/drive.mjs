@@ -1765,8 +1765,13 @@ scene("a save the database took but did not keep is not reported as saved", asyn
   eq(/Saved ✓/.test(lost.said), false,
      "the database did not keep the change and the screen still said: " + JSON.stringify(lost.said));
   eq(/NOT saved/.test(lost.said), true, "it said: " + JSON.stringify(lost.said));
-  eq(/did not survive/.test(lost.said), true,
+  eq(/did not hold either/.test(lost.said), true,
      "it has to say the change is gone, not merely that something is inconsistent");
+  // And name the cause worth acting on. The client-side merge only protects the roster if every
+  // device is running it — a device on an older build still REPLACES the document, and no code
+  // shipped here can stop it, so the person has to be told which action actually helps.
+  eq(/older version/.test(lost.said), true,
+     "a device on an old build is the likeliest reason, and the only fix is on the other device");
   return "caught a write that was accepted and not kept";
 });
 

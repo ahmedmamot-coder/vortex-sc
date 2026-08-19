@@ -6273,7 +6273,7 @@ describe("InBody sheet", () => {
     it("a refused roster edit does not look like a save", () => {
       // The refusal is no longer synchronous — there is nothing to refuse, because the write is a
       // merge. What has to stay true is that a coach is told, and told WHERE the change is.
-      const watch = sourceBetween("async _rosterSaved(){", "\n  }");
+      const watch = sourceBetween("async _rosterSaved(_again){", "\n  }");
       eq(/NOT saved/.test(watch), true, "a roster change the database did not take reads as saved");
       eq(/this device only/.test(watch), true, "it has to say where the change actually is");
       eq(/it never left this device/.test(watch), true,
