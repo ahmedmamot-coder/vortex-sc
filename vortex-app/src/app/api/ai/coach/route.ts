@@ -17,6 +17,10 @@
 //    to defer to a qualified professional instead. A confident paragraph about a 12-year-old's
 //    diet is exactly the kind of thing an LLM will produce on request and nobody should ship.
 
+import Anthropic from "@anthropic-ai/sdk";
+import { z } from "zod";
+import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+
 export const maxDuration = 60;
 
 type Block = { label: string; color: string; lines: string[] };
@@ -37,11 +41,29 @@ Hard limits, because these are minors:
 - Nothing medical. No diagnosing pain, injury or illness. If the data suggests a problem, say
   what you noticed and that it is one for a physio or doctor, and stop there.
 - No maximal strength testing or heavy lifting prescriptions for pre-pubertal swimmers.
-- If the data given is too thin to say anything useful, say so plainly. Do not fill the space.
+- If the data given is too thin to say anything useful, say so plainly and stop. Do not fill the
+  space. Say it in a block like any other answer — "Not enough here" with a line saying what is
+  missing is a useful answer; an empty response is not.
 
-Return ONLY a JSON object, no prose and no code fence:
-{"title": "...", "blocks": [{"label": "...", "lines": ["...", "..."]}]}
-2 to 4 blocks, each 1 to 4 lines. A label is one or two words. A line is one sentence.`;
+Give 2 to 4 blocks, each 1 to 4 lines. A label is one or two words. A line is one sentence.`;
+
+// The shape is enforced by the API, not asked for in the prompt.
+//
+// This used to end with "Return ONLY a JSON object, no prose and no code fence", and the answer
+// was pulled back out with a regex. That is the whole of why the video screen kept saying "the
+// assistant did not return anything usable": the model has to comply with an instruction about
+// formatting at the same time as one that says to speak plainly when the data is thin, and when
+// it chose plainly there was no JSON to find. Nothing was wrong with the request, the key, or the
+// swimmer's splits — the answer simply arrived in prose and was dropped on the floor.
+//
+// Structured outputs make it the API's job. The model cannot return a shape that does not fit.
+const ANSWER = z.object({
+  title: z.string(),
+  blocks: z.array(z.object({
+    label: z.string(),
+    lines: z.array(z.string()),
+  })),
+});
 
 const TASKS: Record<string, string> = {
   review: `Review this training set. Three blocks: what it is (the balance of the session as
@@ -179,49 +201,62 @@ export async function POST(request: Request) {
     Object.keys(context).length ? "\nNumbers:\n" + JSON.stringify(context) : "",
     text.trim() ? "\nFrom the coach:\n" + text.trim() : ""].join("\n");
 
-  let r: Response;
+  // A short, structured answer from a model that is allowed to think about it.
+  //
+  // Three things here were quietly wrong before. The model was Sonnet where this club is paying
+  // for the better one; max_tokens was 1200, which a race with a dozen splits can run past — and
+  // a truncated answer is an unparseable one, which arrived on screen as "did not return anything
+  // usable"; and the failure said the same sentence whatever had happened, so there was no way to
+  // tell a cut-off answer from a refusal from a model that had simply written prose.
+  const client = new Anthropic({ apiKey: key, timeout: 50_000, maxRetries: 1 });
+
+  let response;
   try {
-    r = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      signal: AbortSignal.timeout(40_000),
-      headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({
-        model: "claude-sonnet-5",
-        max_tokens: 1200,
-        system: SYSTEM,
-        messages: [{ role: "user", content: user }],
-      }),
+    response = await client.messages.parse({
+      model: "claude-opus-5",
+      max_tokens: 8000,
+      system: SYSTEM,
+      messages: [{ role: "user", content: user }],
+      output_config: { format: zodOutputFormat(ANSWER), effort: "medium" },
     });
   } catch (e) {
-    const timedOut = (e as Error)?.name === "TimeoutError" || (e as Error)?.name === "AbortError";
-    return Response.json({ error: timedOut ? "The assistant did not answer in time." : "Could not reach the assistant." }, { status: 504 });
+    if (e instanceof Anthropic.AuthenticationError)
+      return Response.json({ error: "The AI reader's key was refused. It needs replacing in the deployment settings." }, { status: 502 });
+    if (e instanceof Anthropic.RateLimitError)
+      return Response.json({ error: "The assistant is rate limited right now. Try again in a minute." }, { status: 429 });
+    if (e instanceof Anthropic.APIConnectionTimeoutError)
+      return Response.json({ error: "The assistant did not answer in time." }, { status: 504 });
+    if (e instanceof Anthropic.APIError)
+      return Response.json({ error: "The assistant refused the request.", said: scrub(e.message).slice(0, 200), status: e.status }, { status: 502 });
+    return Response.json({ error: "Could not reach the assistant." }, { status: 502 });
   }
 
-  if (!r.ok) {
-    const raw = await r.text().catch(() => "");
-    let said = ""; try { said = (JSON.parse(raw) as { error?: { message?: string } })?.error?.message || ""; } catch { said = ""; }
-    return Response.json({ error: "The assistant refused the request.", said: scrub(said || raw).slice(0, 200), status: r.status }, { status: 502 });
+  // Say which thing went wrong, because "did not return anything usable" covered four different
+  // faults and sent this club looking at their API key for a race that was simply too long.
+  if (response.stop_reason === "refusal") {
+    const why = response.stop_details?.explanation || response.stop_details?.category || "";
+    return Response.json({ error: "The assistant declined to answer this one.", said: scrub(String(why)).slice(0, 200) }, { status: 502 });
+  }
+  if (response.stop_reason === "max_tokens")
+    return Response.json({ error: "The answer was cut off before it finished. Try a shorter set, or fewer splits." }, { status: 502 });
+
+  const parsed = response.parsed_output;
+  if (!parsed || !Array.isArray(parsed.blocks) || !parsed.blocks.length) {
+    // Keep the model's own words when the shape did not validate. Somebody has to be able to see
+    // what actually came back, or the next round of this is guesswork again.
+    const said = response.content.filter((c) => c.type === "text").map((c) => c.text).join("").trim();
+    return Response.json({ error: "The assistant answered, but not in a shape this screen can draw.", said: scrub(said).slice(0, 200) }, { status: 502 });
   }
 
-  const j = (await r.json().catch(() => null)) as { content?: Array<{ type?: string; text?: string }> } | null;
-  const out = (j?.content || []).filter((c) => c.type === "text").map((c) => c.text || "").join("").trim();
+  // Shaped here rather than trusted. The colours are ours, and the lengths are ours.
+  const blocks: Block[] = parsed.blocks.slice(0, 4).map((b, i) => ({
+    label: String(b.label ?? "").trim().slice(0, 24) || "Notes",
+    color: COLORS[i % COLORS.length],
+    lines: (Array.isArray(b.lines) ? b.lines : []).map((l) => String(l).trim().slice(0, 300)).filter(Boolean).slice(0, 4),
+  })).filter((b) => b.lines.length);
 
-  let parsed: { title?: unknown; blocks?: unknown } = {};
-  try { const m = out.match(/\{[\s\S]*\}/); if (m) parsed = JSON.parse(m[0]); } catch { parsed = {}; }
-
-  // Shape it here rather than trusting it. A malformed answer must not reach the screen as a
-  // half-rendered panel, and colours are ours, not the model's.
-  const blocks: Block[] = (Array.isArray(parsed.blocks) ? parsed.blocks : [])
-    .slice(0, 4)
-    .map((b, i) => {
-      const raw = (b || {}) as { label?: unknown; lines?: unknown };
-      const lines = (Array.isArray(raw.lines) ? raw.lines : [])
-        .map((l) => String(l).trim().slice(0, 300)).filter(Boolean).slice(0, 4);
-      return { label: String(raw.label ?? "").trim().slice(0, 24) || "Notes", color: COLORS[i % COLORS.length], lines };
-    })
-    .filter((b) => b.lines.length);
-
-  if (!blocks.length) return Response.json({ error: "The assistant did not return anything usable. Try again." }, { status: 502 });
+  if (!blocks.length)
+    return Response.json({ error: "The assistant answered with nothing in it. Try again." }, { status: 502 });
 
   return Response.json({ title: String(parsed.title ?? "").trim().slice(0, 90) || "Coach's notes", blocks });
 }

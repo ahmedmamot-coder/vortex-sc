@@ -2247,6 +2247,44 @@ describe("InBody sheet", () => {
     it("a number arriving as text is still a number, not free text", () =>
       eq(clean({ attendancePct: "84" }).attendancePct, 84));
   });
+  // Why the video screen kept saying "the assistant did not return anything usable".
+  //
+  // Nothing was wrong with the key, the request, or the swimmer's splits. The answer was asked
+  // for as JSON in the prompt and scraped back out with a regex, while the SAME prompt told the
+  // model to speak plainly when the data was thin — and when it chose plainly there was no JSON
+  // to find. A race with a dozen splits could also run past max_tokens: 1200, and a truncated
+  // answer is an unparseable one. Both arrived on screen as the same sentence.
+  describe("the assistant's answer is a shape, not a hope", () => {
+    const AI = readFileSync(new URL("../src/app/api/ai/coach/route.ts", import.meta.url), "utf8");
+
+    it("lets the API enforce the shape instead of asking the prompt for it", () => {
+      eq(/output_config: \{ format: zodOutputFormat/.test(AI), true,
+         "the shape is still being requested in words and scraped back out");
+      // Scoped to the prompt the model is actually sent, not the whole file — the comment above
+      // this fix quotes the old instruction, and a test that cannot tell a prompt from a comment
+      // about a prompt would fail on the explanation of its own fix.
+      const SYS = (AI.match(/const SYSTEM = `([\s\S]*?)`;/) || [])[1] || "";
+      eq(SYS.length > 200, true, "the system prompt could not be read out of the route");
+      eq(/Return ONLY a JSON/.test(SYS), false,
+         "the prompt still asks for JSON, which is what it contradicted itself about");
+      eq(/out\.match\(\/\\\{\[/.test(AI), false, "a regex is still digging JSON out of the prose");
+    });
+
+    it("does not lowball max_tokens, which is what cut the long races off", () => {
+      const max = +((AI.match(/max_tokens: (\d+)/) || [])[1] || 0);
+      eq(max >= 4000, true, "max_tokens is " + max + "; a race with a dozen splits runs past that");
+    });
+
+    it("uses the model the club is paying for", () =>
+      eq(/model: "claude-opus-5"/.test(AI), true, "the coaching answer is worth the better model"));
+
+    // The safety filtering is the part that must survive every rewrite of this route.
+    it("still drops everything that could identify a child", () => {
+      eq(/const context = cleanContext\(body\.context\)/.test(AI), true);
+      eq(/text = String\(body\.text \|\| ""\)\.slice\(0, 6000\)/.test(AI), true);
+    });
+  });
+
   it("the assistant is told these are children, and what it may not say", () => {
     const AI = readFileSync(new URL("../src/app/api/ai/coach/route.ts", import.meta.url), "utf8");
     for (const rule of ["calorie", "supplement", "medical", "minors"])
@@ -2254,8 +2292,17 @@ describe("InBody sheet", () => {
   });
   it("a malformed answer never reaches the screen half-rendered", () => {
     const AI = readFileSync(new URL("../src/app/api/ai/coach/route.ts", import.meta.url), "utf8");
-    eq(/if \(!blocks\.length\) return Response\.json\(\{ error/.test(AI), true);
+    // The requirement, not the spelling of it: an empty answer must leave by an error path, and
+    // it must never fall through to the success return.
+    eq(/!blocks\.length\)[\s\S]{0,120}Response\.json\(\{ error/.test(AI), true,
+       "an answer with no blocks in it has to become an error, not a blank panel");
     eq(/color: COLORS\[i % COLORS\.length\]/.test(AI), true, "colours are ours, not the model's");
+    // And the four ways this can fail have to be four different sentences. They were one, and one
+    // sentence for four faults is what sent this club to check an API key over a race that was
+    // simply too long to fit in the answer.
+    for (const [what, rx] of [["a refusal", /declined to answer/], ["a cut-off answer", /cut off/],
+                              ["an unusable shape", /not in a shape/], ["an empty answer", /nothing in it/]])
+      eq(rx.test(AI), true, "there is no distinct message for " + what);
   });
   it("the assistants no longer answer from a script", () => {
     const gen = sourceBetween("async aiGenerate(){", "async _aiAsk(");
@@ -2265,7 +2312,12 @@ describe("InBody sheet", () => {
   it("the assistant call gives up before the server is killed", () => {
     const client = +((SOURCE.match(/ctl && ctl\.abort\(\); \}catch\(e\)\{\} \}, (\d+)\);\s*try\{\s*const r=await fetch\('\/api\/ai\/coach'/) || [])[1] || 0);
     const AI = readFileSync(new URL("../src/app/api/ai/coach/route.ts", import.meta.url), "utf8");
-    const outbound = +((AI.match(/AbortSignal\.timeout\((\d+)_?(\d*)\)/) || []).slice(1).join("") || 0);
+    // Whichever way the deadline is set. It used to be an AbortSignal on a raw fetch; it is now
+    // the SDK client's own timeout. What must stay true is the ordering: the outbound call has to
+    // give up while the function is still alive to say why, or the platform kills it mid-sentence
+    // and the coach gets a blank screen instead of a reason.
+    const outbound = +((AI.match(/AbortSignal\.timeout\((\d+)_?(\d*)\)/)
+                     || AI.match(/timeout: (\d+)_?(\d*)/) || []).slice(1).join("") || 0);
     const maxRun = +((AI.match(/maxDuration = (\d+)/) || [])[1] || 0) * 1000;
     eq(outbound > 0 && outbound < maxRun, true, "a deadline longer than the function's life never fires");
     eq(client > 0 && client < maxRun, true, "and waiting longer than the platform does loses the explanation");

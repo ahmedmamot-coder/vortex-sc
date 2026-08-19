@@ -13,6 +13,7 @@
     "sql": "node tests/sql.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.118.0",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.110.2",
     "@vercel/speed-insights": "^2.0.0",
@@ -24,7 +25,8 @@
     "react-dom": "19.2.4",
     "recharts": "^3.9.2",
     "server-only": "^0.0.1",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
