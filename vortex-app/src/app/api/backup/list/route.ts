@@ -8,6 +8,9 @@
 
 import { guard, listBackups, readBackup, clubStateKey, dobsIn, shapeOf, type RosterEdits } from "@/lib/backupStore";
 
+// public/assets/roster.js, counted. Every overlay is added and deleted on top of this.
+const BASE_ROSTER = 272;
+
 export async function GET(request: Request) {
   const bad = guard(request);
   if (bad) return bad;
@@ -48,14 +51,32 @@ export async function GET(request: Request) {
         shape = shapeOf(edits);
       }
     } catch {}
-    backups.push({ name: f.name, takenAt, bytes: f.bytes, dobs, shape });
+    // The number the club actually reads off a screen.
+    //
+    // "dobs: 194" does not answer "which backup has our 303 swimmers in it", and that is the
+    // question every one of these restores has been trying to answer. The base roster is 272; an
+    // overlay adds and deletes on top of it, so the total this snapshot would show is arithmetic
+    // we can do here instead of making somebody restore one to find out.
+    const swimmers = shape ? BASE_ROSTER + shape.added - shape.deleted : null;
+    backups.push({ name: f.name, takenAt, bytes: f.bytes, dobs, swimmers, shape });
   }
 
-  const best = backups.filter((b) => b.dobs > 0).sort((a, b) => b.dobs - a.dobs)[0] || null;
+  // Most dates of birth, and the deletions still in it.
+  //
+  // Sorting on dates alone recommended a snapshot with every date and no deletions — which is
+  // 317 swimmers, the exact number this club keeps having to undo. A snapshot that has lost the
+  // deletions has lost real work just as much as one that has lost the dates.
+  const scored = backups.filter((b) => b.dobs > 0);
+  const withDeletions = scored.filter((b) => (b.shape?.deleted ?? 0) > 0);
+  const best = (withDeletions.length ? withDeletions : scored)
+    .sort((a, b) => (b.shape?.deleted ?? 0) - (a.shape?.deleted ?? 0) || b.dobs - a.dobs)[0] || null;
   return Response.json(
     {
       backups,
-      best: best ? { name: best.name, dobs: best.dobs, takenAt: best.takenAt } : null,
+      best: best
+        ? { name: best.name, dobs: best.dobs, swimmers: best.swimmers,
+            deletions: best.shape?.deleted ?? 0, takenAt: best.takenAt }
+        : null,
       next: best
         ? `Check it first: /api/backup/inspect?file=${best.name} — it changes nothing.`
         : "None of these snapshots carry any dates of birth.",

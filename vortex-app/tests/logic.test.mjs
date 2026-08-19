@@ -171,6 +171,38 @@ describe("shipped source", () => {
   // overlay believing it was the club's, and the next roster action saved it up.
   //
   // Nothing on screen could have shown this. The app asked for the roster and was given a roster.
+  // Which backup has the club's real roster in it.
+  //
+  // "dobs: 194" never answered the question anybody was asking, which is "which one has our 303
+  // swimmers". The base roster is 272 and an overlay adds and deletes on top of it, so the total
+  // a snapshot would show is arithmetic — and doing it in the listing is the difference between
+  // choosing a backup and restoring one to find out what is in it.
+  describe("the backup listing answers the question people ask of it", () => {
+    const LIST = readFileSync(new URL("../src/app/api/backup/list/route.ts", import.meta.url), "utf8");
+    const BASE = +((LIST.match(/const BASE_ROSTER = (\d+)/) || [])[1] || 0);
+
+    it("knows how many swimmers the base roster holds", () => {
+      // Counted from the file that ships, so this cannot drift into being a number that was true
+      // once. A wrong base makes every swimmer total in the listing wrong by the same amount, and
+      // it would be believed — it is the number somebody picks a restore by.
+      const src = readFileSync(new URL("../public/assets/roster.js", import.meta.url), "utf8");
+      const scope = {};
+      new Function("window", src).call(scope, scope);
+      const roster = scope.VX_ROSTER || {};
+      const real = Object.values(roster).reduce((n, list) => n + (list || []).length, 0);
+      eq(BASE, real, "BASE_ROSTER says " + BASE + " and roster.js holds " + real);
+    });
+
+    it("reports the swimmer total, not only the dates of birth", () =>
+      eq(/BASE_ROSTER \+ shape\.added - shape\.deleted/.test(LIST), true,
+         "the listing still makes somebody restore a backup to find out what is in it"));
+
+    // Recommending on dates alone picked a snapshot with every date and no deletions — which is
+    // 317 swimmers, the exact number this club keeps having to undo.
+    it("does not recommend a backup that has lost the deletions", () =>
+      eq(/withDeletions/.test(LIST), true, "a snapshot with no deletions can still be recommended"));
+  });
+
   describe("a roster this device cannot read", () => {
     const FULL = { edits: { r1: { dob: "2012-01-01" }, r2: { dob: "2013-02-02" } }, deleted: { r9: 1 }, added: {} };
     const EMPTY = { edits: {}, deleted: {}, added: {} };
