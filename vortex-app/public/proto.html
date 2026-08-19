@@ -679,6 +679,30 @@ if ('serviceWorker' in navigator) {
   // inside a shared document runs to tens of megabytes, while the roster has room to more than
   // triple. A guard that fires on real data is worse than no guard at all.
   var MAX_ROW = 6000000;   // 6 MB. vx_roster_edits is 1.3 MB today; PostgREST takes far more than this.
+  // Whether a record has anything in it at all.
+  //
+  // Counted one level down, because every document in this app is a wrapper: vx_roster_edits is
+  // {edits, deleted, added} whether it holds three hundred swimmers or none, so counting the top
+  // level says 3 either way and answers nothing.
+  //
+  // Anything that cannot be read is treated as having content. A guard that refuses a write
+  // because it could not understand it is a guard that loses work, which is what it is here to
+  // prevent.
+  function _hasContent(json){
+    try{
+      var o = JSON.parse(json);
+      if(o==null) return false;
+      if(typeof o !== "object") return true;
+      if(Array.isArray(o)) return o.length > 0;
+      for(var key in o){
+        if(!Object.prototype.hasOwnProperty.call(o, key)) continue;
+        var val = o[key];
+        if(val && typeof val === "object"){ if(Object.keys(val).length) return true; }
+        else if(val !== undefined && val !== null && val !== "") return true;
+      }
+      return false;
+    }catch(e){ return true; }
+  }
   function pushKey(k, v){
     if (SYNC.indexOf(k) === -1) return Promise.resolve({ok:false, why:"this is not a synced key"});
     if (typeof v === "string" && v.length > MAX_ROW){
@@ -707,19 +731,28 @@ if ('serviceWorker' in navigator) {
     // database is holding is not an edit, and it does not leave the device. It is the one rule that
     // does not need to know which of the reasons happened.
     //
-    // The ratio is deliberately generous. Emptying a squad, deleting a season of meets, clearing
-    // the notifications — all of those stay far above it. Only a record collapsing to a fraction
-    // of itself trips it, and only when there was something substantial there to lose.
-    var COLLAPSE_MIN = 2048;   // under 2 KB the ratio means nothing, so it is not applied
-    var COLLAPSE_AT  = 0.4;    // keeping under 40% of what the database holds is not an edit
+    // The first version of this rule refused any write under 40% of what the database held, and
+    // it was wrong in a way that took the club's app down harder than the bug it was guarding.
+    //
+    // Devices legitimately hold overlays of different sizes \u2014 one screen read 302 swimmers while
+    // another read 310, on the same afternoon. A device holding the smaller one had every roster
+    // save refused: the database never changed, so on the next refresh the server's copy won and
+    // the swimmer that had just been added disappeared. "We cannot add swimmers any more."
+    //
+    // A ratio was never the right test. What goes wrong is not a record getting smaller, it is a
+    // record becoming EMPTY \u2014 the {edits:{},deleted:{},added:{}} that _loadJSON hands back when it
+    // cannot read its own copy, all 36 bytes of it. That is the whole of the fault, so that is the
+    // whole of the rule: nothing with content in it is ever refused here, however much smaller it
+    // is than what the database holds. Deleting swimmers, emptying a squad, clearing a season of
+    // meets all pass, because all of them leave something behind.
+    var COLLAPSE_MIN = 2048;   // the database must have had something substantial to lose
     if(typeof v === "string"){
       var seen = 0; try{ seen = parseInt(localStorage.getItem('__vxsize_'+k)||'0',10)||0; }catch(e){}
-      if(seen > COLLAPSE_MIN && v.length < seen*COLLAPSE_AT){
-        var lost = Math.round(100 - (v.length*100/seen));
-        var whyC = "it would have thrown away about "+lost+"% of what the database is holding for "
-          +k+". A record does not lose most of itself because somebody tapped a button, so it has "
-          +"not been sent. Nothing in the database has changed, and the full copy is still there.";
-        try{ console.warn("vx sync refusing "+k+": "+v.length+" bytes replacing "+seen); }catch(e){}
+      if(seen > COLLAPSE_MIN && !_hasContent(v)){
+        var whyC = "it is empty, and the database is holding "+seen+" bytes for "+k+". An empty "
+          +"record is what this device produces when it cannot read its own copy \u2014 it is not an "
+          +"edit, so it has not been sent. Nothing in the database has changed.";
+        try{ console.warn("vx sync refusing empty "+k+" over "+seen+" bytes"); }catch(e){}
         _blockAdd("collapse|"+k, "club_state ("+k+")", {key:k, wouldBe:v.length, databaseHas:seen}, whyC);
         var _c = Promise.resolve({ok:false, collapsed:true, why:whyC});
         window.__vxLastPush[k] = _c;
@@ -6755,7 +6788,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-18d';
+const VX_BUILD='2026-08-19a';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.

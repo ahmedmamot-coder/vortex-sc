@@ -1420,7 +1420,10 @@ scene("an empty roster overlay is not sent, and the screen stops pretending", as
   eq(problems.length, 0, "the app threw: " + problems.slice(0, 2).join(" | "));
   eq(sentAfter.length, 0, "an empty overlay was sent to the database: " + JSON.stringify(sentAfter));
   eq(refusal.collapsed, true, "it was not recognised as a record collapsing: " + JSON.stringify(refusal));
-  eq(/thrown away about/.test(refusal.why || ""), true, "it did not say what it was refusing: " + JSON.stringify(refusal.why));
+  eq(/it is empty/.test(refusal.why || ""), true,
+     "it did not say what it was refusing: " + JSON.stringify(refusal.why));
+  eq(/Nothing in the database has changed/.test(refusal.why || ""), true,
+     "a refusal has to say the club's data is untouched, or it reads as the loss it just prevented");
   // 2. The screen says the list it is showing is the raw one, rather than reading as normal.
   const said = await page.evaluate(() => {
     const el = [...document.querySelectorAll("*")].find(
@@ -1531,6 +1534,83 @@ scene("a register the database did not take says so, and can be sent again", asy
      "marks that reached the database are still recorded as stranded: " + JSON.stringify(after.unsent));
   await page.close();
   return "warned about 3 stranded marks, then sent all 3";
+});
+
+// ---------------------------------------------------------------------------------------------
+// "We cannot add swimmers any more — after a refresh it is gone."
+//
+// That was mine. The first version of the collapse guard refused any write under 40% of what the
+// database held, on the reasoning that a record does not lose most of itself by somebody tapping
+// a button. True, and irrelevant: devices legitimately hold overlays of very different sizes —
+// one screen read 302 swimmers while another read 310, the same afternoon — and a device holding
+// the smaller one had EVERY roster save refused. The database never changed, so the next refresh
+// took the server's copy and the swimmer that had just been added disappeared.
+//
+// A ratio was never the right test. The fault being guarded is a record becoming EMPTY, not a
+// record becoming smaller. So this drives the case my rule broke: a device whose overlay is a
+// fraction of the server's adds a swimmer, and it has to reach the database.
+// ---------------------------------------------------------------------------------------------
+scene("a device holding a smaller roster than the database can still add a swimmer", async (browser) => {
+  // The database holds a big overlay; this device holds a small one. Both are real states.
+  const big = { edits: {}, deleted: {}, added: {} };
+  for (let i = 1; i <= 300; i++) big.edits["r" + i] = { dob: "2012-04-05", name: "Swimmer " + i, squad: "junior" };
+  const small = { edits: { r1: { dob: "2012-04-05", name: "Swimmer 1", squad: "junior" } }, deleted: {}, added: {} };
+  const page = await (await browser.newContext({ viewport: { width: 1280, height: 1000 } })).newPage();
+  const problems = [], pushes = [];
+  page.on("pageerror", (e) => problems.push(String(e.message)));
+  await page.route("**/rest/v1/**", async (route) => {
+    const req = route.request(), m = req.method();
+    const table = (new URL(req.url()).pathname.split("/rest/v1/")[1] || "").split("?")[0];
+    if (table === "club_state" && m === "GET")
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(
+        [{ key: "vx_roster_edits", value: big, updated_at: new Date(Date.now() - 7200000).toISOString() }]) });
+    if (m !== "GET" && m !== "HEAD") {
+      try {
+        for (const w of JSON.parse(req.postData() || "[]"))
+          if (w && w.key === "vx_roster_edits") pushes.push(JSON.stringify(w.value).length);
+      } catch { /* the assertions read pushes, so an unparseable body fails them */ }
+    }
+    return route.fulfill({ status: m === "GET" ? 200 : 201, contentType: "application/json", body: "[]" });
+  });
+  await page.addInitScript((sm) => {
+    localStorage.setItem("vx_session", JSON.stringify({ type: "staff", id: "ahmed" }));
+    localStorage.setItem("vx_auth", JSON.stringify({ token: "drive-fake", refresh: "drive-fake", exp: Date.now() + 3600000 }));
+    localStorage.removeItem("vx_nav");
+    localStorage.setItem("vx_roster_edits", JSON.stringify(sm));
+    // Written more recently than the server's copy, so this device keeps its own — which is the
+    // state that made every later save unsendable.
+    localStorage.setItem("__vxts_vx_roster_edits", String(Date.now()));
+  }, small);
+  await page.goto("http://127.0.0.1:" + PORT + "/proto.html?drive=" + Date.now(), { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(2600);
+  // The device is holding far less than the database — the exact shape my rule refused.
+  const ratio = await page.evaluate(() => {
+    const seen = parseInt(localStorage.getItem("__vxsize_vx_roster_edits") || "0", 10) || 0;
+    const here = (localStorage.getItem("vx_roster_edits") || "").length;
+    return { seen, here };
+  });
+  eq(ratio.seen > 2048, true, "the database copy was not big enough for this scene to mean anything: " + JSON.stringify(ratio));
+  eq(ratio.here < ratio.seen * 0.4, true,
+     "this device is not holding the smaller copy, so the scene is not testing what it says: " + JSON.stringify(ratio));
+  const before = pushes.length;
+  // Add a swimmer, through the sync layer the Add form goes through.
+  const res = await page.evaluate(() => {
+    const cur = JSON.parse(localStorage.getItem("vx_roster_edits") || "{}");
+    cur.added = cur.added || {};
+    cur.added.newkid = { name: "Nour Hassan", dob: "2015-06-01", squad: "junior" };
+    return window.__vxpush("vx_roster_edits", JSON.stringify(cur));
+  });
+  await page.waitForTimeout(1500);
+  eq(problems.length, 0, "the app threw: " + problems.slice(0, 2).join(" | "));
+  eq(!res.collapsed, true, "adding a swimmer was refused as a collapse: " + JSON.stringify(res.why || ""));
+  eq(pushes.length > before, true,
+     "the new swimmer never reached the database, so a refresh takes them away again");
+  // And the empty overlay is still refused — narrowing the rule must not switch it off.
+  const empty = await page.evaluate(() =>
+    window.__vxpush("vx_roster_edits", JSON.stringify({ edits: {}, deleted: {}, added: {} })));
+  eq(empty.collapsed, true, "an empty overlay is no longer being refused: " + JSON.stringify(empty));
+  await page.close();
+  return "added a swimmer from a " + ratio.here + "-byte overlay against " + ratio.seen + " on the server";
 });
 
 const TOOLS = [
