@@ -162,6 +162,52 @@ describe("shipped source", () => {
   // the mirror was being assigned the server's copy before the newer-than check was even made.
   // So the check protected the copy on disk while the screen showed the stale one. Losing a
   // coach's work in silence is the worst thing this file can do.
+  // An unreadable record is not an empty one.
+  //
+  // 317 swimmers with 123 dates of birth missing is the app showing the BASE list because the
+  // overlay is empty. _loadJSON produced that empty overlay itself: it handed back its fallback,
+  // {edits:{},deleted:{},added:{}}, whenever the key was missing or would not parse — a full
+  // storage, an evicted key, a truncated write, a Reset on that device. The app then held an empty
+  // overlay believing it was the club's, and the next roster action saved it up.
+  //
+  // Nothing on screen could have shown this. The app asked for the roster and was given a roster.
+  describe("a roster this device cannot read", () => {
+    const FULL = { edits: { r1: { dob: "2012-01-01" }, r2: { dob: "2013-02-02" } }, deleted: { r9: 1 }, added: {} };
+    const EMPTY = { edits: {}, deleted: {}, added: {} };
+    const load = (store) => {
+      const ctx = {
+        _shaped: (v, f) => (v && typeof v === "object" ? v : f),
+        __store: store,
+      };
+      const fn = bind("_loadJSON", ctx);
+      const realLS = globalThis.localStorage, realWin = globalThis.window;
+      globalThis.localStorage = { getItem: (k) => (k in store ? store[k] : null) };
+      globalThis.window = { __VX_PULLED: {} };
+      try { return fn("vx_roster_edits", EMPTY); }
+      finally { globalThis.localStorage = realLS; globalThis.window = realWin; }
+    };
+
+    it("reads the copy on disk when there is one", () =>
+      eq(Object.keys(load({ vx_roster_edits: JSON.stringify(FULL) }).edits).length, 2));
+
+    it("recovers the copy the last pull replaced rather than calling the roster empty", () => {
+      const back = load({ __vxprev_vx_roster_edits: JSON.stringify(FULL) });
+      eq(Object.keys(back.edits).length, 2,
+         "it handed back an empty overlay while the real one was sitting right there");
+      eq(Object.keys(back.deleted).length, 1, "the deletions have to come back too, or 317 returns");
+    });
+
+    it("does the same when what is on disk will not parse", () => {
+      const back = load({ vx_roster_edits: "{not json", __vxprev_vx_roster_edits: JSON.stringify(FULL) });
+      eq(Object.keys(back.edits).length, 2, "a truncated write was read as an empty club");
+    });
+
+    // A device that genuinely has no copy of anything still gets the empty shape — it has to, or
+    // the app cannot start. That device is the one pushKey's collapse guard stops from sending it.
+    it("still gives the empty shape to a device that has none of them", () =>
+      eq(Object.keys(load({}).edits).length, 0));
+  });
+
   describe("a pull never shows an older copy than the one on disk", () => {
     const applyPull = (rows, disk, ts) => {
       const store = { ...disk };

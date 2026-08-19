@@ -692,6 +692,40 @@ if ('serviceWorker' in navigator) {
       window.__vxLastPush[k] = _big;
       return _big;
     }
+    // Nobody deletes three hundred swimmers by tapping.
+    //
+    // This is the third time the club's roster has gone back to 317 names with 123 dates of birth
+    // missing, and 317-with-no-dates is not an old copy of the overlay — it is the app showing the
+    // base roster because the overlay is EMPTY. An empty overlay gets to the database like this:
+    // _loadJSON hands back its fallback, {edits:{},deleted:{},added:{}}, whenever the record cannot
+    // be read on this device — a full storage, an evicted key, a truncated write, a reset — and the
+    // very next roster action saves that fallback. One device having a bad moment, and every phone
+    // in the club loses the roster on its next pull.
+    //
+    // Fixing the reasons a record cannot be read is worth doing and is never finished; there will
+    // always be one more. What can be finished is this: a write that throws away most of what the
+    // database is holding is not an edit, and it does not leave the device. It is the one rule that
+    // does not need to know which of the reasons happened.
+    //
+    // The ratio is deliberately generous. Emptying a squad, deleting a season of meets, clearing
+    // the notifications — all of those stay far above it. Only a record collapsing to a fraction
+    // of itself trips it, and only when there was something substantial there to lose.
+    var COLLAPSE_MIN = 2048;   // under 2 KB the ratio means nothing, so it is not applied
+    var COLLAPSE_AT  = 0.4;    // keeping under 40% of what the database holds is not an edit
+    if(typeof v === "string"){
+      var seen = 0; try{ seen = parseInt(localStorage.getItem('__vxsize_'+k)||'0',10)||0; }catch(e){}
+      if(seen > COLLAPSE_MIN && v.length < seen*COLLAPSE_AT){
+        var lost = Math.round(100 - (v.length*100/seen));
+        var whyC = "it would have thrown away about "+lost+"% of what the database is holding for "
+          +k+". A record does not lose most of itself because somebody tapped a button, so it has "
+          +"not been sent. Nothing in the database has changed, and the full copy is still there.";
+        try{ console.warn("vx sync refusing "+k+": "+v.length+" bytes replacing "+seen); }catch(e){}
+        _blockAdd("collapse|"+k, "club_state ("+k+")", {key:k, wouldBe:v.length, databaseHas:seen}, whyC);
+        var _c = Promise.resolve({ok:false, collapsed:true, why:whyC});
+        window.__vxLastPush[k] = _c;
+        return _c;
+      }
+    }
     var val; try { val = JSON.parse(v); } catch(e){ return Promise.resolve({ok:false, why:"could not be read back"}); }
     window.__vxWriteTs[k] = Date.now();
     // See _haveTok. Sending this now would be refused for being anonymous and land on the
@@ -968,6 +1002,9 @@ if ('serviceWorker' in navigator) {
       var mirrored=null, haveMirror=false;
       try{ if(Object.prototype.hasOwnProperty.call(window.__VX_PULLED, r.key) && pushedTs>diskTs){ mirrored=window.__VX_PULLED[r.key]; haveMirror=(mirrored!=null); } }catch(e){}
       var remoteTs=r.updated_at? Date.parse(r.updated_at) : 0;
+      // How big the database's copy is, whichever copy wins below. This is the only number that
+      // makes "this write would destroy the club's roster" answerable at the moment of writing.
+      try{ origSet('__vxsize_'+r.key, String(JSON.stringify(r.value).length)); }catch(e){}
       var takeRemote = ((localVal==null && !haveMirror) || !localTs || remoteTs>=localTs);
       if(takeRemote){
         var _incoming=JSON.stringify(r.value);
@@ -6709,7 +6746,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-18b';
+const VX_BUILD='2026-08-18c';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -7845,9 +7882,42 @@ class Component extends DCLogic {
     if(fallback && typeof fallback==='object') return (v && typeof v==='object' && !Array.isArray(v)) ? v : fallback;
     return v;
   }
+  // A record this device cannot read is not a record that is empty.
+  //
+  // This handed back its fallback — for the roster, {edits:{},deleted:{},added:{}} — whenever the
+  // key was missing or would not parse. A full storage, an evicted key, a truncated write, a
+  // Reset on this device: any of them, and the app then held an empty overlay believing it was
+  // the club's. The next roster action saved it, and 317 names with no dates of birth went to the
+  // database and out to every phone. The screen never said anything, because from the app's point
+  // of view nothing had gone wrong — it had asked for the roster and been given a roster.
+  //
+  // So the copy this pull took is tried, then the copy on disk, then the copy the last pull
+  // replaced — which is kept precisely for this — and only a device that genuinely has none of
+  // the three gets the empty shape. That device is also the one the collapse guard in pushKey
+  // stops from sending it, so an empty overlay now has to get past both to reach anybody.
+  // "317 swimmers " + "\u00b7" + " 9 squads" is what this screen said while the club's roster was gone, and
+  // it is what it would say again. 317 is the base list with no overlay on it at all: nothing
+  // deleted, no dates of birth, no edits. The number is not wrong — it is answering a different
+  // question from the one being asked of it, and there is no way to tell that by looking.
+  //
+  // The database knows how big the overlay ought to be, because every pull records it. So the one
+  // case that matters can be named outright: this device is showing the raw list.
+  _rosterOverlayMissing(){
+    try{
+      const seen=parseInt(localStorage.getItem('__vxsize_vx_roster_edits')||'0',10)||0;
+      if(seen<2048) return 0;                    // the club has no real overlay to be missing
+      const here=(localStorage.getItem('vx_roster_edits')||'').length;
+      return here < seen*0.4 ? seen : 0;
+    }catch(e){ return 0; }
+  }
   _loadJSON(key, fallback){
     try{ const P=window.__VX_PULLED; if(P && Object.prototype.hasOwnProperty.call(P, key) && P[key]!=null){ return this._shaped(JSON.parse(JSON.stringify(P[key])), fallback); } }catch(e){}
-    try{ const v=localStorage.getItem(key); return v==null?fallback:this._shaped(JSON.parse(v), fallback); }catch(e){ return fallback; }
+    try{ const v=localStorage.getItem(key); if(v!=null) return this._shaped(JSON.parse(v), fallback); }catch(e){}
+    try{ const kept=localStorage.getItem('__vxprev_'+key);
+      if(kept!=null){ const back=this._shaped(JSON.parse(kept), fallback);
+        try{ console.warn('vx recovered '+key+' from the copy the last pull replaced'); }catch(e){}
+        return back; } }catch(e){}
+    return fallback;
   }
   _saveJSON(key, val){
     try{ if(window.__VX_PULLED) window.__VX_PULLED[key]=val; }catch(e){}   // keep the mirror current for in-session reads
@@ -13920,6 +13990,7 @@ class Component extends DCLogic {
         // Remember what the database said, even when this device's copy is kept — it is the only
         // way a later write can tell it is about to overwrite something newer than what it read.
         try{ window.__vxRemoteTs=window.__vxRemoteTs||{}; window.__vxRemoteTs[r.key]=remoteTs; }catch(e){}
+        try{ localStorage.setItem('__vxsize_'+r.key, String(JSON.stringify(r.value).length)); }catch(e){}
         const s=JSON.stringify(r.value);
         const was=localStorage.getItem(r.key);
         if(was!==s){
@@ -15596,7 +15667,9 @@ class Component extends DCLogic {
 
     // ---- admin section overlay ----
     const adminTitleMap={swimmers:'Swimmers',meets:'Meets',staff:'Staff',families:'Family accounts',audit:'Activity log',settings:'Settings',brand:'Club Configuration'};
-    const adminSubMap={swimmers:this.allSwimmersFlat().length+' swimmers · '+this.squads.length+' squads', meets:this.allMeets().length+' meets on record', staff:'Admins, coaches & staff · names, usernames & PINs', families:'Check and fix which children each login can see', audit:'Every sign-in and every change, newest first', settings:'AI reader · database · reset data', brand:'Brand · zone method · locale · currency'};
+    const _rosterGone=this._rosterOverlayMissing();
+    const adminSubMap={swimmers:this.allSwimmersFlat().length+' swimmers · '+this.squads.length+' squads'
+      +(_rosterGone ? ' — this device is showing the raw list: its copy of the club’s roster edits is missing, so deletions and dates of birth are not applied. Nothing has been sent to the database. Reload the app; if it stays, open Settings › Database.' : ''), meets:this.allMeets().length+' meets on record', staff:'Admins, coaches & staff · names, usernames & PINs', families:'Check and fix which children each login can see', audit:'Every sign-in and every change, newest first', settings:'AI reader · database · reset data', brand:'Brand · zone method · locale · currency'};
     const onCloseAdmin=()=>this.setState({adminSection:null, swEditId:null, swAddOpen:false, staffEditId:null, meetImportOpen:false, meetImportPreview:null, meetExpanded:null});
 
     // -- swimmers admin --

@@ -1363,6 +1363,85 @@ scene("a pull that replaces the roster keeps what it replaced", async (browser) 
   return "kept the 304 it replaced, and put them back in the database";
 });
 
+// ---------------------------------------------------------------------------------------------
+// An empty roster overlay never leaves the device, and the screen says so.
+//
+// 317 swimmers with 123 dates of birth missing is not an old copy of the club's overlay. It is
+// the app showing the BASE list because the overlay is empty — nothing deleted, no dates, no
+// edits. An empty overlay reaches the database like this: _loadJSON hands back its fallback,
+// {edits:{},deleted:{},added:{}}, whenever the record cannot be read on this device, and the very
+// next roster action saves that fallback over the club's. One phone having a bad moment, and
+// every device loses the roster on its next pull.
+//
+// Three things have to hold, and this drives all three at once.
+// ---------------------------------------------------------------------------------------------
+scene("an empty roster overlay is not sent, and the screen stops pretending", async (browser) => {
+  // What the club actually has: 300 swimmers' worth of edits and dates of birth.
+  const real = { edits: {}, deleted: { r400: 1, r401: 1 }, added: {} };
+  for (let i = 1; i <= 300; i++) real.edits["r" + i] = { dob: "2012-03-0" + (i % 9), name: "Swimmer " + i };
+  const realJson = JSON.stringify(real);
+  const page = await (await browser.newContext({ viewport: { width: 1280, height: 1000 } })).newPage();
+  const problems = [], sentRoster = [];
+  page.on("pageerror", (e) => problems.push(String(e.message)));
+  await page.route("**/rest/v1/**", async (route) => {
+    const req = route.request(), m = req.method();
+    const table = (new URL(req.url()).pathname.split("/rest/v1/")[1] || "").split("?")[0];
+    if (table === "club_state" && m === "GET")
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(
+        [{ key: "vx_roster_edits", value: real, updated_at: new Date().toISOString() }]) });
+    if (m !== "GET" && m !== "HEAD") {
+      try {
+        for (const w of JSON.parse(req.postData() || "[]"))
+          if (w && w.key === "vx_roster_edits") sentRoster.push(JSON.stringify(w.value).length);
+      } catch { /* the assertions read sentRoster, so an unparseable body fails them */ }
+    }
+    return route.fulfill({ status: m === "GET" ? 200 : 201, contentType: "application/json", body: "[]" });
+  });
+  await page.addInitScript(() => {
+    localStorage.setItem("vx_session", JSON.stringify({ type: "staff", id: "ahmed" }));
+    localStorage.setItem("vx_auth", JSON.stringify({ token: "drive-fake", refresh: "drive-fake", exp: Date.now() + 3600000 }));
+    localStorage.removeItem("vx_nav");
+  });
+  await page.goto("http://127.0.0.1:" + PORT + "/proto.html?drive=" + Date.now(), { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(2600);
+  // The device loses its copy — a full storage, an evicted key, a Reset, a truncated write. Which
+  // one does not matter, and that is the point: the rule below does not need to know.
+  await page.evaluate(() => {
+    localStorage.removeItem("vx_roster_edits");
+    localStorage.removeItem("__vxprev_vx_roster_edits");
+    try { delete window.__VX_PULLED["vx_roster_edits"]; } catch { /* mirror may be absent */ }
+  });
+  const before = sentRoster.length;
+  // 1. The empty overlay does not leave the device, whatever asks it to.
+  const refusal = await page.evaluate(() =>
+    window.__vxpush("vx_roster_edits", JSON.stringify({ edits: {}, deleted: {}, added: {} })));
+  await page.waitForTimeout(1200);
+  const sentAfter = sentRoster.slice(before);
+  eq(problems.length, 0, "the app threw: " + problems.slice(0, 2).join(" | "));
+  eq(sentAfter.length, 0, "an empty overlay was sent to the database: " + JSON.stringify(sentAfter));
+  eq(refusal.collapsed, true, "it was not recognised as a record collapsing: " + JSON.stringify(refusal));
+  eq(/thrown away about/.test(refusal.why || ""), true, "it did not say what it was refusing: " + JSON.stringify(refusal.why));
+  // 2. The screen says the list it is showing is the raw one, rather than reading as normal.
+  const said = await page.evaluate(() => {
+    const el = [...document.querySelectorAll("*")].find(
+      (e) => e.children.length === 0 && /Club Administration/i.test(e.textContent || ""));
+    if (el) { let n = el; for (let i = 0; i < 8 && n; i++) { if (n.onclick) { n.click(); break; } n = n.parentElement; } }
+    return true;
+  });
+  eq(said, true, "the hub never rendered");
+  await page.waitForTimeout(700);
+  await tap(page, "Roster · add / edit");
+  await page.waitForTimeout(900);
+  const text = await page.evaluate(() => document.body.innerText || "");
+  eq(/showing the raw list/i.test(text), true,
+     "the roster screen read as normal while the overlay was missing");
+  await page.close();
+  // _loadJSON recovering from the kept copy is the third part of this fix. It is checked in the
+  // unit suite rather than here: no app instance is reachable from the page, so the assertion that
+  // used to sit at this point could not run and quietly passed by doing nothing.
+  return "refused the empty overlay, and the screen named it";
+});
+
 const TOOLS = [
   "Insights","AI Assistants","Daily Attendance","Activity log","Birthdays","Boards",
   "Club Configuration","Pace Clock","Zone Engine","Meet Entries","Family accounts",
