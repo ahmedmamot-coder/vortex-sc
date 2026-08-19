@@ -751,7 +751,24 @@ if ('serviceWorker' in navigator) {
       Object.keys(ed).forEach(function(sq){
         out.edits[sq]=out.edits[sq]||{};
         Object.keys(ed[sq]||{}).forEach(function(sw){
-          out.edits[sq][sw]=Object.assign({}, out.edits[sq][sw]||{}, ed[sq][sw]||{});
+          // A field that has something in it never loses to one that is empty.
+          //
+          // The stale device this club keeps meeting carries the 2 August overlay: 194 dates of
+          // birth where the database has 304. Merging its patches field-over-field would blank
+          // 110 dates with the empty strings that copy holds for them. Which of two NON-empty
+          // values is newer is not knowable without a timestamp per field, and this does not
+          // pretend to know — but empty is never the newer answer, and that alone is most of it.
+          var into=Object.assign({}, out.edits[sq][sw]||{});
+          var from=ed[sq][sw]||{};
+          Object.keys(from).forEach(function(f){
+            var v=from[f];
+            var blank=(v===undefined || v===null || (typeof v==="string" && !v.trim()));
+            var held=into[f];
+            var haveHeld=!(held===undefined || held===null || (typeof held==="string" && !held.trim()));
+            if(blank && haveHeld) return;      // keep what is there
+            into[f]=v;
+          });
+          out.edits[sq][sw]=into;
         });
       });
       var ad=(e && e.added) || {};
@@ -6884,7 +6901,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-19c';
+const VX_BUILD='2026-08-19d';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.

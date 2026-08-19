@@ -203,6 +203,46 @@ describe("shipped source", () => {
       eq(/withDeletions/.test(LIST), true, "a snapshot with no deletions can still be recommended"));
   });
 
+  // The stale device this club keeps meeting carries the 2 August overlay: every 317 snapshot in
+  // their backups has the same shape, {edited:219, added:199, deleted:154}, with 194 dates of
+  // birth where the database has 304. Sending the roster is a merge now, and this is what the
+  // merge has to survive.
+  describe("merging the roster against a much older copy", () => {
+    // The shipped function itself, taken whole — declaration, body and closing brace — and
+    // evaluated. A reimplementation of a merge would agree with itself for ever, and this one
+    // decides whether the club keeps its roster.
+    const src = sourceBetween("function _rosterShaped(o){", "\n  window.__vxMergeRoster");
+    const merge = new Function(src + "\nreturn _mergeRoster;")();
+
+    const server = { edits: { jr: { r1: { dob: "2012-05-05", name: "Sara" } } },
+                     deleted: { jr: { gone1: true, gone2: true } }, added: { jr: [{ id: "n1", name: "New" }] } };
+    const stale  = { edits: { jr: { r1: { dob: "", name: "Sara" } } }, deleted: {}, added: {} };
+
+    it("keeps every deletion the older copy never heard about", () => {
+      const out = merge(stale, server);
+      eq(Object.keys(out.deleted.jr || {}).length, 2, "the stale copy put deleted swimmers back");
+    });
+
+    it("does not blank a date of birth with an empty one", () => {
+      const out = merge(stale, server);
+      eq(out.edits.jr.r1.dob, "2012-05-05",
+         "110 dates of birth are the difference between these two copies, and an empty string is never the newer answer");
+    });
+
+    it("keeps swimmers the older copy never had", () => {
+      const out = merge(stale, server);
+      eq((out.added.jr || []).length, 1, "a swimmer added on another device was dropped");
+    });
+
+    // Anything not in the overlay shape is left alone rather than rebuilt — the first version of
+    // this reduced a differently-shaped document to three empty objects, which is the fault it
+    // exists to prevent.
+    it("refuses to touch a document it does not recognise", () => {
+      const flat = { r1: { name: "A" }, r2: { name: "B" } };
+      eq(Object.keys(merge(flat, server)).length, 2, "a document of another shape was emptied by the merge");
+    });
+  });
+
   describe("a roster this device cannot read", () => {
     const FULL = { edits: { r1: { dob: "2012-01-01" }, r2: { dob: "2013-02-02" } }, deleted: { r9: 1 }, added: {} };
     const EMPTY = { edits: {}, deleted: {}, added: {} };
