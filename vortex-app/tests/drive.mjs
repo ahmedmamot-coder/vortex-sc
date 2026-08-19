@@ -1583,15 +1583,16 @@ scene("a device holding a smaller roster than the database can still add a swimm
   }, small);
   await page.goto("http://127.0.0.1:" + PORT + "/proto.html?drive=" + Date.now(), { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(2600);
-  // The device is holding far less than the database — the exact shape my rule refused.
-  const ratio = await page.evaluate(() => {
-    const seen = parseInt(localStorage.getItem("__vxsize_vx_roster_edits") || "0", 10) || 0;
-    const here = (localStorage.getItem("vx_roster_edits") || "").length;
-    return { seen, here };
-  });
+  // The device was seeded holding far less than the database — the exact shape my rule refused.
+  // It may not still be: sending the roster is a merge now, so a stale device heals itself on the
+  // first write. What has to stay true is the fixture, and that the add reaches the database.
+  const ratio = await page.evaluate(() => ({
+    seen: parseInt(localStorage.getItem("__vxsize_vx_roster_edits") || "0", 10) || 0,
+    here: (localStorage.getItem("vx_roster_edits") || "").length,
+  }));
   eq(ratio.seen > 2048, true, "the database copy was not big enough for this scene to mean anything: " + JSON.stringify(ratio));
-  eq(ratio.here < ratio.seen * 0.4, true,
-     "this device is not holding the smaller copy, so the scene is not testing what it says: " + JSON.stringify(ratio));
+  eq(JSON.stringify(small).length < JSON.stringify(big).length * 0.4, true,
+     "the fixture is not the smaller-copy case this scene exists for");
   const before = pushes.length;
   // Add a swimmer, through the sync layer the Add form goes through.
   const res = await page.evaluate(() => {
@@ -1610,7 +1611,72 @@ scene("a device holding a smaller roster than the database can still add a swimm
     window.__vxpush("vx_roster_edits", JSON.stringify({ edits: {}, deleted: {}, added: {} })));
   eq(empty.collapsed, true, "an empty overlay is no longer being refused: " + JSON.stringify(empty));
   await page.close();
-  return "added a swimmer from a " + ratio.here + "-byte overlay against " + ratio.seen + " on the server";
+  return "added a swimmer from a " + JSON.stringify(small).length + "-byte overlay against " + ratio.seen + " on the server";
+});
+
+// ---------------------------------------------------------------------------------------------
+// 317 again. Every time.
+//
+// The base roster is 272 swimmers; the club's overlay adds 45 and deletes 14, which is the 303
+// they keep asking for. 317 is 272 + 45 with the fourteen deletions gone — so what comes back is
+// never the whole overlay, it is always exactly the deletions.
+//
+// The overlay is ONE document and whoever writes it last wins all of it. A device still holding
+// yesterday's copy does not merely fail to see the fourteen deletions: it sends its copy over
+// them and puts fourteen swimmers back for the entire club. applyPull makes it worse rather than
+// better — when it judges the local copy newer it PUSHES it, so a tab left open overnight
+// actively overwrites work done on another device this morning.
+//
+// So sending the roster is a merge now. This drives the exact collision.
+// ---------------------------------------------------------------------------------------------
+scene("a stale device cannot put deleted swimmers back", async (browser) => {
+  // What the database holds: fourteen swimmers deleted, and a date of birth typed on that device.
+  const theirs = { edits: { junior: { r5: { dob: "2011-02-03" } } }, deleted: { junior: {} }, added: {} };
+  for (let i = 1; i <= 14; i++) theirs.deleted.junior["gone" + i] = true;
+  // What this device holds: yesterday's copy. It has never heard about the deletions, and it has
+  // its own edit made since — which is what makes it look newer and gives it the right to write.
+  const mine = { edits: { junior: { r9: { dob: "2013-07-07" } } }, deleted: {}, added: {} };
+
+  const page = await (await browser.newContext({ viewport: { width: 1280, height: 1000 } })).newPage();
+  const problems = [], sent = [];
+  page.on("pageerror", (e) => problems.push(String(e.message)));
+  await page.route("**/rest/v1/**", async (route) => {
+    const req = route.request(), m = req.method();
+    const table = (new URL(req.url()).pathname.split("/rest/v1/")[1] || "").split("?")[0];
+    if (table === "club_state" && m === "GET")
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(
+        [{ key: "vx_roster_edits", value: theirs, updated_at: new Date(Date.now() - 7200000).toISOString() }]) });
+    if (m !== "GET" && m !== "HEAD") {
+      try {
+        for (const w of JSON.parse(req.postData() || "[]"))
+          if (w && w.key === "vx_roster_edits") sent.push(w.value);
+      } catch { /* the assertions read sent, so an unparseable body fails them */ }
+    }
+    return route.fulfill({ status: m === "GET" ? 200 : 201, contentType: "application/json", body: "[]" });
+  });
+  await page.addInitScript((m) => {
+    localStorage.setItem("vx_session", JSON.stringify({ type: "staff", id: "ahmed" }));
+    localStorage.setItem("vx_auth", JSON.stringify({ token: "drive-fake", refresh: "drive-fake", exp: Date.now() + 3600000 }));
+    localStorage.removeItem("vx_nav");
+    localStorage.setItem("vx_roster_edits", JSON.stringify(m));
+    localStorage.setItem("__vxts_vx_roster_edits", String(Date.now()));  // "mine is newer"
+  }, mine);
+  await page.goto("http://127.0.0.1:" + PORT + "/proto.html?drive=" + Date.now(), { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(2600);
+  await page.evaluate((m) => window.__vxpush("vx_roster_edits", JSON.stringify(m)), mine);
+  await page.waitForTimeout(1800);
+  eq(problems.length, 0, "the app threw: " + problems.slice(0, 2).join(" | "));
+  eq(sent.length > 0, true, "nothing was sent at all");
+  const last = sent[sent.length - 1];
+  const deletions = Object.keys((last.deleted && last.deleted.junior) || {}).length;
+  eq(deletions, 14, "this device sent a roster with " + deletions + " of the 14 deletions — "
+     + "the missing ones are swimmers who come back on every other device");
+  // And its own work is still there. A merge that protects the database by dropping what the
+  // coach just typed is the same bug pointing the other way.
+  eq(((last.edits || {}).junior || {}).r9 !== undefined, true, "the edit made on this device was lost in the merge");
+  eq(((last.edits || {}).junior || {}).r5 !== undefined, true, "the other device's date of birth was dropped");
+  await page.close();
+  return "kept all 14 deletions and both dates of birth";
 });
 
 const TOOLS = [

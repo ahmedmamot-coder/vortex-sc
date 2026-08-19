@@ -703,6 +703,93 @@ if ('serviceWorker' in navigator) {
       return false;
     }catch(e){ return true; }
   }
+  // A swimmer somebody deleted does not come back because another phone had not heard yet.
+  //
+  // This is the 317 that keeps returning. The roster overlay is ONE document, and whoever writes
+  // it last wins the whole thing — so a device still holding yesterday's copy does not merely
+  // fail to see the fourteen deletions, it sends its copy over them and puts all fourteen
+  // swimmers back for the entire club. applyPull makes that worse rather than better: when it
+  // judges the local copy newer it PUSHES it up, so a stale tab left open overnight actively
+  // overwrites work done on another device this morning.
+  //
+  // The migration to one row per swimmer is the real answer to this and it is not safe to run
+  // against a live club — it has already cost this one its dates of birth once. So the document
+  // stays, and what changes is that sending it is a MERGE rather than a replacement:
+  //
+  //   deleted  union   — a deletion is never dropped by someone who had not heard about it
+  //   added    union    (by id, so the same swimmer added twice is still one swimmer)
+  //   edits    per swimmer, this device wins — the field a coach just typed is the current one
+  //
+  // The one thing a union cannot express is an un-delete, which would be undone by the next
+  // device to send. Putting a swimmer back is rare, recoverable in seconds, and done through Add;
+  // losing fourteen deletions every day is neither.
+  // Anything this does not recognise, it does not touch.
+  //
+  // The first version of this built {edits, deleted, added} and copied those three across — which
+  // silently reduced any document of another shape to three empty objects. A roster restored from
+  // a backup, or written by an older build, would have been emptied by the very function added to
+  // stop it being emptied. That is the exact class of bug that has cost this club its roster all
+  // week, and it does not get to happen inside the fix for it.
+  function _rosterShaped(o){
+    return !!(o && typeof o==="object" && !Array.isArray(o)
+      && (o.edits!==undefined || o.deleted!==undefined || o.added!==undefined));
+  }
+  function _mergeRoster(mine, theirs){
+    if(!theirs || typeof theirs!=="object") return mine;
+    if(!mine || typeof mine!=="object") return theirs;
+    // If either side is not the overlay shape, merging is guesswork. Send what this device has.
+    if(!_rosterShaped(mine) || !_rosterShaped(theirs)) return mine;
+    var out={ edits:{}, deleted:{}, added:{} };
+    var side=[theirs, mine];   // mine second, so mine wins where they disagree
+    side.forEach(function(e){
+      var d=(e && e.deleted) || {};
+      Object.keys(d).forEach(function(sq){
+        out.deleted[sq]=out.deleted[sq]||{};
+        Object.keys(d[sq]||{}).forEach(function(sw){ if(d[sq][sw]) out.deleted[sq][sw]=true; });
+      });
+      var ed=(e && e.edits) || {};
+      Object.keys(ed).forEach(function(sq){
+        out.edits[sq]=out.edits[sq]||{};
+        Object.keys(ed[sq]||{}).forEach(function(sw){
+          out.edits[sq][sw]=Object.assign({}, out.edits[sq][sw]||{}, ed[sq][sw]||{});
+        });
+      });
+      var ad=(e && e.added) || {};
+      Object.keys(ad).forEach(function(sq){
+        out.added[sq]=out.added[sq]||[];
+        (ad[sq]||[]).forEach(function(sw){
+          if(!sw || !sw.id) return;
+          var at=-1;
+          for(var i=0;i<out.added[sq].length;i++){ if(out.added[sq][i] && out.added[sq][i].id===sw.id){ at=i; break; } }
+          if(at<0) out.added[sq].push(sw); else out.added[sq][at]=Object.assign({}, out.added[sq][at], sw);
+        });
+      });
+    });
+    return out;
+  }
+  window.__vxMergeRoster = _mergeRoster;
+  // What the database holds right now, read immediately before writing over it.
+  //
+  // __VX_PULLED is up to twenty seconds old, and twenty seconds is exactly long enough for two
+  // coaches on poolside to lose each other's work. This costs one GET on roster saves only.
+  function _rosterMergedWith(v){
+    return fetch(REST + "?select=value&key=eq.vx_roster_edits", { headers: dyn() })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(rows){
+        var theirs=(rows && rows[0] && rows[0].value) || null;
+        if(!theirs) return v;
+        var mine=null; try{ mine=JSON.parse(v); }catch(e){ return v; }
+        var merged=_mergeRoster(mine, theirs);
+        try{
+          var a=0, b=0;
+          Object.keys((mine&&mine.deleted)||{}).forEach(function(sq){ a+=Object.keys(mine.deleted[sq]||{}).length; });
+          Object.keys(merged.deleted||{}).forEach(function(sq){ b+=Object.keys(merged.deleted[sq]||{}).length; });
+          if(b>a) console.warn("vx roster merge kept "+(b-a)+" deletion(s) this device had not heard about");
+        }catch(e){}
+        return JSON.stringify(merged);
+      })
+      .catch(function(){ return v; });   // unreadable: send what we have, which is today's behaviour
+  }
   function pushKey(k, v){
     if (SYNC.indexOf(k) === -1) return Promise.resolve({ok:false, why:"this is not a synced key"});
     if (typeof v === "string" && v.length > MAX_ROW){
@@ -778,8 +865,17 @@ if ('serviceWorker' in navigator) {
     }
     var p;
     try {
-      p = fetch(REST, { method:"POST", headers: dyn({"Prefer":"resolution=merge-duplicates,return=minimal"}),
-        body: JSON.stringify([{ key:k, value:val, updated_at:new Date().toISOString() }]) })
+      // The roster is merged with what the database holds; everything else is sent as it is.
+      p = (k==="vx_roster_edits" ? _rosterMergedWith(v) : Promise.resolve(v)).then(function(sendStr){
+        var sendVal=val; try{ sendVal=JSON.parse(sendStr); }catch(e){}
+        if(k==="vx_roster_edits"){
+          // Keep the device showing what it is about to send, or the next pull hands back the
+          // merged copy and the screen appears to change by itself a moment after a save.
+          try{ origSet(k, sendStr); window.__VX_PULLED[k]=sendVal; }catch(e){}
+        }
+        return fetch(REST, { method:"POST", headers: dyn({"Prefer":"resolution=merge-duplicates,return=minimal"}),
+          body: JSON.stringify([{ key:k, value:sendVal, updated_at:new Date().toISOString() }]) });
+      })
       .then(function(r){ window.__vxSyncOk = r.ok; if(r.ok) _blockClearTable("club_state");
         if(r.ok) return {ok:true};
         if(r.status===401||r.status===403){ _vxQueue(function(){ var cur=null; try{ cur=localStorage.getItem(k); }catch(e){} pushKey(k, cur==null?v:cur); }); }
@@ -6788,7 +6884,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-19b';
+const VX_BUILD='2026-08-19c';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
