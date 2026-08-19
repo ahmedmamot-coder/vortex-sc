@@ -1691,16 +1691,30 @@ scene("a stale device cannot put deleted swimmers back", async (browser) => {
 // which was right while writing replaced the document, and became "we cannot add swimmers any
 // more" the moment it was not. The merge protects that now; the refusal is gone.
 // ---------------------------------------------------------------------------------------------
-async function rosterSave(browser, { accept }) {
+async function rosterSave(browser, { accept, keep = true }) {
   const page = await (await browser.newContext({ viewport: { width: 1280, height: 1000 } })).newPage();
   const problems = [];
   page.on("pageerror", (e) => problems.push(String(e.message)));
+  // The database's own copy, which the read-back reads. `keep:false` is the case this club hit:
+  // the write is ACCEPTED and the record still does not contain the change afterwards.
+  let doc = { edits: {}, deleted: {}, added: {} };
   await page.route("**/rest/v1/**", async (route) => {
     const req = route.request(), m = req.method();
     const table = (new URL(req.url()).pathname.split("/rest/v1/")[1] || "").split("?")[0];
-    if (table === "club_state" && m === "POST" && !accept)
-      return route.fulfill({ status: 403, contentType: "application/json",
-        body: JSON.stringify({ message: "new row violates row-level security policy" }) });
+    if (table === "club_state" && m === "POST") {
+      if (!accept)
+        return route.fulfill({ status: 403, contentType: "application/json",
+          body: JSON.stringify({ message: "new row violates row-level security policy" }) });
+      if (keep) {
+        try {
+          for (const w of JSON.parse(req.postData() || "[]")) if (w && w.key === "vx_roster_edits") doc = w.value;
+        } catch { /* the assertions read doc, so an unparseable body fails them */ }
+      }
+      return route.fulfill({ status: 201, contentType: "application/json", body: "[]" });
+    }
+    if (table === "club_state" && m === "GET")
+      return route.fulfill({ status: 200, contentType: "application/json",
+        body: JSON.stringify([{ key: "vx_roster_edits", value: doc, updated_at: new Date().toISOString() }]) });
     return route.fulfill({ status: m === "GET" ? 200 : 201, contentType: "application/json", body: "[]" });
   });
   await page.addInitScript(() => {
@@ -1737,8 +1751,23 @@ scene("deleting a swimmer says whether the database took it", async (browser) =>
   const ok = await rosterSave(browser, { accept: true });
   eq(ok.problems.length, 0, "the roster threw: " + ok.problems.slice(0, 2).join(" | "));
   eq(/Saved ✓/.test(ok.said), true, "after a save the database took, the screen said: " + JSON.stringify(ok.said));
-  eq(/every device/.test(ok.said), true, "saved has to mean saved for the club, not for this phone");
-  return "said " + JSON.stringify(ok.said.slice(0, 50));
+  eq(/the database holds/.test(ok.said), true,
+     "saved has to be read back from the database, not inferred from a 201: " + JSON.stringify(ok.said));
+  return "said " + JSON.stringify(ok.said.slice(0, 60));
+});
+
+// The case this club actually hit: the write is ACCEPTED, the screen says every device will show
+// it, and the swimmer is not there. A 201 says the request was taken. It says nothing about what
+// the record contains afterwards, and that gap is where "it says saved and it is not" lives.
+scene("a save the database took but did not keep is not reported as saved", async (browser) => {
+  const lost = await rosterSave(browser, { accept: true, keep: false });
+  eq(lost.problems.length, 0, "the roster threw: " + lost.problems.slice(0, 2).join(" | "));
+  eq(/Saved ✓/.test(lost.said), false,
+     "the database did not keep the change and the screen still said: " + JSON.stringify(lost.said));
+  eq(/NOT saved/.test(lost.said), true, "it said: " + JSON.stringify(lost.said));
+  eq(/did not survive/.test(lost.said), true,
+     "it has to say the change is gone, not merely that something is inconsistent");
+  return "caught a write that was accepted and not kept";
 });
 
 scene("a roster change the database refuses is not reported as saved", async (browser) => {
