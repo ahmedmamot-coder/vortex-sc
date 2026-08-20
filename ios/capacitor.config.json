@@ -1,0 +1,26 @@
+{
+  "appId": "com.vortexswimmingclub.app",
+  "appName": "Vortex SC",
+  "webDir": "www",
+  "server": {
+    "iosScheme": "https",
+    "hostname": "vortexswimmingclub.com",
+    "androidScheme": "https"
+  },
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#0A0F1AFF",
+    "limitsNavigationsToAppBoundDomains": true,
+    "scrollEnabled": true
+  },
+  "plugins": {
+    "PushNotifications": { "presentationOptions": ["badge", "sound", "alert"] },
+    "Keyboard": { "resize": "native", "style": "dark", "resizeOnFullScreen": true },
+    "SplashScreen": {
+      "launchShowDuration": 800,
+      "backgroundColor": "#0A0F1A",
+      "showSpinner": false,
+      "androidScaleType": "CENTER_CROP"
+    }
+  }
+}

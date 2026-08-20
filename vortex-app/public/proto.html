@@ -1891,8 +1891,12 @@ if ('serviceWorker' in navigator) {
                   <button onclick="{{ onFamSubmit }}" style="background:var(--vx-blue);color:#fff;border:none;border-radius:13px;padding:13px;font-family:inherit;font-weight:700;font-size:14px;cursor:pointer">{{ famSubmitLabel }}</button>
                   <sc-if value="{{ oauthShow }}" hint-placeholder-val="{{ true }}">
                     <div style="display:flex;align-items:center;gap:9px;margin:2px 0"><span style="flex:1;height:1px;background:rgba(255,255,255,.16)"></span><span style="font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.4)">{{ tx.orWord }}</span><span style="flex:1;height:1px;background:rgba(255,255,255,.16)"></span></div>
+                    <sc-if value="{{ oauthGoogleShow }}" hint-placeholder-val="{{ true }}">
                     <button onclick="{{ onGoogleSignIn }}" style="display:flex;align-items:center;justify-content:center;gap:9px;background:#fff;color:#1F1F1F;border:none;border-radius:13px;padding:12px;font-family:inherit;font-weight:700;font-size:13.5px;cursor:pointer"><img src="data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2048%2048%22%3E%3Cpath%20fill%3D%22%23EA4335%22%20d%3D%22M24%209.5c3.54%200%206.71%201.22%209.21%203.6l6.85-6.85C35.9%202.38%2030.47%200%2024%200%2014.62%200%206.51%205.38%202.56%2013.22l7.98%206.19C12.43%2013.72%2017.74%209.5%2024%209.5z%22%2F%3E%3Cpath%20fill%3D%22%234285F4%22%20d%3D%22M46.98%2024.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58%202.96-2.26%205.48-4.78%207.18l7.73%206c4.51-4.18%207.09-10.36%207.09-17.65z%22%2F%3E%3Cpath%20fill%3D%22%23FBBC05%22%20d%3D%22M10.53%2028.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92%2016.46%200%2020.12%200%2024c0%203.88.92%207.54%202.56%2010.78l7.97-6.19z%22%2F%3E%3Cpath%20fill%3D%22%2334A853%22%20d%3D%22M24%2048c6.48%200%2011.93-2.13%2015.89-5.81l-7.73-6c-2.15%201.45-4.92%202.3-8.16%202.3-6.26%200-11.57-4.22-13.47-9.91l-7.98%206.19C6.51%2042.62%2014.62%2048%2024%2048z%22%2F%3E%3C%2Fsvg%3E" alt="" style="width:17px;height:17px;flex:none">{{ tx.continueGoogle }}</button>
+                    </sc-if>
+                    <sc-if value="{{ oauthAppleShow }}" hint-placeholder-val="{{ true }}">
                     <button onclick="{{ onAppleSignIn }}" style="display:flex;align-items:center;justify-content:center;gap:8px;background:#000;color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:13px;padding:12px;font-family:inherit;font-weight:700;font-size:13.5px;cursor:pointer"><span style="font-size:16px;line-height:1;margin-top:-2px">&#63743;</span>{{ tx.continueApple }}</button>
+                    </sc-if>
                     <p style="margin:0;font-size:11px;color:rgba(255,255,255,.4);line-height:1.5">{{ tx.oauthNote }}</p>
                   </sc-if>
                   <p style="margin:0;font-size:11px;color:rgba(255,255,255,.4);line-height:1.5">{{ tx.readOnlyNote }}</p>
@@ -8218,6 +8222,25 @@ class Component extends DCLogic {
   //
   // Supabase runs the exchange; the club never sees the Google or Apple password, and no token
   // from either lands anywhere but this device.
+  /**
+   * Which social sign-ins are actually configured.
+   *
+   * Apple's is not free: it needs the $99/year Developer Program, a Services ID and a signing
+   * key. Google's needs a Cloud OAuth client. Until each is entered in Supabase its button leads
+   * to a Supabase error page — and Guideline 5.1.1(iv) says that if Google is offered, Apple
+   * must be too, so shipping one without the other is also a rejection.
+   *
+   * Set VX_OAUTH on window (or vx_oauth in localStorage) to the providers that are live, e.g.
+   * "google,apple". Empty or unset means neither button is drawn.
+   */
+  _oauthProviders(){
+    let raw='';
+    try{ raw=String(window.VX_OAUTH || localStorage.getItem('vx_oauth') || ''); }catch(e){}
+    const list=raw.toLowerCase().split(',').map(x=>x.trim()).filter(x=>x==='google'||x==='apple');
+    // Both or neither, never one: offering Google without Apple is the rejection, and offering
+    // Apple without Google is merely unhelpful, so the pair is the unit.
+    return (list.length===2) ? list : (list.length===1 ? list : []);
+  }
   _oauthStart(provider){
     try{
       // Come back to the page we are on, so the family portal reopens where they left it.
@@ -8227,6 +8250,12 @@ class Component extends DCLogic {
       // Remember which side of the app asked, because the return lands on a bare URL with no
       // memory of whether a parent or a coach started it.
       try{ sessionStorage.setItem('vx_oauth_after', this.state.loginStage==='family' ? 'family' : 'staff'); }catch(e){}
+      // Inside the iOS app this must NOT happen in the webview. Google refuses OAuth from an
+      // embedded webview and answers disallowed_useragent (error 403), so a parent tapping
+      // "Continue with Google" would get a Google error page rather than a sign-in. window.open
+      // is patched by native-bridge.js to hand external URLs to SFSafariViewController, which is
+      // the session type Google requires; the redirect comes back through the app's own scheme.
+      if(window.__vxNative){ window.open(url, '_blank'); return; }
       location.href=url;
     }catch(e){ this.setState({famErr:'Could not open the sign-in page.'}); }
   }
@@ -9911,6 +9940,14 @@ class Component extends DCLogic {
   // render window.open('')+document.write or a long data: URL, so we build a Blob object URL
   // and navigate to it (falling back to the same tab when the popup is blocked).
   _openHtml(html){
+    // Inside the iOS app there is no window to open and no blob: URL that native code can show,
+    // so the whole document goes to UIPrintInteractionController instead — which is where these
+    // documents were always headed anyway. Every "Save as PDF / Print" button in the app lands
+    // here, so this one line is the difference between printing working and doing nothing.
+    if(window.__vxNative && window.__vxPrintHtml){
+      const t=(String(html).match(/<title>([^<]*)<\/title>/i)||[])[1]||'Vortex SC';
+      try{ window.__vxPrintHtml(t, html); return; }catch(e){}
+    }
     try{ const url=URL.createObjectURL(new Blob([html],{type:'text/html'}));
       const w=window.open(url,'_blank');
       if(!w){ location.href=url; }
@@ -12920,6 +12957,31 @@ class Component extends DCLogic {
   async enablePush(){
     const set=(m)=>this.setState({pushMsg:m});
     try{
+      // Inside the iOS app none of what follows exists: a WKWebView has no PushManager and no
+      // service worker push, so the whole branch below would fall out at the first check and
+      // tell a parent to add the app to their Home Screen — while they are standing in the app.
+      // Native registration is APNs, and the token is stored beside the web subscriptions so
+      // /api/push/send can reach both from one send.
+      if(window.__vxNative && window.__vxRegisterPush){
+        set('Requesting permission\u2026');
+        const res=await window.__vxRegisterPush();
+        if(!res || !res.ok){
+          set(res && res.reason==='denied'
+            ? 'Notifications are turned off for Vortex SC. Open the iPhone Settings app \u2192 Vortex SC \u2192 Notifications to allow them.'
+            : 'Could not turn on notifications on this device. Close the app fully and open it again.');
+          return;
+        }
+        let acc=null; try{ acc=this._me&&this._me(); }catch(e){}
+        const fam=this.state.familyUser;
+        const swIds=fam?((fam.swimmerIds||[]).map(id=>String(id).split('::').pop())):[];
+        const rec={ id:'apns:'+res.token, endpoint:'apns:'+res.token, p256dh:'', auth:'',
+          platform:'ios', apns_token:res.token,
+          role: fam?'family':'staff', account: fam?('fam:'+fam.id):((acc&&acc.id)||''), swimmer_ids:swIds, ts:Date.now() };
+        let ok=true; if(window.__vxUpsert){ ok=await window.__vxUpsert('push_subscriptions', [rec]); }
+        try{ localStorage.setItem('vx_push_on','1'); }catch(e){}
+        this.setState({pushOn:true, pushMsg: ok ? 'Notifications enabled on this device \u2713' : 'Enabled here, but saving to the server failed \u2014 try again when you have signal.'});
+        return;
+      }
       const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent||'') || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
       const standalone=(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone===true;
       if(!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)){
@@ -13461,6 +13523,12 @@ class Component extends DCLogic {
   exportCsv(filename, rows){
     const esc=v=>{ const s=(v==null?'':String(v)); return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; };
     const csv=rows.map(r=>r.map(esc).join(',')).join('\n');
+    // <a download> is inert in a WKWebView — the tap does nothing, with no error anywhere, which
+    // is how an export can look broken and be silent about it. Hand the file to the iOS share
+    // sheet instead, which is how you save a file on a phone anyway.
+    if(window.__vxNative && window.__vxSaveFile){
+      if(window.__vxSaveFile(filename, '\uFEFF'+csv, 'text/csv')) return;
+    }
     const blob=new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
     const url=URL.createObjectURL(blob);
     const a=Object.assign(document.createElement('a'), {href:url, download:filename});
@@ -14898,13 +14966,17 @@ class Component extends DCLogic {
     this._icons();
   }
   async _aiAsk(task, text, context){
+    // The route is staff-only now, so it needs to know who is asking; without the token the
+    // answer is a 403 that reads, on screen, exactly like the assistant being down.
+    //
+    // Before the timer, not inside the try, for two reasons: returning early from inside the try
+    // would leave a 55-second abort timer running with nothing to abort, and the deadline below
+    // has to stay next to the call it is the deadline for.
+    const tok=(window.__VX_AUTH && window.__VX_AUTH.token)||'';
+    if(!tok) return {error:'Sign in again to use the assistant.'};
     const ctl=(typeof AbortController!=='undefined') ? new AbortController() : null;
     const timer=setTimeout(()=>{ try{ ctl && ctl.abort(); }catch(e){} }, 55000);
     try{
-      // The route is staff-only now, so it needs to know who is asking. Without this the answer
-      // is a 403 that reads, on screen, exactly like the assistant being down.
-      const tok=(window.__VX_AUTH && window.__VX_AUTH.token)||'';
-      if(!tok) return {error:'Sign in again to use the assistant.'};
       const r=await fetch('/api/ai/coach', {method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok},
         body:JSON.stringify({task, text, context}), signal: ctl?ctl.signal:undefined});
       const j=await r.json().catch(()=>null);
@@ -16717,7 +16789,13 @@ class Component extends DCLogic {
       loginFamily: S.loginStage==='family',
       // Shown on sign-in and registration, not on the reset-password steps where they would
       // only be confusing.
-      oauthShow: (S.famMode==='login' || S.famMode==='register'),
+      // A provider that is not configured in Supabase leads to a Supabase error page, and a
+      // button that always errors is its own rejection under Guideline 2.1. VX_OAUTH names the
+      // providers that are actually switched on; with none named, neither button is shown and
+      // the screen is simply email and password.
+      oauthShow: (S.famMode==='login' || S.famMode==='register') && this._oauthProviders().length>0,
+      oauthGoogleShow: this._oauthProviders().indexOf('google')>=0,
+      oauthAppleShow: this._oauthProviders().indexOf('apple')>=0,
       onGoogleSignIn: ()=>this._oauthStart('google'), onAppleSignIn: ()=>this._oauthStart('apple'),
       famIsLogin: S.famMode==='login', famIsRegister: S.famMode==='register',
       famTabLoginBg: S.famMode==='login'?'var(--vx-blue)':'transparent', famTabLoginFg: S.famMode==='login'?'#fff':'rgba(255,255,255,.6)',
