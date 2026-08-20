@@ -803,7 +803,7 @@ if ('serviceWorker' in navigator) {
   // __VX_PULLED is up to twenty seconds old, and twenty seconds is exactly long enough for two
   // coaches on poolside to lose each other's work. This costs one GET on roster saves only.
   function _rosterMergedWith(v){
-    return fetch(REST + "?select=value&key=eq.vx_roster_edits", { headers: dyn() })
+    return fetch(REST + "?select=value&key=eq.vx_roster_edits", { headers: dyn(), cache: "no-store" })
       .then(function(r){ return r.ok ? r.json() : null; })
       .then(function(rows){
         var theirs=(rows && rows[0] && rows[0].value) || null;
@@ -903,8 +903,28 @@ if ('serviceWorker' in navigator) {
           // merged copy and the screen appears to change by itself a moment after a save.
           try{ origSet(k, sendStr); window.__VX_PULLED[k]=sendVal; }catch(e){}
         }
+        // This device's copy is newer than the one it is about to create.
+        //
+        // Five days of "I set it and it comes back". __vxWriteTs is stamped when the write
+        // STARTS; updated_at is generated when the request is BUILT, a round-trip later. So the
+        // server's timestamp for this device's own write is always newer than the device's own
+        // marker — and applyPull takes the remote copy when remoteTs >= localTs. The very next
+        // pull therefore overwrites the change that was just made, and if that pull was already
+        // in flight carrying the copy from BEFORE the write, the old value comes straight back.
+        // Active becomes Break again, seconds after "Active ✓ saved".
+        //
+        // Nothing about that is specific to the roster: it is every synced record in the app,
+        // which is why the same shape kept appearing on statuses, registers and dates of birth.
+        //
+        // So the marker is set past the timestamp being sent. A pull carrying an older copy can
+        // no longer outrank it, and a genuinely newer write from another device still can.
+        var _stamp = Date.now();
+        try{
+          window.__vxWriteTs[k] = _stamp + 1000;
+          origSet('__vxts_'+k, String(_stamp + 1000));
+        }catch(e){}
         return fetch(REST, { method:"POST", headers: dyn({"Prefer":"resolution=merge-duplicates,return=minimal"}),
-          body: JSON.stringify([{ key:k, value:sendVal, updated_at:new Date().toISOString() }]) });
+          body: JSON.stringify([{ key:k, value:sendVal, updated_at:new Date(_stamp).toISOString() }]) });
       })
       .then(function(r){ window.__vxSyncOk = r.ok; if(r.ok) _blockClearTable("club_state");
         if(r.ok) return {ok:true};
@@ -926,9 +946,22 @@ if ('serviceWorker' in navigator) {
     window.__vxLastPush[k] = p;
     return p;
   }
+  // Never from the browser's cache.
+  //
+  // Not one read in this file said so, and PostgREST does not send a Cache-Control header that
+  // forbids it, so a browser is free to answer a repeat GET from its own copy. Safari does.
+  //
+  // Every consequence of that looks like a database fault and is not one. A save is written,
+  // read back for confirmation from the SAME url, answered from cache with the value from before
+  // the write, and reported as "NOT saved" — the club chasing a swimmer who was in the database
+  // the whole time. Worse, applyPull decides which copy is newer from a cached updated_at, so a
+  // stale answer does not merely mislead a message, it can hand the device an old record and
+  // have it write that back.
+  //
+  // A sync layer must not be allowed to read its own past.
   function pull(keys){
     var url = REST + "?select=key,value,updated_at&key=in.(" + keys.join(",") + ")";
-    return fetch(url, { headers: dyn() }).then(function(r){ return r.ok ? r.json() : []; }).catch(function(){ return []; });
+    return fetch(url, { headers: dyn(), cache: "no-store" }).then(function(r){ return r.ok ? r.json() : []; }).catch(function(){ return []; });
   }
   window.__vxpush = pushKey;
   window.__vxpull = pull;
@@ -945,7 +978,7 @@ if ('serviceWorker' in navigator) {
   // null there is why the roster and attendance came back blank after the app had been sitting
   // in the background: nothing retried, nothing was reported. Refresh once, then ask again.
   window.__vxSelect = function(table, qs, _retried){
-    return fetch(SB_URL+"/rest/v1/"+table+(qs?("?"+qs):""), { headers: dyn() }).then(function(r){
+    return fetch(SB_URL+"/rest/v1/"+table+(qs?("?"+qs):""), { headers: dyn(), cache: "no-store" }).then(function(r){
       if(r.ok) return r.json();
       if(r.status===401 && !_retried && window.__vxEnsureAuth){
         return window.__vxEnsureAuth(true).then(function(ok){ return ok ? window.__vxSelect(table, qs, true) : null; });
@@ -959,7 +992,7 @@ if ('serviceWorker' in navigator) {
   // (200 with an empty list) look identical through it, and they send a person to completely
   // different places. Returns {status, rows, said}.
   window.__vxSelectRaw = function(table, qs, _retried){
-    return fetch(SB_URL+"/rest/v1/"+table+(qs?("?"+qs):""), { headers: dyn() }).then(function(r){
+    return fetch(SB_URL+"/rest/v1/"+table+(qs?("?"+qs):""), { headers: dyn(), cache: "no-store" }).then(function(r){
       if(r.ok) return r.json().then(function(j){ return {status:200, rows:j||[], said:""}; });
       if(r.status===401 && !_retried && window.__vxEnsureAuth){
         return window.__vxEnsureAuth(true).then(function(ok){
@@ -992,7 +1025,7 @@ if ('serviceWorker' in navigator) {
       .then(function(r){ return r.ok ? r.json() : r.text().then(function(t){ return {__err:'HTTP '+r.status+' '+String(t||'').slice(0,160)}; }); })
       .catch(function(e){ return {__err:'could not be sent'+((e&&e.message)?(' ('+e.message+')'):'')}; });
   };
-  window.__vxCount = function(table, qs){ return fetch(SB_URL+"/rest/v1/"+table+"?select=id"+(qs?("&"+qs):""), { method:"HEAD", headers: dyn({"Prefer":"count=exact","Range-Unit":"items","Range":"0-0"}) }).then(function(r){ var cr=r.headers.get("content-range")||""; var m=cr.split("/"); var n=m.length>1?parseInt(m[1],10):NaN; return isNaN(n)?(r.ok?0:-1):n; }).catch(function(){ return -1; }); };
+  window.__vxCount = function(table, qs){ return fetch(SB_URL+"/rest/v1/"+table+"?select=id"+(qs?("&"+qs):""), { method:"HEAD", cache:"no-store", headers: dyn({"Prefer":"count=exact","Range-Unit":"items","Range":"0-0"}) }).then(function(r){ var cr=r.headers.get("content-range")||""; var m=cr.split("/"); var n=m.length>1?parseInt(m[1],10):NaN; return isNaN(n)?(r.ok?0:-1):n; }).catch(function(){ return -1; }); };
   window.__vxDelete = function(table, qs){ return ready().then(function(){ if(!_haveTok()){ _vxQueue(function(){ window.__vxDelete(table, qs); }); return false; } return fetch(SB_URL+"/rest/v1/"+table+"?"+qs, { method:"DELETE", headers: dyn() }).then(function(r){ if(!r.ok && (r.status===401||r.status===403)){ _vxQueue(function(){ window.__vxDelete(table, qs); }); } return r.ok; }).catch(function(){ return false; }); });
   };
   // The reason a write was refused, kept for whoever asks next. Callers get a plain true/false
@@ -6980,7 +7013,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-20a';
+const VX_BUILD='2026-08-20c';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -10182,7 +10215,7 @@ class Component extends DCLogic {
     try {
       const wr=await fetch(REST, { method:'POST', headers:Object.assign({}, head, {'Prefer':'resolution=merge-duplicates,return=minimal'}), body:JSON.stringify([{key:'vx_selftest', value:{t:Date.now()}, updated_at:new Date().toISOString()}]) });
       if(!wr.ok){ const t=await wr.text(); this.setState({dbTestMsg:'✗ WRITE blocked ('+who+') — HTTP '+wr.status+': '+(t||'(no message)').slice(0,180)+(/42501/.test(t) ? '  → row-level security refused it. The key is fine: this account is not recognised as staff by the database, so vx_is_staff() is false. Check the email you sign in with is in vx_staff_emails.' : (wr.status===401?'  → the API key is wrong or expired.':(wr.status===403?'  → run the GRANT + policy SQL.':(wr.status===404?'  → the club_state table is missing.':'')))), dbTestColor:'#B42318'}); return; }
-      const rd=await fetch(REST+'?select=value,updated_at&key=eq.vx_selftest', { headers: head });
+      const rd=await fetch(REST+'?select=value,updated_at&key=eq.vx_selftest', { headers: head, cache:'no-store' });
       if(!rd.ok){ const t=await rd.text(); this.setState({dbTestMsg:'Write OK but READ blocked — HTTP '+rd.status+': '+(t||'').slice(0,150), dbTestColor:'#9A6206'}); return; }
       const rows=await rd.json();
       // Proving a write works is the moment to replay anything held from when it did not. The

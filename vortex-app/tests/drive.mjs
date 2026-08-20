@@ -1784,6 +1784,81 @@ scene("a roster change the database refuses is not reported as saved", async (br
   return "refused, and said so: " + JSON.stringify(no.said.slice(0, 50));
 });
 
+// ---------------------------------------------------------------------------------------------
+// "I set Active, it says saved, and seconds later it is Break again."
+//
+// Five days of this, on statuses, on registers, on the roster. One cause.
+//
+// __vxWriteTs is stamped when a write STARTS. updated_at is generated when the request is BUILT,
+// a network round-trip later. So the server's timestamp for a device's OWN write is always newer
+// than that device's own marker — and applyPull takes the remote copy whenever remoteTs is
+// greater than or equal to localTs. The next pull therefore outranks the change that was just
+// made; and when that pull was already in flight, carrying the copy from before the write, the
+// old value comes straight back.
+//
+// The device undoes its own save. This drives exactly that: a pull that only ever answers with
+// the copy from BEFORE the change.
+// ---------------------------------------------------------------------------------------------
+scene("a pull carrying the copy from before the change cannot undo it", async (browser) => {
+  // The database as it was: this swimmer is on a break with no end date.
+  const before = { r131: { active: false, reason: "break", from: "2026-07-22", to: "" } };
+  const page = await (await browser.newContext({ viewport: { width: 1280, height: 1000 } })).newPage();
+  const problems = [], sent = [];
+  page.on("pageerror", (e) => problems.push(String(e.message)));
+  await page.route("**/rest/v1/**", async (route) => {
+    const req = route.request(), m = req.method();
+    const table = (new URL(req.url()).pathname.split("/rest/v1/")[1] || "").split("?")[0];
+    // Every read answers with the PRE-change copy, stamped now — the race, made reliable. A
+    // database that has not caught up yet looks exactly like this.
+    if (table === "club_state" && m === "GET")
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(
+        [{ key: "vx_sw_status", value: before, updated_at: new Date().toISOString() }]) });
+    if (m !== "GET" && m !== "HEAD") {
+      try {
+        for (const w of JSON.parse(req.postData() || "[]"))
+          if (w && w.key === "vx_sw_status") sent.push(Object.keys(w.value || {}).length);
+      } catch { /* the assertions read sent, so an unparseable body fails them */ }
+    }
+    return route.fulfill({ status: m === "GET" ? 200 : 201, contentType: "application/json", body: "[]" });
+  });
+  await page.addInitScript((b) => {
+    localStorage.setItem("vx_session", JSON.stringify({ type: "staff", id: "ahmed" }));
+    localStorage.setItem("vx_auth", JSON.stringify({ token: "drive-fake", refresh: "drive-fake", exp: Date.now() + 3600000 }));
+    localStorage.removeItem("vx_nav");
+    localStorage.setItem("vx_sw_status", JSON.stringify(b));
+  }, before);
+  await page.goto("http://127.0.0.1:" + PORT + "/proto.html?drive=" + Date.now(), { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(2400);
+  const away = () => page.evaluate(() => {
+    try { return !!(JSON.parse(localStorage.getItem("vx_sw_status") || "{}").r131); } catch { return true; }
+  });
+  eq(await away(), true, "the swimmer did not start out on a break, so this scene proves nothing");
+  // Set them Active — which means REMOVING them from the status record. A removal is the thing a
+  // stale copy is most able to undo, because it has nothing in it to compare against.
+  //
+  // And with no __vxts_ marker, which is the state this club's devices were actually left in:
+  // the quota handler drops every __vxts_ key to free space, and applyPull takes the remote copy
+  // whenever localTs is 0 — so after one full-storage moment the server's copy wins
+  // unconditionally and every local change is undone by the next pull.
+  await page.evaluate(() => {
+    // The app's own save: writes locally and sends, through the hooked setItem.
+    localStorage.setItem("vx_sw_status", "{}");
+    // Then the marker is taken away, exactly as the quota handler takes it. From here the device
+    // has no record of when it last wrote, and applyPull hands it whatever the server says.
+    try { localStorage.removeItem("__vxts_vx_sw_status"); } catch { /* nothing to remove */ }
+    try { if (window.__vxWriteTs) delete window.__vxWriteTs["vx_sw_status"]; } catch { /* fresh map */ }
+  });
+  eq(await away(), false, "setting Active did not clear the swimmer from the record at all");
+  // Now let the app run. Every pull in this window answers with the pre-change copy.
+  await page.waitForTimeout(9000);
+  eq(problems.length, 0, "the app threw: " + problems.slice(0, 2).join(" | "));
+  eq(await away(), false,
+     "the swimmer went back on a break by themselves — a pull carrying the older copy overwrote the change");
+  eq(sent.length > 0, true, "nothing was ever sent to the database");
+  await page.close();
+  return "stayed Active through " + sent.length + " write(s) and a stale pull every cycle";
+});
+
 const TOOLS = [
   "Insights","AI Assistants","Daily Attendance","Activity log","Birthdays","Boards",
   "Club Configuration","Pace Clock","Zone Engine","Meet Entries","Family accounts",

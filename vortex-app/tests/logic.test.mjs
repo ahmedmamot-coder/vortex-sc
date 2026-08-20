@@ -207,6 +207,30 @@ describe("shipped source", () => {
   // their backups has the same shape, {edited:219, added:199, deleted:154}, with 194 dates of
   // birth where the database has 304. Sending the roster is a merge now, and this is what the
   // merge has to survive.
+  // A sync layer must not be allowed to read its own past.
+  //
+  // Not one REST read in this file said "do not cache", and PostgREST sends no header forbidding
+  // it, so a browser may answer a repeat GET from its own copy — Safari does. Every consequence
+  // looks like a database fault and is not one: a save is written, read back from the SAME url
+  // for confirmation, answered from cache with the value from before the write, and reported as
+  // NOT saved. Worse, applyPull decides which copy is newer from a cached updated_at, so a stale
+  // answer can hand the device an old record and have it write that back over a good one.
+  describe("reads never come from the browser's cache", () => {
+    // Every GET/HEAD to PostgREST, found by shape rather than by a list somebody has to maintain.
+    const reads = [...SOURCE.matchAll(/fetch\((?:REST|SB_URL\+"\/rest\/v1\/")[^\n]*?\{[^}]*\}/g)]
+      .map((m) => m[0])
+      .filter((f) => !/method: *["']POST["']|method: *["']DELETE["']|method: *["']PATCH["']/.test(f));
+
+    it("finds the reads at all", () =>
+      eq(reads.length >= 4, true, "only " + reads.length + " reads matched; the guard below would pass by finding nothing"));
+
+    it("every one of them says no-store", () => {
+      const cached = reads.filter((f) => !/cache: *["']no-store["']/.test(f));
+      eq(cached.length, 0, cached.length + " REST read(s) may be answered from the browser cache: "
+         + cached.map((f) => f.slice(0, 90)).join(" | "));
+    });
+  });
+
   describe("merging the roster against a much older copy", () => {
     // The shipped function itself, taken whole — declaration, body and closing brace — and
     // evaluated. A reimplementation of a merge would agree with itself for ever, and this one
