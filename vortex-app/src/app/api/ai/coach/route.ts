@@ -19,6 +19,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
+import { requireStaff } from "@/lib/callerAuth";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 
 export const maxDuration = 60;
@@ -181,6 +182,12 @@ function scrub(text: string) {
 }
 
 export async function POST(request: Request) {
+  // Signed-in coaches only. The route had no gate at all, and behind it is the club's Anthropic
+  // key: anybody who found the URL could spend it, at this club's expense, for as long as it took
+  // somebody to notice the bill. Nothing here is useful to a person who is not coaching.
+  const who = await requireStaff(request);
+  if (!who.ok) return who.response;
+
   const key = apiKey();
   if (!key) return Response.json({ error: "The AI reader is not set up on this deployment yet." }, { status: 503 });
 

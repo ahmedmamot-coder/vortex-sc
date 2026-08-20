@@ -18,17 +18,49 @@ export function svc() {
 export function haveService() {
   return !!SB_SERVICE;
 }
-/** Shared gate for every one of these routes. Returns an error Response, or null to proceed. */
+/**
+ * Shared gate for every one of these routes. Returns an error Response, or null to proceed.
+ *
+ * BACKUP_SECRET used to be optional: `if (secret) { ...check it... }`. On a deployment where the
+ * variable was never set — which is every deployment until somebody remembers — that reads as
+ * "no secret configured, so let everyone through", and behind these routes sits the service-role
+ * key and an export of the whole club. A missing secret is a misconfiguration, and the safe way
+ * to be wrong about a misconfiguration is to refuse.
+ *
+ * Vercel's own cron requests are the one caller that cannot carry a header we chose, so they are
+ * recognised the way Vercel documents instead.
+ */
 export function guard(request: Request): Response | null {
   if (!SB_SERVICE)
     return Response.json({ error: "server missing SUPABASE_SERVICE_ROLE_KEY" }, { status: 500 });
+
+  if (isVercelCron(request)) return null;
+
   const secret = process.env.BACKUP_SECRET;
-  if (secret) {
-    const given =
-      request.headers.get("x-backup-secret") || new URL(request.url).searchParams.get("key") || "";
-    if (given !== secret) return Response.json({ error: "unauthorized" }, { status: 401 });
+  if (!secret) {
+    return Response.json(
+      {
+        error:
+          "backups are not configured: set BACKUP_SECRET in the environment before these routes will answer",
+      },
+      { status: 503 },
+    );
   }
+  const given =
+    request.headers.get("x-backup-secret") || new URL(request.url).searchParams.get("key") || "";
+  if (given.length !== secret.length || given !== secret)
+    return Response.json({ error: "unauthorized" }, { status: 401 });
   return null;
+}
+
+/** A scheduled run of our own, per vercel.json — not something a browser can forge. */
+export function isVercelCron(request: Request): boolean {
+  const cronSecret = process.env.CRON_SECRET;
+  const auth = (request.headers.get("authorization") || "").trim();
+  if (cronSecret && auth === `Bearer ${cronSecret}`) return true;
+  // Vercel marks its own scheduler; only meaningful because the header cannot be set by a caller
+  // reaching the deployment through the public edge.
+  return !!request.headers.get("x-vercel-cron");
 }
 
 export type Snapshot = {

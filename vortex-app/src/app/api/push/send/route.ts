@@ -1,4 +1,5 @@
 import webpush from "web-push";
+import { requireStaff } from "@/lib/callerAuth";
 
 // Public Supabase values (same as the client). Overridable via env.
 const SB_URL =
@@ -28,13 +29,14 @@ export async function POST(request: Request) {
   }
   webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
 
-  // Only a logged-in user (their Supabase JWT) may trigger notifications.
-  const token = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
-  if (!token) return Response.json({ error: "unauthorized" }, { status: 401 });
-  const who = await fetch(SB_URL + "/auth/v1/user", {
-    headers: { apikey: SB_ANON, Authorization: "Bearer " + token },
-  });
-  if (!who.ok) return Response.json({ error: "unauthorized" }, { status: 401 });
+  // Only club staff may trigger notifications.
+  //
+  // This used to check that the caller was signed in and nothing more. Anyone can create a family
+  // login — that is what registration is — so "signed in" included every parent, and the body
+  // takes `all: true`. One registration was the whole distance between a stranger and a
+  // notification on 304 families' phones.
+  const who = await requireStaff(request);
+  if (!who.ok) return who.response;
 
   const body = await request.json().catch(() => ({} as Record<string, unknown>));
   const swimmerIds: string[] = Array.isArray(body.swimmerIds) ? body.swimmerIds.map(String) : [];

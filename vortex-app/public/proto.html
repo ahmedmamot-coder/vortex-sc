@@ -6671,6 +6671,27 @@ if ('serviceWorker' in navigator) {
                       </div>
                     </div>
                   </sc-if>
+                  <sc-if value="{{ showAccountCard }}" hint-placeholder-val="{{ false }}">
+                    <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                      <p style="margin:0 0 8px;font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7A8296">{{ tx.yourAccount }}</p>
+                      <p style="margin:0 0 12px;font-size:12.5px;color:#3A4152;line-height:1.5;word-break:break-all">{{ accountEmail }}</p>
+                      <sc-if value="{{ delIdle }}" hint-placeholder-val="{{ true }}">
+                        <button onclick="{{ onDeleteAccountStart }}" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:#FBE4E4;color:#B42318;border:1px solid #F3C9C9;border-radius:11px;padding:12px;font-family:inherit;font-weight:700;font-size:13.5px;cursor:pointer"><i data-lucide="trash-2" style="width:15px;height:15px"></i>{{ tx.deleteAccount }}</button>
+                      </sc-if>
+                      <sc-if value="{{ delConfirming }}" hint-placeholder-val="{{ false }}">
+                        <div style="background:#FFF7F7;border:1px solid #F3C9C9;border-radius:12px;padding:13px">
+                          <p style="margin:0 0 8px;font-size:12.5px;color:#0C1116;font-weight:700;line-height:1.45">{{ tx.deleteAccountTitle }}</p>
+                          <p style="margin:0 0 10px;font-size:11.5px;color:#7A8296;line-height:1.55">{{ tx.deleteAccountBody }}</p>
+                          <input value="{{ delTyped }}" oninput="{{ onDeleteTyped }}" placeholder="{{ tx.typeDelete }}" autocapitalize="characters" autocorrect="off" spellcheck="false" style="width:100%;background:#fff;border:1px solid #E5E9F0;border-radius:10px;padding:11px 13px;font-family:inherit;font-size:13px;color:#0C1116;outline:none;box-sizing:border-box;margin-bottom:9px">
+                          <div style="display:flex;gap:8px">
+                            <button onclick="{{ onDeleteCancel }}" style="flex:1;background:#EEF1F5;color:#3A4152;border:none;border-radius:10px;padding:11px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer">{{ tx.cancelWord }}</button>
+                            <button onclick="{{ onDeleteConfirm }}" disabled="{{ delDisabled }}" style="flex:1;background:{{ delBtnBg }};color:{{ delBtnFg }};border:none;border-radius:10px;padding:11px;font-family:inherit;font-weight:700;font-size:13px;cursor:{{ delBtnCursor }}">{{ delBtnLabel }}</button>
+                          </div>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ delMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:10px 2px 0;font-size:12px;font-weight:600;line-height:1.55;color:{{ delMsgColor }}">{{ delMsg }}</p></sc-if>
+                    </div>
+                  </sc-if>
                   <sc-if value="{{ settingsMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:0 2px;font-size:12px;font-weight:600;color:#0C7A4F">{{ settingsMsg }}</p></sc-if>
                   <p style="margin:14px 2px 0;font-size:11.5px;color:#9AA2B4;text-align:center;line-height:1.6"><a href="/privacy" target="_blank" style="color:#9AA2B4;font-weight:600;text-decoration:underline">Privacy Policy</a> &nbsp;·&nbsp; <a href="/consent" target="_blank" style="color:#9AA2B4;font-weight:600;text-decoration:underline">Parental Consent</a></p>
                 </div>
@@ -7309,6 +7330,7 @@ class Component extends DCLogic {
       loungeEditId:null, loungeEditText:'', commentDrafts:{}, reqOpen:false, reqTo:'', reqText:'', reqMsg:'',
       fmBody:'', fmSet:'', fmVideo:'',
       theme:'light', settingsOpen:false, famProfileDraft:null, waLabel:'', waNumber:'', waLink:'', shareOpen:false, shareMsg:'',
+      delStage:'idle', delTyped:'', delMsg:'', delMsgOk:false,
     };
     try{ var _th=localStorage.getItem('vx_theme'); if(_th) this.state.theme=_th; }catch(e){}
     // Vortex Lounge chat is backed by its own table (lounge_posts), loaded via _loungeFetch().
@@ -9153,6 +9175,16 @@ class Component extends DCLogic {
       tabDocs:['Documents','المستندات'],
       tabFees:['Fees','الرسوم'],
       tabCoach:['Coach','المدرب'],
+      // account & deletion (App Store Review Guideline 5.1.1(v): deleting an account must be
+      // something you can do in the app, not something you email us about)
+      yourAccount:['Your account','حسابك'],
+      deleteAccount:['Delete my account','حذف حسابي'],
+      deleteAccountTitle:['This cannot be undone','لا يمكن التراجع عن هذا'],
+      deleteAccountBody:['Your parent account, your contact details and the link to your children are deleted. Your child stays registered with the club — their attendance, results and training records are the club\u2019s own record and are kept. To leave the club as well, speak to a coach.','سيتم حذف حساب ولي الأمر وبيانات الاتصال والربط بأبنائك. يبقى طفلك مسجلاً في النادي — سجل الحضور والنتائج والتدريب يخص النادي ويُحتفظ به. للانسحاب من النادي، تحدث إلى المدرب.'],
+      typeDelete:['Type DELETE to confirm','اكتب DELETE للتأكيد'],
+      deleteAccountGo:['Delete account','حذف الحساب'],
+      deletingWord:['Deleting\u2026','جارٍ الحذف…'],
+      cancelWord:['Cancel','إلغاء'],
       // performance
       personalBests:['Personal bests','أفضل الأزمنة'],
       longCourse:['Long course','حوض طويل'],
@@ -13580,6 +13612,40 @@ class Component extends DCLogic {
     // the only way in, and it verifies a real hashed password.
     return this.setState({famBusy:false, famErr:'Wrong email or password - or reset it below.'});
   }
+  // ---- Deleting your own account -------------------------------------------------------
+  // Apple requires that an app which lets you make an account lets you delete it from inside the
+  // app (Review Guideline 5.1.1(v)) — a link that opens an email to the club is explicitly not
+  // enough. The server half is /api/family/delete-self; it does the same two-part deletion the
+  // admin route does, with the caller as its own subject.
+  //
+  // The typed word is the confirmation. A one-tap delete on a phone screen is one mis-tap away
+  // from a parent losing the account their children hang off, and there is no undo behind it.
+  async deleteOwnAccount(){
+    const typed=String(this.state.delTyped||'').trim().toUpperCase();
+    if(typed!=='DELETE') return;
+    const tok=(window.__VX_AUTH && window.__VX_AUTH.token)||'';
+    if(!tok) return this.setState({delMsg:'Sign out and sign back in, then try again — this device has no current session.', delMsgOk:false});
+    this.setState({delStage:'busy', delMsg:''});
+    let j=null, ok=false;
+    try{
+      const r=await fetch('/api/family/delete-self', {method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok}, body:JSON.stringify({confirm:'DELETE'})});
+      j=await r.json().catch(()=>null); ok=r.ok && j && j.ok;
+    }catch(e){ j={error:'Could not reach the server — check your connection and try again.'}; }
+    if(!ok){
+      return this.setState({delStage:'confirm', delMsg:(j&&j.error)||'The account could not be deleted. Nothing has been removed.', delMsgOk:false});
+    }
+    try{ this.audit('account-deleted', '', {side:'family', action:(j&&j.action)||''}); }catch(e){}
+    // Everything on this device goes with it. Signing out through famLogout would leave the
+    // cached family record behind, and the app rebuilds a session from that on next launch.
+    try{ localStorage.removeItem('vx_session'); }catch(e){}
+    try{ localStorage.removeItem('vx_family'); }catch(e){}
+    if(window.__vxClearAuth){ try{ window.__vxClearAuth(); }catch(e){} }
+    this.setState({familyUser:null, screen:'login', loginStage:'accounts', famMode:'login',
+      famName:'', famEmail:'', famPass:'', famPass2:'', famPicked:[], famSearch:'', famErr:'',
+      settingsOpen:false, delStage:'idle', delTyped:'',
+      famRegisteredMsg:(j&&j.note)||'Your account has been deleted.'});
+  }
+
   famLogout(){ try{ this.audit('sign-out', '', {side:'family'}); }catch(e){} try{ localStorage.removeItem('vx_session'); }catch(e){} if(window.__vxClearAuth){ try{ window.__vxClearAuth(); }catch(e){} } this.setState({familyUser:null, screen:'login', loginStage:'accounts', famMode:'login', famName:'', famEmail:'', famPass:'', famPass2:'', famPicked:[], famSearch:'', famErr:''}); }
   // After login: if the boot pull loaded no shared data (which only happens once anonymous reads
   // are blocked by row-level security), reload once so boot re-runs carrying the user's JWT and
@@ -14612,7 +14678,11 @@ class Component extends DCLogic {
     const ctl=(typeof AbortController!=='undefined') ? new AbortController() : null;
     const timer=setTimeout(()=>{ try{ ctl && ctl.abort(); }catch(e){} }, 55000);
     try{
-      const r=await fetch('/api/ai/coach', {method:'POST', headers:{'Content-Type':'application/json'},
+      // The route is staff-only now, so it needs to know who is asking. Without this the answer
+      // is a 403 that reads, on screen, exactly like the assistant being down.
+      const tok=(window.__VX_AUTH && window.__VX_AUTH.token)||'';
+      if(!tok) return {error:'Sign in again to use the assistant.'};
+      const r=await fetch('/api/ai/coach', {method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok},
         body:JSON.stringify({task, text, context}), signal: ctl?ctl.signal:undefined});
       const j=await r.json().catch(()=>null);
       if(!r.ok || !j || j.error) return {error:((j&&j.error)||('The assistant returned HTTP '+r.status))+((j&&j.said)?(' '+j.said):'')};
@@ -16472,6 +16542,23 @@ class Component extends DCLogic {
         return {
           onOpenSettings:()=>this.openSettings(), onCloseSettings:()=>this.closeSettings(), settingsOpen:!!S.settingsOpen,
           settingsMsg:S.settingsMsg||'', settingsMsgShow:!!S.settingsMsg,
+          // Your account / delete account. Shown to family users only: a coach's sign-in belongs
+          // to the club and is removed by an admin in Club Administration, not by the coach.
+          showAccountCard: !!S.familyUser,
+          accountEmail: (S.familyUser && S.familyUser.email) || '',
+          delIdle: (S.delStage||'idle')==='idle',
+          delConfirming: (S.delStage||'idle')!=='idle',
+          delTyped: S.delTyped||'',
+          delDisabled: (S.delStage==='busy') || String(S.delTyped||'').trim().toUpperCase()!=='DELETE',
+          delBtnBg: (S.delStage!=='busy' && String(S.delTyped||'').trim().toUpperCase()==='DELETE') ? '#B42318' : '#E7C4C4',
+          delBtnFg: '#fff',
+          delBtnCursor: (S.delStage!=='busy' && String(S.delTyped||'').trim().toUpperCase()==='DELETE') ? 'pointer' : 'not-allowed',
+          delBtnLabel: S.delStage==='busy' ? this._strings().deletingWord : this._strings().deleteAccountGo,
+          delMsg: S.delMsg||'', delMsgShow: !!S.delMsg, delMsgColor: S.delMsgOk ? '#0C7A4F' : '#B42318',
+          onDeleteAccountStart:()=>this.setState({delStage:'confirm', delTyped:'', delMsg:''}),
+          onDeleteTyped:(e)=>this.setState({delTyped:e.target.value}),
+          onDeleteCancel:()=>this.setState({delStage:'idle', delTyped:'', delMsg:''}),
+          onDeleteConfirm:()=>this.deleteOwnAccount(),
           themeIsDark:S.theme==='dark', onThemeLight:()=>this.setTheme('light'), onThemeDark:()=>this.setTheme('dark'),
           onLangEn:()=>this.setLang('en'), onLangAr:()=>this.setLang('ar'),
           langEnBg:(this.lang!=='ar')?'#0A0F1A':'#F4F6F8', langEnFg:(this.lang!=='ar')?'#fff':'#7A8296',
