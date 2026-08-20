@@ -1812,9 +1812,8 @@ if ('serviceWorker' in navigator) {
                   </div>
 
                   <sc-if value="{{ famIsRegister }}" hint-placeholder-val="{{ false }}">
-                    <div style="display:flex;gap:8px">
-                      <button onclick="{{ onFamRoleParent }}" style="flex:1;padding:10px;border-radius:11px;border:1px solid rgba(255,255,255,.16);cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;background:{{ famRoleParentBg }};color:{{ famRoleParentFg }}">{{ tx.imParent }}</button>
-                      <button onclick="{{ onFamRoleSwimmer }}" style="flex:1;padding:10px;border-radius:11px;border:1px solid rgba(255,255,255,.16);cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;background:{{ famRoleSwimmerBg }};color:{{ famRoleSwimmerFg }}">{{ tx.imSwimmer }}</button>
+                    <div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:11px 13px">
+                      <p style="margin:0;font-size:11.5px;color:rgba(255,255,255,.62);line-height:1.55">{{ tx.guardianOnly }}</p>
                     </div>
                     <input value="{{ famName }}" oninput="{{ onFamName }}" placeholder="{{ tx.fullName }}" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
                     <input value="{{ famPhone }}" oninput="{{ onFamPhone }}" placeholder="{{ tx.whatsapp }}" type="tel" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:12px 14px;color:#fff;font-family:inherit;font-size:13.5px;outline:none">
@@ -1877,6 +1876,14 @@ if ('serviceWorker' in navigator) {
                         </sc-for>
                       </div>
                     </div>
+                  </sc-if>
+
+                  <sc-if value="{{ famIsRegister }}" hint-placeholder-val="{{ false }}">
+                    <button onclick="{{ onFamAgreeToggle }}" style="display:flex;align-items:flex-start;gap:10px;background:rgba(255,255,255,.05);border:1px solid {{ famAgreeBorder }};border-radius:12px;padding:12px 13px;cursor:pointer;font-family:inherit;text-align:left;width:100%">
+                      <span style="flex:none;width:19px;height:19px;border-radius:6px;border:1.5px solid {{ famAgreeBoxBorder }};background:{{ famAgreeBoxBg }};display:flex;align-items:center;justify-content:center;margin-top:1px"><sc-if value="{{ famAgreed }}" hint-placeholder-val="{{ false }}"><i data-lucide="check" style="width:13px;height:13px;color:#fff"></i></sc-if></span>
+                      <span style="flex:1;font-size:11.5px;color:rgba(255,255,255,.72);line-height:1.55">{{ tx.agreeIntro }}</span>
+                    </button>
+                    <p style="margin:0;font-size:11px;color:rgba(255,255,255,.4);line-height:1.6;text-align:center"><a href="/terms" target="_blank" style="color:#7FC4FF;font-weight:600;text-decoration:none">{{ tx.termsWord }}</a> &nbsp;·&nbsp; <a href="/privacy" target="_blank" style="color:#7FC4FF;font-weight:600;text-decoration:none">{{ tx.privacyPolicy }}</a> &nbsp;·&nbsp; <a href="/consent" target="_blank" style="color:#7FC4FF;font-weight:600;text-decoration:none">{{ tx.consentWord }}</a></p>
                   </sc-if>
 
                   <sc-if value="{{ famErrShow }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:12px;color:#FF8A8D;font-weight:600">{{ famErr }}</p></sc-if>
@@ -2516,7 +2523,7 @@ if ('serviceWorker' in navigator) {
                                 <sc-if value="{{ mm.hasSet }}" hint-placeholder-val="{{ false }}"><span style="display:block;margin-top:6px;background:rgba(127,127,127,.16);border-radius:8px;padding:7px 9px;font-family:var(--font-mono);font-size:12px;white-space:pre-wrap">{{ mm.setText }}</span></sc-if>
                                 <sc-if value="{{ mm.hasVideo }}" hint-placeholder-val="{{ false }}"><span style="display:block;margin-top:7px">{{ mm.videoEl }}</span></sc-if>
                               </div>
-                              <span style="font-size:9.5px;color:#9AA2B4;margin-top:2px">{{ mm.time }}</span>
+                              <span style="display:flex;align-items:center;gap:5px;font-size:9.5px;color:#9AA2B4;margin-top:2px">{{ mm.time }}<sc-if value="{{ mm.canReport }}" hint-placeholder-val="{{ false }}"><button onclick="{{ mm.onReport }}" aria-label="Report this message" title="Report this message" style="border:none;background:none;padding:0;cursor:pointer;color:#C7CEDB;display:flex;align-items:center"><i data-lucide="flag" style="width:11px;height:11px"></i></button></sc-if></span>
                             </div>
                           </sc-for>
                         </div>
@@ -3455,7 +3462,7 @@ if ('serviceWorker' in navigator) {
                                 <sc-if value="{{ mm.hasSet }}" hint-placeholder-val="{{ false }}"><span style="display:block;margin-top:6px;background:rgba(127,127,127,.16);border-radius:8px;padding:7px 9px;font-family:var(--font-mono);font-size:12px;white-space:pre-wrap">{{ mm.setText }}</span></sc-if>
                                 <sc-if value="{{ mm.hasVideo }}" hint-placeholder-val="{{ false }}"><span style="display:block;margin-top:7px">{{ mm.videoEl }}</span></sc-if>
                               </div>
-                              <span style="font-size:9.5px;color:#9AA2B4;margin-top:2px">{{ mm.time }}</span>
+                              <span style="display:flex;align-items:center;gap:5px;font-size:9.5px;color:#9AA2B4;margin-top:2px">{{ mm.time }}<sc-if value="{{ mm.canReport }}" hint-placeholder-val="{{ false }}"><button onclick="{{ mm.onReport }}" aria-label="Report this message" title="Report this message" style="border:none;background:none;padding:0;cursor:pointer;color:#C7CEDB;display:flex;align-items:center"><i data-lucide="flag" style="width:11px;height:11px"></i></button></sc-if></span>
                             </div>
                           </sc-for>
                         </div>
@@ -5649,12 +5656,16 @@ if ('serviceWorker' in navigator) {
                             <div style="display:flex;gap:16px;margin-top:11px;border-top:1px solid #EEF1F5;padding-top:9px">
                               <button onclick="{{ p.onLike }}" style="display:flex;align-items:center;gap:6px;background:none;border:none;cursor:pointer;color:{{ p.likeColor }};font-family:inherit;font-weight:600;font-size:12.5px"><i data-lucide="heart" style="width:16px;height:16px"></i>{{ p.likes }}</button>
                               <span style="display:flex;align-items:center;gap:6px;color:#9AA2B4;font-weight:600;font-size:12.5px"><i data-lucide="message-circle" style="width:16px;height:16px"></i>{{ p.comments }}</span>
+                              <sc-if value="{{ p.canReport }}" hint-placeholder-val="{{ true }}">
+                                <button onclick="{{ p.onReport }}" aria-label="{{ tx.reportPost }}" title="{{ tx.reportPost }}" style="margin-left:auto;display:flex;align-items:center;gap:5px;background:none;border:none;cursor:pointer;color:#9AA2B4;font-family:inherit;font-weight:600;font-size:12px"><i data-lucide="flag" style="width:15px;height:15px"></i>{{ tx.reportWord }}</button>
+                              </sc-if>
                             </div>
                             <div style="display:flex;flex-direction:column;gap:8px;margin-top:9px">
                               <sc-for list="{{ p.comments2 }}" as="c" hint-placeholder-count="2">
                                 <div style="display:flex;gap:8px;align-items:flex-start">
                                   {{ c.avatar }}
                                   <span style="flex:1;min-width:0;background:#F6F8FB;border-radius:10px;padding:7px 10px"><span style="display:block;font-size:11.5px;font-weight:700;color:#0C1116">{{ c.author }} <span style="font-weight:500;color:#9AA2B4;font-size:10px">· {{ c.time }}</span></span><span style="display:block;font-size:12.5px;color:#3A4152;line-height:1.4;margin-top:1px">{{ c.textEl }}</span></span>
+                                  <sc-if value="{{ c.canReport }}" hint-placeholder-val="{{ true }}"><button onclick="{{ c.onReport }}" aria-label="Report this comment" title="Report this comment" style="flex:none;width:24px;height:24px;border-radius:7px;border:none;background:none;color:#C7CEDB;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="flag" style="width:12px;height:12px"></i></button></sc-if>
                                 </div>
                               </sc-for>
                             </div>
@@ -6671,6 +6682,38 @@ if ('serviceWorker' in navigator) {
                       </div>
                     </div>
                   </sc-if>
+                  <sc-if value="{{ showModQueue }}" hint-placeholder-val="{{ false }}">
+                    <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                      <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 4px">
+                        <p style="margin:0;font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7A8296">Reported content</p>
+                        <sc-if value="{{ modHasOpen }}" hint-placeholder-val="{{ false }}"><span style="background:#FBE4E4;color:#B42318;border-radius:999px;padding:3px 9px;font-size:10.5px;font-weight:700">{{ modOpenCount }} open</span></sc-if>
+                      </div>
+                      <p style="margin:0 0 11px;font-size:11.5px;color:#9AA2B4;line-height:1.5">Every report is answered within 24 hours. "Remove" deletes the post or comment and closes the report.</p>
+                      <sc-if value="{{ modEmpty }}" hint-placeholder-val="{{ true }}">
+                        <p style="margin:0;font-size:12px;color:#9AA2B4;line-height:1.5;text-align:center;padding:10px 0">Nothing reported. </p>
+                      </sc-if>
+                      <sc-for list="{{ modRows }}" as="m" hint-placeholder-count="0">
+                        <div style="background:{{ m.bg }};border:1px solid {{ m.border }};border-radius:12px;padding:11px 12px;margin-bottom:7px">
+                          <div style="display:flex;align-items:center;gap:7px;margin-bottom:6px">
+                            <span style="flex:none;background:{{ m.reasonBg }};color:{{ m.reasonFg }};border-radius:7px;padding:3px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em">{{ m.reasonLabel }}</span>
+                            <span style="flex:1;min-width:0;font-size:11px;color:#9AA2B4">{{ m.meta }}</span>
+                          </div>
+                          <p style="margin:0 0 3px;font-size:12.5px;font-weight:700;color:#0C1116">{{ m.author }}</p>
+                          <p style="margin:0;font-size:12px;color:#3A4152;line-height:1.45">{{ m.excerpt }}</p>
+                          <sc-if value="{{ m.hasDetail }}" hint-placeholder-val="{{ false }}"><p style="margin:6px 0 0;font-size:11.5px;color:#7A8296;line-height:1.45;font-style:italic">{{ m.detail }}</p></sc-if>
+                          <sc-if value="{{ m.isOpen }}" hint-placeholder-val="{{ true }}">
+                            <div style="display:flex;gap:7px;margin-top:9px">
+                              <button onclick="{{ m.onRemove }}" style="flex:1;background:#B42318;color:#fff;border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">Remove content</button>
+                              <button onclick="{{ m.onDismiss }}" style="flex:1;background:#EEF1F5;color:#3A4152;border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">No action needed</button>
+                            </div>
+                          </sc-if>
+                          <sc-if value="{{ m.isClosed }}" hint-placeholder-val="{{ false }}">
+                            <p style="margin:8px 0 0;font-size:11px;color:#0C7A4F;font-weight:600">{{ m.closedLabel }}</p>
+                          </sc-if>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
                   <sc-if value="{{ showAccountCard }}" hint-placeholder-val="{{ false }}">
                     <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
                       <p style="margin:0 0 8px;font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7A8296">{{ tx.yourAccount }}</p>
@@ -6694,6 +6737,33 @@ if ('serviceWorker' in navigator) {
                   </sc-if>
                   <sc-if value="{{ settingsMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:0 2px;font-size:12px;font-weight:600;color:#0C7A4F">{{ settingsMsg }}</p></sc-if>
                   <p style="margin:14px 2px 0;font-size:11.5px;color:#9AA2B4;text-align:center;line-height:1.6"><a href="/privacy" target="_blank" style="color:#9AA2B4;font-weight:600;text-decoration:underline">Privacy Policy</a> &nbsp;·&nbsp; <a href="/consent" target="_blank" style="color:#9AA2B4;font-weight:600;text-decoration:underline">Parental Consent</a></p>
+                </div>
+              </div>
+            </sc-if>
+            <sc-if value="{{ reportOpen }}" hint-placeholder-val="{{ false }}">
+              <div class="vx-screen" style="position:absolute;inset:0;z-index:61;background:rgba(10,15,26,.55);display:flex;flex-direction:column;justify-content:flex-end">
+                <div style="background:#fff;border-radius:20px 20px 0 0;padding:18px 16px calc(env(safe-area-inset-bottom) + 18px);max-height:88%;overflow-y:auto" class="vx-scroll">
+                  <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+                    <span style="width:34px;height:34px;flex:none;border-radius:10px;background:#FBE4E4;color:#B42318;display:flex;align-items:center;justify-content:center"><i data-lucide="flag" style="width:17px;height:17px"></i></span>
+                    <span style="flex:1;min-width:0"><span style="display:block;font-size:15.5px;font-weight:700;color:#0C1116">{{ tx.reportTitle }}</span><span style="display:block;font-size:11.5px;color:#9AA2B4;margin-top:1px">{{ reportSubject }}</span></span>
+                    <button onclick="{{ onReportClose }}" style="flex:none;width:30px;height:30px;border-radius:9px;border:none;background:#EEF1F5;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:15px;height:15px"></i></button>
+                  </div>
+                  <p style="margin:10px 2px 12px;font-size:12px;color:#7A8296;line-height:1.55">{{ tx.reportBlurb }}</p>
+                  <div style="display:flex;flex-direction:column;gap:7px">
+                    <sc-for list="{{ reportReasons }}" as="r" hint-placeholder-count="5">
+                      <button onclick="{{ r.onPick }}" style="display:flex;align-items:center;gap:10px;background:{{ r.bg }};border:1px solid {{ r.border }};border-radius:12px;padding:12px 13px;cursor:pointer;font-family:inherit;text-align:left;width:100%">
+                        <span style="flex:none;width:17px;height:17px;border-radius:50%;border:1.5px solid {{ r.dot }};background:{{ r.dotBg }}"></span>
+                        <span style="flex:1;min-width:0"><span style="display:block;font-size:13px;font-weight:700;color:#0C1116">{{ r.label }}</span><span style="display:block;font-size:11px;color:#9AA2B4;margin-top:1px;line-height:1.4">{{ r.sub }}</span></span>
+                      </button>
+                    </sc-for>
+                  </div>
+                  <textarea value="{{ reportDetail }}" oninput="{{ onReportDetail }}" placeholder="{{ tx.reportDetailPh }}" style="width:100%;margin-top:11px;min-height:62px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:11px;padding:11px 13px;font-family:inherit;font-size:13px;color:#0C1116;outline:none;box-sizing:border-box;resize:vertical"></textarea>
+                  <button onclick="{{ onReportSubmit }}" disabled="{{ reportDisabled }}" style="margin-top:11px;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:{{ reportBtnBg }};color:#fff;border:none;border-radius:12px;padding:13px;font-family:inherit;font-weight:700;font-size:14px;cursor:{{ reportBtnCursor }}"><i data-lucide="send" style="width:15px;height:15px"></i>{{ reportBtnLabel }}</button>
+                  <sc-if value="{{ reportCanBlock }}" hint-placeholder-val="{{ true }}">
+                    <button onclick="{{ onBlockAuthor }}" style="margin-top:8px;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:#F4F6F8;color:#3A4152;border:none;border-radius:12px;padding:12px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer"><i data-lucide="user-x" style="width:15px;height:15px"></i>{{ blockBtnLabel }}</button>
+                  </sc-if>
+                  <sc-if value="{{ reportMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:11px 2px 0;font-size:12px;font-weight:600;line-height:1.55;color:{{ reportMsgColor }}">{{ reportMsg }}</p></sc-if>
+                  <p style="margin:12px 2px 0;font-size:11px;color:#9AA2B4;line-height:1.6;text-align:center">{{ tx.reportFooter }}</p>
                 </div>
               </div>
             </sc-if>
@@ -7331,6 +7401,9 @@ class Component extends DCLogic {
       fmBody:'', fmSet:'', fmVideo:'',
       theme:'light', settingsOpen:false, famProfileDraft:null, waLabel:'', waNumber:'', waLink:'', shareOpen:false, shareMsg:'',
       delStage:'idle', delTyped:'', delMsg:'', delMsgOk:false,
+      famAgreed:false,
+      reportOpen:false, reportKind:'post', reportTarget:null, reportReason:'', reportDetail:'',
+      reportMsg:'', reportMsgOk:false, reportBusy:false, reports:[],
     };
     try{ var _th=localStorage.getItem('vx_theme'); if(_th) this.state.theme=_th; }catch(e){}
     // Vortex Lounge chat is backed by its own table (lounge_posts), loaded via _loungeFetch().
@@ -7516,7 +7589,7 @@ class Component extends DCLogic {
     let mode=null; if(t==='meetday'){ t='entries'; mode='day'; }
     const patch={tool:t, toolScopeClub:!!club, aiOut:null, aiLoading:false};
     if(mode) patch.meetMode=mode; if(t==='clock'){ const seq=this.clockSeq(); patch.clockRunning=false; patch.clockSetIdx=0; patch.clockRep=1; patch.clockRemain=seq[0]?seq[0].interval:0; } this.setState(patch); if(t==='attday'){ try{ this._attendFetch(this.state.attDayISO||this.todayISO()); }catch(e){} }
-    if(t==='lounge'){ try{ this._loungeFetch(); }catch(e){} } if(t==='season'){ try{ this._seasonFetch(); }catch(e){} try{ this._plansFetch(); }catch(e){} try{ this._squadPlansFetch(); }catch(e){} } if(t==='fitness'){ try{ this._fitSessFetch(); }catch(e){} try{ this._fitPlansFetch(); }catch(e){} } }
+    if(t==='lounge'){ try{ this._loungeFetch(); }catch(e){} try{ this._blocksFetch(); }catch(e){} } if(t==='season'){ try{ this._seasonFetch(); }catch(e){} try{ this._plansFetch(); }catch(e){} try{ this._squadPlansFetch(); }catch(e){} } if(t==='fitness'){ try{ this._fitSessFetch(); }catch(e){} try{ this._fitPlansFetch(); }catch(e){} } }
 
   todayISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
   curAttendDate(){ return this.state.attendDateISO || this.todayISO(); }
@@ -9177,6 +9250,40 @@ class Component extends DCLogic {
       tabCoach:['Coach','المدرب'],
       // account & deletion (App Store Review Guideline 5.1.1(v): deleting an account must be
       // something you can do in the app, not something you email us about)
+      guardianOnly:['A parent or legal guardian creates the account. Swimmers under 18 do not register themselves — link your child below and they can be given access from your account.','ينشئ الحساب أحد الوالدين أو الوصي القانوني. لا يسجل السباحون دون 18 عامًا بأنفسهم — اربط طفلك أدناه ويمكن منحه حق الوصول من حسابك.'],
+      agreeIntro:['I am the parent or legal guardian of the swimmer I am linking, and I agree to the Terms of Use, the Privacy Policy and the Parental Consent notice. I understand that abusive or objectionable content is not tolerated in the club feed or in messages.','أنا والد أو الوصي القانوني على السباح الذي أقوم بربطه، وأوافق على شروط الاستخدام وسياسة الخصوصية وإقرار موافقة ولي الأمر. أفهم أن المحتوى المسيء أو غير اللائق غير مسموح به في منشورات النادي أو الرسائل.'],
+      termsWord:['Terms of Use','شروط الاستخدام'],
+      consentWord:['Parental Consent','موافقة ولي الأمر'],
+      mustAgree:['Please confirm you are the parent or guardian and accept the terms.','يرجى تأكيد أنك ولي الأمر والموافقة على الشروط.'],
+      // reporting & blocking (App Store Review Guideline 1.2)
+      reportWord:['Report','إبلاغ'],
+      reportPost:['Report this post','الإبلاغ عن هذا المنشور'],
+      reportTitle:['Report content','الإبلاغ عن محتوى'],
+      reportBlurb:['Tell us what is wrong with this and a manager will look at it. We review every report within 24 hours. Anything involving a child\u2019s safety is escalated straight away.','أخبرنا بالمشكلة وسيراجعها أحد المسؤولين. نراجع كل بلاغ خلال 24 ساعة، وتُصعَّد فورًا أي مسألة تتعلق بسلامة طفل.'],
+      reportDetailPh:['Anything else we should know? (optional)','هل من تفاصيل أخرى؟ (اختياري)'],
+      reportSend:['Send report','إرسال البلاغ'],
+      reportSending:['Sending\u2026','جارٍ الإرسال…'],
+      reportSent:['Reported. A manager will review this within 24 hours — thank you for telling us.','تم الإبلاغ. سيراجعه أحد المسؤولين خلال 24 ساعة — شكرًا لإخبارنا.'],
+      reportFailed:['The report could not be sent. Please try again, or email safeguarding@vortexswimmingclub.com.','تعذّر إرسال البلاغ. حاول مرة أخرى أو راسل safeguarding@vortexswimmingclub.com.'],
+      reportPickReason:['Choose what is wrong with it first.','اختر سبب البلاغ أولاً.'],
+      reportFooter:['You can also email safeguarding@vortexswimmingclub.com at any time.','يمكنك أيضًا مراسلة safeguarding@vortexswimmingclub.com في أي وقت.'],
+      rsnChild:['A child is at risk','طفل في خطر'],
+      rsnChildSub:['Anything that worries you about a child\u2019s safety','أي أمر يقلقك بشأن سلامة طفل'],
+      rsnAbuse:['Abusive or bullying','مسيء أو تنمّر'],
+      rsnAbuseSub:['Threats, harassment, or targeting someone','تهديد أو مضايقة أو استهداف شخص'],
+      rsnSexual:['Sexual or violent','جنسي أو عنيف'],
+      rsnSexualSub:['Content that should not be here at all','محتوى لا ينبغي وجوده إطلاقًا'],
+      rsnPhoto:['A photo of my child','صورة لطفلي'],
+      rsnPhotoSub:['Shared without my permission','نُشرت دون إذني'],
+      rsnSpam:['Spam or off-topic','رسائل مزعجة أو خارج الموضوع'],
+      rsnSpamSub:['Advertising, or nothing to do with the club','إعلانات أو محتوى لا يخص النادي'],
+      rsnOther:['Something else','شيء آخر'],
+      rsnOtherSub:['Tell us below','أخبرنا أدناه'],
+      blockWord:['Block this person','حظر هذا الشخص'],
+      blockedMsg:['Blocked. You will not see their posts or receive their messages.','تم الحظر. لن ترى منشوراته ولن تصلك رسائله.'],
+      unblockWord:['Unblock this person','إلغاء حظر هذا الشخص'],
+      unblockedMsg:['Unblocked.','تم إلغاء الحظر.'],
+      blockedHidden:['Hidden — you blocked this person.','مخفي — لقد حظرت هذا الشخص.'],
       yourAccount:['Your account','حسابك'],
       deleteAccount:['Delete my account','حذف حسابي'],
       deleteAccountTitle:['This cannot be undone','لا يمكن التراجع عن هذا'],
@@ -9928,6 +10035,8 @@ class Component extends DCLogic {
     let profDraft=null;
     if(fam) profDraft={name:fam.name||'', phone:fam.phone||'', photo:fam.photo||''};
     else this.staffAccOpen(this.state.pickedId); // populates staffAccDraft for staff
+    try{ this._blocksFetch(); }catch(e){}
+    try{ if(this._isAdmin()) this._reportsFetch(); }catch(e){}
     this.setState({settingsOpen:true, famProfileDraft:profDraft, settingsMsg:''}); }
   closeSettings(){ this.setState({settingsOpen:false, staffEditId:null, staffAccDraft:null, famProfileDraft:null}); }
   async saveFamilyProfile(){ const d=this.state.famProfileDraft||{}; const fu=this.state.familyUser; if(!fu) return;
@@ -12973,6 +13082,10 @@ class Component extends DCLogic {
       return { id:m.id, mine, notMine:!mine, align: mine?'flex-end':'flex-start', name:m.fromName, avatar:this.av(m.fromPhoto||null, (m.fromName||'?').slice(0,2).toUpperCase(), 24, 8, mine?'#0A0F1A':'#067EEA', '#fff', 9),
         bubbleBg: mine?'#0A0F1A':'#F1F4F8', bubbleFg: mine?'#fff':'#0C1116',
         hasBody:!!m.body, body:m.body, hasSet:!!m.setText, setText:m.setText, hasVideo:!!m.video, videoEl:this._videoEmbedEl(this._mediaSrc(m.video)),
+        // Private messages are user content too, and a private thread is where the thing you
+        // most need to be able to report actually gets said.
+        canReport: !mine,
+        onReport:()=>this.openReport('message', {id:m.id, author:m.fromName, text:m.body||m.setText||'(a video)'}),
         time: m.ts? this.notifTimeAgo(new Date(m.ts).toISOString()):'' }; }); }
   async deleteFitSession(squadId, id){ const list=((this.fitSaved&&this.fitSaved[squadId])||[]).filter(r=>r.id!==id); this.fitSaved={...(this.fitSaved||{}), [squadId]:list}; this.forceUpdate();
     try{ if(window.__vxDelete){ await window.__vxDelete('fitness_sessions', 'id=eq.'+encodeURIComponent(id)); await this._fitSessFetch(); } }catch(e){} }
@@ -13526,13 +13639,18 @@ class Component extends DCLogic {
     if((S.famPass||'').length<4) return this.setState({famErr:'Password must be at least 4 characters.'});
     if(S.famPass!==S.famPass2) return this.setState({famErr:'Passwords don\u2019t match.'});
     if(!S.famPicked.length) return this.setState({famErr: S.famRole==='swimmer' ? 'Search and select your swimmer profile.' : 'Search and link at least one swimmer.'});
+    // The guardian declaration and the terms are one tick, and it is required. Recorded with the
+    // account rather than only enforced here, so the club can answer "did this person accept, and
+    // when" years later without taking anyone's word for it.
+    if(!S.famAgreed) return this.setState({famErr: this._strings().mustAgree});
     // No table read before sign-up either \u2014 Supabase Auth rejects a duplicate email on
     // its own (handled below), so family_accounts stays closed to anonymous readers.
     const existing=this.family||this.state.family||[];
     // Password is NOT stored here anymore — Supabase Auth holds it securely (hashed).
-    const rec={id:this._uid('fam')+'_'+Math.random().toString(36).slice(2,5), name:S.famName.trim(), email, phone:phoneDigits, pass:'', role:S.famRole, swimmerIds:S.famPicked.slice()};
+    const agreedAt=new Date().toISOString();
+    const rec={id:this._uid('fam')+'_'+Math.random().toString(36).slice(2,5), name:S.famName.trim(), email, phone:phoneDigits, pass:'', role:'parent', swimmerIds:S.famPicked.slice(), termsAt:agreedAt};
     this.setState({famErr:'', famBusy:true});
-    const _authRes=await this._authPost('/signup?redirect_to='+encodeURIComponent(location.origin+location.pathname), {email, password:S.famPass, data:{name:rec.name, phone:phoneDigits, role:rec.role, swimmer_ids:rec.swimmerIds}});
+    const _authRes=await this._authPost('/signup?redirect_to='+encodeURIComponent(location.origin+location.pathname), {email, password:S.famPass, data:{name:rec.name, phone:phoneDigits, role:rec.role, swimmer_ids:rec.swimmerIds, terms_accepted_at:agreedAt}});
     if(_authRes.ok===false && !_authRes.netfail){ const _m=(_authRes.j&&(_authRes.j.msg||_authRes.j.error_description||_authRes.j.message))||'Could not create the account.'; if(/registered|already|exists/i.test(_m)) return this.setState({famBusy:false, famErr:'This email is already registered - sign in or reset your password.'}); return this.setState({famBusy:false, famErr:_m}); }
     this._famRegAuthRes=_authRes;
     // Install the new session BEFORE writing the row. The lockdown only lets signed-in
@@ -13612,6 +13730,111 @@ class Component extends DCLogic {
     // the only way in, and it verifies a real hashed password.
     return this.setState({famBusy:false, famErr:'Wrong email or password - or reset it below.'});
   }
+  // ---- Reporting and blocking ------------------------------------------------------------
+  // App Store Review Guideline 1.2 asks for four things from any app carrying user content:
+  // a filter, a way to report, a way to block, and a published contact. The first three are
+  // here; the fourth is on /terms and /support. The reason to build it is not the guideline —
+  // it is that the members of this club are children and there was no way to tell us anything.
+  //
+  // Blocking is one-directional and private. The blocked person is never told, and nothing in
+  // their app changes; what changes is that their posts, comments and messages stop reaching
+  // the person who blocked them.
+
+  /** Who am I, for a report or a block — a coach's label, or a parent's email. */
+  _modMe(){
+    const fam=this.state.familyUser;
+    if(fam) return { label: fam.name||fam.email||'Parent', email: (fam.email||'').toLowerCase(), isStaff:false };
+    const me=this._me();
+    const acc=(this.accounts||[]).find(a=>a.id===this.state.pickedId);
+    return { label: me.label||'Staff', email: ((acc&&acc.email)||'').toLowerCase(), isStaff:true };
+  }
+
+  async _blocksFetch(){
+    if(!window.__vxSelect) return;
+    const me=this._modMe();
+    if(!me.email) return;
+    const rows=await window.__vxSelect('member_blocks', 'select=*&blocker=eq.'+encodeURIComponent(me.email)+'&limit=500');
+    if(rows==null) return;                       // table missing / offline → keep what we have
+    this.blocked = new Set(rows.map(r=>String(r.blocked||'')).filter(Boolean));
+    this.forceUpdate();
+  }
+
+  /** Is this author blocked by the person looking at the screen? */
+  _isBlocked(author){
+    if(!this.blocked || !this.blocked.size) return false;
+    return this.blocked.has(String(author||''));
+  }
+
+  openReport(kind, target){
+    this.setState({ reportOpen:true, reportKind:kind, reportTarget:target||null,
+      reportReason:'', reportDetail:'', reportMsg:'', reportMsgOk:false, reportBusy:false });
+  }
+  closeReport(){ this.setState({reportOpen:false, reportTarget:null, reportReason:'', reportDetail:'', reportMsg:''}); }
+
+  async submitReport(){
+    const S=this.state, t=S.reportTarget;
+    if(!t) return;
+    if(!S.reportReason) return this.setState({reportMsg:this._strings().reportPickReason, reportMsgOk:false});
+    const me=this._modMe();
+    const row={
+      id:'rep_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
+      kind:S.reportKind||'post', target_id:String(t.id||''), target_author:String(t.author||''),
+      // The content is copied in on purpose. A report whose subject has since been deleted is
+      // otherwise a row saying somebody was upset about something nobody can see any more.
+      excerpt:String(t.text||'').slice(0,900),
+      reason:S.reportReason, detail:String(S.reportDetail||'').slice(0,900),
+      by_label:me.label, by_email:me.email, status:'open', ts:Date.now()
+    };
+    this.setState({reportBusy:true, reportMsg:''});
+    let ok=false;
+    try{ if(window.__vxUpsert) ok=await window.__vxUpsert('content_reports', [row]); }catch(e){}
+    if(!ok) return this.setState({reportBusy:false, reportMsg:this._strings().reportFailed, reportMsgOk:false});
+    // A report nobody is told about is a report nobody acts on within 24 hours.
+    try{ this.notify('coach','flag', 'Content reported', (row.target_author||'someone')+' · '+row.reason+(row.excerpt?(' — '+row.excerpt.slice(0,70)):'')); }catch(e){}
+    try{ this.audit('content.reported', row.target_author||'', {kind:row.kind, reason:row.reason}); }catch(e){}
+    this.setState({reportBusy:false, reportMsg:this._strings().reportSent, reportMsgOk:true, reportReason:'', reportDetail:''});
+  }
+
+  async toggleBlock(author){
+    const who=String(author||''); if(!who) return;
+    const me=this._modMe(); if(!me.email) return;
+    const id=me.email+'::'+who;
+    const on=this._isBlocked(who);
+    this.blocked = this.blocked || new Set();
+    if(on) this.blocked.delete(who); else this.blocked.add(who);
+    this.setState({reportMsg: this._strings()[on?'unblockedMsg':'blockedMsg'], reportMsgOk:true});
+    try{
+      if(on){ if(window.__vxDelete) await window.__vxDelete('member_blocks', 'id=eq.'+encodeURIComponent(id)); }
+      else  { if(window.__vxUpsert) await window.__vxUpsert('member_blocks', [{id, blocker:me.email, blocked:who, ts:Date.now()}]); }
+    }catch(e){}
+    try{ this.audit(on?'member.unblocked':'member.blocked', who, {}); }catch(e){}
+  }
+
+  // ---- The moderation queue (managers) ---------------------------------------------------
+  async _reportsFetch(){
+    if(!window.__vxSelect) return;
+    const rows=await window.__vxSelect('content_reports', 'select=*&order=created_at.desc&limit=200');
+    if(rows==null) return;
+    this.setState({reports:rows});
+  }
+  async resolveReport(rep, action){
+    const me=this._modMe();
+    const patch={...rep, status:action, resolved_by:me.label, resolved_at:new Date().toISOString()};
+    this.setState({reports:(this.state.reports||[]).map(r=>r.id===rep.id?patch:r)});
+    try{ if(window.__vxUpsert) await window.__vxUpsert('content_reports', [patch]); }catch(e){}
+    try{ this.audit('report.'+action, rep.target_author||'', {kind:rep.kind, reason:rep.reason}); }catch(e){}
+    // "Actioned" means the content goes. Removing it here is the whole point of the queue —
+    // a manager who has to go and find the post by hand is a manager who sometimes does not.
+    if(action==='actioned'){
+      try{
+        const table = rep.kind==='comment' ? 'lounge_comments' : 'lounge_posts';
+        if(rep.kind!=='message' && window.__vxDelete) await window.__vxDelete(table, 'id=eq.'+encodeURIComponent(rep.target_id));
+        this.setState({feed:(this.state.feed||[]).filter(x=>x.id!==rep.target_id)});
+        await this._loungeFetch();
+      }catch(e){}
+    }
+  }
+
   // ---- Deleting your own account -------------------------------------------------------
   // Apple requires that an app which lets you make an account lets you delete it from inside the
   // app (Review Guideline 5.1.1(v)) — a link that opens an email to the club is explicitly not
@@ -16039,19 +16262,27 @@ class Component extends DCLogic {
     const _me=this._me(); const _isAdmin=this._isAdmin();
     const feed=S.feed.filter(p=>{
       // Private requests are visible only to the sender, the addressed manager, and club admins.
+      // Blocking is what makes the report control mean something: a member who has blocked
+      // somebody stops seeing them, without anybody being told and without a manager in the loop.
+      if(this._isBlocked(p.author)) return false;
       if((p.kind||'post')!=='request') return true;
       return _isAdmin || p.toId===_me.id || p.author===_me.label;
     }).map(p=>{ const [tb,tf]=tagStyle[p.tag]||['#EEF1F5','#5A657E'];
       const isReq=(p.kind||'post')==='request';
       const canEdit=(p.author===_me.label); const editing=(S.loungeEditId===p.id);
-      const cmts=(this.loungeComments||{})[p.id]||[];
-      const cmtEls=cmts.map(c=>({ id:c.id, author:c.author, avatar:this.av(c.photo||null, c.initials, 26, 8, squad.accent, '#fff', 9), textEl:this._mentionTextEl(c.body), time:c.ts?this.notifTimeAgo(new Date(c.ts).toISOString()):'' }));
+      const cmts=((this.loungeComments||{})[p.id]||[]).filter(c=>!this._isBlocked(c.author));
+      const cmtEls=cmts.map(c=>({ id:c.id, author:c.author, avatar:this.av(c.photo||null, c.initials, 26, 8, squad.accent, '#fff', 9), textEl:this._mentionTextEl(c.body), time:c.ts?this.notifTimeAgo(new Date(c.ts).toISOString()):'',
+        canReport: c.author!==_me.label,
+        onReport:()=>this.openReport('comment', {id:c.id, author:c.author, text:c.body}) }));
       return {id:p.id, author:p.author, role:p.role, avatar:this.av(p.photo||null, p.initials, 38, 11, squad.accent, '#fff', 12), imageEl: p.image? window.React.createElement('img',{src:p.image, alt:'', style:{width:'100%',borderRadius:11,marginTop:10}}) : null, tag:p.tag, tagBg:tb, tagFg:tf, textEl:this._mentionTextEl(p.text), likes:p.likes, comments:cmts.length, time: p.ts? this.notifTimeAgo(new Date(p.ts).toISOString()) : (p.time||''), edited:!!p.edited,
         isReq, reqLabel: isReq? ('Private request → '+(p.toName||'manager')) : '',
         canEdit, editing, notEditing:!editing, editText:S.loungeEditText,
         onEdit:()=>this.loungeStartEdit(p), onEditChange:(e)=>this.setState({loungeEditText:e.target.value}), onEditSave:()=>this.loungeSaveEdit(p), onEditCancel:()=>this.loungeCancelEdit(),
         comments2:cmtEls, commentDraft:(S.commentDrafts||{})[p.id]||'', onCommentChange:(e)=>this.onCommentChange(p.id, e.target.value), onAddComment:()=>this.loungeAddComment(p),
-        avBg:squad.accent, likeColor:p.liked?'#E5484D':'#9AA2B4', onLike:()=>{ const list=(this.state.feed||[]).map(x=>x.id===p.id?{...x, liked:!x.liked, likes:x.likes+(x.liked?-1:1)}:x); this.setState({feed:list}); } }; });
+        avBg:squad.accent, likeColor:p.liked?'#E5484D':'#9AA2B4', onLike:()=>{ const list=(this.state.feed||[]).map(x=>x.id===p.id?{...x, liked:!x.liked, likes:x.likes+(x.liked?-1:1)}:x); this.setState({feed:list}); },
+        // Your own post is not reportable — that control is "delete", and it is already there.
+        canReport: p.author!==_me.label,
+        onReport:()=>this.openReport('post', {id:p.id, author:p.author, text:p.text}) }; });
     const reqChoices=this._adminChoices().map(a=>{ const on=S.reqTo===a.id; return { id:a.id, label:a.label, bg:on?squad.accent:'#F4F6F8', fg:on?'#fff':'#3A4152', border:on?squad.accent:'#E5E9F0', onSelect:()=>this.setState({reqTo:a.id}) }; });
     const onReqToggle=()=>this.setState({reqOpen:!S.reqOpen, reqMsg:''});
     const onReqTextChange=(e)=>this.setState({reqText:e.target.value});
@@ -16492,9 +16723,15 @@ class Component extends DCLogic {
       famTabLoginBg: S.famMode==='login'?'var(--vx-blue)':'transparent', famTabLoginFg: S.famMode==='login'?'#fff':'rgba(255,255,255,.6)',
       famTabRegBg: S.famMode==='register'?'var(--vx-blue)':'transparent', famTabRegFg: S.famMode==='register'?'#fff':'rgba(255,255,255,.6)',
       onFamTabLogin:()=>this.setState({famMode:'login', famErr:'', famResetOk:false}), onFamTabRegister:()=>this.setState({famMode:'register', famErr:'', famResetOk:false, famRegisteredMsg:''}),
-      famRoleParentBg: S.famRole==='parent'?'var(--vx-blue)':'#fff', famRoleParentFg: S.famRole==='parent'?'#fff':'#3A4152',
-      famRoleSwimmerBg: S.famRole==='swimmer'?'var(--vx-blue)':'#fff', famRoleSwimmerFg: S.famRole==='swimmer'?'#fff':'#3A4152',
-      onFamRoleParent:()=>this.setState({famRole:'parent', famPicked:[], famVerify:null, famVerifyInput:'', famVerifyErr:''}), onFamRoleSwimmer:()=>this.setState({famRole:'swimmer', famPicked:S.famPicked.slice(0,1), famVerify:null, famVerifyInput:'', famVerifyErr:''}),
+      // Registration is a parent or guardian, always. The "I'm a swimmer" button that used to sit
+      // here let a twelve-year-old create their own account with a consent notice they were the
+      // only person who ever saw — which is not consent, and is what App Store Review Guideline
+      // 5.1.4 is about. Existing swimmer-role accounts still sign in; only this door is closed.
+      famAgreed: !!S.famAgreed,
+      famAgreeBorder: S.famAgreed ? 'rgba(34,215,215,.45)' : 'rgba(255,255,255,.12)',
+      famAgreeBoxBg: S.famAgreed ? 'var(--vx-blue)' : 'transparent',
+      famAgreeBoxBorder: S.famAgreed ? 'var(--vx-blue)' : 'rgba(255,255,255,.35)',
+      onFamAgreeToggle:()=>this.setState({famAgreed:!this.state.famAgreed, famErr:''}),
       famName:S.famName, onFamName:(e)=>this.setState({famName:e.target.value}),
       famPhone:S.famPhone, onFamPhone:(e)=>this.setState({famPhone:e.target.value}),
       famEmail:S.famEmail, onFamEmail:(e)=>this.setState({famEmail:e.target.value}),
@@ -16542,6 +16779,50 @@ class Component extends DCLogic {
         return {
           onOpenSettings:()=>this.openSettings(), onCloseSettings:()=>this.closeSettings(), settingsOpen:!!S.settingsOpen,
           settingsMsg:S.settingsMsg||'', settingsMsgShow:!!S.settingsMsg,
+          // ---- moderation queue (managers) ----
+          showModQueue: this._isAdmin() && !S.familyUser,
+          modOpenCount: ((S.reports||[]).filter(r=>r.status==='open')).length,
+          modHasOpen: ((S.reports||[]).filter(r=>r.status==='open')).length>0,
+          modEmpty: !((S.reports||[]).length),
+          modRows: (()=>{ const RL={'child-safety':['A CHILD IS AT RISK','#FBE4E4','#B42318'],'abuse':['ABUSE','#FBE4E4','#B42318'],
+                            'sexual':['SEXUAL / VIOLENT','#FBE4E4','#B42318'],'photo':['PHOTO OF MY CHILD','#FFF4E5','#B4690E'],
+                            'spam':['SPAM','#EEF1F5','#5A657E'],'other':['OTHER','#EEF1F5','#5A657E']};
+            // Open first, and within that the child-safety ones first. A queue sorted only by
+            // time puts the thing that matters most wherever it happened to arrive.
+            const rank=r=>(r.status==='open'?0:1)*10 + (r.reason==='child-safety'?0:1);
+            return (S.reports||[]).slice().sort((a,b)=>(rank(a)-rank(b)) || (String(b.created_at||'').localeCompare(String(a.created_at||''))))
+              .map(r=>{ const open=r.status==='open'; const rl=RL[r.reason]||RL.other;
+                return { id:r.id, author:r.target_author||'(unknown)', excerpt:r.excerpt||'(no text — an image or a deleted post)',
+                  detail:r.detail||'', hasDetail:!!r.detail,
+                  reasonLabel:rl[0], reasonBg:rl[1], reasonFg:rl[2],
+                  meta:(r.kind||'post')+' · reported by '+(r.by_label||'a member')+(r.created_at?(' · '+this.notifTimeAgo(r.created_at)):''),
+                  bg: open?'#FFF9F9':'#F8FAFC', border: open?'#F3C9C9':'#E5E9F0',
+                  isOpen:open, isClosed:!open,
+                  closedLabel: r.status==='actioned' ? ('Content removed'+(r.resolved_by?(' by '+r.resolved_by):'')) : ('No action needed'+(r.resolved_by?(' · '+r.resolved_by):'')),
+                  onRemove:()=>this.resolveReport(r,'actioned'), onDismiss:()=>this.resolveReport(r,'dismissed') }; }); })(),
+          // ---- report sheet ----
+          reportOpen: !!S.reportOpen,
+          reportSubject: S.reportTarget ? ((S.reportTarget.author||'') + ((S.reportTarget.text) ? (' · \u201c'+String(S.reportTarget.text).slice(0,44)+(String(S.reportTarget.text).length>44?'\u2026':'')+'\u201d') : '')) : '',
+          reportReasons: (()=>{ const T=this._strings(); const picked=S.reportReason;
+            return [['child-safety',T.rsnChild,T.rsnChildSub],['abuse',T.rsnAbuse,T.rsnAbuseSub],['sexual',T.rsnSexual,T.rsnSexualSub],
+                    ['photo',T.rsnPhoto,T.rsnPhotoSub],['spam',T.rsnSpam,T.rsnSpamSub],['other',T.rsnOther,T.rsnOtherSub]]
+              .map(([id,label,sub])=>{ const on=picked===id; return { id, label, sub,
+                bg:on?'#EAF1FF':'#F8FAFC', border:on?'var(--vx-blue)':'#E5E9F0',
+                dot:on?'var(--vx-blue)':'#C7CEDB', dotBg:on?'var(--vx-blue)':'transparent',
+                onPick:()=>this.setState({reportReason:id, reportMsg:''}) }; }); })(),
+          reportDetail: S.reportDetail||'',
+          onReportDetail:(e)=>this.setState({reportDetail:e.target.value}),
+          reportDisabled: !!S.reportBusy || !S.reportReason,
+          reportBtnBg: (!S.reportBusy && S.reportReason) ? '#B42318' : '#E7C4C4',
+          reportBtnCursor: (!S.reportBusy && S.reportReason) ? 'pointer' : 'not-allowed',
+          reportBtnLabel: S.reportBusy ? this._strings().reportSending : this._strings().reportSend,
+          onReportSubmit:()=>this.submitReport(),
+          onReportClose:()=>this.closeReport(),
+          reportCanBlock: !!(S.reportTarget && S.reportTarget.author),
+          blockBtnLabel: (S.reportTarget && this._isBlocked(S.reportTarget.author)) ? this._strings().unblockWord : this._strings().blockWord,
+          onBlockAuthor:()=>this.toggleBlock(S.reportTarget && S.reportTarget.author),
+          reportMsg: S.reportMsg||'', reportMsgShow: !!S.reportMsg,
+          reportMsgColor: S.reportMsgOk ? '#0C7A4F' : '#B42318',
           // Your account / delete account. Shown to family users only: a coach's sign-in belongs
           // to the club and is removed by an admin in Club Administration, not by the coach.
           showAccountCard: !!S.familyUser,
