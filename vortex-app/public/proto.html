@@ -1055,14 +1055,45 @@ if ('serviceWorker' in navigator) {
   function vxReclaim(){ try{ var keys=[]; for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k) keys.push(k); }
     keys.forEach(function(k){ try{ var v=localStorage.getItem(k); if(!v || v.length<1500) return;
       if(v.indexOf('data:')>=0){ var nv=v.replace(/"data:[^"]{200,}"/g,'""'); if(nv!==v){ origSet(k, nv); } } }catch(e){} }); }catch(e){} }
+  // One-time clean-up of the oversized spares this app created on the 18th.
+  //
+  // A device sitting at 4.99 MB of 5 MB does not recover on its own: every write fails, including
+  // the writes that would have cleared anything. It has to be swept before the first save is
+  // attempted, and it has to happen without a person pasting anything into a console on every
+  // phone in the club.
+  (function(){
+    try{
+      var big=[];
+      for(var i=0;i<localStorage.length;i++){
+        var k=localStorage.key(i);
+        if(!k || k.indexOf('__vxprev_')!==0) continue;
+        var v=localStorage.getItem(k);
+        if(v && v.length > 262144) big.push(k);
+      }
+      big.forEach(function(k){
+        try{ origRemove(k); origRemove('__vxprevts_'+k.slice(9)); }catch(e){}
+      });
+      if(big.length) try{ console.warn("vx freed "+big.length+" oversized spare copy(ies) taking up this device's storage"); }catch(e){}
+    }catch(e){}
+  })();
   vxReclaim();
   // Resilient write: try local, free space + retry on quota error, and ALWAYS push to the DB so
   // data is never lost even if this device's storage is momentarily full.
   localStorage.setItem = function(k,v){
     var okLocal=false;
     try{ origSet(k,v); okLocal=true; }catch(e){}
-    if(!okLocal){ // quota — reclaim leftover base64 first, which is where the space actually is
-      vxReclaim();
+    if(!okLocal){
+      // Quota. The spares go first: every __vxprev_ key is a duplicate of a record that also
+      // lives in the database, so it is the only thing here that can be dropped with nothing
+      // lost — and on this club's devices it was the largest thing in storage.
+      try{
+        var pv=[]; for(var pi=0;pi<localStorage.length;pi++){ var pk=localStorage.key(pi);
+          if(pk && (pk.indexOf('__vxprev_')===0 || pk.indexOf('__vxprevts_')===0)) pv.push(pk); }
+        pv.forEach(function(x){ try{ origRemove(x); }catch(_){} });
+      }catch(e){}
+      try{ origSet(k,v); okLocal=true; }catch(eP){}
+      // Then leftover base64, which is where the rest of the space usually is.
+      if(!okLocal) vxReclaim();
       try{ origSet(k,v); okLocal=true; }catch(e2){}
       // Only if that was not enough, give up the timestamp markers. They were being dropped
       // first as "cheap to lose", and they are the opposite: they are the record of which copy
@@ -1074,6 +1105,19 @@ if ('serviceWorker' in navigator) {
       }
     }
     if(okLocal && SYNC.indexOf(k)>=0){ try{ origSet('__vxts_'+k, String(Date.now())); }catch(e){} }
+    // A device that cannot write to its own storage has to say so.
+    //
+    // It was swallowed, and the app carried on as if the write had happened — which is how a
+    // full browser looks exactly like a working one right up until a reload throws the day away.
+    // The database still gets the write (below), so nothing is necessarily lost; what is not
+    // acceptable is nobody knowing.
+    if(!okLocal){
+      try{
+        window.__vxStorageFull = { key:k, bytes:String(v||"").length, at:Date.now() };
+        console.warn("vx storage full: could not keep "+k+" on this device ("+String(v||"").length+" bytes)");
+        window.dispatchEvent(new CustomEvent("vx-storage-full", {detail:{key:k}}));
+      }catch(e){}
+    } else if(window.__vxStorageFull){ try{ window.__vxStorageFull=null; }catch(e){} }
     pushKey(k,v);   // always sync to the database, even if the local write failed
   };
   var booted = false;
@@ -1101,10 +1145,29 @@ if ('serviceWorker' in navigator) {
   // time this happens the club's real roster is still on the device that had it, recoverable in
   // one line, instead of being overwritten at 03:00 by a copy nobody chose.
   window.__vxKeepReplaced = function(key, oldVal, newVal){ return _keepReplaced(key, oldVal, newVal); };
+  // A spare copy must never be big enough to fill the device it is protecting.
+  //
+  // This is the fault I shipped. The rescue copy is a FULL duplicate of the record, and this
+  // club's roster is 2.3 MB — so __vxprev_vx_roster_edits sat next to vx_roster_edits and took
+  // the browser to 4.99 MB of a 5 MB quota. Every setItem after that threw QuotaExceededError
+  // into a catch that ignored it, and the app went on showing saves that had not happened: a
+  // swimmer added and gone, a register marked and empty, dates of birth flickering.
+  //
+  // A net that sinks the boat is worse than no net. So a spare is kept only when it is small
+  // enough to be free, and the record that most needed protecting is exactly the one that cannot
+  // afford it — which is the honest trade, because the roster also lives in the database and in
+  // a nightly backup, and neither of those is competing for the phone's five megabytes.
+  var KEEP_MAX = 262144;   // 256 KB. vx_sw_status is 30 KB; the roster is 2.3 MB.
   function _keepReplaced(key, oldVal, newVal){
     try{
       if(oldVal==null) return;
       if(oldVal===newVal) return;
+      if(String(oldVal).length > KEEP_MAX){
+        // Too big to hold. Do not keep a truncated copy either — half a roster restored is worse
+        // than none, and __vxRestore would offer it as if it were whole.
+        try{ origRemove('__vxprev_'+key); origRemove('__vxprevts_'+key); }catch(e){}
+        return;
+      }
       // Only worth keeping when the two actually differ in size — an identical record rewritten
       // with a new timestamp is not a loss and must not push the real rescue copy out.
       origSet('__vxprev_'+key, oldVal);
@@ -6917,7 +6980,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-19g';
+const VX_BUILD='2026-08-20a';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
