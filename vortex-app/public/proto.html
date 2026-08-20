@@ -13808,13 +13808,21 @@ class Component extends DCLogic {
   // their app changes; what changes is that their posts, comments and messages stop reaching
   // the person who blocked them.
 
-  /** Who am I, for a report or a block — a coach's label, or a parent's email. */
+  /**
+   * Who am I, for a report or a block — a coach's label, or a parent's email.
+   *
+   * The email comes from the signed-in session first, not from the app's own record of who is
+   * picked. member_blocks' policy is `blocker = auth.jwt() ->> 'email'`, so anything that is not
+   * character-for-character the address in the token is refused by the database — and a block
+   * that is refused looks, on screen, exactly like a block that worked.
+   */
   _modMe(){
+    let authed=''; try{ authed=String((window.__VX_AUTH && window.__VX_AUTH.email) || '').toLowerCase(); }catch(e){}
     const fam=this.state.familyUser;
-    if(fam) return { label: fam.name||fam.email||'Parent', email: (fam.email||'').toLowerCase(), isStaff:false };
+    if(fam) return { label: fam.name||fam.email||'Parent', email: authed || (fam.email||'').toLowerCase(), isStaff:false };
     const me=this._me();
     const acc=(this.accounts||[]).find(a=>a.id===this.state.pickedId);
-    return { label: me.label||'Staff', email: ((acc&&acc.email)||'').toLowerCase(), isStaff:true };
+    return { label: me.label||'Staff', email: authed || ((acc&&acc.email)||'').toLowerCase(), isStaff:true };
   }
 
   async _blocksFetch(){
