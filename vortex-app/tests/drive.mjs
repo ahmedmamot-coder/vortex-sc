@@ -2025,6 +2025,122 @@ scene("one save is one write, not a write on every pull afterwards", async (brow
   return "one write, and it held through 60s of pulls";
 });
 
+// ---------------------------------------------------------------------------------------------
+// One expired session used to take the whole device backwards.
+//
+// Measured on the club's own machine in a6e27fe: 2330 KB of __vxprev_vx_roster_edits beside
+// 2329 KB of vx_roster_edits on a 5 MB quota. Freeing the spare left about 2.4 MB of headroom —
+// and the failed-writes queue then stored {key, value:v} with v the whole record, so ONE refused
+// roster save wrote a 2.95 MB entry and put the device straight back over the line.
+//
+// The cost was not the space. The quota handler freed room by deleting every __vxts_ marker, and
+// applyPull takes the server's copy whenever localTs is 0. So after one refused save the device
+// had no record of which copy of ANYTHING was newer, and the next pull undid every local edit on
+// it: the register, the swimmer just added, Active back to Break.
+//
+// This drives the whole chain: a club-sized roster, a session the database has finished with, one
+// added swimmer, and pulls carrying the server's older copy throughout.
+// ---------------------------------------------------------------------------------------------
+scene("a refused save does not fill the device or take the timestamps with it", async (browser) => {
+  // What the database holds: the roster WITHOUT the swimmer about to be added, stamped an hour ago.
+  const theirs = { edits: {}, deleted: {}, added: { junior: [{ id: "sw0", name: "Swimmer Number 0" }] } };
+  const page = await (await browser.newContext({ viewport: { width: 1280, height: 1000 } })).newPage();
+  const problems = [];
+  page.on("pageerror", (e) => problems.push(String(e.message)));
+  await page.route("**/rest/v1/**", async (route) => {
+    const req = route.request(), m = req.method();
+    const table = (new URL(req.url()).pathname.split("/rest/v1/")[1] || "").split("?")[0];
+    if (m === "GET")
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(
+        table === "club_state"
+          ? [{ key: "vx_roster_edits", value: theirs, updated_at: new Date(Date.now() - 3600000).toISOString() }]
+          : []) });
+    if (m === "HEAD") return route.fulfill({ status: 200, headers: { "content-range": "0-0/0" }, body: "" });
+    // Every write refused the way an expired session is refused.
+    return route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ message: "JWT expired" }) });
+  });
+  await page.addInitScript(() => {
+    localStorage.setItem("vx_session", JSON.stringify({ type: "staff", id: "ahmed" }));
+    // A session the app believes in and the database has finished with — the commonest state here.
+    localStorage.setItem("vx_auth", JSON.stringify({ token: "stale", refresh: "stale", exp: Date.now() + 3600000 }));
+    localStorage.removeItem("vx_nav");
+    // Sized to the club's own measurement: a roster of about 2.3 MB, on a 5 MB quota.
+    const added = { junior: [] };
+    for (let i = 0; i < 4200; i++) added.junior.push({
+      id: "sw" + i, first: "Swimmer", last: "Number " + i, name: "Swimmer Number " + i,
+      initials: "SN", dob: "2012-04-05", age: 13, gender: "Girls",
+      pbs: [], results: [], entries: [], meets: [], meetCount: 0,
+      topEvent: "50 Free", topTime: "31.50", topSec: 31.5, notes: "x".repeat(380),
+    });
+    localStorage.setItem("vx_roster_edits", JSON.stringify({ edits: {}, deleted: {}, added }));
+    localStorage.setItem("__vxts_vx_roster_edits", String(Date.now()));
+  });
+  await page.goto("http://127.0.0.1:" + PORT + "/proto.html?drive=" + Date.now(), { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(3000);
+
+  const state = () => page.evaluate(() => {
+    let total = 0, markers = 0, queueKB = 0, biggestPayload = 0;
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i) || "";
+      total += k.length + (localStorage.getItem(k) || "").length;
+      if (k.indexOf("__vxts_") === 0) markers++;
+    }
+    try {
+      const raw = localStorage.getItem("vx_failed_writes") || "[]";
+      queueKB = Math.round(raw.length / 1024);
+      // Only blob pushes. Rows (insert/upsert) legitimately carry their payload — the queue is
+      // the only copy of those. A push's record is already on the device under its own key.
+      for (const e of JSON.parse(raw)) {
+        if (!e || e.op !== "push") continue;
+        const v = e.payload && e.payload.value;
+        if (typeof v === "string") biggestPayload = Math.max(biggestPayload, v.length);
+      }
+    } catch { /* asserted on below */ }
+    let hasNewKid = false;
+    try { hasNewKid = (JSON.parse(localStorage.getItem("vx_roster_edits") || "{}").added.junior || [])
+      .some((x) => x && x.id === "newkid"); } catch { /* asserted on below */ }
+    return { totalKB: Math.round(total / 1024), markers, queueKB, biggestPayload, hasNewKid,
+             storageFull: !!window.__vxStorageFull };
+  });
+
+  const before = await state();
+  eq(before.totalKB > 2000, true, "the fixture is not a club-sized device: " + JSON.stringify(before));
+  eq(before.markers > 0, true, "the fixture has no timestamp markers to lose");
+
+  // The coach adds a swimmer. The database refuses it, because the session is over.
+  await page.evaluate(() => {
+    const v = JSON.parse(localStorage.getItem("vx_roster_edits"));
+    v.added.junior.push({ id: "newkid", name: "Nour Hassan", dob: "2015-06-01" });
+    localStorage.setItem("vx_roster_edits", JSON.stringify(v));
+  });
+  await page.waitForTimeout(3000);
+
+  const after = await state();
+  // The damage first: without the markers, applyPull takes the server's copy of every key.
+  eq(after.markers >= before.markers, true,
+     "the timestamp markers were freed to make room (" + before.markers + " -> " + after.markers
+     + ") — every local edit on this device now loses to the server's copy");
+  eq(after.storageFull, false, "the device was pushed into a full-storage state by one refused save");
+  // And the cause: a blob push recording the bytes of a record that is already on the device.
+  eq(after.biggestPayload, 0,
+     "a queued push carried the record's bytes (" + after.biggestPayload + " of them). A push must record the "
+     + "key and let the replay read the device; carrying the record is what filled the club's phones");
+  eq(after.queueKB < 64, true, "the failed-writes queue is " + after.queueKB + " KB; it must not grow with the size of a record");
+
+  // And the consequence the markers exist to prevent: the pulls arriving throughout carry the
+  // server's older roster, which must not undo the swimmer that was just added.
+  await page.waitForTimeout(30000);
+  const settled = await state();
+  eq(settled.hasNewKid, true,
+     "the added swimmer was undone by a pull carrying the copy from before the change");
+  eq(settled.markers > 0, true, "the markers were dropped later on: " + JSON.stringify(settled));
+
+  eq(problems.length, 0, "the app threw: " + problems.slice(0, 2).join(" | "));
+  await page.close();
+  return "one refused save on a " + before.totalKB + " KB device: queue " + after.queueKB
+       + " KB, markers kept, swimmer still there";
+});
+
 const TOOLS = [
   "Insights","AI Assistants","Daily Attendance","Activity log","Birthdays","Boards",
   "Club Configuration","Pace Clock","Zone Engine","Meet Entries","Family accounts",

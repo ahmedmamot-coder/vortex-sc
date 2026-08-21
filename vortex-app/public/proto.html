@@ -265,6 +265,30 @@ if ('serviceWorker' in navigator) {
       }
     }catch(e){}
   }
+  // A queue entry may never carry a second copy of a record that is already on this device.
+  //
+  // This is the __vxprev_ mistake again, in the next place along. The club's measured storage was
+  // 2330 KB of __vxprev_vx_roster_edits beside 2329 KB of vx_roster_edits, on a 5 MB quota, and
+  // freeing the spare left about 2.4 MB of headroom. A blob push recorded here used to store
+  // {key, value:v} with v the whole record — so ONE refused or unqueued roster save wrote a
+  // 2.95 MB entry (the bytes again, JSON-escaped inside the queue, which is bigger still) and put
+  // the device straight back over the line. Measured: "vx storage full: could not keep
+  // vx_failed_writes on this device (2949650 bytes)".
+  //
+  // And it cost more than the space. The quota handler used to free room by deleting every
+  // __vxts_ marker, so one refused roster save left the device with no record of which copy of
+  // ANYTHING was newer — and applyPull takes the server's copy whenever localTs is 0. Every local
+  // edit on that phone was then undone by the next pull: the register, the swimmer just added,
+  // Active back to Break. One expired session, and the whole device quietly went backwards.
+  //
+  // So a blob push records the KEY and the size, never the bytes. The record itself is already on
+  // the device under its own key, which is what the replay reads and has always preferred; the
+  // copy in here was only ever a fallback, and a fallback that fills the device it is protecting
+  // is not one. The 413 path worked this way already.
+  //
+  // Rows (insert/upsert) still carry their payload: those are not in localStorage under a key of
+  // their own, so the queue is the only copy and dropping it would lose the write. They are
+  // bounded by row count rather than by a whole document, and _failSave bounds the rest.
   function _failAdd(op, table, payload, status, body){
     // The activity log is the app's own bookkeeping, not the coach's work. A row that will not
     // record means the recording is broken — which the Activity log screen already says, in its
@@ -395,6 +419,31 @@ if ('serviceWorker' in navigator) {
       if(keep.length!==a.length) _failSave(keep);
     }catch(e){}
   })();
+  // The copies the old rule already wrote onto the club's phones.
+  //
+  // Stopping _failAdd from storing a record's bytes does nothing about the megabytes sitting in
+  // vx_failed_writes on a device right now — that entry is carried forward verbatim by every
+  // load-and-save of the queue, and is only dropped if that write ever succeeds. So the phones
+  // that are full stay full, and a fix that only helps a device that was never broken is not a
+  // fix for this club.
+  //
+  // Stripped here instead, once, on the way in. The key stays and the entry is still replayed;
+  // only the duplicate of a record that is already on the device under its own key goes. Same
+  // shape as the __vxprev_ sweep below, and for the same reason.
+  (function(){
+    try{
+      var a=_failLoad(), freed=0, touched=false;
+      a.forEach(function(x){
+        if(!x || x.op!=="push" || !x.payload) return;
+        var v=x.payload.value;
+        if(typeof v!=="string") return;
+        freed+=v.length; touched=true;
+        x.payload={key:x.payload.key, value:null, bytes:v.length};
+      });
+      if(touched){ _failSave(a);
+        try{ console.warn("vx freed "+Math.round(freed/1024)+" KB of queued record copies taking up this device's storage"); }catch(e){} }
+    }catch(e){}
+  })();
   window.__vxFailedCount = function(){ return _failLoad().filter(function(x){ return x && !_stillLanding(x); }).length; };
   // The same list the count is made of, so the banner names one of the writes it is counting
   // rather than filtering to a different set and finding nothing to name.
@@ -477,7 +526,17 @@ if ('serviceWorker' in navigator) {
           // roster that had just been put right went back to the copy it was put right from —
           // 304 swimmers became 317 again, with the dates of birth missing again.
           var cur=null; try{ cur=localStorage.getItem(pk); }catch(e){}
-          if(cur==null){ var pv=(it.payload&&it.payload.value); if(pv===undefined) return; cur=JSON.stringify(pv); }
+          // Nothing on the device to send. There used to be a fallback here that took the copy
+          // kept in the queue entry — and it did two harmful things at once. It is why the queue
+          // held the record's bytes at all, which is what filled the club's phones (see
+          // _failAdd); and payload.value is ALREADY a JSON string, so JSON.stringify made it a
+          // string OF a string. pushKey would have parsed that back to a string and written a
+          // string into club_state where a document belongs, and every device in the club would
+          // then have read the roster as unshaped and fallen back to empty.
+          //
+          // A record that cannot be read on this device is not a change this device can send.
+          // Say so and drop it, rather than publishing something worse than nothing.
+          if(cur==null){ try{ console.warn("vx replay: "+pk+" is not on this device any more, so there is nothing to send"); }catch(e){} return; }
           return Promise.resolve(pushKey(pk, cur)).then(function(r){ if(r&&r.ok) fixed++; });
         }
         var fn = it.op==="insert" ? window.__vxInsert : it.op==="upsert" ? window.__vxUpsert : null;
@@ -886,7 +945,9 @@ if ('serviceWorker' in navigator) {
       // lands would take the write with it. Status NOTSENT keeps it in the persistent queue, to
       // be replayed like any other, while keeping it off the banner — it is not work the club
       // has lost, it is work that has not been sent yet.
-      _failAdd("push", "club_state ("+k+")", {key:k, value:v}, NOTSENT, "waiting for the sign-in to land");
+      //
+      // The KEY, never the bytes. See _failAdd.
+      _failAdd("push", "club_state ("+k+")", {key:k, value:null, bytes:(v||"").length}, NOTSENT, "waiting for the sign-in to land");
       var _q = Promise.resolve({ok:false, notSent:true, why: window.__vxAuthDead
         ? "it never left this device \u2014 the database sign-in here has ended"
         : "it has not left this device yet \u2014 the sign-in has not landed"});
@@ -942,13 +1003,13 @@ if ('serviceWorker' in navigator) {
           // surfaces a refusal in the red banner; the shared blob — squads, brand, goals, the
           // meets calendar, notifications — failed in complete silence, so a change made
           // yesterday was simply gone today with nothing said at any point.
-          _failAdd("push", "club_state ("+k+")", {key:k, value:v}, r.status, t);
+          _failAdd("push", "club_state ("+k+")", {key:k, value:null, bytes:(v||"").length}, r.status, t);
           return {ok:false, status:r.status, why:(r.status===401||r.status===403)
             ? "the database refused it — this account may not be allowed to make that change"
             : ("the database answered HTTP "+r.status)}; });
       })
       .catch(function(e){ window.__vxSyncOk=false; try{ console.warn("vx sync network error on "+k, e); }catch(x){}
-        _failAdd("push", "club_state ("+k+")", {key:k, value:v}, 0, "network: "+((e&&e.message)||""));
+        _failAdd("push", "club_state ("+k+")", {key:k, value:null, bytes:(v||"").length}, 0, "network: "+((e&&e.message)||""));
         return {ok:false, why:"it could not be sent from this device"+((e&&e.message)?(" ("+e.message+")"):"")}; });
     } catch(e){ p = Promise.resolve({ok:false, why:"it could not be sent from this device"}); }
     window.__vxLastPush[k] = p;
@@ -1136,14 +1197,27 @@ if ('serviceWorker' in navigator) {
       // Then leftover base64, which is where the rest of the space usually is.
       if(!okLocal) vxReclaim();
       try{ origSet(k,v); okLocal=true; }catch(e2){}
-      // Only if that was not enough, give up the timestamp markers. They were being dropped
-      // first as "cheap to lose", and they are the opposite: they are the record of which copy
-      // is newer, and without them every unsynced local edit loses to whatever the server last
-      // heard. One full-storage moment would quietly hand back stale data across the whole app.
+      // Then the queue of writes waiting to go out, oldest first. Every entry in it describes a
+      // record that is either on this device under its own key or already refused, so the space
+      // it occupies is worth less than the space the app needs to keep working.
       if(!okLocal){
-        try{ var rm=[]; for(var i=0;i<localStorage.length;i++){ var kk=localStorage.key(i); if(kk && kk.indexOf('__vxts_')===0) rm.push(kk); } rm.forEach(function(x){ try{ origRemove(x); }catch(_){} }); }catch(_){}
-        try{ origSet(k,v); okLocal=true; }catch(e3){}
+        try{
+          var q=_failLoad();
+          while(q.length && !okLocal){ q.shift(); try{ origSet(FAILK, JSON.stringify(q)); }catch(_){}
+            try{ origSet(k,v); okLocal=true; }catch(_2){} }
+        }catch(_){}
       }
+      // The timestamp markers are NOT freed here, at any point, however tight it gets.
+      //
+      // They were dropped first as "cheap to lose", then made the last resort, and they are
+      // neither: they are the record of which copy is newer. applyPull takes the server's copy
+      // whenever localTs is 0, so a device that has lost its markers has every local edit undone
+      // by the next pull — the register, the swimmer just added, Active back to Break. That is a
+      // silent, club-wide data loss traded for a few kilobytes.
+      //
+      // A write that cannot be kept is recoverable: it still goes to the database below, and the
+      // device says so. Markers that have been deleted are not recoverable by anything. So the
+      // write is allowed to fail instead, loudly.
     }
     if(okLocal && SYNC.indexOf(k)>=0){ try{ origSet('__vxts_'+k, String(Date.now())); }catch(e){} }
     // A device that cannot write to its own storage has to say so.
@@ -7124,7 +7198,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-21a';
+const VX_BUILD='2026-08-21b';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
