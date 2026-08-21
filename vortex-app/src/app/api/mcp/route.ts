@@ -19,7 +19,7 @@
 //     where "if a secret is set, check it" meant "if nobody set one, let everyone in".
 
 import {
-  squads, findSwimmers, swimmerRecord, attendance, invoices, nameOf, allSwimmers,
+  squads, findSwimmers, swimmerRecord, attendance, invoices, nameOf,
 } from "@/lib/mcpData";
 
 export const maxDuration = 30;

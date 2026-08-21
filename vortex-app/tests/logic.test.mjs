@@ -2366,6 +2366,40 @@ describe("InBody sheet", () => {
       eq(/out\.match\(\/\\\{\[/.test(AI), false, "a regex is still digging JSON out of the prose");
     });
 
+    it("scrubs a date of birth, an email and a phone number out of what the coach types", () => {
+      // The single-shot route is safe because it only ever receives numbers. The chat route
+      // receives whatever a coach types, and a coach types "born 12/05/2013" without thinking
+      // about it. scrub() is the thing standing between that and the prompt.
+      const CHAT = readFileSync(new URL("../src/app/api/ai/chat/route.ts", import.meta.url), "utf8");
+      const fn = CHAT.slice(CHAT.indexOf("function scrub"), CHAT.indexOf("function apiKey"));
+      const scrub = runInSandbox(
+        "const scrub = " + fn.replace(/: string/g, "") + "; return scrub;", {});
+
+      eq(/\d{2}\/\d{2}\/\d{4}/.test(scrub("born 12/05/2013")), false, "a date of birth survived");
+      eq(/\d{4}-\d{2}-\d{2}/.test(scrub("dob 2013-05-12")), false, "an ISO date of birth survived");
+      eq(/@/.test(scrub("mum is fatima@example.com")), false, "an email address survived");
+      eq(/\+?974/.test(scrub("call +974 5551 2345")), false, "a phone number survived");
+
+      // And the half that matters just as much: a coaching sentence must come through intact.
+      // An interval reads like a time and a set reads like digits; a scrubber that eats those is
+      // one a coach stops using.
+      eq(scrub("8x100 free @ 1:25 felt easy"), "8x100 free @ 1:25 felt easy",
+         "the scrubber mangled an ordinary set");
+      eq(scrub("3x(8x50) descend 1-4"), "3x(8x50) descend 1-4",
+         "the scrubber mangled a set written with brackets");
+    });
+
+    it("keeps the minors rules in the chat prompt too", () => {
+      const CHAT = readFileSync(new URL("../src/app/api/ai/chat/route.ts", import.meta.url), "utf8");
+      const SYS = (CHAT.match(/const SYSTEM = `([\s\S]*?)`;/) || [])[1] || "";
+      eq(SYS.length > 200, true, "the chat system prompt could not be read out of the route");
+      eq(/calorie targets/i.test(SYS), true, "the calorie-target limit is missing from the chat prompt");
+      eq(/[Nn]othing medical/.test(SYS), true, "the medical limit is missing from the chat prompt");
+      eq(/never a name/i.test(SYS), true, "the no-names rule is missing from the chat prompt");
+      // Staff-only, like every other route that spends the club's key.
+      eq(/requireStaff/.test(CHAT), true, "the chat route is not gated on staff");
+    });
+
     it("does not lowball max_tokens, which is what cut the long races off", () => {
       const max = +((AI.match(/max_tokens: (\d+)/) || [])[1] || 0);
       eq(max >= 4000, true, "max_tokens is " + max + "; a race with a dozen splits runs past that");
