@@ -18,26 +18,46 @@ at 1am. Companion to `APP_STORE_AUDIT.md`, which is why each of these exists.
 | Category | Primary **Sports**, secondary **Education** |
 | Price | Free |
 
-Run these three SQL files in Supabase before the build goes to anyone:
+## What is already done
+
+Verified against the live project on 21 August 2026, not from memory:
+
+| | |
+|---|---|
+| `media_private.sql` | **Applied.** `vx-media` is private; 126 files intact, no anon access. The bucket had correct RLS policies all along — a public bucket bypasses RLS entirely, so only the bucket flag mattered |
+| `moderation.sql` | **Applied.** `content_reports` and `member_blocks` exist, staff-readable. The report button was live in production hitting tables that did not exist |
+| `push_apns.sql` | **Applied.** `platform` and `apns_token` columns added; the table is no longer readable with the public key |
+| `security_5_swimmer_docs.sql` §1 | **Applied.** `anon` grants on `swimmer_docs` went 7 → 0 |
+| `swimmer_status.sql` | **Applied.** Per-row status table, 234 statuses migrated out of the `club_state` blob, added to the realtime publication |
+
+All seven guideline blockers are closed in code and merged. The 1024×1024 opaque icon, the
+`Info.plist`, the three Swift plugins and the build scripts are in `ios/`.
+
+## What still has to be run
 
 ```
-vortex-app/supabase/media_private.sql        ← DONE, applied 21 Aug 2026: vx-media is private
-supabase/security_5_swimmer_docs.sql         ← section 1 only; section 2 needs the id-shape check
-vortex-app/supabase/moderation.sql           ← needs the app deployed first
-supabase/push_apns.sql                       ← needs the app deployed first
+vortex-app/supabase/club_state_staff_only.sql   ← the last audit finding (D3)
 ```
 
-> `security_5_swimmer_docs.sql` is deliberately in two halves. Section 1 revokes anon and is
-> safe to run any time. **Section 2 is commented out on purpose**: swimmer photographs live in
-> `swimmer_docs` as `kind='photo'`, and a staff-only read policy would blank every swimmer photo
-> and empty the Documents tab for all 304 families. Read the header before uncommenting.
+**Not run yet, deliberately.** The family portal now reads `/api/family/state` instead of
+`club_state`, but a device still on an older build reads `club_state` directly — flipping the
+policy before they have updated blanks the portal for those families. Deploy, open a parent
+account and confirm Performance, Attendance, Results, Meets, Fees and Documents all fill in,
+**then** run it. The check is written into the file.
 
-And set these in Vercel (Production):
+`security_5_swimmer_docs.sql` §2 is optional and stays commented out on purpose: swimmer
+photographs live in `swimmer_docs` as `kind='photo'`, so a staff-only read policy would blank
+every swimmer photo and empty the Documents tab for all 304 families. The header explains the
+id-shape query to run first.
+
+## Vercel environment variables
 
 ```
 APNS_KEY_P8, APNS_KEY_ID, APNS_TEAM_ID, APNS_BUNDLE_ID, APNS_ENV=production
-BACKUP_SECRET          ← now mandatory; the backup routes refuse to answer without it
-VX_ADMIN_EMAILS        ← optional, but it is what makes the admin list independent of the staff table
+                       ← without these, iOS notifications silently do nothing
+BACKUP_SECRET          ← mandatory now; /api/backup/* returns 503 until it is set
+VX_MCP_TOKEN           ← only if you want the Claude connector; see CONNECTOR.md
+VX_ADMIN_EMAILS        ← optional; makes the admin list independent of the staff table
 ```
 
 ---
@@ -246,14 +266,30 @@ stop asking. The app uses HTTPS and nothing else, which is the exemption that co
 
 ## 8. Before you press Submit
 
-- [ ] `media_private.sql` has been run, and `select id, public from storage.buckets where id='vx-media'` returns **false**
-- [ ] `security_5_swimmer_docs.sql`, `moderation.sql` and `push_apns.sql` have been run
-- [ ] `BACKUP_SECRET` is set in Vercel, and `/api/backup/list` without it returns 503
-- [ ] Both demo accounts sign in, on the build you are actually submitting
+**Database — done, re-confirm rather than re-run:**
+
+- [x] `vx-media` is private — `select id, public from storage.buckets where id='vx-media'` returns **false**
+- [x] `moderation.sql`, `push_apns.sql`, `security_5_swimmer_docs.sql` §1 and `swimmer_status.sql` applied
+- [ ] `club_state_staff_only.sql` run — **only after** a parent's portal is confirmed working on the deployed build
+
+**Configuration — nobody has done these yet:**
+
+- [ ] `BACKUP_SECRET` set in Vercel, and `/api/backup/list` without it returns 503
+- [ ] The five `APNS_*` variables set, or iOS notifications silently do nothing
+- [ ] Both demo accounts filled into section 3 and signing in, on the build you are actually submitting
+- [ ] The club's legal entity name filled into the copyright line
+
+**Behaviour on a real device, not in Safari:**
+
 - [ ] Delete-account works end to end on a throwaway account
-- [ ] A report filed from the family account appears in the manager's queue
-- [ ] A push notification arrives on a real device from the TestFlight build
-- [ ] Print, CSV export and opening a document all work in the app, not just in Safari
+- [ ] A report filed from a family account appears in the manager's queue
+- [ ] A status set during a register still holds after marking a swimmer — the thing that broke on 21 Aug
+- [ ] A push notification arrives from the TestFlight build
+- [ ] Print, CSV export and opening a document all work inside the app
 - [ ] Sign in with Apple works — or `VX_OAUTH` is unset so neither provider button is shown
-- [ ] Screenshots contain no real child's name, photo or parent's contact details
+
+**Listing:**
+
+- [ ] Screenshots taken, and containing no real child's name, photo or parent's contact details
 - [ ] `privacy@`, `support@` and `safeguarding@vortexswimmingclub.com` all deliver to somebody
+- [ ] `/privacy` and `/terms` read by a Qatari lawyer

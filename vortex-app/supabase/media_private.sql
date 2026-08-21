@@ -1,5 +1,23 @@
 -- Make the media bucket private. RUN THIS LAST.
 --
+-- ============================================================================
+--  APPLIED — 21 August 2026, to the live project (qhrpwiakobgcxfmcoyfg).
+--
+--  Before:  vx-media public = true
+--  After:   vx-media public = false
+--  Verified after: 126 files still present, 3 storage policies, none granted to anon.
+--
+--  Worth recording what was found doing it, because it is the trap this file warns about
+--  from the other side: the row-level-security policies on this bucket were ALREADY
+--  correct — all three `to authenticated`, none open to anon. Somebody had done that
+--  part. It made no difference whatsoever, because a public bucket serves files through
+--  an endpoint that bypasses row-level security entirely. The one line that mattered was
+--  the bucket flag.
+--
+--  Nothing below needs running again. It is kept because re-running it is harmless and
+--  because the reasoning is the record.
+-- ============================================================================
+--
 -- vx-media holds children's birth certificates, passports, medical certificates, photographs
 -- and race videos. While `public` is true, every one of those is reachable by anyone who has
 -- the URL, with no sign-in at all — a public bucket serves files through an endpoint that
