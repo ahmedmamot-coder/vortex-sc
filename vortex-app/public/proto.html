@@ -16942,7 +16942,14 @@ class Component extends DCLogic {
           annSendLabel: S.annEditId?'Update notification':'Send notification',
           annHasSent:(this.announcements||[]).length>0,
           annSent:(this.announcements||[]).slice(0,8).map(a=>({ id:a.id, body:a.body, audienceLabel:(a.audience==='family'?'Parents':a.audience==='staff'?'Coaches':'Everyone'), when:this.notifTimeAgo(a.at), onEdit:()=>this.editAnnouncement(a.id), onDelete:()=>this.deleteAnnouncement(a.id) })),
-          canDataCheck: this._isAdmin(), onRunDataCheck:()=>this.runDataCheck(),
+          // ...and not to a parent. The Settings sheet is shared between the coach side and the
+          // family portal, and this gate asked only whether the viewer is an admin — which a
+          // signed-in parent is not, except that _me() falls back to a bare object when nobody
+          // is picked, and the family portal never picks anybody. So the owner-only Data Check,
+          // which pulls live club-wide counts out of the database, was drawn in every parent's
+          // settings. Found by signing in as a parent and scrolling. Same guard as the
+          // moderation queue above: staff-side only.
+          canDataCheck: this._isAdmin() && !S.familyUser, onRunDataCheck:()=>this.runDataCheck(),
           onFixCloudSignin:()=>this.fixCloudSignin(),
           authDbg:this._authDbg||'', authDbgShow:!!this._authDbg, authDbgColor: /✓/.test(this._authDbg||'')?'#0C7A4F':(/fail|exists|disabled|no email|old app/i.test(this._authDbg||'')?'#B42318':'#7A8296'),
           dataCheckBtnLabel: S.dataCheckRunning?'Checking…':'Run data check',
