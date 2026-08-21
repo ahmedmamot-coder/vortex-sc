@@ -7493,4 +7493,53 @@ describe("a mark is not undone by a read that started before it", () => {
   });
 });
 
+/* ------------------------------------- the queue may not carry a record's bytes
+   The __vxprev_ mistake, one place along. A blob push recorded {key, value:v}
+   with v the whole record, so one refused roster save wrote a 2.95 MB entry to
+   a device that had about 2.4 MB of headroom. And the quota handler freed room
+   by deleting every __vxts_ marker, after which applyPull takes the server's
+   copy of every key and the device silently goes backwards.
+
+   Matched by shape, with its own assertion that the code was found. */
+describe("a refused save cannot fill the device", () => {
+  const push = sourceBetween("function pushKey(k, v)", "function pull(keys)");
+  it("the code under test was found", () =>
+    eq(push.indexOf('_failAdd("push"') > -1, true, "pushKey no longer records refused writes"));
+  it("no blob push records the record's bytes", () => {
+    const recs = push.match(/_failAdd\("push"[^;]*?\{key:k,[^}]*\}/g) || [];
+    eq(recs.length, 4, "expected the four recording points in pushKey; found " + recs.length);
+    const carrying = recs.filter((r) => /value:\s*v\b/.test(r));
+    eq(carrying.length, 0,
+       "a push is recording the whole record again: " + carrying.join(" | ").slice(0, 160));
+  });
+  it("every one of them records the key instead", () =>
+    eq((push.match(/_failAdd\("push"[^;]*?value:null/g) || []).length, 4));
+
+  const setItem = sourceBetween("localStorage.setItem = function(k,v)", "var booted = false;");
+  it("the quota handler was found", () =>
+    eq(/__vxprev_/.test(setItem), true, "the quota handler moved or was renamed"));
+  it("it never frees the timestamp markers", () =>
+    eq(/__vxts_/.test(setItem.slice(0, setItem.indexOf("if(okLocal && SYNC"))), false,
+       "the quota handler is deleting __vxts_ markers again — that hands every key to the server"));
+  it("it frees the write queue instead", () =>
+    eq(/_failLoad\(\)/.test(setItem), true, "there is nothing left for it to free but the markers"));
+
+  // Stopping new copies does nothing about the megabytes already sitting on a coach's phone.
+  it("the copies already on the club's phones are stripped on the way in", () => {
+    const sweep = sourceBetween("The copies the old rule already wrote onto the club's phones.", "vxReclaim();");
+    eq(/x\.op!=="push"/.test(sweep), true, "the sweep no longer picks out blob pushes");
+    eq(/x\.payload=\{key:x\.payload\.key, value:null/.test(sweep), true,
+       "the sweep must keep the key — an entry with no key is never replayed");
+    eq(/_failSave\(a\)/.test(sweep), true, "the sweep does not write back what it stripped");
+  });
+
+  const replay = sourceBetween('if(it.op==="push"){', 'var fn = it.op===');
+  it("the replay reads the device, and does not re-encode a stored copy", () => {
+    eq(/localStorage\.getItem\(pk\)/.test(replay), true, "the replay no longer reads the live record");
+    eq(/JSON\.stringify\(pv\)/.test(replay), false,
+       "the replay is re-encoding a stored string again — that writes a string into club_state "
+       + "where a document belongs, and every device then reads the roster as empty");
+  });
+});
+
 await report();
