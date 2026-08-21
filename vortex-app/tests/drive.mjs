@@ -1292,9 +1292,12 @@ scene("a save is what refreshes a token that went stale while nothing was happen
 
 scene("a session that cannot be refreshed is counted, not hidden", async (browser) => {
   const page = await authScene(browser, { refresh: "refused" });
-  await page.evaluate(() => window.__vxpush("vx_sw_status", JSON.stringify({ r1: { active: true } })));
+  // vx_sw_meta, not vx_sw_status: status left the shared document for a row per swimmer, so it is
+  // no longer a synced key and pushKey refuses it outright. What this scene is about is the queue
+  // behind a dead session, which is the same for every key the blob still carries.
+  await page.evaluate(() => window.__vxpush("vx_sw_meta", JSON.stringify({ r1: { note: "x" } })));
   await page.waitForTimeout(1500);
-  const mine = (q) => q.filter((x) => String(x.table || "").includes("vx_sw_status"));
+  const mine = (q) => q.filter((x) => String(x.table || "").includes("vx_sw_meta"));
   const fresh = await page.evaluate(() => ({
     queue: window.__vxFailed() || [], counted: window.__vxFailedCount(), dead: !!window.__vxAuthDead }));
   eq(mine(fresh.queue).length, 1, "the change was not kept anywhere: " + JSON.stringify(fresh.queue.map(x => x.table)));
@@ -1329,7 +1332,7 @@ scene("a session that cannot be refreshed is counted, not hidden", async (browse
   // brand-new timestamp, so a change stranded since breakfast read as one second old all
   // morning and the grace period never once elapsed.
   const again = await page.evaluate(async () => {
-    await window.__vxpush("vx_sw_status", JSON.stringify({ r1: { active: true }, r2: { active: false } }));
+    await window.__vxpush("vx_sw_meta", JSON.stringify({ r1: { note: "x" }, r2: { note: "y" } }));
     return { counted: window.__vxFailedCount(), minutes: window.__vxWhyNotSaving().oldestWaitingMinutes };
   });
   eq(again.minutes, 10, "saving again reset how long it had been waiting, to " + again.minutes + " minutes");
@@ -1858,11 +1861,11 @@ scene("a pull carrying the copy from before the change cannot undo it", async (b
     // database that has not caught up yet looks exactly like this.
     if (table === "club_state" && m === "GET")
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(
-        [{ key: "vx_sw_status", value: before, updated_at: new Date().toISOString() }]) });
+        [{ key: "vx_sw_meta", value: before, updated_at: new Date().toISOString() }]) });
     if (m !== "GET" && m !== "HEAD") {
       try {
         for (const w of JSON.parse(req.postData() || "[]"))
-          if (w && w.key === "vx_sw_status") sent.push(Object.keys(w.value || {}).length);
+          if (w && w.key === "vx_sw_meta") sent.push(Object.keys(w.value || {}).length);
       } catch { /* the assertions read sent, so an unparseable body fails them */ }
     }
     return route.fulfill({ status: m === "GET" ? 200 : 201, contentType: "application/json", body: "[]" });
@@ -1871,12 +1874,12 @@ scene("a pull carrying the copy from before the change cannot undo it", async (b
     localStorage.setItem("vx_session", JSON.stringify({ type: "staff", id: "ahmed" }));
     localStorage.setItem("vx_auth", JSON.stringify({ token: "drive-fake", refresh: "drive-fake", exp: Date.now() + 3600000 }));
     localStorage.removeItem("vx_nav");
-    localStorage.setItem("vx_sw_status", JSON.stringify(b));
+    localStorage.setItem("vx_sw_meta", JSON.stringify(b));
   }, before);
   await page.goto("http://127.0.0.1:" + PORT + "/proto.html?drive=" + Date.now(), { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(2400);
   const away = () => page.evaluate(() => {
-    try { return !!(JSON.parse(localStorage.getItem("vx_sw_status") || "{}").r131); } catch { return true; }
+    try { return !!(JSON.parse(localStorage.getItem("vx_sw_meta") || "{}").r131); } catch { return true; }
   });
   eq(await away(), true, "the swimmer did not start out on a break, so this scene proves nothing");
   // Set them Active — which means REMOVING them from the status record. A removal is the thing a
@@ -1888,11 +1891,11 @@ scene("a pull carrying the copy from before the change cannot undo it", async (b
   // unconditionally and every local change is undone by the next pull.
   await page.evaluate(() => {
     // The app's own save: writes locally and sends, through the hooked setItem.
-    localStorage.setItem("vx_sw_status", "{}");
+    localStorage.setItem("vx_sw_meta", "{}");
     // Then the marker is taken away, exactly as the quota handler takes it. From here the device
     // has no record of when it last wrote, and applyPull hands it whatever the server says.
-    try { localStorage.removeItem("__vxts_vx_sw_status"); } catch { /* nothing to remove */ }
-    try { if (window.__vxWriteTs) delete window.__vxWriteTs["vx_sw_status"]; } catch { /* fresh map */ }
+    try { localStorage.removeItem("__vxts_vx_sw_meta"); } catch { /* nothing to remove */ }
+    try { if (window.__vxWriteTs) delete window.__vxWriteTs["vx_sw_meta"]; } catch { /* fresh map */ }
   });
   eq(await away(), false, "setting Active did not clear the swimmer from the record at all");
   // Now let the app run. Every pull in this window answers with the pre-change copy.
@@ -2033,14 +2036,14 @@ scene("one save is one write, not a write on every pull afterwards", async (brow
 
   writes.length = 0;
   const away = { r131: { active: false, reason: "break", from: "2026-08-21", to: "" } };
-  await page.evaluate((v) => localStorage.setItem("vx_sw_status", JSON.stringify(v)), away);
+  await page.evaluate((v) => localStorage.setItem("vx_sw_meta", JSON.stringify(v)), away);
   // Long enough for the 20s shared sweep and the 25s live refresh to come round twice each.
   await page.waitForTimeout(60000);
 
-  const mine = writes.filter((k) => k === "vx_sw_status");
+  const mine = writes.filter((k) => k === "vx_sw_meta");
   eq(mine.length, 1, "the same save was sent " + mine.length + " times — a write on every pull, for ever");
   eq(writes.length, 1, "the pull sent other keys back up unchanged too: " + writes.join(", "));
-  eq(JSON.stringify((clubState.get("vx_sw_status") || {}).value), JSON.stringify(away),
+  eq(JSON.stringify((clubState.get("vx_sw_meta") || {}).value), JSON.stringify(away),
      "the one write did not leave the change in the database");
   eq(problems.length, 0, "the app threw: " + problems.slice(0, 2).join(" | "));
   await page.close();

@@ -102,7 +102,12 @@ if ('serviceWorker' in navigator) {
   var HEAD = { "apikey": SB_ANON, "Authorization": "Bearer " + SB_ANON, "Content-Type": "application/json" };
   // Every shared data type the club edits. No secret is kept per-device: the Anthropic key
   // lives on the server, and any copy an earlier build left on a phone is deleted on start-up.
-  var SYNC = ["vx_squads","vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_meet_events","vx_meet_cuts","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_sw_status","vx_memberships","vx_fee_plans","vx_billing","vx_race_splits","vx_bday_sent","vx_staff_pw_set"];
+  // vx_sw_status is deliberately NOT in this list any more. Status moved to its own table
+  // (swimmer_status, one row per swimmer) because this list is last-write-wins and two coaches
+  // changing two swimmers flattened each other. Leaving the key here would undo that from the
+  // other end: applyPull would keep writing the stale document into localStorage, and the next
+  // boot would read it back over the top — a status set during a register, reverting on reload.
+  var SYNC = ["vx_squads","vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_meet_events","vx_meet_cuts","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_memberships","vx_fee_plans","vx_billing","vx_race_splits","vx_bday_sent","vx_staff_pw_set"];
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
   // Auth-retry queue: if a write is rejected because we weren't signed in yet (401/403 under the
@@ -10810,23 +10815,16 @@ class Component extends DCLogic {
     if(!window.__vxSelect) return;
     const rows=await window.__vxSelect('swimmer_status', 'select=*&limit=2000');
     if(rows==null) return;                     // table missing / offline → keep what we have
-    // A read that came back with NOTHING is not a club with nobody away.
-    //
-    // This is the distinction __vxSelectRaw exists for, in a place that could not see it: a table
-    // that has never been migrated, and a table whose policies return nothing to THIS account,
-    // both answer 200 with an empty list — and so does a club where every swimmer is Active.
-    // The first two are not answers, and taking them as one wiped every status on the device and
-    // then wrote the wipe to disk. setSwStatus no longer pushes the blob, so nothing put it back.
-    //
-    // Two ways in for this club specifically. Run swimmer_status.sql without its data migration
-    // and the table is empty while the blob still holds 234 statuses. Or be a coach the database
-    // does not recognise as staff — vx_is_staff() false has happened here more than once — and
-    // every row is filtered out for that one device, which then forgets who is on a break.
-    //
-    // Rows present means the table is live and authoritative, and an all-Active club correctly
-    // produces an empty map from them: _swStatusPush keeps a row per swimmer with active:true,
-    // and the loop below skips those. No rows at all means it has nothing to say yet.
-    if(!rows.length) return;
+    // An empty answer is not the same as "nobody is away", and the difference matters because a
+    // row-level-security refusal on a SELECT is not an error: PostgREST answers 200 with [].
+    // So a policy that ever goes wrong would arrive here looking exactly like a club where every
+    // swimmer is active, and this function would write that over 234 real statuses on every
+    // device that asked. Setting a swimmer Active writes a row with active:true rather than
+    // deleting one, so a genuinely empty table is a state this club cannot reach by using the app.
+    if(!rows.length && Object.keys(this.swimmerStatus||{}).length){
+      try{ console.warn('vx: swimmer_status read came back empty while this device holds statuses — keeping them'); }catch(e){}
+      return;
+    }
     const m={};
     rows.forEach(r=>{
       if(!r || !r.sw_id) return;
@@ -15076,7 +15074,12 @@ class Component extends DCLogic {
     this.swimmerGoals=g('vx_swimmer_goals', this.swimmerGoals);
     this.squadGoals=g('vx_squad_goals', this.squadGoals);
     this.swimmerMeta=this._sanitizeMeta(g('vx_sw_meta', this.swimmerMeta));
-    this.swimmerStatus=g('vx_sw_status', this.swimmerStatus);
+    // Status comes from the swimmer_status table now, not this blob — re-reading vx_sw_status
+    // here put the stale document back over it. That is why a status set during a register did
+    // not stick: this line runs on every data refresh, and taking attendance now triggers one on
+    // every mark (the attendance_marks realtime subscription), so the revert was near-instant.
+    // Same treatment the photos got when they moved to a table, two lines below.
+    try{ this._swStatusFetch(); }catch(e){}
     this.sponsoredMap=g('vx_sponsored', this.sponsoredMap);
     // (Swimmer photos come from the swimmer_docs table now, not this synced blob — don't overwrite them here.)
     this.staffOverrides=g('vx_staff_ovr', this.staffOverrides);
