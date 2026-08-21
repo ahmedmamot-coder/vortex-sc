@@ -1068,14 +1068,27 @@ async function statusScreen(browser, { refuse, session }) {
   const problems = [];
   page.on("pageerror", (e) => problems.push(String(e.message)));
   let row = { key: "vx_sw_status", value: away, updated_at: new Date(Date.now() - 3600000).toISOString() };
+  // The swimmer_status table, seeded so the club's away swimmer is there to be found. An empty
+  // table is a different scene — see _swStatusFetch on why an empty read must not wipe anything.
+  const statusRows = { r131: { sw_id: "r131", active: false, reason: "break", from_day: "2026-07-22", to_day: null, note: null } };
   await page.route("**/rest/v1/**", (r) => {
     const req = r.request(), m = req.method();
     const table = (new URL(req.url()).pathname.split("/rest/v1/")[1] || "").split("?")[0];
     if (table === "club_state" && m === "GET")
       return r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([row]) });
-    if (table === "club_state" && m === "POST") {
+    if (table === "swimmer_status" && m === "GET")
+      return r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(Object.values(statusRows)) });
+    // Status is one row per swimmer in swimmer_status now, not the club_state blob. The scenes
+    // drive whatever the app actually writes to, or they stop testing the thing that ships.
+    if (table === "swimmer_status" && m === "POST") {
       if (refuse) return r.fulfill({ status: 403, contentType: "application/json",
                                      body: JSON.stringify({ message: "new row violates row-level security policy" }) });
+      try {
+        for (const w of JSON.parse(req.postData() || "[]")) if (w && w.sw_id) statusRows[w.sw_id] = w;
+      } catch { /* the assertion below is what catches this */ }
+      return r.fulfill({ status: 201, contentType: "application/json", body: "[]" });
+    }
+    if (table === "club_state" && m === "POST") {
       try {
         for (const w of JSON.parse(req.postData() || "[]"))
           if (w.key === "vx_sw_status") row = { key: w.key, value: w.value, updated_at: new Date().toISOString() };
@@ -1130,7 +1143,10 @@ async function statusScreen(browser, { refuse, session }) {
   await page.waitForTimeout(2400);
   const said = await line(/saved|Saving/);
   await page.close();
-  return { runsTo, said, problems, server: JSON.stringify(row.value) };
+  // What the database is left holding for this swimmer: the row if the table took one, and the
+  // blob as it was, so a scene can still assert that nothing went the old way.
+  return { runsTo, said, problems, server: JSON.stringify(row.value),
+           statusRow: statusRows.r131 || null };
 }
 
 scene("changing a swimmer's status says whether the database took it", async (browser) => {
@@ -1140,8 +1156,14 @@ scene("changing a swimmer's status says whether the database took it", async (br
   // about it meaning "away every day from now on".
   eq(/No end date/i.test(ok.runsTo), true, "it said: " + JSON.stringify(ok.runsTo));
   eq(/✓ saved/.test(ok.said), true, "after a successful write the screen said: " + JSON.stringify(ok.said));
-  eq(ok.server, "{}", "the change did not reach the database: " + ok.server);
-  return "said " + JSON.stringify(ok.said) + ", and the database has " + ok.server;
+  // Setting them Active is a row saying so, not a blob with the entry removed. Checking the row
+  // is the stronger test: it says the write reached the table the app actually reads back from.
+  eq(!!ok.statusRow, true, "nothing reached swimmer_status at all");
+  eq(ok.statusRow.active, true, "the row still says they are away: " + JSON.stringify(ok.statusRow));
+  // And the blob is left exactly as it was — sending it is the collision the table move ended.
+  eq(ok.server, JSON.stringify({ r131: { active: false, reason: "break", from: "2026-07-22", to: "" } }),
+     "the whole document went up as well, which is what flattens another coach's change: " + ok.server);
+  return "said " + JSON.stringify(ok.said) + ", and swimmer_status holds active=" + ok.statusRow.active;
 });
 
 scene("a status that never left the phone is not reported as saved", async (browser) => {

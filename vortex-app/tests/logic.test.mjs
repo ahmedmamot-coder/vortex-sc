@@ -7542,4 +7542,56 @@ describe("a refused save cannot fill the device", () => {
   });
 });
 
+/* ------------------------------------- an empty read is not an empty club
+   swimmer_status became one row per swimmer, and _swStatusFetch replaced the
+   local map with whatever the table returned. A table that has never been
+   migrated, and a table whose policies return nothing to THIS account, both
+   answer 200 with an empty list — and taking that as an answer wiped every
+   status on the device and then wrote the wipe to disk. setSwStatus no longer
+   pushes the blob, so nothing put it back. */
+describe("swimmer status: an empty read does not wipe the club", () => {
+  const away = { r131: { active: false, reason: "break", from: "2026-07-22", to: "" } };
+  const newCtx = () => ({ swimmerStatus: { ...away }, _saveLocalOnly() {}, forceUpdate() {} });
+
+  itAsync("a table that answers with nothing changes nothing", async () => {
+    globalThis.window = { __vxSelect: () => Promise.resolve([]) };
+    const ctx = newCtx();
+    await bind("_swStatusFetch", ctx, [])();
+    eq(ctx.swimmerStatus, away, "an empty read wiped every status on the device");
+  });
+
+  itAsync("a read that failed outright changes nothing either", async () => {
+    globalThis.window = { __vxSelect: () => Promise.resolve(null) };
+    const ctx = newCtx();
+    await bind("_swStatusFetch", ctx, [])();
+    eq(ctx.swimmerStatus, away, "a failed read wiped every status on the device");
+  });
+
+  itAsync("rows present are authoritative, including an all-Active club", async () => {
+    globalThis.window = { __vxSelect: () => Promise.resolve([
+      { sw_id: "r131", active: true }, { sw_id: "r9", active: true },
+    ]) };
+    const ctx = newCtx();
+    await bind("_swStatusFetch", ctx, [])();
+    eq(ctx.swimmerStatus, {}, "a club where everyone is back must clear the away map");
+  });
+
+  itAsync("and an away row still arrives", async () => {
+    globalThis.window = { __vxSelect: () => Promise.resolve([
+      { sw_id: "r9", active: false, reason: "injured", from_day: "2026-08-01", to_day: null },
+    ]) };
+    const ctx = newCtx();
+    await bind("_swStatusFetch", ctx, [])();
+    eq(ctx.swimmerStatus.r9.reason, "injured");
+    eq(ctx.swimmerStatus.r131, undefined, "the table is authoritative once it has rows");
+  });
+
+  it("a status write that never left says so, rather than blaming the database", () => {
+    const push = sourceBetween("async _swStatusPush(swId, entry)", "setSwStatus(swId, active, reason)");
+    eq(/notSent:true/.test(push), true,
+       "__vxUpsert returns false both when it queues for a sign-in and when the database refuses; "
+       + "without notSent every dead session reads as a refusal and the coach is sent to ask somebody else");
+  });
+});
+
 await report();

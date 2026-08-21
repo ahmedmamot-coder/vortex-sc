@@ -10810,6 +10810,23 @@ class Component extends DCLogic {
     if(!window.__vxSelect) return;
     const rows=await window.__vxSelect('swimmer_status', 'select=*&limit=2000');
     if(rows==null) return;                     // table missing / offline → keep what we have
+    // A read that came back with NOTHING is not a club with nobody away.
+    //
+    // This is the distinction __vxSelectRaw exists for, in a place that could not see it: a table
+    // that has never been migrated, and a table whose policies return nothing to THIS account,
+    // both answer 200 with an empty list — and so does a club where every swimmer is Active.
+    // The first two are not answers, and taking them as one wiped every status on the device and
+    // then wrote the wipe to disk. setSwStatus no longer pushes the blob, so nothing put it back.
+    //
+    // Two ways in for this club specifically. Run swimmer_status.sql without its data migration
+    // and the table is empty while the blob still holds 234 statuses. Or be a coach the database
+    // does not recognise as staff — vx_is_staff() false has happened here more than once — and
+    // every row is filtered out for that one device, which then forgets who is on a break.
+    //
+    // Rows present means the table is live and authoritative, and an all-Active club correctly
+    // produces an empty map from them: _swStatusPush keeps a row per swimmer with active:true,
+    // and the loop below skips those. No rows at all means it has nothing to say yet.
+    if(!rows.length) return;
     const m={};
     rows.forEach(r=>{
       if(!r || !r.sw_id) return;
@@ -10838,6 +10855,20 @@ class Component extends DCLogic {
     let ok=false;
     try{ ok=await window.__vxUpsert('swimmer_status', [row]); }catch(e){}
     if(ok) return {ok:true};
+    // Refused, or never sent? They are different problems with different answers, and the coach
+    // needs the answer rather than the diagnosis: a refusal is somebody else's to fix, a write
+    // still on the phone is fixed by the person holding it in about four seconds.
+    //
+    // __vxUpsert returns false for both — with no live token it queues the write for the sign-in
+    // and returns false without ever reaching the database. The blob path this replaced carried
+    // notSent for exactly this, and _swStatusSaved still reads it to add "Sign out and back in".
+    // Without it every dead session read as "the database refused it", which sends a coach to
+    // ask somebody else about a problem they could have fixed themselves.
+    const a=window.__VX_AUTH;
+    const live=!!(a && a.token && a.exp && Date.now() < a.exp);
+    if(!live) return {ok:false, notSent:true, why: window.__vxAuthDead
+      ? 'it never left this device — the database sign-in here has ended'
+      : 'it has not left this device yet — the sign-in has not landed'};
     const said=(window.__vxLastWriteErr && window.__vxLastWriteErr.table==='swimmer_status')
       ? window.__vxLastWriteErr.said : '';
     return {ok:false, why: said || 'the database refused it'};
