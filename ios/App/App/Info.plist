@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>Vortex SC</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+
+	<!-- Arabic is a first-class language in this app, not a translation bolted on: the whole
+	     interface flips to right-to-left. Declaring it here is what puts Arabic on the App Store
+	     listing and lets the system pick it for a phone set to Arabic. -->
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>ar</string>
+	</array>
+
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>armv7</string>
+	</array>
+
+	<!-- Portrait only. The app is laid out for a phone held upright; a landscape rotation shows
+	     a stretched portrait layout, which is a 2.1 rejection for anyone who rotates the phone. -->
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<true/>
+	<key>UIStatusBarStyle</key>
+	<string>UIStatusBarStyleLightContent</string>
+
+	<!-- ============================================================================
+	     Permission strings.
+
+	     Every one of these is shown to the user verbatim in the system prompt, and App
+	     Review reads them. A missing string is not a prompt the user declines — it is an
+	     immediate crash the moment the API is touched, which is how a photo picker
+	     "works in testing and crashes in review".
+
+	     They say what the club does with it, in the words a parent would use. "This app
+	     needs camera access" is the phrasing that gets a rejection asking what for.
+	     ============================================================================ -->
+
+	<key>NSCameraUsageDescription</key>
+	<string>Vortex SC uses the camera so coaches can take a swimmer's profile photo, record technique video for coaching review, and photograph a document you are asked to provide.</string>
+
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Vortex SC needs your photo library so you can attach a profile photo, a race video, or a document such as a birth certificate or medical certificate to your child's club record.</string>
+
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Vortex SC saves session plans, meet programs and reports to your photo library when you choose to save them.</string>
+
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Vortex SC records audio only as part of a coaching video you choose to record, so a coach's commentary is on the clip.</string>
+
+	<key>NSFaceIDUsageDescription</key>
+	<string>Vortex SC can lock itself with Face ID. The app holds swimmers' medical details and documents, so this keeps them closed if somebody else picks up your phone.</string>
+
+	<!-- ============================================================================
+	     App Transport Security.
+
+	     No exceptions, no NSAllowsArbitraryLoads. Everything the app talks to is HTTPS:
+	     the club's own site, Supabase, and the video embeds. An ATS exception is a
+	     question at review time that we would have no answer to.
+	     ============================================================================ -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<false/>
+	</dict>
+
+	<!-- App-Bound Domains. Capacitor sets limitsNavigationsToAppBoundDomains, which stops the
+	     webview navigating anywhere outside this list — so a compromised page cannot take the
+	     app somewhere else, and cookies stay put. External links go to SFSafariViewController
+	     instead, which is outside the webview and unaffected. -->
+	<key>WKAppBoundDomains</key>
+	<array>
+		<string>vortexswimmingclub.com</string>
+		<string>qhrpwiakobgcxfmcoyfg.supabase.co</string>
+	</array>
+
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
+
+	<key>UIUserInterfaceStyle</key>
+	<string>Light</string>
+
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.vortexswimmingclub.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>vortexsc</string>
+			</array>
+		</dict>
+	</array>
+
+	<!-- WhatsApp is how this club actually reaches parents, and the app links to wa.me. Without
+	     this the link silently fails on a phone that has WhatsApp installed. -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>whatsapp</string>
+	</array>
+</dict>
+</plist>

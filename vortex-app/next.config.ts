@@ -9,6 +9,8 @@ const nextConfig: NextConfig = {
         { source: "/", destination: "/proto.html" },
         { source: "/privacy", destination: "/privacy.html" },
         { source: "/consent", destination: "/consent.html" },
+        { source: "/terms", destination: "/terms.html" },
+        { source: "/support", destination: "/support.html" },
       ],
       afterFiles: [],
       fallback: [],
