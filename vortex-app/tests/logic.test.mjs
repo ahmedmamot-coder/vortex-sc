@@ -2424,12 +2424,12 @@ describe("InBody sheet", () => {
     });
 
     it("the roster document is cut to this family's children, not withheld", async () => {
-      // Withholding vx_roster_edits was the regression: rebuildRoster()'s base is
-      // `window.VX_ROSTER || {}` and nothing assigns it, VX_ROSTER_ROWS is false, and the client
-      // never reads the swimmers table — so the roster is built entirely from this document's
-      // `added`. With it withheld, this.roster falls back to buildRoster(), which INVENTS demo
-      // swimmers, so a parent opens the app and sees children who do not exist. On the live
-      // record 6 of the 8 linked children exist only in `added`.
+      // rebuildRoster() is base + overlay. The base is window.VX_ROSTER, assigned by
+      // public/assets/roster.js (272 swimmers, shipped with the app); this document is the
+      // overlay. Withholding it therefore serves a parent a STALE child rather than no child:
+      // measured on the live record, the name matched in all 8 cases, but the date of birth
+      // differed for 6, the age for 2, and 6 of 8 sat in a different squad in the overlay than
+      // in the base — a squad move is recorded as deleted-here plus added-there.
       const M = await import("../src/app/api/family/state/route.ts");
       const mine = new Set(["r157", "r158"]);
 
@@ -2470,10 +2470,9 @@ describe("InBody sheet", () => {
            forbidden + " is in the family slice; it is the club's, not one family's");
       }
       // vx_roster_edits is the exception, and the shape of the exception is the point: it is
-      // returned SLICED and must never be returned whole. Withholding it entirely was worse than
-      // a leak-free portal — rebuildRoster()'s base is {} (nothing assigns window.VX_ROSTER), so
-      // the roster came only from this document; without it this.roster falls back to
-      // buildRoster(), which invents demo swimmers, and a parent sees strangers' children.
+      // returned SLICED and must never be returned whole. Withholding it entirely left parents
+      // on the base roster in public/assets/roster.js with the overlay's corrections missing —
+      // stale squads and dates of birth — so the answer is to cut it, not to drop it.
       eq(/const ROSTER_DOC_KEYS = \["vx_roster_edits"\]/.test(SRC), true,
          "vx_roster_edits is no longer the sliced roster key");
       for (const whole of ["CLUB_KEYS", "PER_SWIMMER_KEYS"]) {

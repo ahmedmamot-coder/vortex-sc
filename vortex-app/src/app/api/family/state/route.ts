@@ -59,21 +59,21 @@ const ARRAY_BY_SWID_KEYS = ["vx_meet_entries"];
 /**
  * The roster document, cut to this family's children.
  *
- * This one is here because leaving it out broke the portal, and it is worth saying exactly how,
- * because "the roster is the club's, not one family's" is true of the document and wrong about
- * the consequence.
+ * rebuildRoster() is base + overlay: the base is `window.VX_ROSTER`, assigned by
+ * public/assets/roster.js (272 swimmers, loaded by proto.html at line 93 and shipped with the
+ * app), and this document is the overlay — `edits` patching a swimmer field by field, `deleted`
+ * removing them from a squad and `added` putting them in another, which together are how a
+ * squad move is recorded.
  *
- * rebuildRoster() reads `window.VX_ROSTER` as its base — and nothing ever assigns it, so the
- * base is {} and the roster is built ENTIRELY from this document's `added`. VX_ROSTER_ROWS is
- * false, so the vx_roster table is never read, and the client never reads `swimmers` either. So
- * with this key withheld a parent's roster is empty, _famResolve() returns null for their own
- * child, and the chip reads "Not linked" — and it does not stop at empty: this.roster falls
- * back to buildRoster(), which INVENTS demo swimmers with random names. A parent would open the
- * app and see a stranger's children.
+ * So withholding it does not empty a parent's roster; the base still resolves their child by id.
+ * What it does is serve them a stale one. Measured against the live record for the 8 linked
+ * children: the name is identical in every case (roster.js was regenerated on 20 August), but
+ * the date of birth differs for six of them, the age for two, and six of the eight sit in a
+ * different squad in the overlay than in the base. A parent would have seen their own child,
+ * correctly named, filed under the squad they left, with a date of birth the club had since
+ * corrected.
  *
- * Checked against the live record: 6 of the 8 linked children exist only in `added`.
- *
- * So it is returned, sliced the same way as everything else — this family's children and
+ * Hence: returned, and sliced the same way as everything else — this family's children and
  * nobody else's, in all three parts of the document.
  */
 const ROSTER_DOC_KEYS = ["vx_roster_edits"];
