@@ -7236,17 +7236,17 @@ describe("sign-in speed", () => {
 
   itAsync("the live poll asks for one day, not the table", async () => {
     stubWindow(); asked.length = 0;
-    await bind("_attendFetch", newCtx(), ["shiftDate"])("2026-08-08");
+    await bind("_attendFetch", newCtx(), ["shiftDate", "_attendUnsent"])("2026-08-08");
     eq(asked[0].includes("day=eq.2026-08-08"), true);
   });
   itAsync("a bounded catch-up asks only for days since a date", async () => {
     stubWindow(); asked.length = 0;
-    await bind("_attendFetch", newCtx(), ["shiftDate"])(null, "2026-04-10");
+    await bind("_attendFetch", newCtx(), ["shiftDate", "_attendUnsent"])(null, "2026-04-10");
     eq(asked[0].includes("day=gte.2026-04-10"), true);
   });
   itAsync("a single day never also carries a range", async () => {
     stubWindow(); asked.length = 0;
-    await bind("_attendFetch", newCtx(), ["shiftDate"])("2026-08-08", "2026-04-10");
+    await bind("_attendFetch", newCtx(), ["shiftDate", "_attendUnsent"])("2026-08-08", "2026-04-10");
     eq(asked[0].includes("gte"), false);
   });
 
@@ -7254,7 +7254,7 @@ describe("sign-in speed", () => {
     stubWindow(); asked.length = 0;
     stubWindow();
     const ctx = newCtx();
-    bind("_attendFetchStaged", ctx, ["_attendFetch", "shiftDate", "_isStaffSession"])();
+    bind("_attendFetchStaged", ctx, ["_attendFetch", "shiftDate", "_isStaffSession", "_attendUnsent"])();
     await new Promise((r) => setTimeout(r, 5));
     eq(asked.length, 1, "one read, not a full-table read as well");
     eq(asked[0].includes("day=gte.2026-04-10"), true, "120 days back from 2026-08-08");
@@ -7262,7 +7262,7 @@ describe("sign-in speed", () => {
   itAsync("the full history follows later, so nothing is lost", async () => {
     stubWindow();
     const ctx = newCtx();
-    bind("_attendFetchStaged", ctx, ["_attendFetch", "shiftDate", "_isStaffSession"])();
+    bind("_attendFetchStaged", ctx, ["_attendFetch", "shiftDate", "_isStaffSession", "_attendUnsent"])();
     await new Promise((r) => setTimeout(r, 5));
     eq(!!ctx._attendFullTimer, true, "the catch-up must be scheduled, not skipped");
     clearTimeout(ctx._attendFullTimer);
@@ -7271,7 +7271,7 @@ describe("sign-in speed", () => {
     const ctx = newCtx();
     let migrated = false;
     ctx._attendMigrate = () => { migrated = true; };
-    bind("_attendFetchStaged", ctx, ["_attendFetch", "shiftDate", "_isStaffSession"])();
+    bind("_attendFetchStaged", ctx, ["_attendFetch", "shiftDate", "_isStaffSession", "_attendUnsent"])();
     await new Promise((r) => setTimeout(r, 5));
     eq(migrated, false, "it uploads the whole history in batches — never while signing in");
     clearTimeout(ctx._attendFullTimer);
@@ -7318,6 +7318,96 @@ describe("sign-in speed", () => {
   });
   it("the shared club data is pulled once per sign-in, not twice", () =>
     eq(/_repullOnce\(\)/.test(SOURCE) && !/if\(window\.__vxRepull\) window\.__vxRepull\(\);\s*\}catch\(e\)\{\}\s*\['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_wearFetch'/.test(SOURCE), true));
+});
+
+/* -------------------------------------------------- one save is one write
+   pushKey stamped this device's marker a second PAST the updated_at it was
+   sending, so every key the device had ever written outranked the database for
+   ever. applyPull could then never take the remote copy for that key — it took
+   the other branch and pushed the local one back up, on every pull, for the
+   life of the app. One tap became a write every twenty seconds, of the whole
+   roster, from every device in the club, and every one of those writes is a
+   read-modify-write another device can lose a change inside.
+
+   Matched by shape rather than by a line number, and with its own assertion
+   that it found the code at all — a guard that matches nothing passes. */
+describe("a device's own write does not outrank the database for ever", () => {
+  const push = sourceBetween("function pushKey(k, v)", "function pull(keys)");
+  it("the code under test was found", () => eq(push.length > 500, true, "pushKey moved or was renamed"));
+  it("one instant is taken", () => eq(/var _stamp = Date\.now\(\);/.test(push), true));
+  it("the marker is that instant", () =>
+    eq(/__vxWriteTs\[k\] = _stamp;/.test(push), true, "the in-memory marker is not the timestamp being sent"));
+  it("the marker on disk is that instant", () =>
+    eq(/origSet\('__vxts_'\+k, String\(_stamp\)\)/.test(push), true, "the disk marker is not the timestamp being sent"));
+  it("and it is the instant that goes to the database", () =>
+    eq(/updated_at:new Date\(_stamp\)\.toISOString\(\)/.test(push), true));
+  it("the marker is never put ahead of what was sent", () =>
+    eq(/_stamp\s*\+\s*\d/.test(push), false,
+       "a marker past the timestamp being sent makes this device outrank the database for ever"));
+
+  const pull = sourceBetween("function applyPull(rows, seed)", "window.__vxRepull = function");
+  it("applyPull was found", () => eq(pull.includes("takeRemote"), true, "applyPull moved or was renamed"));
+  it("a copy the database already holds is not sent back", () => {
+    const sends = pull.match(/pushKey\(r\.key,/g) || [];
+    eq(sends.length, 2, "expected the two catch-up pushes; found " + sends.length);
+    eq(/if\(_mineStr!==_remoteStr\) pushKey\(r\.key,/.test(pull), true, "the mirror is pushed unconditionally");
+    eq(/if\(localVal!==_remoteStr\) pushKey\(r\.key,/.test(pull), true, "the disk copy is pushed unconditionally");
+  });
+});
+
+/* ------------------------------------------------- the register's own reads
+   The register re-reads its table every 2.5 seconds while it is open, and
+   again on every change to it anywhere — including the coach's own taps. So a
+   read issued a moment BEFORE a tap answers with the row from before the tap,
+   and _attendFetch applied those rows over the log it had just cloned. The
+   mark was undone on the device, and then sent back to the database as the old
+   value by the day's resend and the one-time migration. */
+describe("a mark is not undone by a read that started before it", () => {
+  const newCtx = () => ({
+    attendLog: {}, todayISO: () => "2026-08-08", _saveLocalOnly() {}, forceUpdate() {},
+    _attendMarkTs: {}, _attendSeen: {},
+  });
+  const inFlight = () => {
+    let answer;
+    globalThis.window = { __vxSelect: () => new Promise((r) => { answer = r; }) };
+    return { answer: (rows) => answer(rows) };
+  };
+
+  itAsync("a row read before the tap does not replace the tap", async () => {
+    const net = inFlight();
+    const ctx = newCtx();
+    const run = bind("_attendFetch", ctx, ["shiftDate", "_attendUnsent"])("2026-08-08");
+    // ...and while it is still open, the coach taps the swimmer.
+    ctx.attendLog = { junior: { "2026-08-08": { r131: "present" } } };
+    ctx._attendMarkTs["junior|2026-08-08|r131"] = Date.now() + 5;
+    net.answer([{ squad_id: "junior", day: "2026-08-08", sw_id: "r131", status: "absent" }]);
+    await run;
+    eq(ctx.attendLog.junior["2026-08-08"].r131, "present",
+       "the read that was already in flight put the old status back");
+  });
+
+  itAsync("a mark nobody touched here still arrives from another device", async () => {
+    const net = inFlight();
+    const ctx = newCtx();
+    const run = bind("_attendFetch", ctx, ["shiftDate", "_attendUnsent"])("2026-08-08");
+    net.answer([{ squad_id: "junior", day: "2026-08-08", sw_id: "r999", status: "late" }]);
+    await run;
+    eq(ctx.attendLog.junior["2026-08-08"].r999, "late", "the guard has stopped the register being live");
+  });
+
+  itAsync("the migration leaves alone what the database has already answered with", async () => {
+    const net = inFlight();
+    const ctx = newCtx();
+    const run = bind("_attendFetch", ctx, ["shiftDate", "_attendUnsent"])("2026-08-08");
+    net.answer([{ squad_id: "junior", day: "2026-08-08", sw_id: "r131", status: "late" }]);
+    await run;
+    const sent = [];
+    globalThis.window = { __vxUpsert: (t, rows) => { sent.push(...rows); return Promise.resolve(true); } };
+    ctx.attendLog.junior["2026-08-08"].r7 = "present";     // only on this device
+    bind("_attendMigrate", ctx, ["_attendUnsent"])();
+    eq(sent.map((r) => r.sw_id), ["r7"],
+       "it re-uploaded a day the database has already answered with, over whatever has changed since");
+  });
 });
 
 await report();

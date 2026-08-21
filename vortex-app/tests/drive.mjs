@@ -154,6 +154,30 @@ const STAFF_CARD = `(function(name){
   return null;
 })`;
 
+/**
+ * The running app object.
+ *
+ * Its methods are what several of the scenes below have to call directly — a register mark made
+ * at a chosen moment cannot be expressed as a click. The runtime keeps the author's logic on
+ * `logic` of the host component, so this walks the fiber tree for the one that has it.
+ */
+const APP = `(() => {
+  function fiber(n){ for (const k in n) if (k.startsWith("__reactFiber$")) return n[k]; return null; }
+  let start = null;
+  for (const n of document.querySelectorAll("*")) { const f = fiber(n); if (f) { start = f; break; } }
+  if (!start) throw new Error("the app has not rendered");
+  let root = start; while (root.return) root = root.return;
+  const q = [root], seen = new Set();
+  while (q.length) {
+    const f = q.shift(); if (!f || seen.has(f)) continue; seen.add(f);
+    const sn = f.stateNode;
+    if (sn && sn.logic && typeof sn.logic.setAttendStatus === "function") return sn.logic;
+    if (f.child) q.push(f.child);
+    if (f.sibling) q.push(f.sibling);
+  }
+  throw new Error("could not find the running app");
+})()`;
+
 const scenes = [];
 const scene = (name, fn) => scenes.push({ name, fn });
 const eq = (got, want, why) => {
@@ -1857,6 +1881,148 @@ scene("a pull carrying the copy from before the change cannot undo it", async (b
   eq(sent.length > 0, true, "nothing was ever sent to the database");
   await page.close();
   return "stayed Active through " + sent.length + " write(s) and a stale pull every cycle";
+});
+
+// ---------------------------------------------------------------------------------------------
+// The register re-reads itself every 2.5 seconds while it is open, and again on every change to
+// the table anywhere — including the coach's own taps. So while a register is being taken there
+// is almost always a read on its way, and a read issued a moment BEFORE a tap answers with the
+// row from before it.
+//
+// _attendFetch applied those rows over the log it had just cloned, so the tap was undone. Not
+// only on screen: the reverted value is what the day's resend sends and what the one-time
+// migration uploads, so seconds later the OLD status went back to the database and the mark was
+// gone for the whole club. That is "we mark the register and it does not save".
+//
+// This holds one read open, taps a swimmer while it is open, and lets it answer.
+// ---------------------------------------------------------------------------------------------
+scene("a mark made while the register is re-reading itself is not undone", async (browser) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const id = "junior_" + today + "_r131";
+  const marks = new Map([[id, { id, squad_id: "junior", day: today, sw_id: "r131", status: "absent" }]]);
+  let hold = 0;                                  // ms to hold the next register read open
+
+  const page = await (await browser.newContext({ viewport: { width: 1280, height: 1000 } })).newPage();
+  const problems = [];
+  page.on("pageerror", (e) => problems.push(String(e.message)));
+  await page.route("**/rest/v1/**", async (route) => {
+    const req = route.request(), m = req.method();
+    const table = (new URL(req.url()).pathname.split("/rest/v1/")[1] || "").split("?")[0];
+    if (m === "GET") {
+      const rows = table === "attendance_marks" ? [...marks.values()] : [];
+      if (table === "attendance_marks" && hold) {   // answered later, with what it read NOW
+        const ms = hold; hold = 0;
+        await new Promise((r) => setTimeout(r, ms));
+      }
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(rows) });
+    }
+    if (m === "HEAD") return route.fulfill({ status: 200, headers: { "content-range": "0-0/0" }, body: "" });
+    let body = []; try { body = JSON.parse(req.postData() || "[]"); } catch { /* asserted on below */ }
+    for (const r of (Array.isArray(body) ? body : [body]))
+      if (table === "attendance_marks" && r && r.id) marks.set(r.id, r);
+    return route.fulfill({ status: 201, contentType: "application/json", body: "[]" });
+  });
+  await page.addInitScript(() => {
+    localStorage.setItem("vx_session", JSON.stringify({ type: "staff", id: "ahmed" }));
+    localStorage.setItem("vx_auth", JSON.stringify({ token: "drive-fake", refresh: "drive-fake", exp: Date.now() + 3600000 }));
+    localStorage.removeItem("vx_nav");
+  });
+  await page.goto("http://127.0.0.1:" + PORT + "/proto.html?drive=" + Date.now(), { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(2600);
+
+  const shown = () => page.evaluate(`(${APP}).getAttendStatus("junior", "${today}", "r131", 0)`);
+  eq(await shown(), "absent", "the fixture did not start from the database's copy");
+
+  hold = 2500;
+  // Started, NOT awaited — the point of the scene is that it is still in flight when the coach taps.
+  await page.evaluate(`(${APP})._attendFetch("${today}"); 1`);
+  await page.waitForTimeout(200);
+  await page.evaluate(`(${APP}).setAttendStatus("junior", "${today}", "r131", "present"); 1`);
+  eq(await shown(), "present", "the tap did not register at all, so this scene proves nothing");
+
+  await page.waitForTimeout(4000);
+  eq(await shown(), "present",
+     "the read that was already in flight put the old status back — the coach's mark was undone");
+  // And it must not have been sent back to the database as the old value, which is how the mark
+  // was lost for everybody rather than only on the phone that made it.
+  await page.waitForTimeout(6000);
+  eq(marks.get(id).status, "present",
+     "the reverted status was written back to the database, so every device now shows the old one");
+
+  // The guard must not cost the thing the poll is for: another coach's mark still arrives.
+  marks.set(id, { id, squad_id: "junior", day: today, sw_id: "r131", status: "late" });
+  await page.evaluate(`(${APP})._attendFetch("${today}"); 1`);
+  await page.waitForTimeout(1200);
+  eq(await shown(), "late", "another device's mark no longer reaches this one");
+
+  eq(problems.length, 0, "the app threw: " + problems.slice(0, 2).join(" | "));
+  await page.close();
+  return "marked through a read held open for 2.5s, and another device's mark still arrived";
+});
+
+// ---------------------------------------------------------------------------------------------
+// One save is one write.
+//
+// pushKey used to stamp this device's marker a second PAST the updated_at it was sending, so
+// every key the device had ever written outranked the database for ever. applyPull could then
+// never take the remote copy for that key — it took the other branch and pushed the local one
+// back up, on every pull, for the life of the app. One tap became a write every twenty seconds,
+// of the whole roster, from every device in the club; and every one of those writes is a
+// read-modify-write another device can lose a change inside.
+//
+// The existing idle scene cannot see this: it never saves anything, and the loop only starts
+// once the device has written once.
+// ---------------------------------------------------------------------------------------------
+scene("one save is one write, not a write on every pull afterwards", async (browser) => {
+  const clubState = new Map();                    // a database that keeps what it is given
+  const writes = [];
+  const page = await (await browser.newContext({ viewport: { width: 1280, height: 1000 } })).newPage();
+  const problems = [];
+  page.on("pageerror", (e) => problems.push(String(e.message)));
+  await page.route("**/rest/v1/**", async (route) => {
+    const req = route.request(), m = req.method(), u = new URL(req.url());
+    const table = (u.pathname.split("/rest/v1/")[1] || "").split("?")[0];
+    if (m === "GET") {
+      let rows = [];
+      if (table === "club_state") {
+        const kf = u.searchParams.get("key") || "";
+        rows = [...clubState.values()];
+        if (kf.startsWith("eq.")) rows = rows.filter((r) => r.key === kf.slice(3));
+        else if (kf.startsWith("in.")) { const set = new Set(kf.slice(4, -1).split(",")); rows = rows.filter((r) => set.has(r.key)); }
+      }
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(rows) });
+    }
+    if (m === "HEAD") return route.fulfill({ status: 200, headers: { "content-range": "0-0/0" }, body: "" });
+    let body = []; try { body = JSON.parse(req.postData() || "[]"); } catch { /* asserted on below */ }
+    for (const r of (Array.isArray(body) ? body : [body])) {
+      if (table !== "club_state" || !r || !r.key) continue;
+      writes.push(r.key);
+      clubState.set(r.key, { key: r.key, value: r.value, updated_at: r.updated_at || new Date().toISOString() });
+    }
+    return route.fulfill({ status: 201, contentType: "application/json", body: "[]" });
+  });
+  await page.addInitScript(() => {
+    localStorage.setItem("vx_session", JSON.stringify({ type: "staff", id: "ahmed" }));
+    localStorage.setItem("vx_auth", JSON.stringify({ token: "drive-fake", refresh: "drive-fake", exp: Date.now() + 3600000 }));
+    localStorage.removeItem("vx_nav");
+  });
+  await page.goto("http://127.0.0.1:" + PORT + "/proto.html?drive=" + Date.now(), { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(3000);
+
+  writes.length = 0;
+  const away = { r131: { active: false, reason: "break", from: "2026-08-21", to: "" } };
+  await page.evaluate((v) => localStorage.setItem("vx_sw_status", JSON.stringify(v)), away);
+  // Long enough for the 20s shared sweep and the 25s live refresh to come round twice each.
+  await page.waitForTimeout(60000);
+
+  const mine = writes.filter((k) => k === "vx_sw_status");
+  eq(mine.length, 1, "the same save was sent " + mine.length + " times — a write on every pull, for ever");
+  eq(writes.length, 1, "the pull sent other keys back up unchanged too: " + writes.join(", "));
+  eq(JSON.stringify((clubState.get("vx_sw_status") || {}).value), JSON.stringify(away),
+     "the one write did not leave the change in the database");
+  eq(problems.length, 0, "the app threw: " + problems.slice(0, 2).join(" | "));
+  await page.close();
+  return "one write, and it held through 60s of pulls";
 });
 
 const TOOLS = [
