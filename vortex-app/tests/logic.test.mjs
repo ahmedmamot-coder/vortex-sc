@@ -2366,6 +2366,89 @@ describe("InBody sheet", () => {
       eq(/out\.match\(\/\\\{\[/.test(AI), false, "a regex is still digging JSON out of the prose");
     });
 
+    it("scrubs a date of birth, an email and a phone number out of what the coach types", () => {
+      // The single-shot route is safe because it only ever receives numbers. The chat route
+      // receives whatever a coach types, and a coach types "born 12/05/2013" without thinking
+      // about it. scrub() is the thing standing between that and the prompt.
+      const CHAT = readFileSync(new URL("../src/app/api/ai/chat/route.ts", import.meta.url), "utf8");
+      const fn = CHAT.slice(CHAT.indexOf("function scrub"), CHAT.indexOf("function apiKey"));
+      const scrub = runInSandbox(
+        "const scrub = " + fn.replace(/: string/g, "") + "; return scrub;", {});
+
+      eq(/\d{2}\/\d{2}\/\d{4}/.test(scrub("born 12/05/2013")), false, "a date of birth survived");
+      eq(/\d{4}-\d{2}-\d{2}/.test(scrub("dob 2013-05-12")), false, "an ISO date of birth survived");
+      eq(/@/.test(scrub("mum is fatima@example.com")), false, "an email address survived");
+      eq(/\+?974/.test(scrub("call +974 5551 2345")), false, "a phone number survived");
+
+      // And the half that matters just as much: a coaching sentence must come through intact.
+      // An interval reads like a time and a set reads like digits; a scrubber that eats those is
+      // one a coach stops using.
+      eq(scrub("8x100 free @ 1:25 felt easy"), "8x100 free @ 1:25 felt easy",
+         "the scrubber mangled an ordinary set");
+      eq(scrub("3x(8x50) descend 1-4"), "3x(8x50) descend 1-4",
+         "the scrubber mangled a set written with brackets");
+    });
+
+    it("the family slice returns this family's children and nobody else's", async () => {
+      // Audit finding D3. club_state is one record for the whole club and every device pulled
+      // all of it; a parent could read the roster, the fees, the memberships and the billing.
+      // /api/family/state cuts it down, and these are the shapes it cuts — taken from the live
+      // record, not invented, because the filtering is only as good as its idea of the shape.
+      const M = await import("../src/app/api/family/state/route.ts");
+      const mine = new Set(["r3"]);
+
+      // Keyed by swimmer id at the top level.
+      const meta = M.pickBySwimmer({ r3: { note: "mine" }, r76: { note: "somebody else's" } }, mine);
+      eq(Object.keys(meta).join(","), "r3", "another family's swimmer came back");
+
+      // "squad::id" on the family record, bare id in club_state. Both must mean the same swimmer.
+      eq(M.bareId("preteam::r3"), "r3");
+      eq(M.bareId("r3"), "r3");
+
+      // A period, then swimmer ids — and a period that empties out is dropped entirely rather
+      // than returned as an empty object that the app would render as a month with no fees.
+      const inv = M.pickPeriodThenSwimmer(
+        { "2026-07": { r3: false, r76: true }, "2026-06": { r76: true } }, mine);
+      eq(JSON.stringify(inv), JSON.stringify({ "2026-07": { r3: false } }),
+         "invoices leaked another family's row, or kept an empty month");
+
+      // Meet entries are arrays that carry other children's NAMES. This is the one that would
+      // have handed a parent a list of the club's swimmers if it were returned whole.
+      const entries = M.pickArraysBySwId({
+        Test: [ { swId: "r3", name: "my child", lane: 5 },
+                { swId: "r76", name: "another child", lane: 2 } ],
+        Other: [ { swId: "r99", name: "not mine" } ],
+      }, mine);
+      eq(JSON.stringify(entries), JSON.stringify({ Test: [{ swId: "r3", name: "my child", lane: 5 }] }),
+         "a meet entry for another family's child came back");
+    });
+
+    it("the family slice allowlists keys rather than excluding them", () => {
+      // The safety here is the allowlist, not the filtering: a key added next year is not
+      // returned to families until somebody adds it, instead of being returned until somebody
+      // remembers to exclude it. If this ever becomes a denylist, this test should fail.
+      const SRC = readFileSync(new URL("../src/app/api/family/state/route.ts", import.meta.url), "utf8");
+      eq(/const CLUB_KEYS = \[/.test(SRC), true, "the club-wide allowlist is gone");
+      eq(/const PER_SWIMMER_KEYS = \[/.test(SRC), true, "the per-swimmer allowlist is gone");
+      // The keys that must never be in it, whatever else changes.
+      for (const forbidden of ["vx_roster_edits", "vx_staff_ovr", "vx_staff_accounts", "vx_billing"]) {
+        eq(new RegExp('"' + forbidden + '"').test(SRC), false,
+           forbidden + " is in the family slice; it is the club's, not one family's");
+      }
+      eq(/requireUser/.test(SRC), true, "the family slice does not authenticate its caller");
+    });
+
+    it("keeps the minors rules in the chat prompt too", () => {
+      const CHAT = readFileSync(new URL("../src/app/api/ai/chat/route.ts", import.meta.url), "utf8");
+      const SYS = (CHAT.match(/const SYSTEM = `([\s\S]*?)`;/) || [])[1] || "";
+      eq(SYS.length > 200, true, "the chat system prompt could not be read out of the route");
+      eq(/calorie targets/i.test(SYS), true, "the calorie-target limit is missing from the chat prompt");
+      eq(/[Nn]othing medical/.test(SYS), true, "the medical limit is missing from the chat prompt");
+      eq(/never a name/i.test(SYS), true, "the no-names rule is missing from the chat prompt");
+      // Staff-only, like every other route that spends the club's key.
+      eq(/requireStaff/.test(CHAT), true, "the chat route is not gated on staff");
+    });
+
     it("does not lowball max_tokens, which is what cut the long races off", () => {
       const max = +((AI.match(/max_tokens: (\d+)/) || [])[1] || 0);
       eq(max >= 4000, true, "max_tokens is " + max + "; a race with a dozen splits runs past that");
