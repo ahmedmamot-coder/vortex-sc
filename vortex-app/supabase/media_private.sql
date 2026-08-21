@@ -37,6 +37,30 @@ create policy "vx-media update" on storage.objects
 
 commit;
 
+-- ---------------------------------------------------------------------------
+-- PRE-FLIGHT, checked against the code on 21 Aug 2026 rather than assumed:
+--
+--   * Every path that displays a file goes through _mediaSrc(), which signs it. There are
+--     seven of them — avatars, documents, the InBody sheet, the video player, the video
+--     download link, a message attachment, and _openUrl() for opening a document.
+--   * _mediaPath() matches BOTH url shapes, `.../object/vx-media/x` and
+--     `.../object/public/vx-media/x`. Uploads store the second one, so the thousands of
+--     public-shaped URLs already in the database keep working — they are re-signed on read,
+--     not followed as links.
+--   * Nothing outside proto.html touches this bucket: not the Next.js app, not
+--     vortex-static, not the family portal. The service-role routes (/api/backup/*, the
+--     wearable sync) bypass bucket privacy entirely and are unaffected.
+--
+-- ONE CAVEAT, and it is the support call you will get:
+--   _signMedia() needs a live database session and returns early without one:
+--       const tok=(window.__VX_AUTH && window.__VX_AUTH.token)||''; if(!tok) return;
+--   A device showing the orange "Signed out — changes will not save" banner is in exactly
+--   that state: the app looks signed in, but there is no token to sign links with. After this
+--   migration those devices show blank photos and documents until the person signs in again.
+--   Before flipping the bucket, it is worth telling coaches: if pictures go blank, sign out
+--   and back in.
+-- ---------------------------------------------------------------------------
+
 -- Check it worked:
 --   select id, public from storage.buckets;          -- vx-media must now be false
 --
