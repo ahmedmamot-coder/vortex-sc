@@ -3515,6 +3515,9 @@ if ('serviceWorker' in navigator) {
                               <button onclick="{{ st.onClick }}" style="background:{{ st.bg }};color:{{ st.fg }};border:1px solid {{ st.border }};border-radius:9px;padding:7px 12px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">{{ st.label }}</button>
                             </sc-for>
                           </div>
+                          <sc-if value="{{ swStatusMsgShow }}" hint-placeholder-val="{{ false }}">
+                            <p style="margin:7px 0 0;font-size:11px;font-weight:700;line-height:1.45;color:{{ swStatusMsgFg }}">{{ swStatusMsgText }}</p>
+                          </sc-if>
                           <sc-if value="{{ swStatusInactive }}" hint-placeholder-val="{{ false }}">
                             <div style="display:flex;gap:7px;margin-top:8px;align-items:center">
                               <span style="display:flex;align-items:center;gap:5px;flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:7px 9px"><span style="font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#9AA2B4">From</span><input value="{{ swStatusFrom }}" oninput="{{ onSwStatusFrom }}" type="date" style="flex:1;min-width:0;border:none;outline:none;background:none;font-family:var(--font-mono);font-size:11.5px;font-weight:700;color:#0C1116"></span>
@@ -10576,10 +10579,14 @@ class Component extends DCLogic {
   async _swStatusSaved(swId, what){
     this.setState({swStatusMsgFor:swId, swStatusMsg:'Saving\u2026', swStatusMsgOk:true});
     let res=null;
-    // No entry at all used to mean {ok:true}. It never meant that: it means pushKey returned
-    // before it recorded anything, which is what happens when the write is not sent. Saying so
-    // is the difference between a coach re-marking a register and a coach walking away from one.
-    const _rec=(window.__vxLastPush||{})['vx_sw_status'];
+    // Watches the row write, not the old club_state push. Same promise it always was: what the
+    // database said, rather than "we put it in localStorage", which is what "saved" used to mean.
+    //
+    // No promise at all still means the write never left — pushKey used to return before
+    // recording anything when nothing was sent, and the row path can do the same if the writer
+    // is missing. Saying so is the difference between a coach re-marking a register and a coach
+    // walking away from one.
+    const _rec=this._swStatusWrite;
     if(!_rec) return this.setState({swStatusMsgFor:swId, swStatusMsgOk:false,
       swStatusMsg:'NOT saved \u2014 it never left this device. Sign out and back in, and it saves itself.'});
     try{ res=await _rec; }catch(e){ res={ok:false, why:'it could not be sent from this device'}; }
@@ -10611,8 +10618,67 @@ class Component extends DCLogic {
     return swId;
   }
   _swStatus(swId){ const s=(this.swimmerStatus||{})[swId]; return s ? {active:s.active!==false, reason:s.reason||'', from:s.from||s.since||'', to:s.to||''} : {active:true, reason:'', from:'', to:''}; }
+  // ---- Swimmer status: one row per swimmer -------------------------------------------------
+  //
+  // This used to live only in vx_sw_status, a single document inside club_state holding every
+  // swimmer at once. club_state is last-write-wins — pushKey sends the whole value and applyPull
+  // takes the remote copy when its timestamp is newer — and vx_roster_edits is the ONLY key in
+  // this app that merges instead of replacing. Status was not it.
+  //
+  // So: a coach sets Omar to On break from the poolside phone. A second coach, on a tablet that
+  // loaded the document before that, sets Layla to Sick and sends ITS whole document — the one
+  // where Omar is still active. Omar is active again, nobody is told, and the first coach's app
+  // pulls the newer copy and shows him back in the register. That is "I set him to break and it
+  // did not save": the write saved, and was overwritten by a device that had never heard of it.
+  // Trying again cannot fix it, and trying again is what the app invited.
+  //
+  // Two coaches changing two swimmers now touch two rows. The local map stays as the thing the
+  // screens render from, so nothing above this line had to change; it is a cache of the table.
+  async _swStatusFetch(){
+    if(!window.__vxSelect) return;
+    const rows=await window.__vxSelect('swimmer_status', 'select=*&limit=2000');
+    if(rows==null) return;                     // table missing / offline → keep what we have
+    const m={};
+    rows.forEach(r=>{
+      if(!r || !r.sw_id) return;
+      // Active is the absence of a status, exactly as the blob expressed it — the screens test
+      // for a key being there at all, so writing {active:true} would read as "away" everywhere.
+      if(r.active) return;
+      m[r.sw_id]={ active:false, reason:r.reason||'break', from:r.from_day||'', to:r.to_day||'',
+                   note:r.note||'' };
+    });
+    this.swimmerStatus=m;
+    try{ this._saveLocalOnly('vx_sw_status', m); }catch(e){}
+    this.forceUpdate();
+  }
+
+  /** Write one swimmer's status. Returns what the database said, so the caller can report it. */
+  async _swStatusPush(swId, entry){
+    if(!window.__vxUpsert) return {ok:false, why:'this device cannot reach the database'};
+    const me=(()=>{ try{ return this._modMe().label; }catch(e){ return ''; } })();
+    const row={ sw_id:swId,
+      active: !entry,                          // no entry at all means active
+      reason: entry ? (entry.reason||'break') : null,
+      from_day: entry ? (entry.from||null) : null,
+      to_day:   entry ? (entry.to||null)   : null,
+      note:     entry ? (entry.note||null) : null,
+      set_by: me, ts: Date.now() };
+    let ok=false;
+    try{ ok=await window.__vxUpsert('swimmer_status', [row]); }catch(e){}
+    if(ok) return {ok:true};
+    const said=(window.__vxLastWriteErr && window.__vxLastWriteErr.table==='swimmer_status')
+      ? window.__vxLastWriteErr.said : '';
+    return {ok:false, why: said || 'the database refused it'};
+  }
+
   setSwStatus(swId, active, reason){ const m={...(this.swimmerStatus||{})}; if(active){ delete m[swId]; } else { const prev=m[swId]||{}; m[swId]={active:false, reason:reason||prev.reason||'break', from:prev.from||prev.since||this.todayISO(), to:prev.to||''}; }
-    this.swimmerStatus=m; this._saveJSON('vx_sw_status', m); this.forceUpdate();
+    this.swimmerStatus=m;
+    // Local first so the screen is instant, then the one row. _saveLocalOnly, not _saveJSON:
+    // _saveJSON also pushes the whole blob to club_state, which is the collision this move exists
+    // to end — a device sending the whole document would still flatten another coach's change.
+    try{ this._saveLocalOnly('vx_sw_status', m); }catch(e){}
+    this.forceUpdate();
+    this._swStatusWrite = this._swStatusPush(swId, m[swId] || null);
     // The log's own heading promises "every sign-in and every change", and this was not in it.
     // Marking a child away changes who is expected at every session from that day on, and who
     // shows as absent in every figure the club reports — that belongs in a record nobody can
@@ -10623,7 +10689,10 @@ class Component extends DCLogic {
          from:(_w&&_w.from)||'', to:(_w&&_w.to)||''}); }catch(e){}
     try{ this._swStatusSaved(swId, active?'Active':(reason||'Status')); }catch(e){} }
   setSwStatusDate(swId, which, val){ const m={...(this.swimmerStatus||{})}; const cur=m[swId]||{active:false, reason:'break', from:this.todayISO(), to:''}; cur.active=false; cur[which]=val; m[swId]=cur;
-    this.swimmerStatus=m; this._saveJSON('vx_sw_status', m); this.forceUpdate();
+    this.swimmerStatus=m;
+    try{ this._saveLocalOnly('vx_sw_status', m); }catch(e){}
+    this.forceUpdate();
+    this._swStatusWrite = this._swStatusPush(swId, m[swId] || null);
     try{ this.audit('swimmer.status.dates', this._swName(swId)+' \u00b7 '+(which==='from'?'from ':'to ')+(val||'(cleared)'),
       {swimmer:swId, status:cur.reason||'break', from:cur.from||'', to:cur.to||''}); }catch(e){}
     try{ this._swStatusSaved(swId, which==='from'?'Start date':'End date'); }catch(e){} }
@@ -13975,7 +14044,7 @@ class Component extends DCLogic {
   // empty; this re-fetches them with the signed-in user's JWT so their data appears.
   _refetchAll(){
     try{ this._repullOnce(); }catch(e){}
-    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_wearFetch','_wearStatusFetch','_hrSetsFetch','_wellnessFetch','_inbodyFetch','_invoicesFetch','_membershipsFetch','_entriesFetch','_planCustomFetch','_familyFetch']
+    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_swStatusFetch','_wearFetch','_wearStatusFetch','_hrSetsFetch','_wellnessFetch','_inbodyFetch','_invoicesFetch','_membershipsFetch','_entriesFetch','_planCustomFetch','_familyFetch']
       .forEach((f)=>{ try{ if(typeof this[f]==='function') this[f](); }catch(e){} });
     try{ this._attendFetchStaged(); }catch(e){}
   }
@@ -13986,7 +14055,13 @@ class Component extends DCLogic {
     if(this._liveLast && now-this._liveLast<1500){ if(!this._liveTimer){ this._liveTimer=setTimeout(()=>{ this._liveTimer=null; this._liveRefresh(); }, 1600); } return; }
     this._liveLast=now;
     try{ if(window.__vxRepull) window.__vxRepull(); }catch(e){}
-    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_wellnessFetch','_inbodyFetch','_invoicesFetch','_membershipsFetch','_entriesFetch','_hrSetsFetch','_wearFetch','_planCustomFetch']
+    // Attendance was in _refetchAll but not here, so a register only came back on sign-in or a
+    // reload. The database has been publishing attendance_marks all along and nothing was
+    // listening — two coaches marking the same session on two devices never saw each other's
+    // marks until one of them signed out. Both halves are fixed: the subscription above, and
+    // this call.
+    try{ this._attendFetchStaged(); }catch(e){}
+    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_swStatusFetch','_wellnessFetch','_inbodyFetch','_invoicesFetch','_membershipsFetch','_entriesFetch','_hrSetsFetch','_wearFetch','_planCustomFetch']
       .forEach((f)=>{ try{ if(typeof this[f]==='function') this[f](); }catch(e){} });
   }
   // Stage B: give a signed-in staff member a real Supabase Auth session (JWT) in the background,
@@ -14664,7 +14739,7 @@ class Component extends DCLogic {
     // Make the WHOLE app live: one websocket watching the shared store + all per-row tables.
     // Any change anywhere → a throttled refresh, so plans, results, messages, meets, goals,
     // recovery, etc. update across devices with no manual refresh.
-    try{ if(window.__vxRealtime){ window.__vxRealtime(['club_state','plan_sessions','squad_plans','season_plans','fitness_sessions','fitness_plans','family_messages','announcements','lounge_posts','lounge_comments','signup_alerts','swimmer_docs','wearable_readings','hr_sets','wellness_checkins','family_accounts','staff_accounts'], ()=>{ try{ this._liveRefresh(); }catch(e){} }); } }catch(e){}
+    try{ if(window.__vxRealtime){ window.__vxRealtime(['club_state','plan_sessions','squad_plans','season_plans','fitness_sessions','fitness_plans','family_messages','announcements','lounge_posts','lounge_comments','signup_alerts','swimmer_docs','wearable_readings','hr_sets','wellness_checkins','family_accounts','staff_accounts','attendance_marks','swimmer_status'], ()=>{ try{ this._liveRefresh(); }catch(e){} }); } }catch(e){}
     // Fallback poll so the app stays fresh even if realtime is unavailable.
     this._liveInt=setInterval(()=>{ try{ this._liveRefresh(); }catch(e){} }, 25000);
     // Saved training-log sessions live in their own table too.
@@ -14686,6 +14761,10 @@ class Component extends DCLogic {
     this._membershipsFetch();
     this._entriesFetch();
     this._attendFetchStaged();
+    // Status is a table now, not a key in the shared document, so it needs loading here with the
+    // rest of the per-row data. _refetchAll lists it too, but that only runs once a signed-in
+    // session lands — on boot this is the call that fills the register in.
+    this._swStatusFetch();
     this._planCustomFetch();
     // Also pull family accounts on open. This is what re-uploads ("self-heals") a
     // registration that never reached the table, so the admin can see that parent.
@@ -17418,6 +17497,13 @@ class Component extends DCLogic {
           swStatusOpts: [{key:'active',label:'Active'},{key:'inactive',label:'Inactive'},{key:'travel',label:'Traveling'},{key:'break',label:'Break'},{key:'sick',label:'Sick'},{key:'injured',label:'Injured'}].map(o=>{ const st=this._swStatus(swObj.id); const sel = o.key==='active' ? st.active : (!st.active && st.reason===o.key); const isAct=o.key==='active';
             return { label:o.label, onClick:()=>this.setSwStatus(swObj.id, isAct, isAct?'':o.key),
               bg: sel?(isAct?'#E4F3EC':'#FCEFDD'):'#F8FAFC', fg: sel?(isAct?'#0C7A4F':'#B4690E'):'#7A8296', border: sel?(isAct?'#B7E0C7':'#F0D9A8'):'#E5E9F0' }; }),
+          // The same "did it actually save" answer the admin swimmers list has had. Setting a
+          // status here showed nothing at all, so a coach who changed it and saw no response
+          // reasonably concluded it had not saved — and, until the row move above, sometimes it
+          // genuinely had not, because another device's copy of the whole document flattened it.
+          swStatusMsgShow: S.swStatusMsgFor===swObj.id && !!S.swStatusMsg,
+          swStatusMsgText: S.swStatusMsgFor===swObj.id ? (S.swStatusMsg||'') : '',
+          swStatusMsgFg: S.swStatusMsgOk===false ? '#B42318' : '#0C7A4F',
           isSponsored: sponsorOn,
           profileMsgThread:this._famMsgEls(swObj.id, 'staff'), profileMsgEmpty:((this.famMessages||{})[swObj.id]||[]).length===0,
           onSendFamMsg:()=>this.sendFamMsg(swObj.id, 'staff'),
