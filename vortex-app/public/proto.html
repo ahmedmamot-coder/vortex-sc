@@ -903,25 +903,33 @@ if ('serviceWorker' in navigator) {
           // merged copy and the screen appears to change by itself a moment after a save.
           try{ origSet(k, sendStr); window.__VX_PULLED[k]=sendVal; }catch(e){}
         }
-        // This device's copy is newer than the one it is about to create.
+        // The marker and the timestamp being sent are the SAME instant.
         //
-        // Five days of "I set it and it comes back". __vxWriteTs is stamped when the write
-        // STARTS; updated_at is generated when the request is BUILT, a round-trip later. So the
-        // server's timestamp for this device's own write is always newer than the device's own
-        // marker — and applyPull takes the remote copy when remoteTs >= localTs. The very next
-        // pull therefore overwrites the change that was just made, and if that pull was already
-        // in flight carrying the copy from BEFORE the write, the old value comes straight back.
-        // Active becomes Break again, seconds after "Active ✓ saved".
+        // Five days of "I set it and it comes back" came from them not being. __vxWriteTs was
+        // stamped when the write STARTED; updated_at was generated when the request was BUILT, a
+        // round-trip later — so the server's timestamp for this device's own write was always
+        // newer than the device's own marker, and applyPull takes the remote copy when
+        // remoteTs >= localTs. The very next pull overwrote the change that had just been made,
+        // and a pull already in flight carrying the copy from BEFORE the write brought the old
+        // value straight back. Active becomes Break again, seconds after "Active ✓ saved".
         //
         // Nothing about that is specific to the roster: it is every synced record in the app,
         // which is why the same shape kept appearing on statuses, registers and dates of birth.
         //
-        // So the marker is set past the timestamp being sent. A pull carrying an older copy can
-        // no longer outrank it, and a genuinely newer write from another device still can.
+        // The fix for it is that these two are one number, not that the marker is put AHEAD of
+        // the number. Setting it a second past what was sent made every key this device has ever
+        // written permanently outrank the server: applyPull could never take the remote copy
+        // again, so it took the other branch and pushed the local one back up — on every pull,
+        // for ever. One save turned into a write every twenty seconds, of the whole roster, from
+        // every device in the club, each one a fresh chance for a stale copy to win a merge.
+        //
+        // Equal is the honest answer. This device's own echo is a tie and changes nothing; a
+        // pull carrying the copy from before the write is older and cannot outrank it; a
+        // genuinely newer write from another device still wins.
         var _stamp = Date.now();
         try{
-          window.__vxWriteTs[k] = _stamp + 1000;
-          origSet('__vxts_'+k, String(_stamp + 1000));
+          window.__vxWriteTs[k] = _stamp;
+          origSet('__vxts_'+k, String(_stamp));
         }catch(e){}
         return fetch(REST, { method:"POST", headers: dyn({"Prefer":"resolution=merge-duplicates,return=minimal"}),
           body: JSON.stringify([{ key:k, value:sendVal, updated_at:new Date(_stamp).toISOString() }]) });
@@ -1257,17 +1265,24 @@ if ('serviceWorker' in navigator) {
       var mirrored=null, haveMirror=false;
       try{ if(Object.prototype.hasOwnProperty.call(window.__VX_PULLED, r.key) && pushedTs>diskTs){ mirrored=window.__VX_PULLED[r.key]; haveMirror=(mirrored!=null); } }catch(e){}
       var remoteTs=r.updated_at? Date.parse(r.updated_at) : 0;
+      var _remoteStr=JSON.stringify(r.value);
       // How big the database's copy is, whichever copy wins below. This is the only number that
       // makes "this write would destroy the club's roster" answerable at the moment of writing.
-      try{ origSet('__vxsize_'+r.key, String(JSON.stringify(r.value).length)); }catch(e){}
+      try{ origSet('__vxsize_'+r.key, String(_remoteStr.length)); }catch(e){}
       var takeRemote = ((localVal==null && !haveMirror) || !localTs || remoteTs>=localTs);
       if(takeRemote){
-        var _incoming=JSON.stringify(r.value);
+        var _incoming=_remoteStr;
         _keepReplaced(r.key, localVal, _incoming);
         window.__VX_PULLED[r.key]=r.value;      // DB copy → in-memory mirror
         origSet(r.key, _incoming);
       } else if(haveMirror){
-        pushKey(r.key, JSON.stringify(mirrored));   // the newest copy, straight back up
+        // Judging this device's copy the newer one is not a reason to send it. If the database is
+        // already holding the same bytes there is nothing to catch up on, and sending anyway is a
+        // write per pull for ever — which is how an idle phone came to re-upload the club's whole
+        // roster every twenty seconds, and every one of those is a read-modify-write another
+        // device can lose a change inside.
+        var _mineStr=JSON.stringify(mirrored);
+        if(_mineStr!==_remoteStr) pushKey(r.key, _mineStr);   // the newest copy, straight back up
       } else {
         // Local is newer, so it has to win in the mirror as well — and this is the part that
         // was missing. The mirror was being set to the server's copy before this decision was
@@ -1279,7 +1294,8 @@ if ('serviceWorker' in navigator) {
         var parsed=null, ok=false;
         try{ parsed=JSON.parse(localVal); ok=true; }catch(e){}
         window.__VX_PULLED[r.key]= ok ? parsed : r.value;
-        pushKey(r.key, localVal);   // and push it up so the server catches up
+        // Same rule as above: only if the database is not already holding it.
+        if(localVal!==_remoteStr) pushKey(r.key, localVal);   // push it up so the server catches up
       }
     }); } catch(e){}
     if(seed){ try { SYNC.forEach(function(k){ if(have[k]) return; var lv=localStorage.getItem(k); if(lv!=null) pushKey(k, lv); }); } catch(e){} }
@@ -7108,7 +7124,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-20c';
+const VX_BUILD='2026-08-21a';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -7282,6 +7298,19 @@ class Component extends DCLogic {
       {id:'seed1', audience:'all', icon:'calendar-plus', title:'New meet added', body:'Nautilus Invitational Swim Meet 2026 is open for entries.', at:new Date(Date.now()-86400000*2).toISOString(), read:false},
     ]);
     this.attendLog=this._loadJSON('vx_attend_log', {});
+    // When each mark on this device was last changed here: "squad|day|swimmer" -> ms.
+    //
+    // The register re-reads the table every 2.5 seconds while it is open, and again the instant
+    // anything in it changes anywhere. A read started before a coach taps a swimmer answers with
+    // the row from before that tap — and _attendFetch was writing those rows over the log it had
+    // just cloned, so the mark went back to what it was. Every synced record in this app has a
+    // guard for exactly that; the register, which is tapped forty times in a minute with reads
+    // in flight the whole time, had none. See _attendFetch.
+    this._attendMarkTs={};
+    // Which marks the database has already answered with, so the one-time migration of marks
+    // made before this table existed cannot re-upload a stale copy of a day somebody else has
+    // since changed.
+    this._attendSeen={};
     this.academyTrials=this._loadJSON('vx_academy_trials', []);
     this.academyFees=this._loadJSON('vx_academy_fees', {preteam:350,advb:450,adva:500,junior:550,seniorb:600,seniora:650,vortexb:700,vortexa:750,legend:800});
     // Membership packages — the same price for every squad, priced by sessions per week.
@@ -7635,6 +7664,9 @@ class Component extends DCLogic {
     this.attendLog[squadId]=this.attendLog[squadId]||{};
     this.attendLog[squadId][dateISO]=this.attendLog[squadId][dateISO]||{};
     this.attendLog[squadId][dateISO][swId]=status;
+    // When this mark was made here. A read that was already on its way when the coach tapped
+    // must not be allowed to answer with the row from before the tap and put it back.
+    try{ (this._attendMarkTs=this._attendMarkTs||{})[squadId+'|'+dateISO+'|'+swId]=Date.now(); }catch(e){}
     // Local cache only (NOT the synced blob — attendance now lives in its own Supabase table so
     // concurrent coaches/devices can never overwrite each other).
     try{ this._saveLocalOnly('vx_attend_log', this.attendLog); }catch(e){}
@@ -7726,13 +7758,41 @@ class Component extends DCLogic {
       }
     });
   }
+  // A read must never answer with the register from before the tap that is still in flight.
+  //
+  // This is where the club's marks were going. The register polls this table every 2.5 seconds
+  // while it is open and re-reads it on every realtime change — including the coach's own taps —
+  // so at any moment during a register there is a read on its way. A coach taps Present; the
+  // upsert goes; a read issued a moment BEFORE the tap comes back carrying "absent"; and these
+  // rows were applied over a log cloned after the tap, so the tap was undone on the device.
+  //
+  // It did not stop at the screen. The reverted value is what the day's resend sends and what
+  // the one-time migration uploads, so a few seconds later the OLD status was written back to
+  // the database and the mark was gone for the whole club. Forty taps a register, on two devices
+  // marking at once, is a lot of chances to lose one.
+  //
+  // So a row is not applied when this device has changed that mark since the read started, or
+  // when the mark is still waiting to be sent — in both cases this device is holding the newer
+  // answer and the database has not caught up yet. Everything else is applied exactly as before,
+  // which is what keeps another coach's marks arriving live.
   async _attendFetch(dayFilter, sinceISO){ if(!window.__vxSelect) return;
     // A day filter (used by the live poll) fetches just that date — small & fast.
     const qs='select=squad_id,day,sw_id,status&limit=100000'+(dayFilter?('&day=eq.'+encodeURIComponent(dayFilter)):'')
       +((!dayFilter && sinceISO)?('&day=gte.'+encodeURIComponent(sinceISO)):'');
+    const startedAt=Date.now();
     const rows=await window.__vxSelect('attendance_marks', qs); if(rows==null) return;
+    this._attendRead=true;              // the table has answered at least once on this device
     const log=JSON.parse(JSON.stringify(this.attendLog||{}));
-    rows.forEach(r=>{ if(!r.squad_id||!r.day||!r.sw_id) return; (log[r.squad_id]=log[r.squad_id]||{}); (log[r.squad_id][r.day]=log[r.squad_id][r.day]||{}); log[r.squad_id][r.day][r.sw_id]=r.status; });
+    const markTs=this._attendMarkTs||{};
+    const unsent=this._attendUnsent();
+    const seen=(this._attendSeen=this._attendSeen||{});
+    rows.forEach(r=>{ if(!r.squad_id||!r.day||!r.sw_id) return;
+      seen[r.squad_id+'_'+r.day+'_'+r.sw_id]=1;
+      // Marked here since this read was asked for, or marked here and not yet accepted: this
+      // device holds the newer answer either way.
+      if((markTs[r.squad_id+'|'+r.day+'|'+r.sw_id]||0) >= startedAt) return;
+      if(((unsent[r.squad_id+'|'+r.day]||{})[r.sw_id])) return;
+      (log[r.squad_id]=log[r.squad_id]||{}); (log[r.squad_id][r.day]=log[r.squad_id][r.day]||{}); log[r.squad_id][r.day][r.sw_id]=r.status; });
     this.attendLog=log; this._attendVer=(this._attendVer||0)+1; try{ this._saveLocalOnly('vx_attend_log', log); }catch(e){} this.forceUpdate();
   }
   // One CSV of the whole club's register for a single day — a daily record you can keep.
@@ -7748,8 +7808,21 @@ class Component extends DCLogic {
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(()=>{ try{ URL.revokeObjectURL(url); }catch(e){} }, 60000);
   }
-  _attendMigrate(){ if(!window.__vxUpsert) return; const log=this.attendLog||{}; const batch=[];
-    Object.keys(log).forEach(sq=>{ const days=log[sq]||{}; Object.keys(days).forEach(day=>{ const marks=days[day]||{}; Object.keys(marks).forEach(sw=>{ const st=marks[sw]; if(st) batch.push({id:sq+'_'+day+'_'+sw, squad_id:sq, day:day, sw_id:sw, status:st, ts:Date.now(), updated_at:new Date().toISOString()}); }); }); });
+  // Marks made before this table existed, and only those.
+  //
+  // It used to upload every mark on the device, which meant a phone opened after a week away
+  // wrote its week-old copy of the register over whatever had been marked since. A row the
+  // database has just answered with does not need migrating — it is already there, and this
+  // device's copy of it is the older of the two. A mark still waiting to be sent is the
+  // opposite case and is still sent.
+  //
+  // And it does not run at all until the table has answered once. A migration that has never
+  // read what it is writing over cannot know what it is writing over.
+  _attendMigrate(){ if(!window.__vxUpsert || !this._attendRead) return; const log=this.attendLog||{}; const batch=[];
+    const seen=this._attendSeen||{}; const unsent=this._attendUnsent();
+    Object.keys(log).forEach(sq=>{ const days=log[sq]||{}; Object.keys(days).forEach(day=>{ const marks=days[day]||{}; Object.keys(marks).forEach(sw=>{ const st=marks[sw]; if(!st) return;
+      if(seen[sq+'_'+day+'_'+sw] && !((unsent[sq+'|'+day]||{})[sw])) return;
+      batch.push({id:sq+'_'+day+'_'+sw, squad_id:sq, day:day, sw_id:sw, status:st, ts:Date.now(), updated_at:new Date().toISOString()}); }); }); });
     for(let i=0;i<batch.length;i+=500){ try{ window.__vxUpsert('attendance_marks', batch.slice(i,i+500)); }catch(e){} }
   }
   cycleAttend(id){ const sq=this.state.squadId; const date=this.curAttendDate(); const list=(this.roster[sq]||[]); const idx=list.findIndex(s=>s.id===id);
