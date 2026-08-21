@@ -56,6 +56,28 @@ const PERIOD_THEN_SWIMMER_KEYS = ["vx_invoices"];
 /** { "Meet name": [ { swId, name, ... } ] } — arrays of entries carrying other children's names. */
 const ARRAY_BY_SWID_KEYS = ["vx_meet_entries"];
 
+/**
+ * The roster document, cut to this family's children.
+ *
+ * This one is here because leaving it out broke the portal, and it is worth saying exactly how,
+ * because "the roster is the club's, not one family's" is true of the document and wrong about
+ * the consequence.
+ *
+ * rebuildRoster() reads `window.VX_ROSTER` as its base — and nothing ever assigns it, so the
+ * base is {} and the roster is built ENTIRELY from this document's `added`. VX_ROSTER_ROWS is
+ * false, so the vx_roster table is never read, and the client never reads `swimmers` either. So
+ * with this key withheld a parent's roster is empty, _famResolve() returns null for their own
+ * child, and the chip reads "Not linked" — and it does not stop at empty: this.roster falls
+ * back to buildRoster(), which INVENTS demo swimmers with random names. A parent would open the
+ * app and see a stranger's children.
+ *
+ * Checked against the live record: 6 of the 8 linked children exist only in `added`.
+ *
+ * So it is returned, sliced the same way as everything else — this family's children and
+ * nobody else's, in all three parts of the document.
+ */
+const ROSTER_DOC_KEYS = ["vx_roster_edits"];
+
 type Json = Record<string, unknown>;
 
 function svc() {
@@ -83,6 +105,44 @@ export function pickPeriodThenSwimmer(value: unknown, mine: Set<string>): Json {
     const kept = pickBySwimmer(inner, mine);
     if (Object.keys(kept).length) out[period] = kept;
   }
+  return out;
+}
+
+/**
+ * { edits:{sqid:{swid:patch}}, deleted:{sqid:{swid:true}}, added:{sqid:[{id,...}]} }
+ *
+ * All three parts are filtered to `mine`. The three keys are always present in the result, even
+ * when empty: rebuildRoster() defends against a missing one, and a half-shaped document there is
+ * a white screen on every device rather than a wrong roster.
+ */
+export function pickRosterDoc(value: unknown, mine: Set<string>): Json {
+  const out: Json = { edits: {}, deleted: {}, added: {} };
+  if (!value || typeof value !== "object") return out;
+  const doc = value as Json;
+
+  for (const part of ["edits", "deleted"] as const) {
+    const kept: Json = {};
+    const src = doc[part];
+    if (src && typeof src === "object") {
+      for (const [sqid, inner] of Object.entries(src as Json)) {
+        const swimmers = pickBySwimmer(inner, mine);
+        if (Object.keys(swimmers).length) kept[sqid] = swimmers;
+      }
+    }
+    out[part] = kept;
+  }
+
+  const added: Json = {};
+  const src = doc.added;
+  if (src && typeof src === "object") {
+    for (const [sqid, rows] of Object.entries(src as Json)) {
+      if (!Array.isArray(rows)) continue;
+      const kept = rows.filter((r) => mine.has(bareId((r as Json)?.id)));
+      if (kept.length) added[sqid] = kept;
+    }
+  }
+  out.added = added;
+
   return out;
 }
 
@@ -128,6 +188,7 @@ export async function GET(request: Request) {
 
   const wanted = [
     ...CLUB_KEYS, ...PER_SWIMMER_KEYS, ...PERIOD_THEN_SWIMMER_KEYS, ...ARRAY_BY_SWID_KEYS,
+    ...ROSTER_DOC_KEYS,
   ];
   const stateRes = await fetch(
     `${SB_URL}/rest/v1/club_state?select=key,value,updated_at&key=in.(${wanted.join(",")})`,
@@ -146,7 +207,8 @@ export async function GET(request: Request) {
       if (PER_SWIMMER_KEYS.includes(r.key)) return { ...r, value: pickBySwimmer(r.value, mine) };
       if (PERIOD_THEN_SWIMMER_KEYS.includes(r.key)) return { ...r, value: pickPeriodThenSwimmer(r.value, mine) };
       if (ARRAY_BY_SWID_KEYS.includes(r.key)) return { ...r, value: pickArraysBySwId(r.value, mine) };
-      return null;   // unreachable — `wanted` is built from the four lists
+      if (ROSTER_DOC_KEYS.includes(r.key)) return { ...r, value: pickRosterDoc(r.value, mine) };
+      return null;   // unreachable — `wanted` is built from the five lists
     })
     .filter(Boolean);
 

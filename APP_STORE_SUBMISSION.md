@@ -29,21 +29,31 @@ Verified against the live project on 21 August 2026, not from memory:
 | `push_apns.sql` | **Applied.** `platform` and `apns_token` columns added; the table is no longer readable with the public key |
 | `security_5_swimmer_docs.sql` §1 | **Applied.** `anon` grants on `swimmer_docs` went 7 → 0 |
 | `swimmer_status.sql` | **Applied.** Per-row status table, 234 statuses migrated out of the `club_state` blob, added to the realtime publication |
+| `club_state_staff_only.sql` | **Applied.** The last audit finding (D3). A family login now reads 1 of 35 keys instead of all 35 — verified by impersonating one, not assumed |
 
 All seven guideline blockers are closed in code and merged. The 1024×1024 opaque icon, the
 `Info.plist`, the three Swift plugins and the build scripts are in `ios/`.
 
 ## What still has to be run
 
-```
-vortex-app/supabase/club_state_staff_only.sql   ← the last audit finding (D3)
-```
+**Nothing.** Every SQL file is applied. `club_state_staff_only.sql` went in last, on
+21 August, after the build carrying `/api/family/state` was live in production.
 
-**Not run yet, deliberately.** The family portal now reads `/api/family/state` instead of
-`club_state`, but a device still on an older build reads `club_state` directly — flipping the
-policy before they have updated blanks the portal for those families. Deploy, open a parent
-account and confirm Performance, Attendance, Results, Meets, Fees and Documents all fill in,
-**then** run it. The check is written into the file.
+One consequence to know about, because it is not obvious: dropping the read policy did not
+by itself close the table. `vx_s4_write` is a `FOR ALL` policy, and permissive policies are
+OR'd, so it grants SELECT as well. A family's real read is now
+`vx_is_staff() OR key IN ('vx_event_requests','vx_notifications')` — the deliberate carve-out
+from `security_4_roles.sql`, since families write event requests and read notifications.
+`vx_notifications` holds 11 club-wide announcements. The roster, fees, memberships, billing
+and staff overrides are closed, which is what D3 was about.
+
+**Still worth doing on a parent account:** open the portal and confirm Performance,
+Attendance, Results, Meets, Fees and Documents all fill in. `/api/family/state` holds the
+service key and bypasses RLS, so this change cannot break it by construction — but a device
+running a cached older build reads `club_state` directly and will show blanks until it
+reloads. If a tab is empty on a fresh load, the slice is missing a key: add it to `CLUB_KEYS`
+or `PER_SWIMMER_KEYS` in `src/app/api/family/state/route.ts`. The rollback is in section 3 of
+the SQL file and takes seconds.
 
 `security_5_swimmer_docs.sql` §2 is optional and stays commented out on purpose: swimmer
 photographs live in `swimmer_docs` as `kind='photo'`, so a staff-only read policy would blank
@@ -270,7 +280,8 @@ stop asking. The app uses HTTPS and nothing else, which is the exemption that co
 
 - [x] `vx-media` is private — `select id, public from storage.buckets where id='vx-media'` returns **false**
 - [x] `moderation.sql`, `push_apns.sql`, `security_5_swimmer_docs.sql` §1 and `swimmer_status.sql` applied
-- [ ] `club_state_staff_only.sql` run — **only after** a parent's portal is confirmed working on the deployed build
+- [x] `club_state_staff_only.sql` run — a family login reads 1 of 35 keys, verified by impersonation
+- [ ] A parent's portal confirmed filling in on a fresh load of the deployed build — the last check on this list that nobody has done
 
 **Configuration — nobody has done these yet:**
 

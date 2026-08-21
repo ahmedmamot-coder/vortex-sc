@@ -2423,6 +2423,40 @@ describe("InBody sheet", () => {
          "a meet entry for another family's child came back");
     });
 
+    it("the roster document is cut to this family's children, not withheld", async () => {
+      // Withholding vx_roster_edits was the regression: rebuildRoster()'s base is
+      // `window.VX_ROSTER || {}` and nothing assigns it, VX_ROSTER_ROWS is false, and the client
+      // never reads the swimmers table — so the roster is built entirely from this document's
+      // `added`. With it withheld, this.roster falls back to buildRoster(), which INVENTS demo
+      // swimmers, so a parent opens the app and sees children who do not exist. On the live
+      // record 6 of the 8 linked children exist only in `added`.
+      const M = await import("../src/app/api/family/state/route.ts");
+      const mine = new Set(["r157", "r158"]);
+
+      const cut = M.pickRosterDoc({
+        edits:   { squadA: { r157: { name: "mine" }, r76: { name: "not mine" } } },
+        deleted: { squadA: { r76: true } },
+        added:   { squadA: [ { id: "r157", name: "my child" }, { id: "r76", name: "another child" } ],
+                   squadB: [ { id: "r158", name: "my other child" } ],
+                   squadC: [ { id: "r99",  name: "nobody of mine" } ] },
+      }, mine);
+
+      eq(Object.keys(cut.added).sort().join(","), "squadA,squadB", "a squad of other children came back");
+      eq(cut.added.squadA.length, 1, "another family's child is in the roster slice");
+      eq(cut.added.squadA[0].id, "r157");
+      eq(cut.added.squadB[0].id, "r158", "the second child was lost");
+      eq(JSON.stringify(cut.edits), JSON.stringify({ squadA: { r157: { name: "mine" } } }),
+         "an edit to another family's child came back");
+      // A squad that empties out is dropped rather than returned as {} — and `deleted` here holds
+      // only somebody else's child, so it empties completely.
+      eq(JSON.stringify(cut.deleted), "{}", "a deletion of another family's child came back");
+
+      // All three parts are always present, even empty: rebuildRoster() defends against a missing
+      // one because a half-shaped document there is a white screen, not a wrong roster.
+      const empty = M.pickRosterDoc(null, mine);
+      eq(Object.keys(empty).sort().join(","), "added,deleted,edits", "the three-part shape is not guaranteed");
+    });
+
     it("the family slice allowlists keys rather than excluding them", () => {
       // The safety here is the allowlist, not the filtering: a key added next year is not
       // returned to families until somebody adds it, instead of being returned until somebody
@@ -2431,9 +2465,21 @@ describe("InBody sheet", () => {
       eq(/const CLUB_KEYS = \[/.test(SRC), true, "the club-wide allowlist is gone");
       eq(/const PER_SWIMMER_KEYS = \[/.test(SRC), true, "the per-swimmer allowlist is gone");
       // The keys that must never be in it, whatever else changes.
-      for (const forbidden of ["vx_roster_edits", "vx_staff_ovr", "vx_staff_accounts", "vx_billing"]) {
+      for (const forbidden of ["vx_staff_ovr", "vx_staff_accounts", "vx_billing", "vx_account_ovr"]) {
         eq(new RegExp('"' + forbidden + '"').test(SRC), false,
            forbidden + " is in the family slice; it is the club's, not one family's");
+      }
+      // vx_roster_edits is the exception, and the shape of the exception is the point: it is
+      // returned SLICED and must never be returned whole. Withholding it entirely was worse than
+      // a leak-free portal — rebuildRoster()'s base is {} (nothing assigns window.VX_ROSTER), so
+      // the roster came only from this document; without it this.roster falls back to
+      // buildRoster(), which invents demo swimmers, and a parent sees strangers' children.
+      eq(/const ROSTER_DOC_KEYS = \["vx_roster_edits"\]/.test(SRC), true,
+         "vx_roster_edits is no longer the sliced roster key");
+      for (const whole of ["CLUB_KEYS", "PER_SWIMMER_KEYS"]) {
+        const list = (SRC.match(new RegExp("const " + whole + " = \\[([\\s\\S]*?)\\]")) || [])[1] || "";
+        eq(/vx_roster_edits/.test(list), false,
+           "vx_roster_edits is in " + whole + ", which would return the whole club's roster");
       }
       eq(/requireUser/.test(SRC), true, "the family slice does not authenticate its caller");
     });

@@ -1,4 +1,31 @@
 -- ============================================================================
+--  APPLIED — 21 August 2026, to the live project (qhrpwiakobgcxfmcoyfg).
+--
+--  Before:  policy vx_s4_read, SELECT to authenticated, using (true)  — all 35 keys
+--  After:   policy club_state_read, SELECT to authenticated, using (vx_is_staff())
+--
+--  Verified by impersonating a family login (role authenticated, a non-staff email in
+--  request.jwt.claims) and selecting from the table: 1 key visible instead of 35.
+--
+--  That 1 is worth writing down, because dropping the read policy does NOT by itself
+--  close the table. `vx_s4_write` is a FOR ALL policy, and permissive policies are OR'd
+--  together — a FOR ALL policy grants SELECT too. So the real family read is:
+--
+--      vx_is_staff() OR key IN ('vx_event_requests', 'vx_notifications')
+--
+--  which is the deliberate carve-out from security_4_roles.sql: families write event
+--  requests and read notifications, so they need both. Only vx_notifications exists as a
+--  row today — 11 club-wide announcements, fields at/audience/body/icon/id/read/title.
+--  Broadcast content, by design. The roster, fees, memberships, billing and staff
+--  overrides — what D3 was actually about — are all closed.
+--
+--  /api/family/state was never at risk: it holds the service key, which bypasses RLS
+--  entirely, so no policy on this table can break it.
+--
+--  Nothing below needs running again. It is kept because the reasoning is the record.
+-- ============================================================================
+--
+-- ============================================================================
 --  VORTEX SC — club_state stops being readable by every parent. RUN THIS LAST.
 --
 --  Audit finding D3, and the last one left.
