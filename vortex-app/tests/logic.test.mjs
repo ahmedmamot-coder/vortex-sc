@@ -4053,6 +4053,11 @@ describe("InBody sheet", () => {
       vx_wear_cache: "inbody_readings",
       vx_wellness_cache: "inbody_readings",
       vx_plan_custom: "club_state",
+      // Status left club_state for a table of its own: the shared document is last-write-wins,
+      // and two coaches changing two swimmers flattened each other. This is now the same kind of
+      // local copy as the photos above — the table is the truth, and losing the copy costs a
+      // render, not a status.
+      vx_sw_status: "swimmer_status",
     };
 
     const written = new Set();
