@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "seed": "tsx scripts/seed.ts",
-    "test": "node tests/logic.test.mjs",
+    "test": "node --import ./tests/alias-loader.mjs tests/logic.test.mjs",
     "drive": "node tests/drive.mjs",
     "sql": "node tests/sql.mjs"
   },
