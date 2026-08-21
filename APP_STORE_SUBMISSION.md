@@ -21,11 +21,16 @@ at 1am. Companion to `APP_STORE_AUDIT.md`, which is why each of these exists.
 Run these three SQL files in Supabase before the build goes to anyone:
 
 ```
-vortex-app/supabase/media_private.sql        ← the critical one; see the audit, finding D1
-supabase/security_5_swimmer_docs.sql
-vortex-app/supabase/moderation.sql
-supabase/push_apns.sql
+vortex-app/supabase/media_private.sql        ← DONE, applied 21 Aug 2026: vx-media is private
+supabase/security_5_swimmer_docs.sql         ← section 1 only; section 2 needs the id-shape check
+vortex-app/supabase/moderation.sql           ← needs the app deployed first
+supabase/push_apns.sql                       ← needs the app deployed first
 ```
+
+> `security_5_swimmer_docs.sql` is deliberately in two halves. Section 1 revokes anon and is
+> safe to run any time. **Section 2 is commented out on purpose**: swimmer photographs live in
+> `swimmer_docs` as `kind='photo'`, and a staff-only read policy would blank every swimmer photo
+> and empty the Documents tab for all 304 families. Read the header before uncommenting.
 
 And set these in Vercel (Production):
 
