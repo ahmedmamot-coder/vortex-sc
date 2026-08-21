@@ -1288,9 +1288,34 @@ if ('serviceWorker' in navigator) {
   // (anon) and again right after login (now carrying the user's JWT), so once anonymous reads
   // are blocked by row-level security, signed-in users still load everything. Fires a DOM event
   // the app listens for to refresh the screen with the freshly pulled data.
-  window.__vxRepull = function(){ return pull(SYNC).then(function(rows){ applyPull(rows, false);
+  // A family asks the server for its own slice instead of reading the whole club.
+  //
+  // Audit finding D3: club_state's policy is `for select to authenticated using (true)`, and
+  // anybody can create a family login — that is what registration is. So every parent could read
+  // the roster, the fees, the memberships, the billing and the staff overrides. /api/family/state
+  // holds the service key, works out which children are theirs, and returns those keys only,
+  // in the same row shape pull() returns so applyPull needs no special case.
+  //
+  // Staff keep reading club_state directly, and always will: they are the club.
+  function _isFamilyDevice(){
+    try{ var s=JSON.parse(localStorage.getItem('vx_session')||'null'); return !!(s && s.type==='family'); }
+    catch(e){ return false; }
+  }
+  function pullForThisDevice(){
+    if(!_isFamilyDevice()) return pull(SYNC);
+    var tok=(window.__VX_AUTH && window.__VX_AUTH.token)||'';
+    // Before the session lands there is nothing to authenticate with. Returning [] rather than
+    // falling back to pull(SYNC) is the point of the whole change — the fallback would be the
+    // hole. applyPull leaves what is on the device alone, and _refetchAll runs again after login.
+    if(!tok) return Promise.resolve([]);
+    return fetch('/api/family/state', { headers:{ 'Authorization':'Bearer '+tok }, cache:'no-store' })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){ return (j && Array.isArray(j.rows)) ? j.rows : []; })
+      .catch(function(){ return []; });
+  }
+  window.__vxRepull = function(){ return pullForThisDevice().then(function(rows){ applyPull(rows, false);
     try{ window.dispatchEvent(new Event('vx-data-refreshed')); }catch(e){} return true; }).catch(function(){ return false; }); };
-  pull(SYNC).then(function(rows){ window.__vxBootEmpty = !(rows && rows.length); applyPull(rows, true); boot(); });
+  pullForThisDevice().then(function(rows){ window.__vxBootEmpty = !(rows && rows.length); applyPull(rows, true); boot(); });
 })();
 </script>
 </head>

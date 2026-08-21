@@ -2389,6 +2389,55 @@ describe("InBody sheet", () => {
          "the scrubber mangled a set written with brackets");
     });
 
+    it("the family slice returns this family's children and nobody else's", async () => {
+      // Audit finding D3. club_state is one record for the whole club and every device pulled
+      // all of it; a parent could read the roster, the fees, the memberships and the billing.
+      // /api/family/state cuts it down, and these are the shapes it cuts — taken from the live
+      // record, not invented, because the filtering is only as good as its idea of the shape.
+      const M = await import("../src/app/api/family/state/route.ts");
+      const mine = new Set(["r3"]);
+
+      // Keyed by swimmer id at the top level.
+      const meta = M.pickBySwimmer({ r3: { note: "mine" }, r76: { note: "somebody else's" } }, mine);
+      eq(Object.keys(meta).join(","), "r3", "another family's swimmer came back");
+
+      // "squad::id" on the family record, bare id in club_state. Both must mean the same swimmer.
+      eq(M.bareId("preteam::r3"), "r3");
+      eq(M.bareId("r3"), "r3");
+
+      // A period, then swimmer ids — and a period that empties out is dropped entirely rather
+      // than returned as an empty object that the app would render as a month with no fees.
+      const inv = M.pickPeriodThenSwimmer(
+        { "2026-07": { r3: false, r76: true }, "2026-06": { r76: true } }, mine);
+      eq(JSON.stringify(inv), JSON.stringify({ "2026-07": { r3: false } }),
+         "invoices leaked another family's row, or kept an empty month");
+
+      // Meet entries are arrays that carry other children's NAMES. This is the one that would
+      // have handed a parent a list of the club's swimmers if it were returned whole.
+      const entries = M.pickArraysBySwId({
+        Test: [ { swId: "r3", name: "my child", lane: 5 },
+                { swId: "r76", name: "another child", lane: 2 } ],
+        Other: [ { swId: "r99", name: "not mine" } ],
+      }, mine);
+      eq(JSON.stringify(entries), JSON.stringify({ Test: [{ swId: "r3", name: "my child", lane: 5 }] }),
+         "a meet entry for another family's child came back");
+    });
+
+    it("the family slice allowlists keys rather than excluding them", () => {
+      // The safety here is the allowlist, not the filtering: a key added next year is not
+      // returned to families until somebody adds it, instead of being returned until somebody
+      // remembers to exclude it. If this ever becomes a denylist, this test should fail.
+      const SRC = readFileSync(new URL("../src/app/api/family/state/route.ts", import.meta.url), "utf8");
+      eq(/const CLUB_KEYS = \[/.test(SRC), true, "the club-wide allowlist is gone");
+      eq(/const PER_SWIMMER_KEYS = \[/.test(SRC), true, "the per-swimmer allowlist is gone");
+      // The keys that must never be in it, whatever else changes.
+      for (const forbidden of ["vx_roster_edits", "vx_staff_ovr", "vx_staff_accounts", "vx_billing"]) {
+        eq(new RegExp('"' + forbidden + '"').test(SRC), false,
+           forbidden + " is in the family slice; it is the club's, not one family's");
+      }
+      eq(/requireUser/.test(SRC), true, "the family slice does not authenticate its caller");
+    });
+
     it("keeps the minors rules in the chat prompt too", () => {
       const CHAT = readFileSync(new URL("../src/app/api/ai/chat/route.ts", import.meta.url), "utf8");
       const SYS = (CHAT.match(/const SYSTEM = `([\s\S]*?)`;/) || [])[1] || "";
