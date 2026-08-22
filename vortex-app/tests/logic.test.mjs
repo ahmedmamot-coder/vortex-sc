@@ -909,7 +909,7 @@ describe("meet day", () => {
   describeSwims();
   function describeSwims() {
     const ctx = baseCtx();
-    const swims = bind("_meetSwims", ctx, ["_swEntries", "_resultISO", "_toISODate"]);
+    const swims = bind("_meetSwims", ctx, ["_swEntries", "_resultISO", "_meetDateISO", "_toISODate"]);
     const out = swims("Doha Open");
     it("collects this meet's swims across every squad", () => eq(Object.keys(out).length, 3));
     it("leaves another meet's swims alone", () => eq(out["s1|100 Free"], undefined));
@@ -919,7 +919,7 @@ describe("meet day", () => {
   describePlaces();
   function describePlaces() {
     const ctx = baseCtx();
-    const places = bind("_meetPlaces", ctx, ["_meetSwims", "_swEntries", "_resultISO", "_toISODate"]);
+    const places = bind("_meetPlaces", ctx, ["_meetSwims", "_swEntries", "_resultISO", "_meetDateISO", "_toISODate"]);
     const p = places("Doha Open");
     it("first place is the fastest of the whole event", () => eq(p["s2|50 Free"], 1));
     it("places run across heats, not within one", () => eq(p["s3|50 Free"], 2));
@@ -929,7 +929,7 @@ describe("meet day", () => {
   describeBest();
   function describeBest() {
     const ctx = baseCtx();
-    const best = bind("_bestBefore", ctx, ["_swEntries", "_resultISO", "_toISODate"]);
+    const best = bind("_bestBefore", ctx, ["_swEntries", "_resultISO", "_meetDateISO", "_toISODate"]);
     const hannah = ctx.roster.junior[0];
     it("the best they came in with", () => eq(best(hannah, "50 Free", "Doha Open"), 31.2));
     it("without today's meet excluded it would beat itself", () => eq(best(hannah, "50 Free", ""), 30.8));
@@ -978,7 +978,7 @@ describe("meet day", () => {
     ctx.allSwimmersFlat = () => [{ ...ctx.roster.junior[0], squadId: "junior" }];
     let saved = null;
     ctx.adminEditSwimmer = (sqId, id, patch) => { saved = patch; };
-    const clear = bind("meetLiveClear", ctx, ["_swEntries", "_resultISO", "_toISODate"]);
+    const clear = bind("meetLiveClear", ctx, ["_swEntries", "_resultISO", "_meetDateISO", "_toISODate"]);
     clear("Doha Open", "s1", "50 Free");
     it("undo takes the swim back out of the record", () =>
       eq(saved.pbs.some((p) => p.event === "50 Free" && p.meet === "Doha Open"), false));
@@ -1139,7 +1139,7 @@ describe("DQ and no-show", () => {
     adminEditSwimmer: function (sq, id, patch) { this.patched = patch; },
     audit: () => {},
   });
-  const deps = ["_markKey", "_meetMarks", "meetLiveClear", "_swEntries", "_resultISO", "_toISODate"];
+  const deps = ["_markKey", "_meetMarks", "meetLiveClear", "_swEntries", "_resultISO", "_meetDateISO", "_toISODate"];
 
   describeMark();
   function describeMark() {
@@ -1200,17 +1200,30 @@ describe("swim dates", () => {
   it("something that is not a date at all is not invented", () => eq(iso("next Friday"), ""));
   it("nothing in is nothing out", () => eq(iso(""), ""));
 
-  const ctx = { _toISODate: iso };
-  const resultISO = bind("_resultISO", ctx);
+  const ctx = { _toISODate: iso, allMeets: () => [
+    { name: "H2O Spring Cup", date: "6/5/2026" },
+    { name: "Nautilus Invitational", date: "1/30/2026" },
+  ] };
+  const resultISO = bind("_resultISO", ctx, ["_meetDateISO", "_toISODate"]);
   it("a swim the app wrote keeps its own date", () =>
     eq(resultISO({ meetDate: "2026-08-22", date: "5 Jun" }), "2026-08-22"));
   it("a swim from the roster keeps the date the roster gave it", () =>
     eq(resultISO({ date: "6/5/2026" }), "2026-06-05"));
+  // The history the old save stripped of its dates: the swim still names its meet, and the club
+  // still knows when that meet was.
+  it("a swim left with no date takes the date of the meet it was swum at", () =>
+    eq(resultISO({ meet: "H2O Spring Cup", date: "", meetDate: "" }), "2026-06-05"));
+  it("a meet the club has never heard of invents nothing", () =>
+    eq(resultISO({ meet: "Somebody else's gala" }), ""));
+  it("a hand-typed swim with no meet invents nothing", () =>
+    eq(resultISO({ meet: "Time trial" }), ""));
+  it("the swim's own date still wins over the meet's", () =>
+    eq(resultISO({ meet: "H2O Spring Cup", meetDate: "2026-08-22" }), "2026-08-22"));
 
   describeHistory();
   function describeHistory() {
     const c = { _resultISO: resultISO, _toISODate: iso };
-    const entries = bind("_swEntries", c, ["_resultISO", "_toISODate"])({
+    const entries = bind("_swEntries", c, ["_resultISO", "_meetDateISO", "_toISODate"])({
       results: [
         { event: "400 Free", sec: 296.73, meet: "Nautilus Invitational", date: "1/30/2026", course: "L" },
         { event: "400 Free", sec: 292.20, meet: "H2O Spring Cup", date: "6/5/2026", course: "L" },
@@ -1225,7 +1238,7 @@ describe("swim dates", () => {
   describeChart();
   function describeChart() {
     const c = { _resultISO: resultISO, _toISODate: iso, fmt: (s) => String(s), shortDate: (d) => String(d) };
-    const series = bind("buildProgSeries", c, ["_resultISO", "_toISODate"])([
+    const series = bind("buildProgSeries", c, ["_resultISO", "_meetDateISO", "_toISODate"])([
       { sec: 296.73, time: "4:56.73", date: "30 Jan", meetDate: "2026-01-30", meet: "Nautilus" },
       { sec: 286.23, time: "4:46.23", date: "22 Aug", meetDate: "2026-08-22", meet: "Test" },
       { sec: 292.20, time: "4:52.20", date: "5 Jun",  meetDate: "2026-06-05", meet: "H2O" },
