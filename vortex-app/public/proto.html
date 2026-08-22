@@ -107,7 +107,7 @@ if ('serviceWorker' in navigator) {
   // changing two swimmers flattened each other. Leaving the key here would undo that from the
   // other end: applyPull would keep writing the stale document into localStorage, and the next
   // boot would read it back over the top — a status set during a register, reverting on reload.
-  var SYNC = ["vx_squads","vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_meet_events","vx_meet_cuts","vx_seed_config","vx_meet_marks","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_memberships","vx_fee_plans","vx_billing","vx_race_splits","vx_bday_sent","vx_staff_pw_set"];
+  var SYNC = ["vx_squads","vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_entries","vx_meet_events","vx_meet_cuts","vx_seed_config","vx_meet_marks","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_memberships","vx_fee_plans","vx_billing","vx_race_splits","vx_bday_sent","vx_staff_pw_set"];
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
   // Auth-retry queue: if a write is rejected because we weren't signed in yet (401/403 under the
@@ -7304,7 +7304,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-22e';
+const VX_BUILD='2026-08-22f';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -7452,9 +7452,9 @@ class Component extends DCLogic {
     this.aiSuggOverrides=this._loadJSON('vx_ai_sugg_ovr', {});
     this.promoStore=this._loadJSON('vx_promo', {});
     this.brandConfig=this._loadJSON('vx_brand', {clubName:'Vortex Swimming Club', zoneMethod:'6', locale:'en', rtl:false, currency:'QAR', payLink:''});
-    this.meetStatus=this._loadJSON('vx_meet_status', {});
+    this.meetStatus=this._loadLocalOnly('vx_meet_status', {});
     this.meetEntries=this._loadJSON('vx_meet_entries', {});
-    this.customMeets=this._loadJSON('vx_custom_meets', []);
+    this.customMeets=this._loadLocalOnly('vx_custom_meets', []);
     this.seedConfig=this._seedConfigNormalise(this._loadJSON('vx_seed_config', null));
     this.meetEventsMap=this._loadJSON('vx_meet_events', {});
     this.wearables=this._loadJSON('vx_wear_cache', {});
@@ -8670,6 +8670,14 @@ class Component extends DCLogic {
   _saveJSON(key, val){
     try{ if(window.__VX_PULLED) window.__VX_PULLED[key]=val; }catch(e){}   // keep the mirror current for in-session reads
     try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){}       // best-effort local cache + DB push (via the setItem hook)
+  }
+  // Read a key from this device only, never from the copy the last pull left in memory. For a
+  // record whose truth is a table, the pulled blob is not a fallback — it is the stale document
+  // the table was created to get away from, and preferring it at boot would hand the old meets
+  // back before the table had even answered.
+  _loadLocalOnly(key, fallback){
+    try{ const v=localStorage.getItem(key); if(v!=null) return this._shaped(JSON.parse(v), fallback); }catch(e){}
+    return fallback;
   }
   _saveLocalOnly(key, val){ try{ (window.__vxsetlocal||localStorage.setItem.bind(localStorage))(key, JSON.stringify(val)); }catch(e){} }
 
@@ -10094,7 +10102,8 @@ class Component extends DCLogic {
     const dateStr=(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();
     const meet={name:S.compName.trim(), location:S.compLocation.trim(), date:dateStr, course:S.compCourse, entries:0, events:S.compEvents.slice()};
     this.customMeets=[meet, ...this.customMeets];
-    this._saveJSON('vx_custom_meets', this.customMeets);
+    try{ this._saveLocalOnly('vx_custom_meets', this.customMeets); }catch(e){}
+    this._meetsPush(meet.name);
     this.notify('all', 'trophy', 'New competition built', meet.name+' \u2014 '+S.compEvents.length+' events \u00b7 '+dateStr+'.');
     this.setState({compName:'', compLocation:'', compDate:'', compCourse:'LCM', compEvents:[], compErr:'', compBuildOpen:false});
   }
@@ -10133,7 +10142,8 @@ class Component extends DCLogic {
     const dateStr=isoDate?this._mdyFromISO(this._toISODate(isoDate)):'';
     const meet={name, location:'', date:dateStr, course:courseLabel||'LCM', entries:0, events:[]};
     this.customMeets=[meet, ...this.customMeets];
-    this._saveJSON('vx_custom_meets', this.customMeets);
+    try{ this._saveLocalOnly('vx_custom_meets', this.customMeets); }catch(e){}
+    this._meetsPush(name);
   }
   // ---- Meet qualifying / cut times --------------------------------------------------------
   _cutSec(meetName, event){ const m=(this.meetCuts||{})[meetName]; const t=m&&m[event]; if(!t) return null; const sec=this.parseTimeStr(t); return (sec!=null?sec:null); }
@@ -10155,6 +10165,13 @@ class Component extends DCLogic {
     // keep them in the standard catalogue order for a tidy program
     const order=this.EVENT_CATALOG(); map[meetName]=base.slice().sort((a,b)=>order.indexOf(a)-order.indexOf(b));
     this.meetEventsMap=map; this._saveJSON('vx_meet_events', map); this.forceUpdate();
+    // The club's own meets carry their program in their row; an imported meet keeps it in the
+    // overlay, because there is no row of the club's to put it on.
+    if(this._isCustomMeet(meetName)){
+      const cm=(this.customMeets||[]).map(x=>x.name===meetName?{...x, events:map[meetName]}:x);
+      this.customMeets=cm; try{ this._saveLocalOnly('vx_custom_meets', cm); }catch(e){}
+      this._meetsPush(meetName);
+    }
   }
   // Did that save reach the club, or only this device?
   //
@@ -10205,12 +10222,13 @@ class Component extends DCLogic {
     const dateStr=this._mdyFromISO(iso);
     const list=(this.customMeets||[]).map(m=>m.name===name
       ? {...m, date:dateStr, location:String(d.location||'').trim(), course:(d.course==='SCM'?'SCM':'LCM')} : m);
-    this.customMeets=list; this._saveJSON('vx_custom_meets', list);
+    this.customMeets=list;
+    try{ this._saveLocalOnly('vx_custom_meets', list); }catch(e){}
     try{ this.audit('meet.edit', name, {meet:name, date:iso, course:d.course}); }catch(e){}
     this.setState({meetEditName:null, meetEditDraft:null, meetEditErr:'',
       settingsMsg:name+' — '+this._fmtDMY(iso, true)+' ✓'});
     this.forceUpdate();
-    this._sayIfNotSaved('vx_custom_meets', name+'\u2019s date was');
+    this._meetsPush(name).then(r=>this._sayMeetSaved(r, name+' — '+this._fmtDMY(iso, true)));
   }
   swFormAddPb(){ const S=this.state; const sec=this.parseTimeStr(S.swPbTimeDraft); if(sec==null) return;
     // A full meet history: each add is its OWN result (same event may appear at several meets),
@@ -12004,9 +12022,108 @@ class Component extends DCLogic {
     this.setState({shareNote:sw.name+' moved to '+(this.squadById[toSquadId]?this.squadById[toSquadId].name:toSquadId)+' ✓'});
   }
   brandSave(){ const d=this.state.brandDraft || this.brandConfig; this.brandConfig={...d}; this._saveJSON('vx_brand', this.brandConfig); this.setState({brandDraft:null, settingsMsg:'Club configuration saved ✓'}); }
+  // ---- The club's meets, one row each --------------------------------------------------------
+  //
+  // The date, venue, course and status used to live in two club_state documents holding every
+  // meet at once, and club_state is last-write-wins on the whole document. A device coming back
+  // online works through its queue of unsent writes, and that queue records the KEY rather than
+  // the bytes — so each retry re-reads whatever that device currently holds and sends its whole
+  // copy of the calendar. That is how a date corrected four times over two hours kept coming
+  // back as 30 July: every write did save, and was then overwritten by a device that had never
+  // heard of it. Correcting a meet now touches one row, so a stale device can only put back the
+  // meets it actually holds. supabase/club_meets.sql.
+  _meetRowToMeet(r){
+    return { name:r.name, date:r.meet_date||'', location:r.location||'', course:r.course||'LCM',
+      entries:0, events:Array.isArray(r.events)?r.events:[] };
+  }
+  async _meetsFetch(){
+    if(!window.__vxSelect) return;
+    this._meetsFetchAt=Date.now();
+    const rows=await window.__vxSelect('club_meets', 'select=*&limit=2000');
+    if(rows==null) return;                    // table missing / offline → keep what we have
+    // An empty answer is not the same as "this club has no meets": a row-level-security refusal
+    // on a SELECT is answered 200 with [], which would arrive here looking exactly like a club
+    // that has never run a meet — and would then be written over the real calendar.
+    if(!rows.length && ((this.customMeets||[]).length || Object.keys(this.meetStatus||{}).length)){
+      try{ console.warn('vx: club_meets read came back empty while this device holds meets — keeping them'); }catch(e){}
+      return;
+    }
+    const unsent=this._meetsUnsent(); const ts=this._meetWriteTs||{}; const startedAt=this._meetsFetchAt||0;
+    const built=[], status={}, seen={};
+    rows.forEach(r=>{ if(!r || !r.name) return; seen[r.name]=1;
+      // Written here since this read went out, or written here and not yet accepted: this device
+      // holds the newer answer, exactly as the entries sheet does.
+      const mine=(unsent[r.name] || (ts[r.name]||0)>=startedAt) ? this._meetHeldHere(r.name) : null;
+      if(mine){ if(mine.meet) built.push(mine.meet); status[r.name]=mine.status; return; }
+      if(r.club_built) built.push(this._meetRowToMeet(r));
+      status[r.name]=r.status||'Upcoming'; });
+    // A meet made here that the table has never heard of is still a meet.
+    Object.keys(unsent).forEach(nm=>{ if(seen[nm]) return; const mine=this._meetHeldHere(nm);
+      if(mine && mine.meet) built.push(mine.meet); if(mine) status[nm]=mine.status; });
+    this.customMeets=built; this.meetStatus=status;
+    try{ this._saveLocalOnly('vx_custom_meets', built); this._saveLocalOnly('vx_meet_status', status); }catch(e){}
+    this.forceUpdate();
+    this._meetsMigrateOnce(rows);
+  }
+  _meetHeldHere(name){
+    const meet=(this.customMeets||[]).find(m=>m.name===name)||null;
+    const status=(this.meetStatus||{})[name];
+    return (meet||status) ? {meet, status:status||'Upcoming'} : null;
+  }
+  // Which meets are still only on this device, and when each was last written here.
+  _meetsUnsent(){
+    if(this._meetUnsent) return this._meetUnsent;
+    try{ this._meetUnsent=JSON.parse(localStorage.getItem('vx_meets_unsent')||'{}')||{}; }catch(e){ this._meetUnsent={}; }
+    return this._meetUnsent;
+  }
+  _meetLanded(name, ok){
+    const m=this._meetsUnsent();
+    if(ok) delete m[name]; else m[name]=1;
+    try{ this._saveLocalOnly('vx_meets_unsent', m); }catch(e){}
+  }
+  /** Write one meet. Returns what the database said, so the caller can report it. */
+  async _meetsPush(name){
+    const ts=(this._meetWriteTs=this._meetWriteTs||{}); ts[name]=Date.now();
+    if(!window.__vxUpsert) return {ok:false, why:'this device cannot reach the database'};
+    const meet=(this.customMeets||[]).find(m=>m.name===name)||null;
+    const row={ name,
+      meet_date:(meet&&meet.date)||'', location:(meet&&meet.location)||'',
+      course:(meet&&meet.course)||'LCM', events:(meet&&Array.isArray(meet.events))?meet.events:[],
+      status:(this.meetStatus||{})[name]||'Upcoming', club_built: !!meet };
+    // Marked as this device's before it is sent and unmarked only when the database says yes:
+    // with no live session the write is parked for the sign-in and never settles, so recording
+    // the outcome when it settles would never run.
+    this._meetLanded(name, false);
+    let ok=false;
+    try{ ok=!!(await Promise.race([ Promise.resolve(window.__vxUpsert('club_meets', [row])).catch(()=>false),
+                                    new Promise(r=>setTimeout(()=>r(false), 8000)) ])); }catch(e){ ok=false; }
+    this._meetLanded(name, ok);
+    if(ok) return {ok:true};
+    const err=(window.__vxLastWriteErr && window.__vxLastWriteErr.table==='club_meets')
+      ? (window.__vxLastWriteErr.said||('HTTP '+window.__vxLastWriteErr.status)) : '';
+    return {ok:false, why: err || 'it has not left this device — the database sign-in here may have ended'};
+  }
+  // Everything this device knows that the table does not. Runs once the table has answered:
+  // a migration that has never read what it is writing over cannot know what it is writing over.
+  async _meetsMigrateOnce(rowsSeen){
+    if(this._meetsMigrated || !window.__vxUpsert) return; this._meetsMigrated=true;
+    const have={}; (rowsSeen||[]).forEach(r=>{ if(r&&r.name) have[r.name]=1; });
+    const names=[];
+    (this.customMeets||[]).forEach(m=>{ if(m&&m.name&&!have[m.name]) names.push(m.name); });
+    Object.keys(this.meetStatus||{}).forEach(nm=>{ if(!have[nm] && names.indexOf(nm)<0) names.push(nm); });
+    for(const nm of names){ try{ await this._meetsPush(nm); }catch(e){} }
+  }
   allMeets(){ return [...this.customMeets, ...this.meetsMeta]; }
-  meetStatusCycle(name){ const order=['Upcoming','Entries open','In progress','Completed']; const cur=this.meetStatus[name]||'Upcoming'; const ni=(order.indexOf(cur)+1)%order.length; this.meetStatus={...this.meetStatus, [name]:order[ni]}; this._saveJSON('vx_meet_status', this.meetStatus); this.forceUpdate();
-    this._sayIfNotSaved('vx_meet_status', name+' \u2014 '+order[ni]+' was'); }
+  meetStatusCycle(name){ const order=['Upcoming','Entries open','In progress','Completed']; const cur=this.meetStatus[name]||'Upcoming'; const ni=(order.indexOf(cur)+1)%order.length; this.meetStatus={...this.meetStatus, [name]:order[ni]};
+    try{ this._saveLocalOnly('vx_meet_status', this.meetStatus); }catch(e){}
+    this.forceUpdate();
+    this._meetsPush(name).then(r=>this._sayMeetSaved(r, name+' \u2014 '+order[ni])); }
+  // What actually happened to the write, said on the screen the change was made on.
+  _sayMeetSaved(r, what){
+    if(r && r.ok) return this.setState({meetsMsg: what+' \u2713', meetsMsgOk:true});
+    this.setState({meetsMsgOk:false, meetsMsg: what+' \u2014 saved on this device only: '+((r&&r.why)||'it did not reach the database')
+      +'. Sign out and back in, then set it again.'});
+  }
   toggleEntryEvent(ev){ const cur=this.state.entriesEventsSel.slice(); const i=cur.indexOf(ev); if(i>=0) cur.splice(i,1); else cur.push(ev); this.setState({entriesEventsSel:cur}); }
   toggleEntrySwimmer(id){ const cur=(this.state.entriesSwSel||[]).slice(); const i=cur.indexOf(id); if(i>=0) cur.splice(i,1); else cur.push(id); this.setState({entriesSwSel:cur}); }
   // Personal-best time for a swimmer in an event ('NT' = no time on file).
@@ -14195,7 +14312,8 @@ class Component extends DCLogic {
     const dateStr=(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();
     const meet={name:S.calName.trim(), location:S.calLocation.trim(), date:dateStr, course:S.calCourse, entries:0};
     this.customMeets=[meet, ...this.customMeets];
-    this._saveJSON('vx_custom_meets', this.customMeets);
+    try{ this._saveLocalOnly('vx_custom_meets', this.customMeets); }catch(e){}
+    this._meetsPush(meet.name);
     this.notify('all', 'calendar-plus', 'New meet added', meet.name+' \u2014 '+dateStr+(meet.location?(' \u00b7 '+meet.location):'')+'.');
     this.setState({calName:'', calLocation:'', calDate:'', calCourse:'LCM', calErr:'', calOpen:false});
   }
@@ -14692,7 +14810,7 @@ class Component extends DCLogic {
   // empty; this re-fetches them with the signed-in user's JWT so their data appears.
   _refetchAll(){
     try{ this._repullOnce(); }catch(e){}
-    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_swStatusFetch','_wearFetch','_wearStatusFetch','_hrSetsFetch','_wellnessFetch','_inbodyFetch','_invoicesFetch','_membershipsFetch','_entriesFetch','_planCustomFetch','_familyFetch']
+    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_swStatusFetch','_wearFetch','_wearStatusFetch','_hrSetsFetch','_wellnessFetch','_inbodyFetch','_invoicesFetch','_membershipsFetch','_entriesFetch','_meetsFetch','_planCustomFetch','_familyFetch']
       .forEach((f)=>{ try{ if(typeof this[f]==='function') this[f](); }catch(e){} });
     try{ this._attendFetchStaged(); }catch(e){}
   }
@@ -14709,7 +14827,7 @@ class Component extends DCLogic {
     // marks until one of them signed out. Both halves are fixed: the subscription above, and
     // this call.
     try{ this._attendFetchStaged(); }catch(e){}
-    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_swStatusFetch','_wellnessFetch','_inbodyFetch','_invoicesFetch','_membershipsFetch','_entriesFetch','_hrSetsFetch','_wearFetch','_planCustomFetch']
+    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_swStatusFetch','_wellnessFetch','_inbodyFetch','_invoicesFetch','_membershipsFetch','_entriesFetch','_meetsFetch','_hrSetsFetch','_wearFetch','_planCustomFetch']
       .forEach((f)=>{ try{ if(typeof this[f]==='function') this[f](); }catch(e){} });
   }
   // Stage B: give a signed-in staff member a real Supabase Auth session (JWT) in the background,
@@ -15408,6 +15526,7 @@ class Component extends DCLogic {
     this._invoicesFetch();
     this._membershipsFetch();
     this._entriesFetch();
+    this._meetsFetch();
     this._attendFetchStaged();
     // Status is a table now, not a key in the shared document, so it needs loading here with the
     // rest of the per-row data. _refetchAll lists it too, but that only runs once a signed-in
@@ -15530,12 +15649,16 @@ class Component extends DCLogic {
     this.sponsoredMap=g('vx_sponsored', this.sponsoredMap);
     // (Swimmer photos come from the swimmer_docs table now, not this synced blob — don't overwrite them here.)
     this.staffOverrides=g('vx_staff_ovr', this.staffOverrides);
-    this.meetStatus=g('vx_meet_status', this.meetStatus); this.meetEntries=g('vx_meet_entries', this.meetEntries);
+    this.meetEntries=g('vx_meet_entries', this.meetEntries);
     // How the club seeds, and which lanes ended in a DQ or an empty block — both are the meet as
     // every coach on deck sees it, not this one iPad's opinion of it.
     this.seedConfig=this._seedConfigNormalise(g('vx_seed_config', this.seedConfig));
     this.meetMarks=g('vx_meet_marks', this._meetMarks());
-    this.customMeets=g('vx_custom_meets', this.customMeets); this.eventRequests=g('vx_event_requests', this.eventRequests); this.meetCuts=g('vx_meet_cuts', this.meetCuts);
+    // The meets and their statuses come from club_meets now, not from this blob — re-reading the
+    // document here is precisely how a stale copy got back over a corrected date. Same treatment
+    // swimmer status got when it moved to a table of its own.
+    try{ this._meetsFetch(); }catch(e){}
+    this.eventRequests=g('vx_event_requests', this.eventRequests); this.meetCuts=g('vx_meet_cuts', this.meetCuts);
     this.academyTrials=g('vx_academy_trials', this.academyTrials); this.academyFees=g('vx_academy_fees', this.academyFees);
     this.feePlans=g('vx_fee_plans', this.feePlans); this.memberships=g('vx_memberships', this.memberships); this.invoices=g('vx_invoices', this.invoices);
     this.billing=g('vx_billing', this.billing); this.raceSplitLog=g('vx_race_splits', this.raceSplitLog);
