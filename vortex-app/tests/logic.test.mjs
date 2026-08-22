@@ -909,7 +909,7 @@ describe("meet day", () => {
   describeSwims();
   function describeSwims() {
     const ctx = baseCtx();
-    const swims = bind("_meetSwims", ctx, ["_swEntries"]);
+    const swims = bind("_meetSwims", ctx, ["_swEntries", "_resultISO", "_toISODate"]);
     const out = swims("Doha Open");
     it("collects this meet's swims across every squad", () => eq(Object.keys(out).length, 3));
     it("leaves another meet's swims alone", () => eq(out["s1|100 Free"], undefined));
@@ -919,7 +919,7 @@ describe("meet day", () => {
   describePlaces();
   function describePlaces() {
     const ctx = baseCtx();
-    const places = bind("_meetPlaces", ctx, ["_meetSwims", "_swEntries"]);
+    const places = bind("_meetPlaces", ctx, ["_meetSwims", "_swEntries", "_resultISO", "_toISODate"]);
     const p = places("Doha Open");
     it("first place is the fastest of the whole event", () => eq(p["s2|50 Free"], 1));
     it("places run across heats, not within one", () => eq(p["s3|50 Free"], 2));
@@ -929,7 +929,7 @@ describe("meet day", () => {
   describeBest();
   function describeBest() {
     const ctx = baseCtx();
-    const best = bind("_bestBefore", ctx, ["_swEntries"]);
+    const best = bind("_bestBefore", ctx, ["_swEntries", "_resultISO", "_toISODate"]);
     const hannah = ctx.roster.junior[0];
     it("the best they came in with", () => eq(best(hannah, "50 Free", "Doha Open"), 31.2));
     it("without today's meet excluded it would beat itself", () => eq(best(hannah, "50 Free", ""), 30.8));
@@ -942,7 +942,7 @@ describe("meet day", () => {
     ctx.allSwimmersFlat = () => [{ ...ctx.roster.junior[0], squadId: "junior" }];
     let saved = null;
     ctx.adminEditSwimmer = (sqId, id, patch) => { saved = { sqId, id, patch }; };
-    const save = bind("meetLiveSave", ctx, ["parseTimeStr", "_bestBefore", "_swEntries", "fmt"]);
+    const save = bind("meetLiveSave", ctx, ["parseTimeStr", "_bestBefore", "_swEntries", "_resultISO", "_toISODate", "fmt"]);
 
     save("Doha Open", "2026-08-08", "LCM", "s1", "50 Free", "30.10");
     it("saves against the swimmer's own squad", () => eq(saved.sqId, "junior"));
@@ -978,11 +978,262 @@ describe("meet day", () => {
     ctx.allSwimmersFlat = () => [{ ...ctx.roster.junior[0], squadId: "junior" }];
     let saved = null;
     ctx.adminEditSwimmer = (sqId, id, patch) => { saved = patch; };
-    const clear = bind("meetLiveClear", ctx, ["_swEntries"]);
+    const clear = bind("meetLiveClear", ctx, ["_swEntries", "_resultISO", "_toISODate"]);
     clear("Doha Open", "s1", "50 Free");
     it("undo takes the swim back out of the record", () =>
       eq(saved.pbs.some((p) => p.event === "50 Free" && p.meet === "Doha Open"), false));
     it("and leaves every other race in place", () => eq(saved.pbs.length, 2));
+  }
+});
+
+/* ------------------------------------------------------------------- seeding
+   The heat sheet the club ran its first meet off put every swimmer in heat 1,
+   lane 1: one heat, one lane, boys and girls and every age in it. The pool has
+   ten lanes numbered 0-9, girls and boys go off separately, and a coach must be
+   able to say which age groups are kept apart. */
+describe("seeding a meet", () => {
+  const SW = [
+    // girls, fastest first
+    { id: "g1", name: "Aisha", gender: "Girls", age: 12, pbs: [{ event: "50 Free", sec: 29.1 }] },
+    { id: "g2", name: "Bea",   gender: "Girls", age: 12, pbs: [{ event: "50 Free", sec: 30.4 }] },
+    { id: "g3", name: "Cara",  gender: "Girls", age: 9,  pbs: [{ event: "50 Free", sec: 34.9 }] },
+    // boys
+    { id: "b1", name: "Dan",   gender: "Boys",  age: 12, pbs: [{ event: "50 Free", sec: 28.7 }] },
+    { id: "b2", name: "Eli",   gender: "Boys",  age: 9,  pbs: [{ event: "50 Free", sec: 33.2 }] },
+    { id: "b3", name: "Fahd",  gender: "Boys",  age: 9,  pbs: [] },     // no time on file
+  ];
+  const entriesFor = (ids, event = "50 Free") =>
+    ids.map((id) => ({ swId: id, name: (SW.find((s) => s.id === id) || {}).name, event, heat: 1, lane: 1 }));
+
+  const seedCtx = (entries, cfg) => {
+    const ctx = {
+      state: {},
+      meetEntries: { Test: entries },
+      seedConfig: cfg || null,
+      allSwimmersFlat: () => SW,
+      setState: function (p) { Object.assign(this.state, p); },
+      forceUpdate: () => {},
+      _saveJSON: () => {},
+      _entriesSave: function (meet, list) { this.meetEntries = { ...this.meetEntries, [meet]: list }; },
+      _ageFromDob: () => null,
+    };
+    ctx.seedConfig = bind("_seedConfigNormalise", ctx, ["_seedConfigDefaults"])(cfg || null);
+    return ctx;
+  };
+  const seedDeps = ["_seedConfig", "_seedConfigNormalise", "_seedConfigDefaults", "_laneOrder",
+                    "_seedGroupOf", "_seedGenderOf", "_ageBandFor", "_swAge"];
+
+  describeLanes();
+  function describeLanes() {
+    const order = bind("_laneOrder", {});
+    it("a ten-lane pool numbered from zero fills from the middle out", () =>
+      eq(order(10, 0).join(","), "4,5,3,6,2,7,1,8,0,9"));
+    it("lane 0 is a real lane, not a missing one", () => eq(order(10, 0).includes(0), true));
+    it("the eight-lane pool it was written for seeds exactly as it always did", () =>
+      eq(order(8, 1).join(","), "4,5,3,6,2,7,1,8"));
+    it("no lane is dealt twice", () => eq(new Set(order(10, 0)).size, 10));
+  }
+
+  describeSplit();
+  function describeSplit() {
+    const ctx = seedCtx(entriesFor(["g1", "g2", "g3", "b1", "b2", "b3"]));
+    bind("autoSeedMeet", ctx, seedDeps)("Test");
+    const out = ctx.meetEntries.Test;
+    const heatOf = (id) => out.find((e) => e.swId === id).heat;
+    const laneOf = (id) => out.find((e) => e.swId === id).lane;
+
+    it("girls and boys are never in the same heat", () => {
+      const girlHeats = new Set(["g1", "g2", "g3"].map(heatOf));
+      const boyHeats = new Set(["b1", "b2", "b3"].map(heatOf));
+      eq([...girlHeats].some((h) => boyHeats.has(h)), false);
+    });
+    it("an event does not have two heat 1s", () =>
+      eq(new Set(out.map((e) => e.heat)).size, 2, "one heat of girls, one of boys"));
+    it("nobody is left in the lane they were entered on", () =>
+      eq(out.every((e) => e.lane !== 1 || e.heat !== 1), true));
+    it("the fastest girl gets the centre lane", () => eq(laneOf("g1"), 4));
+    it("the next fastest is beside her", () => eq(laneOf("g2"), 5));
+    it("the fastest boy gets the centre lane of his own heat", () => eq(laneOf("b1"), 4));
+    it("a swimmer with no time on file still gets a lane", () => eq(laneOf("b3") >= 0, true));
+    it("and is seeded last, not first", () => eq(laneOf("b3"), 3));
+  }
+
+  describeMixed();
+  function describeMixed() {
+    const ctx = seedCtx(entriesFor(["g1", "g2", "b1"]), { splitGender: false });
+    bind("autoSeedMeet", ctx, seedDeps)("Test");
+    const out = ctx.meetEntries.Test;
+    it("a club that seeds mixed gets one heat again", () => eq(new Set(out.map((e) => e.heat)).size, 1));
+    it("and it is still ordered by personal best", () =>
+      eq(out.find((e) => e.swId === "b1").lane, 4, "the fastest of the three is in the centre"));
+  }
+
+  describeAgeGroups();
+  function describeAgeGroups() {
+    const ctx = seedCtx(entriesFor(["g1", "g2", "g3", "b1", "b2", "b3"]), { splitAge: true });
+    bind("autoSeedMeet", ctx, seedDeps)("Test");
+    const out = ctx.meetEntries.Test;
+    const heatOf = (id) => out.find((e) => e.swId === id).heat;
+    it("a nine-year-old does not swim the twelve-year-olds' heat", () =>
+      eq(heatOf("g3") === heatOf("g1"), false));
+    it("each age category and gender gets its own heat", () =>
+      eq(new Set(out.map((e) => e.heat)).size, 4));
+    it("the youngest category is called first", () => eq(heatOf("g3") < heatOf("g1"), true));
+  }
+
+  describeFullPool();
+  function describeFullPool() {
+    const many = Array.from({ length: 14 }, (_, i) => ({
+      id: "m" + i, name: "Swimmer " + i, gender: "Boys", age: 12, pbs: [{ event: "50 Free", sec: 30 + i }],
+    }));
+    const ctx = seedCtx(many.map((s) => ({ swId: s.id, name: s.name, event: "50 Free", heat: 1, lane: 1 })));
+    ctx.allSwimmersFlat = () => many;
+    bind("autoSeedMeet", ctx, seedDeps)("Test");
+    const out = ctx.meetEntries.Test;
+    const heat = (id) => out.find((e) => e.swId === id).heat;
+    it("fourteen swimmers are two heats of a ten-lane pool", () =>
+      eq(new Set(out.map((e) => e.heat)).size, 2));
+    it("no heat is bigger than the pool", () =>
+      eq(out.filter((e) => e.heat === 2).length <= 10, true));
+    it("the fastest swim in the last heat, as a meet is run", () => eq(heat("m0"), 2));
+    it("the slowest are in the first heat", () => eq(heat("m13"), 1));
+    it("and the fastest of all has the centre lane", () =>
+      eq(out.find((e) => e.swId === "m0").lane, 4));
+  }
+
+  describeConfig();
+  function describeConfig() {
+    const norm = bind("_seedConfigNormalise", {}, ["_seedConfigDefaults"]);
+    it("a club with no settings yet gets the club's ten-lane pool", () => {
+      const c = norm(null);
+      eq(c.lanes + ":" + c.firstLane, "10:0");
+    });
+    it("boys and girls apart is the default, because that is how the meets are run", () =>
+      eq(norm(null).splitGender, true));
+    it("a nonsense lane count cannot be saved", () => eq(norm({ lanes: 900 }).lanes, 20));
+    it("an age category typed backwards is still the category meant", () => {
+      const b = norm({ bands: [{ name: "11-12", from: 12, to: 11 }] }).bands[0];
+      eq(b.from + "-" + b.to, "11-12");
+    });
+    it("a category with no name is named after its ages rather than dropped", () =>
+      eq(norm({ bands: [{ from: 9, to: 10 }] }).bands[0].name, "9-10"));
+  }
+});
+
+/* --------------------------------------------------------- DQ and no-show
+   A lane that ends in a disqualification or an empty block has no time in it. It
+   must still be marked, or the coach is sent back to a heat that finished an hour
+   ago — and it must never be given a number, because a number in a swimmer's
+   history is a race they swam. */
+describe("DQ and no-show", () => {
+  const ctx = () => ({
+    state: {},
+    meetMarks: {},
+    roster: { junior: [{ id: "s1", name: "Hannah Millen", entries: [
+      { event: "50 Free", sec: 31.2, meet: "Test", meetDate: "2026-08-22" }] }] },
+    allSwimmersFlat: function () { return [{ ...this.roster.junior[0], squadId: "junior" }]; },
+    setState: function (p) { Object.assign(this.state, p); },
+    forceUpdate: () => {},
+    _loadJSON: (k, f) => f,
+    _saveJSON: function (k, v) { this.saved = { k, v }; },
+    adminEditSwimmer: function (sq, id, patch) { this.patched = patch; },
+    audit: () => {},
+  });
+  const deps = ["_markKey", "_meetMarks", "meetLiveClear", "_swEntries", "_resultISO", "_toISODate"];
+
+  describeMark();
+  function describeMark() {
+    const c = ctx();
+    bind("meetMarkSet", c, deps)("Test", "s1", "50 Free", "DQ");
+    it("the mark is saved against the meet, not the swimmer's history", () =>
+      eq(c.saved.k, "vx_meet_marks"));
+    it("a DQ takes the time it replaces back out of the record", () =>
+      eq(c.patched.pbs.some((p) => p.event === "50 Free" && p.meet === "Test"), false));
+    it("and the mark reads back on the lane it was set on", () =>
+      eq(bind("meetMarkOf", c, ["_markKey", "_meetMarks"])("Test", "s1", "50 Free"), "DQ"));
+    it("the coach is told which lane was marked", () => eq(/DQ/.test(c.state.meetDayMsg), true));
+  }
+
+  describeNoShow();
+  function describeNoShow() {
+    const c = ctx();
+    bind("meetMarkSet", c, deps)("Test", "s1", "50 Free", "NS");
+    it("a no-show is a mark of its own, not a DQ", () =>
+      eq(bind("meetMarkOf", c, ["_markKey", "_meetMarks"])("Test", "s1", "50 Free"), "NS"));
+    it("an unknown mark is refused rather than stored", () => {
+      const c2 = ctx();
+      bind("meetMarkSet", c2, [...deps, "meetMarkClear"])("Test", "s1", "50 Free", "maybe");
+      eq(bind("meetMarkOf", c2, ["_markKey", "_meetMarks"])("Test", "s1", "50 Free"), "");
+    });
+  }
+
+  describeUnmark();
+  function describeUnmark() {
+    const c = ctx();
+    bind("meetMarkSet", c, deps)("Test", "s1", "50 Free", "DQ");
+    bind("meetMarkClear", c, ["_markKey", "_meetMarks"])("Test", "s1", "50 Free");
+    it("a mark set by mistake comes off again", () =>
+      eq(bind("meetMarkOf", c, ["_markKey", "_meetMarks"])("Test", "s1", "50 Free"), ""));
+  }
+
+  describeReadBack();
+  function describeReadBack() {
+    const c = ctx();
+    c.meetMarks = { "Test::s1::50 Free": { mark: "DQ" }, "Other::s2::100 Free": { mark: "NS" } };
+    const marks = bind("_meetMarksFor", c, ["_meetMarks"])("Test");
+    it("a meet reads its own marks", () => eq(marks["s1|50 Free"], "DQ"));
+    it("and not another meet's", () => eq(Object.keys(marks).length, 1));
+  }
+});
+
+/* ----------------------------------------------------- the date a swim happened
+   A time trial swum this morning appeared in the swimmer's progression months
+   back, and every earlier swim in their history lost its date the moment it was
+   saved. Both came from reading only one of the shapes a date arrives in. */
+describe("swim dates", () => {
+  const iso = bind("_toISODate", {});
+  it("an ISO date is already the shape it is stored in", () => eq(iso("2026-08-22"), "2026-08-22"));
+  it("the American order the roster and Hy-Tek use is read", () => eq(iso("6/5/2026"), "2026-06-05"));
+  it("a date already turned into a label is read back", () => eq(iso("30 Jul 2026"), "2026-07-30"));
+  it("a label with no year takes this year rather than becoming nothing", () =>
+    eq(iso("30 Jul").slice(4), "-07-30"));
+  it("something that is not a date at all is not invented", () => eq(iso("next Friday"), ""));
+  it("nothing in is nothing out", () => eq(iso(""), ""));
+
+  const ctx = { _toISODate: iso };
+  const resultISO = bind("_resultISO", ctx);
+  it("a swim the app wrote keeps its own date", () =>
+    eq(resultISO({ meetDate: "2026-08-22", date: "5 Jun" }), "2026-08-22"));
+  it("a swim from the roster keeps the date the roster gave it", () =>
+    eq(resultISO({ date: "6/5/2026" }), "2026-06-05"));
+
+  describeHistory();
+  function describeHistory() {
+    const c = { _resultISO: resultISO, _toISODate: iso };
+    const entries = bind("_swEntries", c, ["_resultISO", "_toISODate"])({
+      results: [
+        { event: "400 Free", sec: 296.73, meet: "Nautilus Invitational", date: "1/30/2026", course: "L" },
+        { event: "400 Free", sec: 292.20, meet: "H2O Spring Cup", date: "6/5/2026", course: "L" },
+      ],
+    });
+    it("a race saved poolside no longer empties the dates of every race before it", () =>
+      eq(entries.every((e) => e.meetDate !== ""), true));
+    it("the dates kept are the dates the swims really carry", () =>
+      eq(entries.map((e) => e.meetDate).join(" "), "2026-01-30 2026-06-05"));
+  }
+
+  describeChart();
+  function describeChart() {
+    const c = { _resultISO: resultISO, _toISODate: iso, fmt: (s) => String(s), shortDate: (d) => String(d) };
+    const series = bind("buildProgSeries", c, ["_resultISO", "_toISODate"])([
+      { sec: 296.73, time: "4:56.73", date: "30 Jan", meetDate: "2026-01-30", meet: "Nautilus" },
+      { sec: 286.23, time: "4:46.23", date: "22 Aug", meetDate: "2026-08-22", meet: "Test" },
+      { sec: 292.20, time: "4:52.20", date: "5 Jun",  meetDate: "2026-06-05", meet: "H2O" },
+    ], "#000");
+    it("the progression runs in the order the swims happened", () =>
+      eq(series.dots.map((d) => d.meet).join(" "), "Nautilus H2O Test"));
+    it("and the improvement is measured against the first swim, not the first row", () =>
+      eq(series.drop, "−10.50s vs first"));
   }
 });
 

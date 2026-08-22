@@ -107,7 +107,7 @@ if ('serviceWorker' in navigator) {
   // changing two swimmers flattened each other. Leaving the key here would undo that from the
   // other end: applyPull would keep writing the stale document into localStorage, and the next
   // boot would read it back over the top — a status set during a register, reverting on reload.
-  var SYNC = ["vx_squads","vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_meet_events","vx_meet_cuts","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_memberships","vx_fee_plans","vx_billing","vx_race_splits","vx_bday_sent","vx_staff_pw_set"];
+  var SYNC = ["vx_squads","vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_status","vx_meet_entries","vx_custom_meets","vx_meet_events","vx_meet_cuts","vx_seed_config","vx_meet_marks","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_memberships","vx_fee_plans","vx_billing","vx_race_splits","vx_bday_sent","vx_staff_pw_set"];
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
   // Auth-retry queue: if a write is rejected because we weren't signed in yet (401/403 under the
@@ -4238,6 +4238,10 @@ if ('serviceWorker' in navigator) {
                             <span style="font-size:11px;opacity:.65">{{ meetDayProgress }}</span>
                             <span style="font-size:11px;font-weight:700;color:#C89B3C">{{ meetDayPbLine }}</span>
                           </div>
+                          <div style="display:flex;align-items:center;gap:8px;margin-top:11px;padding-top:10px;border-top:1px solid rgba(255,255,255,.12)">
+                            <span style="flex:1;min-width:0;font-size:11px;opacity:.65">Times are recorded on</span>
+                            <input value="{{ meetDayDate }}" onchange="{{ onMeetDayDate }}" type="date" aria-label="Date these times were swum" style="flex:none;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);border-radius:9px;padding:7px 9px;font-family:inherit;font-size:12px;color:#fff;outline:none">
+                          </div>
                         </div>
                         <sc-if value="{{ meetDayMsgShow }}" hint-placeholder-val="{{ false }}">
                           <p style="margin:0;background:#EEF4FF;border:1px solid #D4E2FB;border-radius:10px;padding:8px 10px;font-size:11.5px;color:#1B4CA1">{{ meetDayMsg }}</p>
@@ -4247,7 +4251,7 @@ if ('serviceWorker' in navigator) {
                             <sc-for list="{{ meetDayHeats }}" as="hh" hint-placeholder-count="2">
                               <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
                                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px">
-                                  <p style="margin:0;font-size:12.5px;font-weight:700;color:#0C1116">{{ hh.label }}</p>
+                                  <p style="margin:0;font-size:12.5px;font-weight:700;color:#0C1116">{{ hh.label }}<sc-if value="{{ hh.groupShow }}" hint-placeholder-val="{{ true }}"><span style="display:block;font-size:10.5px;font-weight:600;color:#7A8296;margin-top:2px">{{ hh.groupLabel }}</span></sc-if></p>
                                   <span style="font-family:var(--font-mono);font-size:11px;font-weight:700;color:#7A8296">{{ hh.doneLabel }}</span>
                                 </div>
                                 <div style="display:flex;flex-direction:column;gap:6px">
@@ -4256,8 +4260,14 @@ if ('serviceWorker' in navigator) {
                                       <span style="flex:none;width:22px;height:22px;border-radius:7px;background:#fff;border:1px solid #E5E9F0;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:11px;font-weight:700;color:#3A4152">{{ ln.lane }}</span>
                                       <span style="flex:1;min-width:0"><span style="display:block;font-size:12px;font-weight:700;color:#0C1116;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ ln.name }}</span><span style="display:block;font-size:10px;color:#9AA2B4;margin-top:1px">Seed {{ ln.pb }}</span></span>
                                       <sc-if value="{{ ln.notDone }}" hint-placeholder-val="{{ true }}">
-                                        <input value="{{ ln.draft }}" oninput="{{ ln.onDraft }}" inputmode="decimal" placeholder="26.20" style="flex:none;width:74px;background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:7px 8px;font-family:var(--font-mono);font-size:12.5px;color:#0C1116;outline:none;text-align:center">
+                                        <input value="{{ ln.draft }}" oninput="{{ ln.onDraft }}" inputmode="decimal" placeholder="26.20" style="flex:none;width:66px;background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:7px 6px;font-family:var(--font-mono);font-size:12.5px;color:#0C1116;outline:none;text-align:center">
                                         <button onclick="{{ ln.onSave }}" aria-label="Save this time" style="flex:none;width:32px;height:32px;border-radius:9px;background:var(--vx-blue);border:none;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center"><i data-lucide="check" style="width:15px;height:15px"></i></button>
+                                        <button onclick="{{ ln.onDq }}" aria-label="Disqualified" title="Disqualified" style="flex:none;height:32px;padding:0 7px;border-radius:9px;background:#FDECEC;border:none;cursor:pointer;color:#B42318;font-family:inherit;font-weight:700;font-size:10.5px">DQ</button>
+                                        <button onclick="{{ ln.onNs }}" aria-label="Did not start" title="Did not start" style="flex:none;height:32px;padding:0 7px;border-radius:9px;background:#F1F3F7;border:none;cursor:pointer;color:#5B6472;font-family:inherit;font-weight:700;font-size:10.5px">N/S</button>
+                                      </sc-if>
+                                      <sc-if value="{{ ln.marked }}" hint-placeholder-val="{{ false }}">
+                                        <span style="flex:none;text-align:right"><span style="display:block;font-family:var(--font-mono);font-size:13px;font-weight:800;color:{{ ln.markFg }}">{{ ln.markLabel }}</span><span style="display:block;font-size:9.5px;font-weight:700;color:#9AA2B4">{{ ln.markFull }}</span></span>
+                                        <button onclick="{{ ln.onUnmark }}" aria-label="Remove this mark" style="flex:none;width:28px;height:28px;border-radius:8px;background:{{ ln.markBg }};border:none;cursor:pointer;color:#7A8296;display:flex;align-items:center;justify-content:center"><i data-lucide="undo-2" style="width:13px;height:13px"></i></button>
                                       </sc-if>
                                       <sc-if value="{{ ln.done }}" hint-placeholder-val="{{ false }}">
                                         <span style="flex:none;text-align:right"><span style="display:block;font-family:var(--font-mono);font-size:13px;font-weight:700;color:#0C1116">{{ ln.timeLabel }}</span><span style="display:block;font-size:10px;font-weight:700;color:#7A8296">{{ ln.placeLabel }}</span></span>
@@ -4338,14 +4348,55 @@ if ('serviceWorker' in navigator) {
                           </sc-for>
                         </div>
                         <button onclick="{{ onEntryAdd }}" style="width:100%;background:var(--vx-blue);color:#fff;border:none;border-radius:10px;padding:12px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px"><i data-lucide="plus" style="width:16px;height:16px"></i>Add {{ entrySelName }} × selected events</button>
-                        <p style="margin:7px 2px 0;font-size:10.5px;color:#9AA2B4;line-height:1.5">Heats &amp; lanes are seeded automatically by personal best (fastest in the centre, last heat) — no manual heat/lane needed.</p>
+                        <p style="margin:7px 2px 0;font-size:10.5px;color:#9AA2B4;line-height:1.5">Heats &amp; lanes are seeded automatically by personal best — no manual heat/lane needed. {{ seedSummary }}.</p>
+                      </div>
+
+                      <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+                          <p style="margin:0;font-size:13px;font-weight:700;color:#0C1116">Seeding rules</p>
+                          <span style="font-family:var(--font-mono);font-size:11px;font-weight:700;color:#7A8296">{{ seedLanesLabel }}</span>
+                        </div>
+                        <p style="margin:0 0 7px;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4">The pool</p>
+                        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
+                          <sc-for list="{{ seedPresets }}" as="lp" hint-placeholder-count="4">
+                            <button onclick="{{ lp.onClick }}" style="background:{{ lp.bg }};color:{{ lp.fg }};border:1px solid {{ lp.border }};border-radius:9px;padding:7px 11px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer">{{ lp.label }}</button>
+                          </sc-for>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:9px;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:11px;padding:10px;margin-bottom:7px">
+                          <span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;font-weight:700;color:#0C1116">Boys &amp; girls apart</span><span style="display:block;font-size:10.5px;color:#7A8296;margin-top:1px">Girls and boys never share a heat</span></span>
+                          <button onclick="{{ onSeedGender }}" style="flex:none;background:{{ seedGenderBg }};color:{{ seedGenderFg }};border:none;border-radius:999px;padding:7px 15px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">{{ seedGenderLabel }}</button>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:9px;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:11px;padding:10px">
+                          <span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;font-weight:700;color:#0C1116">Age categories apart</span><span style="display:block;font-size:10.5px;color:#7A8296;margin-top:1px">Each category gets its own heats</span></span>
+                          <button onclick="{{ onSeedAge }}" style="flex:none;background:{{ seedAgeBg }};color:{{ seedAgeFg }};border:none;border-radius:999px;padding:7px 15px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">{{ seedAgeLabel }}</button>
+                        </div>
+                        <p style="margin:13px 0 7px;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4">Age categories</p>
+                        <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:9px">
+                          <sc-for list="{{ seedBands }}" as="bd" hint-placeholder-count="4">
+                            <div style="display:flex;align-items:center;gap:9px;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:10px;padding:8px 10px">
+                              <span style="flex:1;min-width:0;font-size:12px;font-weight:700;color:#0C1116">{{ bd.name }}</span>
+                              <span style="flex:none;font-size:11px;color:#7A8296">{{ bd.range }}</span>
+                              <button onclick="{{ bd.onRemove }}" aria-label="Remove this category" style="flex:none;width:24px;height:24px;border-radius:7px;border:none;background:#F1F3F7;color:#9AA2B4;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:13px;height:13px"></i></button>
+                            </div>
+                          </sc-for>
+                        </div>
+                        <div style="display:flex;gap:6px;margin-bottom:7px">
+                          <input value="{{ seedBandName }}" oninput="{{ onSeedBandName }}" placeholder="Category name e.g. 11-12" style="flex:2;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-size:12px;color:#0C1116;outline:none">
+                          <input value="{{ seedBandFrom }}" oninput="{{ onSeedBandFrom }}" inputmode="numeric" placeholder="From" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-size:12px;color:#0C1116;outline:none;text-align:center">
+                          <input value="{{ seedBandTo }}" oninput="{{ onSeedBandTo }}" inputmode="numeric" placeholder="To" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-size:12px;color:#0C1116;outline:none;text-align:center">
+                        </div>
+                        <button onclick="{{ onSeedBandAdd }}" style="width:100%;background:#0A0F1A;color:#fff;border:none;border-radius:10px;padding:10px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px"><i data-lucide="plus" style="width:15px;height:15px"></i>Add age category</button>
+                        <sc-if value="{{ seedMsgShow }}" hint-placeholder-val="{{ false }}">
+                          <p style="margin:9px 0 0;background:#EEF4FF;border:1px solid #D4E2FB;border-radius:10px;padding:8px 10px;font-size:11.5px;color:#1B4CA1">{{ seedMsg }}</p>
+                        </sc-if>
+                        <p style="margin:9px 2px 0;font-size:10.5px;color:#9AA2B4;line-height:1.5">Changing a rule does not move anybody on its own — tap <b>Auto-seed by PB</b> below to re-seed the meet with it.</p>
                       </div>
                       <sc-if value="{{ entryHasRows }}" hint-placeholder-val="{{ false }}">
                         <div style="display:flex;flex-direction:column;gap:6px">
                           <sc-for list="{{ entryRows }}" as="e" hint-placeholder-count="4">
                             <div style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:10px 12px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
                               <span style="font-family:var(--font-mono);font-weight:700;font-size:11px;color:{{ squad.accent }};background:var(--vx-blue-tint);border-radius:7px;padding:4px 7px;flex:none">H{{ e.heat }}·L{{ e.lane }}</span>
-                              <span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;font-weight:600;color:#0C1116">{{ e.name }}</span><span style="display:block;font-size:10.5px;color:#7A8296">{{ e.event }}</span></span>
+                              <span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;font-weight:600;color:#0C1116">{{ e.name }}</span><span style="display:flex;align-items:center;gap:5px;margin-top:2px"><span style="font-size:10.5px;color:#7A8296">{{ e.event }}</span><span style="background:{{ e.whoBg }};color:{{ e.whoFg }};border-radius:6px;padding:1px 6px;font-size:9.5px;font-weight:700">{{ e.who }}</span></span></span>
                               <span style="flex:none;text-align:right;margin-right:2px"><span style="display:block;font-family:var(--font-mono);font-weight:700;font-size:12px;color:{{ squad.accent }}">{{ e.pb }}</span><span style="display:block;font-size:8.5px;letter-spacing:.05em;text-transform:uppercase;color:#B9C0CC">seed PB</span></span>
                               <button onclick="{{ e.onDelete }}" style="flex:none;width:24px;height:24px;border-radius:7px;border:none;background:#F4F6F8;color:#9AA2B4;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:14px;height:14px"></i></button>
                             </div>
@@ -7382,6 +7433,7 @@ class Component extends DCLogic {
     this.meetStatus=this._loadJSON('vx_meet_status', {});
     this.meetEntries=this._loadJSON('vx_meet_entries', {});
     this.customMeets=this._loadJSON('vx_custom_meets', []);
+    this.seedConfig=this._seedConfigNormalise(this._loadJSON('vx_seed_config', null));
     this.meetEventsMap=this._loadJSON('vx_meet_events', {});
     this.wearables=this._loadJSON('vx_wear_cache', {});
     this.wearConn={};
@@ -7505,6 +7557,7 @@ class Component extends DCLogic {
       promoQuery:'',
       brandDraft:null,
       entriesMeetIdx:0, entriesSwId:'', entriesSwSel:[], entriesEvent:'50 Free', entriesHeat:'', entriesLane:'', entriesQuery:'', printMode:'plan', entriesEventsSel:[],
+      meetDayDate:'', seedBandName:'', seedBandFrom:'', seedBandTo:'', seedMsg:'',
       entryNewOpen:false, entryNewName:'', entryNewDob:'', entryNewSeed:'', entryNewErr:'',
       famReqEvent:'50 Free', famReqMeetIdx:0,
       famAttView:'month', famAttDateISO:null, famAttCalY:null, famAttCalM:null, famAttYearSel:null, famMeetSel:0,
@@ -7584,6 +7637,30 @@ class Component extends DCLogic {
     if(!VX_MONTHS[mi] || isNaN(day)) return t;
     return VX_MONTHS[mi]+' '+day;
   }
+  // Every shape a date reaches the app in, back to the one shape it is stored in. The roster and
+  // every Hy-Tek import carry "6/5/2026"; a swim the app wrote carries "2026-06-05"; a swim that
+  // has already been through a screen carries the label "5 Jun 2026". Reading only the ISO one is
+  // what silently emptied a swimmer's history of dates the first time a live time was saved for
+  // them — every earlier swim was rewritten with no date at all, and the chart lost its timeline.
+  _toISODate(v){
+    if(!v) return '';
+    const t=String(v).trim();
+    if(/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+    if(/^\d{4}-\d{2}-\d{2}T/.test(t)) return t.slice(0,10);
+    const pad=(n)=>String(n).padStart(2,'0');
+    const us=t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);       // M/D/YYYY, as the roster stores it
+    if(us) return us[3]+'-'+pad(us[1])+'-'+pad(us[2]);
+    const lbl=t.match(/^(\d{1,2})\s+([A-Za-z]{3,})\s*(\d{4})?$/);   // "5 Jun 2026", "5 Jun"
+    if(lbl){
+      const months=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+      const mi=months.indexOf(lbl[2].slice(0,3).toLowerCase());
+      if(mi>=0){ const y=lbl[3]?+lbl[3]:new Date().getFullYear(); return y+'-'+pad(mi+1)+'-'+pad(+lbl[1]); }
+    }
+    return '';
+  }
+  // The day a swim happened, whichever of those shapes it was recorded in. Sorting a progression
+  // needs a comparable date, not a label — "30 Jul" sorts against "5 Jun" alphabetically.
+  _resultISO(r){ return (r && (this._toISODate(r.meetDate) || this._toISODate(r.date))) || ''; }
   // Label a date the app has stored, which is always ISO.
   //
   // shortDate above reads month first, and every ISO date was being fed to it by reversing the
@@ -9364,27 +9441,167 @@ class Component extends DCLogic {
     this.notify('coach', 'shield-check', 'Plan submitted for review', squadName+'\u2019s session plan was submitted \u2014 AI Plan Review is in sync.');
     this.setState({tool:'review', shareNote:'Submitted \u2713 opening AI Plan Review\u2026'});
   }
+  // ---- Seeding -----------------------------------------------------------------------------
+  // A heat sheet is not a list in PB order — it is a pool. Who may share a lane with whom is the
+  // club's rule, not the app's: a ten-lane pool numbered from zero, boys and girls off the blocks
+  // separately, and age groups that a meet can either keep apart or throw together. All of it is
+  // one saved configuration so a coach seeds the same way every meet without re-choosing.
+  _seedConfigDefaults(){
+    return { lanes:10, firstLane:0, splitGender:true, splitAge:false,
+      bands:[ {name:'8 & under', from:0, to:8}, {name:'9-10', from:9, to:10},
+              {name:'11-12', from:11, to:12}, {name:'13-14', from:13, to:14},
+              {name:'15 & over', from:15, to:99} ] };
+  }
+  // A saved configuration is read defensively: a pool cannot have half a lane or twenty of them,
+  // and a band whose numbers arrived backwards is still a band the coach meant to have.
+  _seedConfigNormalise(raw){
+    const d=this._seedConfigDefaults();
+    const c=(raw && typeof raw==='object') ? raw : {};
+    const lanes=Math.max(2, Math.min(20, parseInt(c.lanes,10) || d.lanes));
+    const firstLane=Math.max(0, Math.min(9, c.firstLane==null ? d.firstLane : (parseInt(c.firstLane,10)||0)));
+    const bands=(Array.isArray(c.bands)?c.bands:d.bands).map(b=>{
+      const from=Math.max(0, Math.min(99, parseInt(b&&b.from,10)||0));
+      const to=Math.max(0, Math.min(99, parseInt(b&&b.to,10)||0));
+      return { name:String((b&&b.name)||'').trim() || ((Math.min(from,to))+'-'+(Math.max(from,to))),
+        from:Math.min(from,to), to:Math.max(from,to) };
+    }).filter(b=>b.name).sort((a,b)=>a.from-b.from || a.to-b.to);
+    return { lanes, firstLane,
+      splitGender: c.splitGender==null ? d.splitGender : !!c.splitGender,
+      splitAge: c.splitAge==null ? d.splitAge : !!c.splitAge,
+      bands: bands.length ? bands : d.bands };
+  }
+  _seedConfig(){ return (this.seedConfig=this._seedConfigNormalise(this.seedConfig)); }
+  _seedConfigSave(patch){
+    this.seedConfig=this._seedConfigNormalise({...this._seedConfig(), ...(patch||{})});
+    this._saveJSON('vx_seed_config', this.seedConfig);
+    this.forceUpdate();
+    return this.seedConfig;
+  }
+  // Lanes are filled from the middle out, so the fastest seed in a heat swims in the centre with
+  // the field either side of them. The middle of a ten-lane pool numbered 0-9 is lane 4, of an
+  // eight-lane pool numbered 1-8 it is lane 4 as well — which is why the order is worked out from
+  // the pool rather than written down as one fixed list.
+  _laneOrder(lanes, firstLane){
+    const n=Math.max(1, parseInt(lanes,10)||1), f=parseInt(firstLane,10)||0;
+    const mid=Math.floor((n-1)/2);
+    const seq=[mid]; let lo=mid, hi=mid+1;
+    while(seq.length<n){ if(hi<=n-1) seq.push(hi++); if(seq.length<n && lo-1>=0) seq.push(--lo); }
+    return seq.map(i=>i+f);
+  }
+  _ageBandFor(age){
+    const c=this._seedConfig(); const a=parseInt(age,10);
+    if(isNaN(a)) return null;
+    return c.bands.find(b=>a>=b.from && a<=b.to) || null;
+  }
+  _seedGenderOf(sw){ const g=String((sw&&sw.gender)||'').trim().toLowerCase();
+    if(g==='girls'||g==='girl'||g==='female'||g==='f') return 'Girls';
+    if(g==='boys'||g==='boy'||g==='male'||g==='m') return 'Boys';
+    return ''; }
+  // The group an entry seeds into: an event, and — where the club has asked for it — one gender
+  // and one age band. A swimmer with no gender or no age on file is not dropped from the meet;
+  // they seed in their own group and are visible as such on the sheet.
+  _seedGroupOf(sw){
+    const c=this._seedConfig();
+    const gender=c.splitGender ? (this._seedGenderOf(sw) || 'Mixed') : '';
+    let bandName='', bandFrom=999;
+    if(c.splitAge){
+      const age=sw ? this._swAge(sw) : null;
+      const b=this._ageBandFor(age);
+      bandName=b?b.name:'Unbanded'; bandFrom=b?b.from:999;
+    }
+    return { key:(gender||'-')+'|'+(bandName||'-'), gender, bandName, bandFrom,
+      label:[bandName, gender].filter(Boolean).join(' ') };
+  }
+  // Seed a meet: every entry sorted by the swimmer's personal best in that event, split into the
+  // groups the club seeds by, then dealt into heats of one poolful — slowest heat first, so the
+  // final heat of each group is the fastest. Heat numbers run on across the groups of an event,
+  // because a sheet with two "Heat 1"s in the same event is two heats nobody can call.
   autoSeedMeet(meetName){
     const list=(this.meetEntries[meetName]||[]).slice();
     if(!list.length) return;
+    const c=this._seedConfig();
     const flat=this.allSwimmersFlat();
-    const seedFor=(e)=>{ const sw=flat.find(s=>s.id===e.swId); const pb=sw && (sw.pbs||[]).find(p=>p.event===e.event); return pb ? pb.sec : Infinity; };
+    const swOf=(e)=>flat.find(s=>s.id===e.swId)||null;
+    const seedFor=(e)=>{ const sw=swOf(e); const pb=sw && (sw.pbs||[]).find(p=>p.event===e.event); return pb ? pb.sec : Infinity; };
+    const laneOrder=this._laneOrder(c.lanes, c.firstLane);
+    const perHeat=laneOrder.length;
     const byEvent={};
     list.forEach(e=>{ (byEvent[e.event]=byEvent[e.event]||[]).push(e); });
-    const laneOrder=[4,5,3,6,2,7,1,8];
     Object.keys(byEvent).forEach(ev=>{
-      const entries=byEvent[ev].slice().sort((a,b)=>seedFor(a)-seedFor(b));
-      const perHeat=8;
-      const heatCount=Math.ceil(entries.length/perHeat);
-      const chunks=[];
-      for(let i=0;i<heatCount;i++){ chunks.push(entries.slice(i*perHeat,(i+1)*perHeat)); }
-      chunks.reverse();
-      chunks.forEach((chunk,hi)=>{
-        chunk.forEach((e,ci)=>{ e.heat=hi+1; e.lane=laneOrder[ci]||(ci+1); });
+      const groups={};
+      byEvent[ev].forEach(e=>{ const g=this._seedGroupOf(swOf(e));
+        (groups[g.key]=groups[g.key]||{g, entries:[]}).entries.push(e); });
+      // Youngest band first, and girls before boys inside a band — the order a meet is run in.
+      const order=Object.keys(groups).sort((a,b)=>{
+        const ga=groups[a].g, gb=groups[b].g;
+        return ga.bandFrom-gb.bandFrom || String(ga.bandName).localeCompare(String(gb.bandName))
+          || (ga.gender==='Girls'?0:1)-(gb.gender==='Girls'?0:1)
+          || String(ga.gender).localeCompare(String(gb.gender));
+      });
+      let heatNo=1;
+      order.forEach(k=>{
+        const entries=groups[k].entries.slice()
+          .sort((a,b)=>seedFor(a)-seedFor(b) || String(a.name||'').localeCompare(String(b.name||'')));
+        const chunks=[];
+        for(let i=0;i<entries.length;i+=perHeat) chunks.push(entries.slice(i,i+perHeat));
+        chunks.reverse();                                  // fastest swimmers in the last heat
+        chunks.forEach(chunk=>{
+          const h=heatNo++;
+          chunk.forEach((e,ci)=>{ e.heat=h; e.lane=laneOrder[ci]!=null?laneOrder[ci]:(c.firstLane+ci); });
+        });
       });
     });
     this._entriesSave(meetName, list);
-    this.setState({shareNote:'Auto-seeded '+list.length+' entries by PB \u2713'});
+    const how=[c.lanes+' lanes ('+c.firstLane+'-'+(c.firstLane+c.lanes-1)+')',
+      c.splitGender?'boys & girls apart':'mixed genders',
+      c.splitAge?'age groups apart':'all ages together'].join(' · ');
+    this.setState({shareNote:'Seeded '+list.length+' entries by PB — '+how+' ✓'});
+  }
+  // ---- Seeding settings (the club's pool, and who shares a heat) -----------------------------
+  seedSetLanes(lanes, firstLane){
+    const c=this._seedConfigSave({lanes, firstLane});
+    this.setState({seedMsg:c.lanes+' lanes, numbered '+c.firstLane+'-'+(c.firstLane+c.lanes-1)+' ✓'});
+  }
+  seedToggleGender(){ const c=this._seedConfigSave({splitGender:!this._seedConfig().splitGender});
+    this.setState({seedMsg: c.splitGender ? 'Boys and girls seed into separate heats ✓' : 'Boys and girls seed together'}); }
+  seedToggleAge(){ const c=this._seedConfigSave({splitAge:!this._seedConfig().splitAge});
+    this.setState({seedMsg: c.splitAge ? 'Age categories seed into separate heats ✓' : 'All ages seed together'}); }
+  seedBandAdd(){
+    const S=this.state;
+    const from=parseInt(S.seedBandFrom,10), to=parseInt(S.seedBandTo,10);
+    if(isNaN(from)||isNaN(to)) return this.setState({seedMsg:'Give the category an age from and an age to, e.g. 11 to 12.'});
+    if(from<0||to>99) return this.setState({seedMsg:'Ages run from 0 to 99.'});
+    const lo=Math.min(from,to), hi=Math.max(from,to);
+    const name=String(S.seedBandName||'').trim() || (lo===hi?('Age '+lo):(lo+'-'+hi));
+    const bands=this._seedConfig().bands.slice();
+    if(bands.some(b=>b.name.toLowerCase()===name.toLowerCase())) return this.setState({seedMsg:'There is already a category called '+name+'.'});
+    bands.push({name, from:lo, to:hi});
+    this._seedConfigSave({bands, splitAge:true});
+    this.setState({seedBandName:'', seedBandFrom:'', seedBandTo:'', seedMsg:name+' added ✓'});
+  }
+  seedBandRemove(name){
+    const bands=this._seedConfig().bands.filter(b=>b.name!==name);
+    if(!bands.length) return this.setState({seedMsg:'Keep at least one age category, or turn age groups off.'});
+    this._seedConfigSave({bands});
+    this.setState({seedMsg:name+' removed'});
+  }
+  // What a heat is, read back off the swimmers actually in it rather than off the settings — so a
+  // sheet seeded last week still describes itself correctly after the settings change.
+  // byId is optional and is only a shortcut: a screen that has already indexed the roster passes
+  // it rather than have every heat on the sheet rebuild the club's 272 swimmers to read two.
+  _heatGroupLabel(entries, byId){
+    const idx=byId||null;
+    const flat=idx?null:this.allSwimmersFlat();
+    const swims=(entries||[]).map(e=>idx?idx[e.swId]:flat.find(s=>s.id===e.swId)).filter(Boolean);
+    if(!swims.length) return '';
+    const genders={}; swims.forEach(sw=>{ genders[this._seedGenderOf(sw)||'?']=true; });
+    const gKeys=Object.keys(genders);
+    const gender = gKeys.length===1 ? (gKeys[0]==='?'?'':gKeys[0]) : 'Mixed';
+    const ages=swims.map(sw=>this._swAge(sw)).filter(a=>a>0);
+    let ageLabel='';
+    if(ages.length){ const lo=Math.min(...ages), hi=Math.max(...ages);
+      ageLabel = lo===hi ? ('Age '+lo) : ('Age '+lo+'-'+hi); }
+    return [gender, ageLabel].filter(Boolean).join(' · ');
   }
   // ---- Language ---------------------------------------------------------------------------
   // Arabic for the people who need it most: the parents and swimmers. The club's own default
@@ -9764,17 +9981,61 @@ class Component extends DCLogic {
     const body=hit.name+' — '+event+' '+this.fmt(sec)+(drop>0?(' · '+drop.toFixed(2)+'s faster'):'')+' at '+meetName;
     try{ this.notify('family_sw:'+swId, drop>0?'trophy':'timer', title, body); }catch(e){}
     try{ this._pushSend({swimmerIds:[swId]}, title, body, '/'); }catch(e){}
+    try{ this.meetMarkClear(meetName, swId, event, true); }catch(e){}
     const drafts={...(this.state.meetTimeDrafts||{})}; delete drafts[swId+'|'+event];
     this.setState({meetTimeDrafts:drafts,
       meetDayMsg: drop>0 ? (hit.name+' — PB by '+drop.toFixed(2)+'s ✓') : (hit.name+' — '+this.fmt(sec)+' saved ✓')});
   }
+  // ---- Did not swim it: DQ and no-show -------------------------------------------------------
+  // Not every lane ends in a time. A swimmer is disqualified, or never comes to the blocks, and
+  // the box for their time stays empty all day — which reads as "nobody has typed it yet" and
+  // sends a coach back to a heat that is long finished. A mark says the lane is dealt with.
+  //
+  // A mark is not a swim. It is kept beside the meet rather than in the swimmer's history,
+  // because a DQ has no time in it: put one in the history and it has to be given a number, and
+  // any number there is a race that never happened sitting in their personal bests.
+  _markKey(meetName, swId, event){ return meetName+'::'+swId+'::'+event; }
+  _meetMarks(){ return (this.meetMarks = this.meetMarks || this._loadJSON('vx_meet_marks', {})); }
+  meetMarkOf(meetName, swId, event){ const m=this._meetMarks()[this._markKey(meetName, swId, event)]; return (m && m.mark) || ''; }
+  meetMarkSet(meetName, swId, event, mark){
+    const code=(mark==='DQ'||mark==='NS')?mark:'';
+    if(!code) return this.meetMarkClear(meetName, swId, event);
+    const hit=this.allSwimmersFlat().find(s=>s.id===swId);
+    // A time already typed for this lane is the truth about the swim; the mark replaces it, so
+    // the time comes back out of the swimmer's history rather than standing beside a DQ.
+    try{ this.meetLiveClear(meetName, swId, event, true); }catch(e){}
+    const marks={...this._meetMarks()};
+    marks[this._markKey(meetName, swId, event)]={mark:code, at:new Date().toISOString()};
+    this.meetMarks=marks; this._saveJSON('vx_meet_marks', marks);
+    try{ this.audit('meet.mark', meetName, {meet:meetName, swimmer:swId, event, mark:code}); }catch(e){}
+    this.setState({meetDayMsg:((hit&&hit.name)||'That lane')+' — '+event+' marked '+(code==='DQ'?'DQ':'no-show')});
+  }
+  meetMarkClear(meetName, swId, event, quiet){
+    const key=this._markKey(meetName, swId, event);
+    const marks=this._meetMarks();
+    if(!marks[key]) return;
+    const next={...marks}; delete next[key];
+    this.meetMarks=next; this._saveJSON('vx_meet_marks', next);
+    if(!quiet) this.setState({meetDayMsg:'Mark removed — the lane is open again'});
+    else this.forceUpdate();
+  }
+  // Every mark in one meet, as { swId|event: 'DQ' | 'NS' }, for the screens that draw the sheet.
+  _meetMarksFor(meetName){
+    const out={}; const marks=this._meetMarks(); const pre=meetName+'::';
+    Object.keys(marks).forEach(k=>{ if(k.indexOf(pre)!==0) return;
+      const rest=k.slice(pre.length); const i=rest.indexOf('::'); if(i<0) return;
+      out[rest.slice(0,i)+'|'+rest.slice(i+2)]=(marks[k]||{}).mark||''; });
+    return out;
+  }
   // Struck a wrong swimmer's lane: take the swim back out rather than leaving a time that
   // never happened sitting in their history and their PB.
-  meetLiveClear(meetName, swId, event){
+  meetLiveClear(meetName, swId, event, quiet){
     const hit=this.allSwimmersFlat().find(s=>s.id===swId); if(!hit) return;
-    const entries=(this._swEntries(hit)||[]).filter(p=>!(p.event===event && (p.meet||'')===meetName));
+    const before=(this._swEntries(hit)||[]);
+    const entries=before.filter(p=>!(p.event===event && (p.meet||'')===meetName));
+    if(quiet && entries.length===before.length) return;   // nothing typed for this lane yet
     this.adminEditSwimmer(hit.squadId, swId, {pbs:entries});
-    this.setState({meetDayMsg:'Removed '+hit.name+' — '+event});
+    if(!quiet) this.setState({meetDayMsg:'Removed '+hit.name+' — '+event});
   }
   toggleCompEvent(ev){ const cur=this.state.compEvents.slice(); const i=cur.indexOf(ev); if(i>=0) cur.splice(i,1); else cur.push(ev); this.setState({compEvents:cur}); }
   createCompetition(){ const S=this.state;
@@ -9797,7 +10058,7 @@ class Component extends DCLogic {
   // (event/time/course/meet/date) into the swimmer's meet history (results), personal bests
   // (fastest per event), and the set of meets — and registers any new meet, club-wide.
   _deriveFromEntries(rawEntries){
-    const entries=(rawEntries||[]).map(p=>({event:p.event, sec:p.sec, time:this.fmt(p.sec), course:p.course||'L', courseLabel:p.courseLabel||(p.course==='S'?'SCM':'LCM'), meet:(p.meet||'').trim(), meetDate:p.meetDate||''}));
+    const entries=(rawEntries||[]).map(p=>({event:p.event, sec:p.sec, time:this.fmt(p.sec), course:p.course||'L', courseLabel:p.courseLabel||(p.course==='S'?'SCM':'LCM'), meet:(p.meet||'').trim(), meetDate:this._resultISO(p)}));
     const results=entries.slice().sort((a,b)=>{ const da=a.meetDate||'', db=b.meetDate||''; return db.localeCompare(da); })
       .map(p=>({meet:p.meet||'Time trial', date:p.meetDate?this._fmtDMY(p.meetDate):'', event:p.event, time:p.time, sec:p.sec, place:null, course:p.course, courseLabel:p.courseLabel, meetDate:p.meetDate}));
     const bestByEvent={}; entries.forEach(p=>{ const cur=bestByEvent[p.event]; if(!cur||p.sec<cur.sec) bestByEvent[p.event]={event:p.event, sec:p.sec, time:p.time, drop:'', course:p.course, courseLabel:p.courseLabel, meet:p.meet, meetDate:p.meetDate}; });
@@ -9858,9 +10119,9 @@ class Component extends DCLogic {
   swFormRemovePb(idx){ const S=this.state; this.setState({swForm:{...S.swForm, pbs:(S.swForm.pbs||[]).filter((p,i)=>i!==idx)}}); }
   // Load the swimmer's existing swim entries (full history) so editing keeps meet/course/date.
   // Prefer stored entries; fall back to results, then to plain PBs for legacy swimmers.
-  _swEntries(sw){ if(Array.isArray(sw.entries)&&sw.entries.length) return sw.entries.map(p=>({event:p.event, sec:p.sec, course:p.course||'L', courseLabel:p.courseLabel||(p.course==='S'?'SCM':'LCM'), meet:p.meet||'', meetDate:p.meetDate||''}));
-    if(Array.isArray(sw.results)&&sw.results.length) return sw.results.map(r=>({event:r.event, sec:r.sec, course:r.course||'L', courseLabel:r.courseLabel||(r.course==='S'?'SCM':'LCM'), meet:(r.meet&&r.meet!=='Time trial')?r.meet:'', meetDate:r.meetDate||''}));
-    return (sw.pbs||[]).map(p=>({event:p.event, sec:p.sec, course:p.course||'L', courseLabel:p.courseLabel||(p.course==='S'?'SCM':'LCM'), meet:p.meet||'', meetDate:p.meetDate||''})); }
+  _swEntries(sw){ if(Array.isArray(sw.entries)&&sw.entries.length) return sw.entries.map(p=>({event:p.event, sec:p.sec, course:p.course||'L', courseLabel:p.courseLabel||(p.course==='S'?'SCM':'LCM'), meet:p.meet||'', meetDate:this._resultISO(p)}));
+    if(Array.isArray(sw.results)&&sw.results.length) return sw.results.map(r=>({event:r.event, sec:r.sec, course:r.course||'L', courseLabel:r.courseLabel||(r.course==='S'?'SCM':'LCM'), meet:(r.meet&&r.meet!=='Time trial')?r.meet:'', meetDate:this._resultISO(r)}));
+    return (sw.pbs||[]).map(p=>({event:p.event, sec:p.sec, course:p.course||'L', courseLabel:p.courseLabel||(p.course==='S'?'SCM':'LCM'), meet:p.meet||'', meetDate:this._resultISO(p)})); }
   swEditOpen(squadId, id, sw){ this.setState({swEditId:squadId+'::'+id, swEditDraft:{name:sw.name, age:this._swAge(sw), dob:(sw.dob||''), gender:sw.gender, squadId:squadId}, swEditPbs:this._swEntries(sw), swEditPbEventSel:'50 Free', swEditPbTimeDraft:'', swEditPbCourse:'LCM', swEditPbMeet:'', swEditPbMeetDate:''}); }
   swEditAddPb(){ const S=this.state; const sec=this.parseTimeStr(S.swEditPbTimeDraft); if(sec==null) return;
     const courseCode=(S.swEditPbCourse==='LCM')?'L':'S'; const meet=(S.swEditPbMeet||'').trim(), meetDate=(S.swEditPbMeetDate||'');
@@ -13834,7 +14095,14 @@ class Component extends DCLogic {
   squadForAge(a){ return a<=6?'preteam':a<=8?'advb':a<=10?'adva':a<=12?'junior':a==13?'seniorb':a==14?'seniora':a==15?'vortexb':a==16?'vortexa':'legend'; }
   buildProgSeries(results, accent){
     const palette=['#7C3AED','#2563EB','#0D9488','#D97706','#DC2626','#DB2777','#059669','#4F46E5'];
-    const rs=(results||[]).slice().sort((a,b)=>(new Date(a.date).getTime()||0)-(new Date(b.date).getTime()||0));
+    // Ordered by the date the swim carries, read as a date rather than as the label it prints as:
+    // "30 Jul" against "5 Jun" through new Date() is two NaNs, and the chart drew the swims in
+    // whatever order they happened to be stored in.
+    const rs=(results||[]).slice().sort((a,b)=>{
+      const da=this._resultISO(a), db=this._resultISO(b);
+      if(da&&db&&da!==db) return da<db?-1:1;
+      if(da&&!db) return 1; if(!da&&db) return -1;
+      return 0; });
     const n=rs.length;
     if(!n) return { hasData:false, caption:'No recorded swims in this course', drop:'', linePts:'', lineArea:'', dots:[], swims:[] };
     const secs=rs.map(r=>r.sec); const bestSec=Math.min(...secs);
@@ -13842,7 +14110,7 @@ class Component extends DCLogic {
     const dots=rs.map((r,i)=>{ const x=n>1?(8+i*(284/(n-1))):150; const y=10+((r.sec-minS)/(maxS-minS))*72;
       const above=y>16; const labelY= above?(y-9):(y+15); const anchor= i===0?'start':(i===n-1?'end':'middle');
       const color= r.sec===bestSec ? '#0C7A4F' : palette[i%palette.length];
-      return {x:x.toFixed(1), y:y.toFixed(1), t:r.time, labelY:labelY.toFixed(1), anchor, color, sec:r.sec, date:r.date, meet:r.meet}; });
+      return {x:x.toFixed(1), y:y.toFixed(1), t:r.time, labelY:labelY.toFixed(1), anchor, color, sec:r.sec, date:(r.date||this._resultISO(r)), meet:r.meet}; });
     const linePts=dots.map(d=>d.x+','+d.y).join(' ');
     const lineArea = n>1 ? ('8,86 '+linePts+' 292,86') : '';
     const caption = n>1 ? (this.shortDate(rs[0].date)+' \u2192 '+this.shortDate(rs[n-1].date)+' \u00b7 '+n+' swims') : ('Single swim \u00b7 '+this.shortDate(rs[0].date));
@@ -15084,6 +15352,10 @@ class Component extends DCLogic {
     // (Swimmer photos come from the swimmer_docs table now, not this synced blob — don't overwrite them here.)
     this.staffOverrides=g('vx_staff_ovr', this.staffOverrides);
     this.meetStatus=g('vx_meet_status', this.meetStatus); this.meetEntries=g('vx_meet_entries', this.meetEntries);
+    // How the club seeds, and which lanes ended in a DQ or an empty block — both are the meet as
+    // every coach on deck sees it, not this one iPad's opinion of it.
+    this.seedConfig=this._seedConfigNormalise(g('vx_seed_config', this.seedConfig));
+    this.meetMarks=g('vx_meet_marks', this._meetMarks());
     this.customMeets=g('vx_custom_meets', this.customMeets); this.eventRequests=g('vx_event_requests', this.eventRequests); this.meetCuts=g('vx_meet_cuts', this.meetCuts);
     this.academyTrials=g('vx_academy_trials', this.academyTrials); this.academyFees=g('vx_academy_fees', this.academyFees);
     this.feePlans=g('vx_fee_plans', this.feePlans); this.memberships=g('vx_memberships', this.memberships); this.invoices=g('vx_invoices', this.invoices);
@@ -15721,7 +15993,7 @@ class Component extends DCLogic {
     const eventChips=swEvents.map(ev=>({label:ev, onClick:()=>this.setState({profileEvent:ev}),
       bg: ev===selEvent?squad.accent:'#fff', fg: ev===selEvent?'#fff':'#3A4152', border: ev===selEvent?squad.accent:'#E5E9F0'}));
     const progRes=(swObj.results||[]).filter(r=>r.event===selEvent).slice()
-      .sort((a,b)=> (new Date(a.date).getTime()||0) - (new Date(b.date).getTime()||0));
+      .sort((a,b)=>{ const da=this._resultISO(a), db=this._resultISO(b); return (da&&db&&da!==db)?(da<db?-1:1):0; });
     const lcmSeries = this.buildProgSeries(progRes.filter(r=>(r.course||'L')!=='S'), squad.accent);
     const scmSeries = this.buildProgSeries(progRes.filter(r=>r.course==='S'), squad.accent);
     const secsAll=progRes.map(r=>r.sec);
@@ -16173,6 +16445,7 @@ class Component extends DCLogic {
     }));
 
     // ---- Meet Entries (heats & lanes) ----
+    const seedCfg = this._seedConfig();
     const entryMeetsList = this.allMeets().map(m=>m.name);
     if(!entryMeetsList.length) entryMeetsList.push('Season Meet');
     const entryMeetIdx = Math.min(S.entriesMeetIdx||0, entryMeetsList.length-1);
@@ -16181,9 +16454,19 @@ class Component extends DCLogic {
     const enQ=(S.entriesQuery||'').trim().toLowerCase();
     const entrySwOptions = entryRoster.filter(sw=>!enQ||sw.name.toLowerCase().includes(enQ));
     const entriesList = (this.meetEntries[entryMeetName]||[]).filter(e=>entryRoster.some(sw=>sw.id===e.swId));
-    const entriesSorted = entriesList.slice().sort((a,b)=> a.heat-b.heat || a.lane-b.lane);
-    const entryRows = entriesSorted.map((e)=>{ const idx=(this.meetEntries[entryMeetName]||[]).indexOf(e); return {
-      name:e.name, event:e.event, heat:e.heat, lane:e.lane, pb:this._pbTimeFor(e.swId, e.event), onDelete:()=>this.entryRemove(entryMeetName, idx) }; });
+    // Grouped as the sheet is read: event, then heat, then lane — not one long list in heat order
+    // with three events interleaved, which is what "heat 1" of every event sorted together gave.
+    const entriesSorted = entriesList.slice().sort((a,b)=>
+      String(a.event||'').localeCompare(String(b.event||'')) || (a.heat||0)-(b.heat||0) || (a.lane||0)-(b.lane||0));
+    const entryFlatById={}; entryRoster.forEach(sw=>{ entryFlatById[sw.id]=sw; });
+    const entryRows = entriesSorted.map((e)=>{ const idx=(this.meetEntries[entryMeetName]||[]).indexOf(e);
+      const sw=entryFlatById[e.swId]; const g=sw?this._seedGenderOf(sw):''; const age=sw?this._swAge(sw):0;
+      return {
+      name:e.name, event:e.event, heat:e.heat, lane:e.lane, pb:this._pbTimeFor(e.swId, e.event),
+      who:[g, age>0?('Age '+age):''].filter(Boolean).join(' · '),
+      whoBg: g==='Girls'?'#FBE9F3':(g==='Boys'?'#E7F0FE':'#F1F3F7'),
+      whoFg: g==='Girls'?'#9D2C6B':(g==='Boys'?'#1B4CA1':'#5B6472'),
+      onDelete:()=>this.entryRemove(entryMeetName, idx) }; });
     const entryMeetChips = entryMeetsList.map((n,i)=>({label:n, onClick:()=>this.setState({entriesMeetIdx:i}), bg:i===entryMeetIdx?squad.accent:'#fff', fg:i===entryMeetIdx?'#fff':'#3A4152', border:i===entryMeetIdx?squad.accent:'#E5E9F0'}));
     const entrySwSel=(S.entriesSwSel||[]);
     const entrySwRows = entrySwOptions.slice(0,60).map(sw=>{ const on=entrySwSel.includes(sw.id); return {id:sw.id, name:sw.name, initials:sw.initials, selected:on?'#C7D6FF':'#F1F3F7', onSelect:()=>this.toggleEntrySwimmer(sw.id)}; });
@@ -16194,6 +16477,12 @@ class Component extends DCLogic {
     const meetDayOn = S.meetMode==='day';
     const entryMeetObj = this.allMeets().find(m=>m.name===entryMeetName) || null;
     const entryMeetISO = this._meetISO(entryMeetObj);
+    // The day a time is being written down, which is today unless the coach says otherwise. It is
+    // NOT the meet's date in the calendar: a meet built weeks ago and swum this morning was still
+    // swum this morning, and stamping the swim with the entry in the diary put this morning's
+    // times months back in the swimmer's progression.
+    const mdDateISO = this._toISODate(S.meetDayDate) || this.todayISO();
+    const mdMarks = this._meetMarksFor(entryMeetName);
     const entryMeetCourse = (entryMeetObj && entryMeetObj.course) || 'LCM';
     const mdSwims = meetDayOn ? this._meetSwims(entryMeetName) : {};
     const mdPlaces = meetDayOn ? this._meetPlaces(entryMeetName) : {};
@@ -16204,20 +16493,27 @@ class Component extends DCLogic {
     const mdRowFor = (e)=>{
       const key=e.swId+'|'+e.event;
       const swim=mdSwims[key]||null;
+      const mark=mdMarks[key]||'';
       const sw=mdFlatById[e.swId];
       const before=sw ? this._bestBefore(sw, e.event, entryMeetName) : null;
       const drop=(swim && before!=null && swim.sec<before) ? (before-swim.sec) : 0;
-      if(swim){ mdDone++; if(drop>0 || before==null) mdPbs++; }
+      if(swim || mark){ mdDone++; if(swim && (drop>0 || before==null)) mdPbs++; }
       const place=mdPlaces[key];
       return { lane:e.lane, name:e.name, event:e.event, pb:this._pbTimeFor(e.swId, e.event),
-        done:!!swim, notDone:!swim,
+        done:!!swim, notDone:!swim && !mark,
+        marked:!!mark, markLabel: mark==='DQ'?'DQ':(mark?'N/S':''),
+        markFull: mark==='DQ'?'Disqualified':(mark?'Did not start':''),
+        markBg: mark==='DQ'?'#FDECEC':'#F1F3F7', markFg: mark==='DQ'?'#B42318':'#5B6472',
         timeLabel: swim ? this.fmt(swim.sec) : '',
         placeLabel: place ? mdOrdinal(place) : '',
         pbLabel: swim ? (before==null ? 'First time' : (drop>0 ? ('PB −'+drop.toFixed(2)+'s') : '')) : '',
         pbShow: !!swim && (before==null || drop>0),
         draft: mdDrafts[key]||'',
         onDraft:(ev)=>this.setState({meetTimeDrafts:{...(this.state.meetTimeDrafts||{}), [key]:ev.target.value}}),
-        onSave:()=>this.meetLiveSave(entryMeetName, entryMeetISO, entryMeetCourse, e.swId, e.event, (this.state.meetTimeDrafts||{})[key]),
+        onSave:()=>this.meetLiveSave(entryMeetName, mdDateISO, entryMeetCourse, e.swId, e.event, (this.state.meetTimeDrafts||{})[key]),
+        onDq:()=>this.meetMarkSet(entryMeetName, e.swId, e.event, 'DQ'),
+        onNs:()=>this.meetMarkSet(entryMeetName, e.swId, e.event, 'NS'),
+        onUnmark:()=>this.meetMarkClear(entryMeetName, e.swId, e.event),
         onClear:()=>this.meetLiveClear(entryMeetName, e.swId, e.event) };
     };
     const meetDayHeats = (()=>{
@@ -16227,10 +16523,12 @@ class Component extends DCLogic {
       Object.keys(byEv).sort().forEach(ev=>{
         const byHeat={}; byEv[ev].forEach(e=>{ (byHeat[e.heat||1]=byHeat[e.heat||1]||[]).push(e); });
         Object.keys(byHeat).sort((a,b)=>a-b).forEach(h=>{
+          const group=this._heatGroupLabel(byHeat[h], mdFlatById);
           const rows=byHeat[h].slice().sort((a,b)=>(a.lane||0)-(b.lane||0)).map(mdRowFor);
           out.push({ label:ev+' — Heat '+h, event:ev,
-            doneLabel: rows.filter(r=>r.done).length+' / '+rows.length,
-            complete: rows.every(r=>r.done), rows });
+            groupLabel:group, groupShow:!!group,
+            doneLabel: rows.filter(r=>r.done||r.marked).length+' / '+rows.length,
+            complete: rows.every(r=>r.done||r.marked), rows });
         });
       });
       return out;
@@ -16252,6 +16550,11 @@ class Component extends DCLogic {
       }));
     })();
     const mdTotal = entriesList.length;
+    // How many lanes ended in something other than a time. Counted off this meet's own entries so
+    // a mark left on a swimmer who was later taken out of the meet is not still on the tally.
+    let mdDq=0, mdNs=0;
+    entriesList.forEach(e=>{ const m=mdMarks[e.swId+'|'+e.event]; if(m==='DQ') mdDq++; else if(m) mdNs++; });
+    const mdMarkLine=[mdDq?(mdDq+' DQ'):'', mdNs?(mdNs+' no-show'+(mdNs===1?'':'s')):''].filter(Boolean).join(' · ');
 
     // ---- Academy ----
     const acadTabs=['trials','ladder','schedule','fees'];
@@ -17897,7 +18200,7 @@ class Component extends DCLogic {
         const swIdx=(this.roster[sqid]||[]).findIndex(x=>x.id===sw.id); const swIdxSafe=swIdx<0?0:swIdx;
         const today=this.todayISO();
         const famPbs=(sw.pbs||[]).slice(0,8).map(p=>({event:p.event, time:p.time, drop:p.drop}));
-        const famResults=(sw.results||[]).slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))).map((r,i)=>({event:r.event, meet:r.meet, date:this.shortDate(r.date), time:r.time, place:r.place||(i+1)}));
+        const famResults=(sw.results||[]).slice().sort((a,b)=>String(this._resultISO(b)||'').localeCompare(String(this._resultISO(a)||''))).map((r,i)=>({event:r.event, meet:r.meet, date:this.shortDate(r.date), time:r.time, place:r.place||(i+1)}));
         const upcoming=this.meetsMeta.slice(0,3).map(m=>({name:m.name, meta:(m.course||'LCM')+' · '+(m.date||'')}));
 
         // ==== real attendance for this swimmer: day / month / year (mirrors coach dashboard) ====
@@ -18785,8 +19088,8 @@ class Component extends DCLogic {
       meetModeDayBg: meetDayOn?squad.accent:'transparent', meetModeDayFg: meetDayOn?'#fff':'#7A8296',
       meetDayHeats, meetDayBoards, meetDayHasHeats: meetDayHeats.length>0,
       meetDayTitle: entryMeetName,
-      meetDaySub: entryMeetObj ? (this._fmtDMY(entryMeetISO, true)+' · '+entryMeetCourse) : 'No date set',
-      meetDayProgress: mdDone+' of '+mdTotal+' swim'+(mdTotal===1?'':'s')+' recorded',
+      meetDaySub: entryMeetObj ? ('Scheduled '+this._fmtDMY(entryMeetISO, true)+' · '+entryMeetCourse) : 'No date set',
+      meetDayProgress: mdDone+' of '+mdTotal+' swim'+(mdTotal===1?'':'s')+' recorded'+(mdMarkLine?(' · '+mdMarkLine):''),
       meetDayPbLine: mdPbs+' personal best'+(mdPbs===1?'':'s')+' today',
       meetDayPct: mdTotal ? Math.round((mdDone/mdTotal)*100)+'%' : '0%',
       meetDayMsg:S.meetDayMsg||'', meetDayMsgShow:!!S.meetDayMsg,
@@ -18799,6 +19102,32 @@ class Component extends DCLogic {
       entryNewErr:S.entryNewErr, entryNewErrShow:!!S.entryNewErr,
       onEntryNewSave:()=>this.entryAddNewSwimmer(entryMeetName),
       onAutoSeed:()=>this.autoSeedMeet(entryMeetName),
+      // ---- seeding settings ----
+      seedLanesLabel: seedCfg.lanes+' lanes · '+seedCfg.firstLane+'-'+(seedCfg.firstLane+seedCfg.lanes-1),
+      seedPresets: [{lanes:10, first:0, label:'10 lanes (0-9)'}, {lanes:10, first:1, label:'10 lanes (1-10)'},
+                    {lanes:8, first:1, label:'8 lanes (1-8)'}, {lanes:6, first:1, label:'6 lanes (1-6)'}]
+        .map(p=>{ const on=(seedCfg.lanes===p.lanes && seedCfg.firstLane===p.first); return {label:p.label,
+          bg: on?squad.accent:'#fff', fg: on?'#fff':'#3A4152', border: on?squad.accent:'#E5E9F0',
+          onClick:()=>this.seedSetLanes(p.lanes, p.first)}; }),
+      seedGenderOn: seedCfg.splitGender, seedGenderLabel: seedCfg.splitGender?'On':'Off',
+      seedGenderBg: seedCfg.splitGender?'#0C7A4F':'#F1F3F7', seedGenderFg: seedCfg.splitGender?'#fff':'#5B6472',
+      onSeedGender:()=>this.seedToggleGender(),
+      seedAgeOn: seedCfg.splitAge, seedAgeLabel: seedCfg.splitAge?'On':'Off',
+      seedAgeBg: seedCfg.splitAge?'#0C7A4F':'#F1F3F7', seedAgeFg: seedCfg.splitAge?'#fff':'#5B6472',
+      onSeedAge:()=>this.seedToggleAge(),
+      seedBands: seedCfg.bands.map(b=>({name:b.name, range:(b.to>=99?(b.from+' & over'):(b.from+'-'+b.to+' yrs')),
+        onRemove:()=>this.seedBandRemove(b.name)})),
+      seedBandName:S.seedBandName||'', onSeedBandName:(e)=>this.setState({seedBandName:e.target.value}),
+      seedBandFrom:S.seedBandFrom||'', onSeedBandFrom:(e)=>this.setState({seedBandFrom:e.target.value}),
+      seedBandTo:S.seedBandTo||'', onSeedBandTo:(e)=>this.setState({seedBandTo:e.target.value}),
+      onSeedBandAdd:()=>this.seedBandAdd(),
+      seedMsg:S.seedMsg||'', seedMsgShow:!!S.seedMsg,
+      seedSummary: 'Fastest seed in the centre lane, last heat · '
+        +(seedCfg.splitGender?'boys & girls in separate heats':'boys & girls together')+' · '
+        +(seedCfg.splitAge?'age categories in separate heats':'all ages together'),
+      // ---- meet day ----
+      meetDayDate: S.meetDayDate || this.todayISO(),
+      onMeetDayDate:(e)=>this.setState({meetDayDate:e.target.value}),
       reqRows: this.eventRequests.filter(r=>r.status==='pending' && r.meetName===entryMeetName).map(r=>({ swName:r.swName, event:r.event,
         onApprove:()=>{ const flat=this.allSwimmersFlat(); const sw=flat.find(s=>s.id===r.swId); this.reqDecide(r.id,'approved'); if(sw) this.setState({squadId:sw.squadId, entriesSwId:sw.id, entriesEvent:r.event}); },
         onDismiss:()=>this.reqDecide(r.id,'dismissed') })),
@@ -18809,8 +19138,12 @@ class Component extends DCLogic {
       printProgram:{ clubName:this.brandConfig.clubName||'Vortex Swimming Club', accent:squad.accent, squadName:squad.name, meetName:entryMeetName, printDate:new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}),
         heats:(()=>{ const list=(this.meetEntries[entryMeetName]||[]).filter(e=>entryRoster.some(sw=>sw.id===e.swId));
           const byEv={}; list.forEach(e=>{ (byEv[e.event]=byEv[e.event]||[]).push(e); });
+          const marks=this._meetMarksFor(entryMeetName);
           const out=[]; Object.keys(byEv).sort().forEach(ev=>{ const byHeat={}; byEv[ev].forEach(e=>{ (byHeat[e.heat]=byHeat[e.heat]||[]).push(e); });
-            Object.keys(byHeat).sort((a,b)=>a-b).forEach(h=>{ out.push({ label:ev+' — Heat '+h, heat:h, event:ev, rows:byHeat[h].sort((a,b)=>a.lane-b.lane).map(e=>({lane:e.lane, name:e.name, event:e.event, pb:this._pbTimeFor(e.swId, e.event)})) }); }); });
+            Object.keys(byHeat).sort((a,b)=>a-b).forEach(h=>{ const group=this._heatGroupLabel(byHeat[h], entryFlatById);
+              out.push({ label:ev+' — Heat '+h+(group?(' · '+group):''), heat:h, event:ev,
+                rows:byHeat[h].slice().sort((a,b)=>(a.lane||0)-(b.lane||0)).map(e=>({lane:e.lane, name:e.name, event:e.event,
+                  pb:(marks[e.swId+'|'+e.event]==='DQ'?'DQ':(marks[e.swId+'|'+e.event]?'N/S':this._pbTimeFor(e.swId, e.event)))})) }); }); });
           return out; })() },
       tpaceQuery:S.tpaceQuery, onTpaceQuery:(e)=>this.setState({tpaceQuery:e.target.value}),
       tpSwimmerRows, tpHasSel, tpNoSel: !tpHasSel, tpSelName: tpSel?tpSel.name:'', tpSelInitials: tpSel?tpSel.initials:'',
