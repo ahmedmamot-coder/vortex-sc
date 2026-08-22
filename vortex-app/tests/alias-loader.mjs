@@ -14,6 +14,13 @@ import { pathToFileURL } from "node:url";
 const SRC = pathToFileURL(new URL("../src/", import.meta.url).pathname).href;
 
 export async function resolve(specifier, context, next) {
+  // Node refuses a .json import that does not say `with { type: "json" }`; webpack has never
+  // needed one, so the app's own imports do not carry it — src/lib/mcpData.ts pulls the roster
+  // export in exactly that way. Without this, importing the connector here dies on the JSON and
+  // the only testable thing left is the source text, which is not the same as the behaviour.
+  if (specifier.endsWith(".json"))
+    return { ...(await next(specifier, context)), importAttributes: { type: "json" } };
+
   if (specifier.startsWith("@/")) {
     // Preserve any query string (?probe=…) — that is how the wearable tests get a fresh module.
     const q = specifier.indexOf("?");

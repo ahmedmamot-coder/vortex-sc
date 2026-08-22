@@ -25,14 +25,46 @@ claude.ai → Settings → **Connectors** → **Add custom connector**
 | Field | Value |
 |---|---|
 | Name | `Vortex SC` |
-| URL | `https://vortexswimmingclub.com/api/mcp` |
-| Authentication | Bearer token — paste the value from step 1 |
+| Remote MCP server URL | `https://www.vortexswimmingclub.com/api/mcp/s/PASTE-THE-TOKEN-HERE` |
+| OAuth Client ID | leave empty |
+| OAuth Client Secret | leave empty |
+
+So with a token of `a1b2c3…`, the URL is `https://www.vortexswimmingclub.com/api/mcp/s/a1b2c3…`.
+Two things that will otherwise cost you an afternoon: paste the **actual token**, not the
+placeholder, and keep the **`www.`** — the bare domain answers with a redirect to it, and the
+connector should not be attached to a hop.
+
+**The URL is the credential.** That dialog has three fields and none of them sets a request
+header, which is why the token rides in the path — the connector was written around an
+`Authorization: Bearer` header and, until the path route existed, could not be attached to Claude
+at all. The cost of moving it is real and worth knowing: **a path is written to Vercel's
+request logs, where a header value never is.** So treat this URL exactly as you treat the Supabase
+service key — not in a chat, not in a screenshot, not in the repository — and rotate it if it has
+been somewhere it should not have been.
+
+Nothing else about the guard changed. No token, a wrong token, or an unset `VX_MCP_TOKEN` all
+refuse.
 
 **3. Check it.**
 
-Open `https://vortexswimmingclub.com/api/mcp` in a browser. You should see
-`"configured": true` and the list of tools. That endpoint is safe to open — it names the tools
-and nothing else.
+Open `https://www.vortexswimmingclub.com/api/mcp` in a browser — the plain URL, no token. You should
+see `"configured": true` and the list of tools. That endpoint is safe to open: it names the tools
+and nothing else, and it answers the same whether or not you gave it a token, so it cannot be
+used to find out whether a guess was right.
+
+### Other clients
+
+Anything that can set a header should use one, because a header stays out of the logs:
+
+```bash
+curl -s https://www.vortexswimmingclub.com/api/mcp \
+  -H "Authorization: Bearer $VX_MCP_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+Both URLs are the same server. The header is checked first and is not a fallback: a request with
+a stale header is refused rather than quietly rescued by the URL it was posted to.
 
 ## What it can answer
 
@@ -70,13 +102,15 @@ Two more properties, by construction:
 
 ## Rotating or revoking
 
-Change `VX_MCP_TOKEN` in Vercel and redeploy. The old token stops working immediately; update it
-in the claude.ai connector settings. To switch the connector off entirely, delete the variable —
-the route then refuses everything.
+Change `VX_MCP_TOKEN` in Vercel and redeploy. The old token stops working immediately — which
+also means the old URL does, so update the connector in claude.ai with the new one. Because the
+token is in the URL, rotating it is the way you revoke a URL that has been logged, pasted or
+shared; do it whenever you are unsure where it has been.
+
+To switch the connector off entirely, delete the variable — the route then refuses everything.
 
 ## A note on what you are sharing
 
 Anything the connector returns goes into a Claude conversation: swimmers' names, squads, ages,
 attendance and race times, and — in `fees_summary` — who owes money. That is the club's own
-coaching and administrative picture, and the token is what keeps it to you. Treat it like the
-Supabase service key: not in a chat, not in a screenshot, not in the repository.
+coaching and administrative picture, and the token is what keeps it to you.

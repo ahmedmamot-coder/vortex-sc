@@ -8306,4 +8306,115 @@ describe("swimmer status: an empty read does not wipe the club", () => {
   });
 });
 
+
+/* ------------------------------------------------------------------- connector
+   The club as an MCP connector, so it can be asked about from claude.ai.
+
+   The route was written around a bearer token, and then could never be attached: the "Add custom
+   connector" dialog offers a name, a URL and an OAuth pair, and no way to set a header. So the
+   secret may now travel in the URL instead. A path is a weaker place for a secret than a header —
+   it reaches the request log — so the cases worth having are the ones that prove it is still a
+   secret: unset refuses, wrong refuses, and nothing here can be used to guess it. */
+const MCP_TOKEN = "0123456789abcdef0123456789abcdef";
+process.env.VX_MCP_TOKEN = MCP_TOKEN;
+// Both modules read the env once, at import, so they are loaded here while it is set.
+const MCP = await import("../src/lib/mcpServer.ts?probe=configured");
+const MCP_URL_ROUTE = await import("../src/app/api/mcp/s/[token]/route.ts");
+delete process.env.VX_MCP_TOKEN;
+const MCP_UNSET = await import("../src/lib/mcpServer.ts?probe=unconfigured");
+
+describe("the club as a connector", () => {
+  const post = (method, token) =>
+    new Request("https://vortexswimmingclub.com/api/mcp", {
+      method: "POST",
+      headers: token
+        ? { "content-type": "application/json", authorization: "Bearer " + token }
+        : { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method }),
+    });
+
+  // An unset secret is the case that has bitten this codebase before: BACKUP_SECRET read as
+  // "if a secret is set, check it", which meant "if nobody set one, let everyone in".
+  itAsync("an unset VX_MCP_TOKEN refuses the URL token as flatly as it refuses everything else",
+    async () => {
+      const r = await (await MCP_UNSET.handleRpc(post("initialize"), MCP_TOKEN)).json();
+      eq(!!r.error, true, "an unconfigured connector answered a request");
+      eq(/not configured/.test(r.error.message), true,
+         "it has to say it is unconfigured, not merely unauthorized — they are different repairs");
+    });
+
+  itAsync("the right token in the URL is accepted", async () => {
+    const r = await (await MCP.handleRpc(post("initialize"), MCP_TOKEN)).json();
+    eq(r.error, undefined, "the token the dialog can actually carry was refused");
+    eq(r.result.serverInfo.name, "vortex-sc");
+  });
+
+  itAsync("a wrong token in the URL is refused", async () => {
+    // Same length as the real one: a length check alone must not be what is standing guard.
+    const r = await (await MCP.handleRpc(post("initialize"), "f".repeat(MCP_TOKEN.length))).json();
+    eq(!!r.error, true, "any token in the URL was let through");
+    eq(/Unauthorized/.test(r.error.message), true);
+  });
+
+  itAsync("no token at all is refused", async () => {
+    const r = await (await MCP.handleRpc(post("initialize"))).json();
+    eq(!!r.error, true, "the connector answered an unauthenticated request");
+  });
+
+  // The header route is the better one and every non-Claude client still uses it. Moving the
+  // logic into a lib to share it is exactly the kind of change that quietly drops it.
+  itAsync("the Authorization header still works, with no token in the URL", async () => {
+    const r = await (await MCP.handleRpc(post("initialize", MCP_TOKEN))).json();
+    eq(r.error, undefined, "the header route stopped working when the URL route was added");
+    eq(r.result.serverInfo.name, "vortex-sc");
+  });
+
+  itAsync("a wrong header is refused even when the URL segment is right", async () => {
+    // The header is checked first and is not a fallback: a client that sends a stale header
+    // should be told so, not quietly rescued by the URL it happens to be posting to.
+    const r = await (await MCP.handleRpc(post("initialize", "nope"), MCP_TOKEN)).json();
+    eq(!!r.error, true, "a bad header was papered over by the URL");
+  });
+
+  itAsync("the tool list is not readable without the token", async () => {
+    const r = await (await MCP.handleRpc(post("tools/list"))).json();
+    eq(r.result, undefined, "the tools were listed to an unauthenticated caller");
+  });
+
+  itAsync("the URL route hands its path segment to the checker", async () => {
+    // The wiring itself: a route that awaited the wrong thing would refuse every real request.
+    const ok = await (await MCP_URL_ROUTE.POST(post("initialize"),
+      { params: Promise.resolve({ token: MCP_TOKEN }) })).json();
+    eq(ok.error, undefined, "the route did not pass its [token] segment through");
+
+    const bad = await (await MCP_URL_ROUTE.POST(post("initialize"),
+      { params: Promise.resolve({ token: "wrong" }) })).json();
+    eq(!!bad.error, true, "the route accepted a wrong segment");
+  });
+
+  itAsync("the health check cannot be used to test a guess", async () => {
+    // It takes no token and returns the same answer either way, so it is safe to open in a
+    // browser and useless for finding out whether a guessed URL was the right one.
+    eq(MCP_URL_ROUTE.GET.length, 0, "the health check started reading the token");
+    const a = await (await MCP_URL_ROUTE.GET()).json();
+    const b = await (await MCP.describe()).json();
+    eq(a, b, "the token-bearing URL answers a different health check than the plain one");
+    eq(a.tools.length, 5);
+  });
+
+  it("what the connector exposes is still five reads and nothing else", () => {
+    // The allowlist is the whole safety argument, and these are children. A sixth tool arriving
+    // here should be a decision someone made on purpose, not a diff nobody looked at twice.
+    eq(MCP.TOOLS.map((t) => t.name).sort().join(","),
+       "attendance_summary,club_overview,fees_summary,find_swimmer,swimmer_progress");
+  });
+
+  it("the URL that carries the secret is documented as a secret", () => {
+    const doc = readFileSync(new URL("../../CONNECTOR.md", import.meta.url), "utf8");
+    eq(/request log|server log/i.test(doc), true,
+       "the one real cost of a token in a URL has to be written down where it is handed out");
+    eq(/rotat/i.test(doc), true, "a credential you cannot rotate is one you cannot revoke");
+  });
+});
+
 await report();
