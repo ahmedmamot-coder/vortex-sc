@@ -1259,9 +1259,11 @@ describe("editing a meet the club built", () => {
     customMeets: [{ name: "Test", date: "7/30/2026", location: "Hamad", course: "LCM", entries: 0 }],
     meetsMeta: [{ name: "Nautilus Invitational Swim Meet 2026", date: "1/30/2026", course: "LCM" }],
     state: {}, forceUpdate() {}, _saveJSON(k, v) { this.saved = { k, v }; }, audit() {},
+    meetStatus: {}, _saveLocalOnly(k, v) { this.saved = { k, v }; }, _meetUnsent: {},
     setState: function (p) { Object.assign(this.state, p); },
   });
-  const deps = ["_toISODate", "_mdyFromISO", "_fmtDMY", "_sayIfNotSaved", "_clubStateLanded"];
+  const deps = ["_toISODate", "_mdyFromISO", "_fmtDMY", "_sayMeetSaved", "_meetsPush",
+                "_meetLanded", "_meetsUnsent"];
 
   it("the club's own meet can be edited", () =>
     eq(bind("_isCustomMeet", ctx(), [])("Test"), true));
@@ -1308,12 +1310,12 @@ describe("editing a meet the club built", () => {
     c.state.meetEditName = "Test";
     c.state.meetEditDraft = { date: "2026-08-22", location: "", course: "LCM" };
     const restore = globalThis.window;
-    globalThis.window = { __vxLastPush: { vx_custom_meets: Promise.resolve({ ok: false, why: "the sign-in here has ended" }) } };
+    globalThis.window = { __vxUpsert: () => Promise.resolve(false), __vxLastWriteErr: { table: "club_meets", said: "the sign-in here has ended" } };
     bind("meetEditSave", c, deps)();
     await new Promise((r) => setTimeout(r, 5));
     globalThis.window = restore;
     eq(/saved on this device only/.test(c.state.meetsMsg || ""), true);
-    eq(/Sign out and back in/.test(c.state.meetsMsg || ""), true);
+    eq(/the sign-in here has ended/.test(c.state.meetsMsg || ""), true);
   });
 
   itAsync("a write nothing even recorded is not read as success", async () => {
@@ -1321,11 +1323,11 @@ describe("editing a meet the club built", () => {
     c.state.meetEditName = "Test";
     c.state.meetEditDraft = { date: "2026-08-22", location: "", course: "LCM" };
     const restore = globalThis.window;
-    globalThis.window = { __vxLastPush: {} };            // pushKey returned before recording one
+    globalThis.window = {};                              // no way to reach the database at all
     bind("meetEditSave", c, deps)();
     await new Promise((r) => setTimeout(r, 5));
     globalThis.window = restore;
-    eq(/no database sign-in here/.test(c.state.meetsMsg || ""), true);
+    eq(/cannot reach the database/.test(c.state.meetsMsg || ""), true);
   });
 
   itAsync("a date the database did take says nothing extra", async () => {
@@ -1333,12 +1335,12 @@ describe("editing a meet the club built", () => {
     c.state.meetEditName = "Test";
     c.state.meetEditDraft = { date: "2026-08-22", location: "", course: "LCM" };
     const restore = globalThis.window;
-    globalThis.window = { __vxLastPush: { vx_custom_meets: Promise.resolve({ ok: true }) } };
+    globalThis.window = { __vxUpsert: () => Promise.resolve(true) };
     bind("meetEditSave", c, deps)();
     await new Promise((r) => setTimeout(r, 5));
     globalThis.window = restore;
     eq(/saved on this device only/.test(c.state.meetsMsg || ""), false);
-    eq(/saved \u2713/.test(c.state.meetsMsg || ""), true, "it says so plainly when it did land");
+    eq(/\u2713/.test(c.state.meetsMsg || ""), true, "it says so plainly when it did land");
   });
 
   it("no other meet is touched", () => {
@@ -1348,6 +1350,154 @@ describe("editing a meet the club built", () => {
     c.state.meetEditDraft = { date: "2026-08-22", location: "", course: "LCM" };
     bind("meetEditSave", c, deps)();
     eq(c.customMeets[1].date, "9/1/2026");
+  });
+});
+
+/* ------------------------------------------------- meets, one row each
+   The date and status lived in two club_state documents holding every meet at
+   once, and club_state is last-write-wins on the whole document. A device coming
+   back online replays its queue of unsent writes, and that queue records the KEY
+   rather than the bytes — so it re-read its own stale calendar and sent all of it.
+   The club watched a corrected date go back to 30 July four times. */
+describe("the club's meets are rows, not one document", () => {
+  const row = (name, extra = {}) => ({ name, meet_date: "", location: "", course: "LCM",
+    events: [], status: "Upcoming", club_built: true, ...extra });
+  const ctxWith = (patch = {}) => ({
+    customMeets: [], meetStatus: {}, state: {}, forceUpdate() {}, _saveLocalOnly() {},
+    _meetUnsent: {}, _meetsMigrated: true, setState(p) { Object.assign(this.state, p); }, ...patch });
+  const fetchDeps = ["_meetRowToMeet", "_meetHeldHere", "_meetsUnsent", "_meetsMigrateOnce"];
+
+  const readWith = (rows, patch) => {
+    const ctx = ctxWith(patch);
+    const restore = globalThis.window;
+    globalThis.window = { __vxSelect: () => Promise.resolve(rows) };
+    return bind("_meetsFetch", ctx, fetchDeps)()
+      .then(() => { globalThis.window = restore; return ctx; })
+      .catch((e) => { globalThis.window = restore; throw e; });
+  };
+
+  itAsync("the club's own meets come back as meets", async () => {
+    const c = await readWith([row("Test", { meet_date: "8/22/2026", location: "Hamad", status: "Completed" })]);
+    eq(c.customMeets.length, 1);
+    eq(c.customMeets[0].date, "8/22/2026");
+    eq(c.meetStatus.Test, "Completed");
+  });
+
+  itAsync("a meet that only carries a status is not put in the calendar", async () => {
+    const c = await readWith([row("H2O Spring Cup", { club_built: false, status: "Completed" })]);
+    eq(c.customMeets.length, 0, "it was never one of the club's own");
+    eq(c.meetStatus["H2O Spring Cup"], "Completed", "but its status is still known");
+  });
+
+  // The whole point of the move.
+  itAsync("a date this device just set is not undone by a read that overtook it", async () => {
+    const c = await readWith([row("Test", { meet_date: "7/30/2026" })], {
+      customMeets: [{ name: "Test", date: "8/22/2026", course: "LCM", events: [] }],
+      meetStatus: { Test: "Completed" },
+      _meetWriteTs: { Test: Date.now() + 5000 } });
+    eq(c.customMeets[0].date, "8/22/2026");
+    eq(c.meetStatus.Test, "Completed");
+  });
+
+  itAsync("a write the database refused is kept, not overwritten", async () => {
+    const c = await readWith([row("Test", { meet_date: "7/30/2026", status: "In progress" })], {
+      customMeets: [{ name: "Test", date: "8/22/2026", course: "LCM", events: [] }],
+      meetStatus: { Test: "Completed" },
+      _meetUnsent: { Test: 1 } });
+    eq(c.customMeets[0].date + " " + c.meetStatus.Test, "8/22/2026 Completed");
+  });
+
+  itAsync("a meet built here that the table has never heard of does not vanish", async () => {
+    const c = await readWith([row("Test")], {
+      customMeets: [{ name: "Test", date: "", course: "LCM", events: [] },
+                    { name: "New Gala", date: "9/1/2026", course: "LCM", events: [] }],
+      _meetUnsent: { "New Gala": 1 } });
+    eq(c.customMeets.some((m) => m.name === "New Gala"), true);
+  });
+
+  // And the other half: another coach's correction must still arrive.
+  itAsync("another device's correction comes through", async () => {
+    const c = await readWith([row("Test", { meet_date: "9/9/2026", status: "Entries open" })], {
+      customMeets: [{ name: "Test", date: "8/22/2026", course: "LCM", events: [] }],
+      meetStatus: { Test: "Completed" } });
+    eq(c.customMeets[0].date, "9/9/2026");
+    eq(c.meetStatus.Test, "Entries open");
+  });
+
+  itAsync("an empty read does not wipe the club's calendar", async () => {
+    const c = await readWith([], {
+      customMeets: [{ name: "Test", date: "8/22/2026", course: "LCM", events: [] }],
+      meetStatus: { Test: "Completed" } });
+    eq(c.customMeets.length, 1, "a refused SELECT answers 200 with [], and that is not 'no meets'");
+  });
+
+  describePush();
+  function describePush() {
+    itAsync("setting a status writes that meet and no other", async () => {
+      const sent = [];
+      const c = ctxWith({ customMeets: [{ name: "Test", date: "8/22/2026", course: "LCM", events: [] },
+                                        { name: "Other", date: "1/1/2026", course: "LCM", events: [] }],
+                          meetStatus: { Test: "In progress" } });
+      const restore = globalThis.window;
+      globalThis.window = { __vxUpsert: (t, rows) => { sent.push([t, rows]); return Promise.resolve(true); } };
+      bind("meetStatusCycle", c, ["_meetsPush", "_meetLanded", "_meetsUnsent", "_sayMeetSaved"])("Test");
+      await new Promise((r) => setTimeout(r, 5));
+      globalThis.window = restore;
+      eq(sent.length, 1);
+      eq(sent[0][0], "club_meets");
+      eq(sent[0][1].length, 1, "one row, not the whole calendar");
+      eq(sent[0][1][0].name, "Test");
+      eq(sent[0][1][0].status, "Completed");
+    });
+
+    itAsync("the row carries the meet's own details, not another meet's", async () => {
+      const sent = [];
+      const c = ctxWith({ customMeets: [{ name: "Test", date: "8/22/2026", location: "Hamad", course: "SCM", events: ["50 Free"] }],
+                          meetStatus: { Test: "Completed" } });
+      const restore = globalThis.window;
+      globalThis.window = { __vxUpsert: (t, rows) => { sent.push(...rows); return Promise.resolve(true); } };
+      await bind("_meetsPush", c, ["_meetLanded", "_meetsUnsent"])("Test");
+      globalThis.window = restore;
+      eq(sent[0].meet_date + " " + sent[0].course + " " + sent[0].location, "8/22/2026 SCM Hamad");
+      eq(sent[0].club_built, true);
+    });
+
+    itAsync("a status for an imported meet is written as one of theirs, not the club's", async () => {
+      const sent = [];
+      const c = ctxWith({ customMeets: [], meetStatus: { "H2O Spring Cup": "Completed" } });
+      const restore = globalThis.window;
+      globalThis.window = { __vxUpsert: (t, rows) => { sent.push(...rows); return Promise.resolve(true); } };
+      await bind("_meetsPush", c, ["_meetLanded", "_meetsUnsent"])("H2O Spring Cup");
+      globalThis.window = restore;
+      eq(sent[0].club_built, false);
+    });
+
+    itAsync("a refused write is remembered as this device's", async () => {
+      const c = ctxWith({ customMeets: [{ name: "Test", date: "8/22/2026", course: "LCM", events: [] }] });
+      const restore = globalThis.window;
+      globalThis.window = { __vxUpsert: () => Promise.resolve(false) };
+      const r = await bind("_meetsPush", c, ["_meetLanded", "_meetsUnsent"])("Test");
+      globalThis.window = restore;
+      eq(r.ok, false);
+      eq(c._meetUnsent.Test, 1);
+    });
+
+    itAsync("a write that never answers is remembered too", async () => {
+      const c = ctxWith({ customMeets: [{ name: "Test", date: "8/22/2026", course: "LCM", events: [] }] });
+      const restore = globalThis.window;
+      globalThis.window = { __vxUpsert: () => new Promise(() => {}) };
+      bind("_meetsPush", c, ["_meetLanded", "_meetsUnsent"])("Test");
+      await new Promise((r) => setTimeout(r, 5));
+      globalThis.window = restore;
+      eq(c._meetUnsent.Test, 1, "marked before it is sent, because a parked write never settles");
+    });
+  }
+
+  // The two documents must stop being synced, or the thing just fixed comes straight back.
+  it("the meet documents are no longer in the shared blob", () => {
+    const SYNC = JSON.parse(SOURCE.match(/var SYNC = (\[[^\]]*\])/)[1]);
+    eq(SYNC.includes("vx_custom_meets"), false);
+    eq(SYNC.includes("vx_meet_status"), false);
   });
 });
 
@@ -4450,6 +4600,7 @@ describe("InBody sheet", () => {
       // act on being told this one is behind, and the entries themselves are in
       // meet_declarations and cached in vx_meet_entries, both accounted for already.
       vx_entries_unsent: "which of this device's entry writes have not reached the database yet",
+      vx_meets_unsent: "which of this device's meet writes have not reached the database yet",
     };
     // 2. A local copy of a database table, so the screen can draw before the read comes back.
     //    The table is the truth; losing the copy costs nothing.
@@ -4473,6 +4624,11 @@ describe("InBody sheet", () => {
       // local copy as the photos above — the table is the truth, and losing the copy costs a
       // render, not a status.
       vx_sw_status: "swimmer_status",
+      // Meets left club_state for a table of their own, for the reason recorded in
+      // supabase/club_meets.sql: the shared document is last-write-wins, so a device replaying
+      // its queue of unsent writes put its whole stale calendar back over a corrected date.
+      vx_custom_meets: "club_meets",
+      vx_meet_status: "club_meets",
     };
 
     const written = new Set();
