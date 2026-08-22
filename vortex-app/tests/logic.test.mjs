@@ -1261,7 +1261,7 @@ describe("editing a meet the club built", () => {
     state: {}, forceUpdate() {}, _saveJSON(k, v) { this.saved = { k, v }; }, audit() {},
     setState: function (p) { Object.assign(this.state, p); },
   });
-  const deps = ["_toISODate", "_mdyFromISO", "_fmtDMY"];
+  const deps = ["_toISODate", "_mdyFromISO", "_fmtDMY", "_sayIfNotSaved", "_clubStateLanded"];
 
   it("the club's own meet can be edited", () =>
     eq(bind("_isCustomMeet", ctx(), [])("Test"), true));
@@ -1299,6 +1299,46 @@ describe("editing a meet the club built", () => {
     bind("meetEditSave", c, deps)();
     eq(c.customMeets[0].date, "7/30/2026", "the meet keeps the date it had");
     eq(/Pick the day/.test(c.state.meetEditErr), true);
+  });
+
+  // A push with no session behind it leaves the new date on this device and nowhere else, and
+  // the screen said "✓" over it. That is how a date set twice was still wrong on the other iPad.
+  itAsync("a date the database never took says so, rather than reading as saved", async () => {
+    const c = ctx();
+    c.state.meetEditName = "Test";
+    c.state.meetEditDraft = { date: "2026-08-22", location: "", course: "LCM" };
+    const restore = globalThis.window;
+    globalThis.window = { __vxLastPush: { vx_custom_meets: Promise.resolve({ ok: false, why: "the sign-in here has ended" }) } };
+    bind("meetEditSave", c, deps)();
+    await new Promise((r) => setTimeout(r, 5));
+    globalThis.window = restore;
+    eq(/saved on this device only/.test(c.state.meetsMsg || ""), true);
+    eq(/Sign out and back in/.test(c.state.meetsMsg || ""), true);
+  });
+
+  itAsync("a write nothing even recorded is not read as success", async () => {
+    const c = ctx();
+    c.state.meetEditName = "Test";
+    c.state.meetEditDraft = { date: "2026-08-22", location: "", course: "LCM" };
+    const restore = globalThis.window;
+    globalThis.window = { __vxLastPush: {} };            // pushKey returned before recording one
+    bind("meetEditSave", c, deps)();
+    await new Promise((r) => setTimeout(r, 5));
+    globalThis.window = restore;
+    eq(/no database sign-in here/.test(c.state.meetsMsg || ""), true);
+  });
+
+  itAsync("a date the database did take says nothing extra", async () => {
+    const c = ctx();
+    c.state.meetEditName = "Test";
+    c.state.meetEditDraft = { date: "2026-08-22", location: "", course: "LCM" };
+    const restore = globalThis.window;
+    globalThis.window = { __vxLastPush: { vx_custom_meets: Promise.resolve({ ok: true }) } };
+    bind("meetEditSave", c, deps)();
+    await new Promise((r) => setTimeout(r, 5));
+    globalThis.window = restore;
+    eq(/saved on this device only/.test(c.state.meetsMsg || ""), false);
+    eq(/saved \u2713/.test(c.state.meetsMsg || ""), true, "it says so plainly when it did land");
   });
 
   it("no other meet is touched", () => {
