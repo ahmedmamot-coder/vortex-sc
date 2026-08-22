@@ -1250,6 +1250,67 @@ describe("swim dates", () => {
   }
 });
 
+/* ---------------------------------------------------------- editing a meet
+   The date is typed once when the meet is built and was then fixed for good, so
+   a meet created for the wrong day stayed on the wrong day everywhere it is
+   read — including underneath a swim that only knows which meet it was at. */
+describe("editing a meet the club built", () => {
+  const ctx = () => ({
+    customMeets: [{ name: "Test", date: "7/30/2026", location: "Hamad", course: "LCM", entries: 0 }],
+    meetsMeta: [{ name: "Nautilus Invitational Swim Meet 2026", date: "1/30/2026", course: "LCM" }],
+    state: {}, forceUpdate() {}, _saveJSON(k, v) { this.saved = { k, v }; }, audit() {},
+    setState: function (p) { Object.assign(this.state, p); },
+  });
+  const deps = ["_toISODate", "_mdyFromISO", "_fmtDMY"];
+
+  it("the club's own meet can be edited", () =>
+    eq(bind("_isCustomMeet", ctx(), [])("Test"), true));
+  it("a meet that came in with imported results cannot", () =>
+    eq(bind("_isCustomMeet", ctx(), [])("Nautilus Invitational Swim Meet 2026"), false));
+
+  it("opening the editor starts from the date the meet already has", () => {
+    const c = ctx();
+    bind("meetEditOpen", c, ["_toISODate"])("Test");
+    eq(c.state.meetEditDraft.date, "2026-07-30");
+  });
+
+  it("a new date is stored the way every other meet stores one", () => {
+    const c = ctx();
+    c.state.meetEditName = "Test";
+    c.state.meetEditDraft = { date: "2026-08-22", location: "Hamad Aquatics Center", course: "LCM" };
+    bind("meetEditSave", c, deps)();
+    eq(c.customMeets[0].date, "8/22/2026");
+    eq(c.customMeets[0].location, "Hamad Aquatics Center");
+    eq(c.saved.k, "vx_custom_meets", "and it is saved, not only held in memory");
+  });
+
+  it("the course can be corrected too", () => {
+    const c = ctx();
+    c.state.meetEditName = "Test";
+    c.state.meetEditDraft = { date: "2026-08-22", location: "", course: "SCM" };
+    bind("meetEditSave", c, deps)();
+    eq(c.customMeets[0].course, "SCM");
+  });
+
+  it("an empty date is refused rather than saved as nothing", () => {
+    const c = ctx();
+    c.state.meetEditName = "Test";
+    c.state.meetEditDraft = { date: "", location: "", course: "LCM" };
+    bind("meetEditSave", c, deps)();
+    eq(c.customMeets[0].date, "7/30/2026", "the meet keeps the date it had");
+    eq(/Pick the day/.test(c.state.meetEditErr), true);
+  });
+
+  it("no other meet is touched", () => {
+    const c = ctx();
+    c.customMeets.push({ name: "Second", date: "9/1/2026", course: "LCM" });
+    c.state.meetEditName = "Test";
+    c.state.meetEditDraft = { date: "2026-08-22", location: "", course: "LCM" };
+    bind("meetEditSave", c, deps)();
+    eq(c.customMeets[1].date, "9/1/2026");
+  });
+});
+
 /* -------------------------------------------------------------------- billing
    Money is the one place where "roughly right" is not good enough. A fee that is
    billed twice, billed to a swimmer who is signed off injured, or counted as
