@@ -25,11 +25,14 @@ claude.ai → Settings → **Connectors** → **Add custom connector**
 | Field | Value |
 |---|---|
 | Name | `Vortex SC` |
-| Remote MCP server URL | `https://vortexswimmingclub.com/api/mcp/s/PASTE-THE-TOKEN-HERE` |
+| Remote MCP server URL | `https://www.vortexswimmingclub.com/api/mcp/s/PASTE-THE-TOKEN-HERE` |
 | OAuth Client ID | leave empty |
 | OAuth Client Secret | leave empty |
 
-So with a token of `a1b2c3…`, the URL is `https://vortexswimmingclub.com/api/mcp/s/a1b2c3…`.
+So with a token of `a1b2c3…`, the URL is `https://www.vortexswimmingclub.com/api/mcp/s/a1b2c3…`.
+Two things that will otherwise cost you an afternoon: paste the **actual token**, not the
+placeholder, and keep the **`www.`** — the bare domain answers with a redirect to it, and the
+connector should not be attached to a hop.
 
 **The URL is the credential.** That dialog has three fields and none of them sets a request
 header, which is why the token rides in the path — the connector was written around an
@@ -44,7 +47,7 @@ refuse.
 
 **3. Check it.**
 
-Open `https://vortexswimmingclub.com/api/mcp` in a browser — the plain URL, no token. You should
+Open `https://www.vortexswimmingclub.com/api/mcp` in a browser — the plain URL, no token. You should
 see `"configured": true` and the list of tools. That endpoint is safe to open: it names the tools
 and nothing else, and it answers the same whether or not you gave it a token, so it cannot be
 used to find out whether a guess was right.
@@ -54,7 +57,7 @@ used to find out whether a guess was right.
 Anything that can set a header should use one, because a header stays out of the logs:
 
 ```bash
-curl -s https://vortexswimmingclub.com/api/mcp \
+curl -s https://www.vortexswimmingclub.com/api/mcp \
   -H "Authorization: Bearer $VX_MCP_TOKEN" \
   -H 'content-type: application/json' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
