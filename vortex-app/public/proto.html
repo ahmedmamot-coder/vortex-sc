@@ -6178,6 +6178,22 @@ if ('serviceWorker' in navigator) {
                                   <div style="background:#F8FAFC;border-radius:9px;padding:8px 10px"><span style="display:block;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4;font-weight:700;margin-bottom:3px">Event program</span><span style="font-size:12px;color:#3A4152;line-height:1.5">{{ m.eventsLine }}</span></div>
                                 </sc-if>
                                 <button onclick="{{ m.onToggleEditEvents }}" style="display:flex;align-items:center;justify-content:center;gap:7px;background:#EAF1FF;color:var(--vx-blue-dark);border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer"><i data-lucide="list-checks" style="width:14px;height:14px"></i>{{ m.editEventsLabel }}</button>
+                                <sc-if value="{{ m.canEditMeet }}" hint-placeholder-val="{{ true }}">
+                                  <button onclick="{{ m.onToggleEditMeet }}" style="display:flex;align-items:center;justify-content:center;gap:7px;background:#EAF1FF;color:var(--vx-blue-dark);border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer"><i data-lucide="calendar-days" style="width:14px;height:14px"></i>Edit date &amp; details</button>
+                                </sc-if>
+                                <sc-if value="{{ m.editingMeet }}" hint-placeholder-val="{{ false }}">
+                                  <div style="background:#F8FAFC;border:1px solid #EEF1F5;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:7px">
+                                    <p style="margin:0;font-size:10.5px;color:#7A8296;line-height:1.5">The day this meet is swum. Times already recorded keep the day they were swum on — this is the meet's own date, and it is what a swim that never had one of its own falls back to.</p>
+                                    <input value="{{ meetEdit.date }}" onchange="{{ meetEdit.onDate }}" type="date" aria-label="Meet date" style="background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                                    <input value="{{ meetEdit.location }}" oninput="{{ meetEdit.onLocation }}" placeholder="Location e.g. Hamad Aquatics Center" style="background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                                    <div style="display:flex;gap:6px">
+                                      <button onclick="{{ meetEdit.onLcm }}" style="flex:1;background:{{ meetEdit.lcmBg }};color:{{ meetEdit.lcmFg }};border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Long course (LCM)</button>
+                                      <button onclick="{{ meetEdit.onScm }}" style="flex:1;background:{{ meetEdit.scmBg }};color:{{ meetEdit.scmFg }};border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Short course (SCM)</button>
+                                    </div>
+                                    <sc-if value="{{ meetEdit.errShow }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:11px;color:#B42318;font-weight:600">{{ meetEdit.err }}</p></sc-if>
+                                    <button onclick="{{ meetEdit.onSave }}" style="background:#0C7A4F;color:#fff;border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">Save meet details</button>
+                                  </div>
+                                </sc-if>
                                 <sc-if value="{{ m.editingEvents }}" hint-placeholder-val="{{ false }}">
                                   <div style="background:#F8FAFC;border:1px solid #EEF1F5;border-radius:10px;padding:10px">
                                     <p style="margin:0 0 7px;font-size:10.5px;color:#7A8296;line-height:1.5">Tap events to add or remove them from this meet's program. Parents will only be able to request these events.</p>
@@ -7282,7 +7298,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-22c';
+const VX_BUILD='2026-08-22d';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -7540,6 +7556,7 @@ class Component extends DCLogic {
       meetImportOpen:false, meetImportText:'', meetImportPreview:null, meetImportBusy:false, meetExpanded:null, meetEventsEditIdx:null,
       hytekMode:'paste', hytekPdfBusy:false, hytekPdfLabel:'Choose a Hy-Tek file (PDF, .hy3 or .zip)\u2026',
       calOpen:false, calName:'', calLocation:'', calDate:'', calCourse:'LCM', calErr:'',
+      meetEditName:null, meetEditDraft:null, meetEditErr:'',
       showVortexId:false,
       compBuildOpen:false, compName:'', compLocation:'', compDate:'', compCourse:'LCM', compEvents:[], compErr:'',
       printPreviewOpen:false,
@@ -10128,6 +10145,38 @@ class Component extends DCLogic {
     // keep them in the standard catalogue order for a tidy program
     const order=this.EVENT_CATALOG(); map[meetName]=base.slice().sort((a,b)=>order.indexOf(a)-order.indexOf(b));
     this.meetEventsMap=map; this._saveJSON('vx_meet_events', map); this.forceUpdate();
+  }
+  // ---- Editing a meet the club built itself --------------------------------------------------
+  // The date is typed once when the meet is created and was then fixed for good, so a meet built
+  // for the wrong day stayed on the wrong day — on the meet-day screen, on the calendar, and
+  // underneath any swim that only knows which meet it was swum at.
+  //
+  // Only the club's own meets. The rest arrived with the results imported from the meet host, and
+  // editing this club's copy of somebody else's meet would put the two out of step for no gain.
+  _isCustomMeet(name){ const nm=String(name||'').trim().toLowerCase();
+    return (this.customMeets||[]).some(m=>String((m&&m.name)||'').trim().toLowerCase()===nm); }
+  _mdyFromISO(iso){ const p=String(iso||'').split('-');
+    return (p.length===3) ? (parseInt(p[1],10)+'/'+parseInt(p[2],10)+'/'+p[0]) : ''; }
+  meetEditOpen(name){
+    const m=(this.customMeets||[]).find(x=>x.name===name); if(!m) return;
+    this.setState({meetEditName:name, meetEditErr:'', meetEditDraft:{
+      date:this._toISODate(m.date)||'', location:m.location||'', course:m.course||'LCM' }});
+  }
+  meetEditClose(){ this.setState({meetEditName:null, meetEditDraft:null, meetEditErr:''}); }
+  meetEditField(k, v){ const d={...(this.state.meetEditDraft||{})}; d[k]=v; this.setState({meetEditDraft:d, meetEditErr:''}); }
+  meetEditSave(){
+    const S=this.state; const name=S.meetEditName; const d=S.meetEditDraft||{};
+    if(!name) return;
+    const iso=this._toISODate(d.date);
+    if(!iso) return this.setState({meetEditErr:'Pick the day the meet is swum.'});
+    const dateStr=this._mdyFromISO(iso);
+    const list=(this.customMeets||[]).map(m=>m.name===name
+      ? {...m, date:dateStr, location:String(d.location||'').trim(), course:(d.course==='SCM'?'SCM':'LCM')} : m);
+    this.customMeets=list; this._saveJSON('vx_custom_meets', list);
+    try{ this.audit('meet.edit', name, {meet:name, date:iso, course:d.course}); }catch(e){}
+    this.setState({meetEditName:null, meetEditDraft:null, meetEditErr:'',
+      settingsMsg:name+' — '+this._fmtDMY(iso, true)+' ✓'});
+    this.forceUpdate();
   }
   swFormAddPb(){ const S=this.state; const sec=this.parseTimeStr(S.swPbTimeDraft); if(sec==null) return;
     // A full meet history: each add is its OWN result (same event may appear at several meets),
@@ -17238,10 +17287,25 @@ class Component extends DCLogic {
         hasEvents: mEvents.length>0, eventsLine: mEvents.length?mEvents.join(' · '):'', eventCount:mEvents.length,
         editingEvents, eventEditChips, editEventsLabel: editingEvents?'Done editing events':(mEvents.length?('Edit event program ('+mEvents.length+')'):'Add event program'),
         onToggleEditEvents:()=>this.setState({meetEventsEditIdx: editingEvents?null:i}),
+        // Only a meet the club built itself can have its details changed here.
+        canEditMeet: this._isCustomMeet(m.name),
+        editingMeet: S.meetEditName===m.name,
+        onToggleEditMeet:()=>{ if(S.meetEditName===m.name) this.meetEditClose(); else this.meetEditOpen(m.name); },
         onToggle:()=>this.setState({meetExpanded: expanded?null:i}),
         onManageEntries:()=>{ const idx=this.allMeets().findIndex(x=>x.name===m.name); this.setState({adminSection:null, tool:'entries', entriesMeetIdx: idx>=0?idx:0}); },
         status, statusBg:sBg, statusFg:sFg, onCycleStatus:()=>this.meetStatusCycle(m.name) };
     });
+
+    const meetEditDraft = S.meetEditDraft||{date:'', location:'', course:'LCM'};
+    const meetEdit = {
+      date: meetEditDraft.date||'', location: meetEditDraft.location||'',
+      onDate:(e)=>this.meetEditField('date', e.target.value),
+      onLocation:(e)=>this.meetEditField('location', e.target.value),
+      lcmBg: meetEditDraft.course!=='SCM'?'#0A0F1A':'#F8FAFC', lcmFg: meetEditDraft.course!=='SCM'?'#fff':'#3A4152',
+      scmBg: meetEditDraft.course==='SCM'?'#0A0F1A':'#F8FAFC', scmFg: meetEditDraft.course==='SCM'?'#fff':'#3A4152',
+      onLcm:()=>this.meetEditField('course','LCM'), onScm:()=>this.meetEditField('course','SCM'),
+      onSave:()=>this.meetEditSave(), err:S.meetEditErr||'', errShow:!!S.meetEditErr,
+    };
 
     // -- staff admin --
     const staffRows=this.squads.map(sq=>{ const editing=S.staffEditId===sq.id; const ov=this.staffOverrides[sq.id]||{};
@@ -18894,6 +18958,7 @@ class Component extends DCLogic {
       onSwPbEventSel:(e)=>this.setState({swPbEventSel:e.target.value}), onSwPbTimeDraft:(e)=>this.setState({swPbTimeDraft:e.target.value}),
       onSwPbAdd:()=>this.swFormAddPb(),
       onSwAddSave, swRows, swEmpty,
+      meetEdit,
       meetImportOpen:S.meetImportOpen, onMeetImportToggle:()=>this.setState({meetImportOpen:!S.meetImportOpen}), meetImportChevron,
       hytekIsPaste:(S.hytekMode||'paste')==='paste', hytekIsPdf:S.hytekMode==='pdf',
       hytekModePasteBg:(S.hytekMode||'paste')==='paste'?'#fff':'transparent', hytekModePasteFg:(S.hytekMode||'paste')==='paste'?'#0C1116':'#7A8296',
