@@ -6163,6 +6163,12 @@ if ('serviceWorker' in navigator) {
                         </div>
                       </sc-if>
 
+                      <sc-if value="{{ meetsMsgShow }}" hint-placeholder-val="{{ false }}">
+                        <div style="display:flex;align-items:flex-start;gap:9px;background:{{ meetsMsgBg }};border:1px solid {{ meetsMsgEdge }};border-radius:11px;padding:10px 11px;margin-bottom:8px">
+                          <span style="flex:1;min-width:0;font-size:11.5px;line-height:1.5;color:{{ meetsMsgFg }};font-weight:600">{{ meetsMsg }}</span>
+                          <button onclick="{{ onMeetsMsgClear }}" aria-label="Dismiss" style="flex:none;width:22px;height:22px;border-radius:6px;border:none;background:rgba(255,255,255,.6);color:{{ meetsMsgFg }};cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:13px;height:13px"></i></button>
+                        </div>
+                      </sc-if>
                       <div style="display:flex;flex-direction:column;gap:8px">
                         <sc-for list="{{ meetRows }}" as="m" hint-placeholder-count="6">
                           <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;box-shadow:0 1px 4px rgba(11,20,40,.04);overflow:hidden">
@@ -7298,7 +7304,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-22d';
+const VX_BUILD='2026-08-22e';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -7557,6 +7563,7 @@ class Component extends DCLogic {
       hytekMode:'paste', hytekPdfBusy:false, hytekPdfLabel:'Choose a Hy-Tek file (PDF, .hy3 or .zip)\u2026',
       calOpen:false, calName:'', calLocation:'', calDate:'', calCourse:'LCM', calErr:'',
       meetEditName:null, meetEditDraft:null, meetEditErr:'',
+      meetsMsg:'', meetsMsgOk:false,
       showVortexId:false,
       compBuildOpen:false, compName:'', compLocation:'', compDate:'', compCourse:'LCM', compEvents:[], compErr:'',
       printPreviewOpen:false,
@@ -10120,7 +10127,10 @@ class Component extends DCLogic {
   // Add a meet to the club meets list if it isn't already there (matched by name), then sync.
   _ensureMeet(name, isoDate, courseLabel){ name=(name||'').trim(); if(!name) return;
     const exists=this.allMeets().some(m=>(m.name||'').trim().toLowerCase()===name.toLowerCase()); if(exists) return;
-    const dateStr=isoDate?this._fmtDMY(isoDate):'';
+    // The same shape every other meet is stored in. This wrote the LABEL — "16 May" — and a label
+    // is not a date this app can read back: the meets registered by an import have sat in the
+    // club's calendar with a date nothing could parse.
+    const dateStr=isoDate?this._mdyFromISO(this._toISODate(isoDate)):'';
     const meet={name, location:'', date:dateStr, course:courseLabel||'LCM', entries:0, events:[]};
     this.customMeets=[meet, ...this.customMeets];
     this._saveJSON('vx_custom_meets', this.customMeets);
@@ -10145,6 +10155,29 @@ class Component extends DCLogic {
     // keep them in the standard catalogue order for a tidy program
     const order=this.EVENT_CATALOG(); map[meetName]=base.slice().sort((a,b)=>order.indexOf(a)-order.indexOf(b));
     this.meetEventsMap=map; this._saveJSON('vx_meet_events', map); this.forceUpdate();
+  }
+  // Did that save reach the club, or only this device?
+  //
+  // A push that is refused, or that has no database session to go out with, still leaves the new
+  // value on this device — so the screen says "saved" and looks right, while the other iPads and
+  // the next reopening of the app hold the old one. The shared blob failed silently for a long
+  // time; this is the same reading _squadSaveWatch does, for the screens that also need it.
+  async _clubStateLanded(key){
+    try{
+      // No entry means pushKey returned before recording one, which is what happens when the
+      // write is not sent at all. Reading that as success is how "Saved" appeared over a change
+      // that was still sitting on the device.
+      const p=(window.__vxLastPush||{})[key];
+      const r=p ? await p : {ok:false, why:'it never left this device — there is no database sign-in here'};
+      if(r && r.ok===false) return {ok:false, why:(r.why||('HTTP '+(r.status||'?')))};
+      return {ok:true};
+    }catch(e){ return {ok:false, why:'it could not be sent from this device'}; }
+  }
+  _sayIfNotSaved(key, what){
+    this._clubStateLanded(key).then(r=>{
+      if(r.ok) return this.setState({meetsMsg: what+' saved ✓', meetsMsgOk:true});
+      this.setState({meetsMsgOk:false, meetsMsg: what+' saved on this device only — '+r.why
+        +'. Sign out and back in, then set it again, or it will be lost when the app is reopened.'}); });
   }
   // ---- Editing a meet the club built itself --------------------------------------------------
   // The date is typed once when the meet is created and was then fixed for good, so a meet built
@@ -10177,6 +10210,7 @@ class Component extends DCLogic {
     this.setState({meetEditName:null, meetEditDraft:null, meetEditErr:'',
       settingsMsg:name+' — '+this._fmtDMY(iso, true)+' ✓'});
     this.forceUpdate();
+    this._sayIfNotSaved('vx_custom_meets', name+'\u2019s date was');
   }
   swFormAddPb(){ const S=this.state; const sec=this.parseTimeStr(S.swPbTimeDraft); if(sec==null) return;
     // A full meet history: each add is its OWN result (same event may appear at several meets),
@@ -11971,7 +12005,8 @@ class Component extends DCLogic {
   }
   brandSave(){ const d=this.state.brandDraft || this.brandConfig; this.brandConfig={...d}; this._saveJSON('vx_brand', this.brandConfig); this.setState({brandDraft:null, settingsMsg:'Club configuration saved ✓'}); }
   allMeets(){ return [...this.customMeets, ...this.meetsMeta]; }
-  meetStatusCycle(name){ const order=['Upcoming','Entries open','In progress','Completed']; const cur=this.meetStatus[name]||'Upcoming'; const ni=(order.indexOf(cur)+1)%order.length; this.meetStatus={...this.meetStatus, [name]:order[ni]}; this._saveJSON('vx_meet_status', this.meetStatus); this.forceUpdate(); }
+  meetStatusCycle(name){ const order=['Upcoming','Entries open','In progress','Completed']; const cur=this.meetStatus[name]||'Upcoming'; const ni=(order.indexOf(cur)+1)%order.length; this.meetStatus={...this.meetStatus, [name]:order[ni]}; this._saveJSON('vx_meet_status', this.meetStatus); this.forceUpdate();
+    this._sayIfNotSaved('vx_meet_status', name+' \u2014 '+order[ni]+' was'); }
   toggleEntryEvent(ev){ const cur=this.state.entriesEventsSel.slice(); const i=cur.indexOf(ev); if(i>=0) cur.splice(i,1); else cur.push(ev); this.setState({entriesEventsSel:cur}); }
   toggleEntrySwimmer(id){ const cur=(this.state.entriesSwSel||[]).slice(); const i=cur.indexOf(id); if(i>=0) cur.splice(i,1); else cur.push(id); this.setState({entriesSwSel:cur}); }
   // Personal-best time for a swimmer in an event ('NT' = no time on file).
@@ -17296,6 +17331,12 @@ class Component extends DCLogic {
         status, statusBg:sBg, statusFg:sFg, onCycleStatus:()=>this.meetStatusCycle(m.name) };
     });
 
+    const meetsMsg = S.meetsMsg||'';
+    const meetsMsgShow = !!meetsMsg;
+    const meetsMsgBg = S.meetsMsgOk ? '#DCF5EA' : '#FBF0DD';
+    const meetsMsgEdge = S.meetsMsgOk ? '#A8E6C8' : '#F0D9A8';
+    const meetsMsgFg = S.meetsMsgOk ? '#0C7A4F' : '#7A5A0C';
+    const onMeetsMsgClear = ()=>this.setState({meetsMsg:''});
     const meetEditDraft = S.meetEditDraft||{date:'', location:'', course:'LCM'};
     const meetEdit = {
       date: meetEditDraft.date||'', location: meetEditDraft.location||'',
@@ -18958,7 +18999,8 @@ class Component extends DCLogic {
       onSwPbEventSel:(e)=>this.setState({swPbEventSel:e.target.value}), onSwPbTimeDraft:(e)=>this.setState({swPbTimeDraft:e.target.value}),
       onSwPbAdd:()=>this.swFormAddPb(),
       onSwAddSave, swRows, swEmpty,
-      meetEdit,
+      meetEdit, meetsMsg:meetsMsg, meetsMsgShow:meetsMsgShow, meetsMsgBg:meetsMsgBg,
+      meetsMsgEdge:meetsMsgEdge, meetsMsgFg:meetsMsgFg, onMeetsMsgClear:onMeetsMsgClear,
       meetImportOpen:S.meetImportOpen, onMeetImportToggle:()=>this.setState({meetImportOpen:!S.meetImportOpen}), meetImportChevron,
       hytekIsPaste:(S.hytekMode||'paste')==='paste', hytekIsPdf:S.hytekMode==='pdf',
       hytekModePasteBg:(S.hytekMode||'paste')==='paste'?'#fff':'transparent', hytekModePasteFg:(S.hytekMode||'paste')==='paste'?'#0C1116':'#7A8296',
