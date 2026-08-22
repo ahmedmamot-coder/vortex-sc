@@ -30,8 +30,6 @@ const CLUB_KEYS = [
   "vx_squads",       // squad order and names
   "vx_fee_plans",    // the price list
   "vx_meets_cal",    // the meet calendar
-  "vx_custom_meets",
-  "vx_meet_status",
   "vx_meet_events",
   "vx_meet_cuts",
   "vx_season",
@@ -79,6 +77,56 @@ const ARRAY_BY_SWID_KEYS = ["vx_meet_entries"];
 const ROSTER_DOC_KEYS = ["vx_roster_edits"];
 
 type Json = Record<string, unknown>;
+
+type MeetRow = {
+  name: string;
+  meet_date?: string;
+  location?: string;
+  course?: string;
+  events?: unknown;
+  status?: string;
+  club_built?: boolean;
+  updated_at?: string;
+};
+
+/** The club's meets, one row each. Null when the table cannot be read, so the caller can tell
+ *  "no meets" apart from "no answer" and simply leave the two keys out rather than send empties. */
+async function fetchMeets(): Promise<MeetRow[] | null> {
+  try {
+    const r = await fetch(SB_URL + "/rest/v1/club_meets?select=*&limit=2000", {
+      headers: svc(),
+      cache: "no-store",
+    });
+    if (!r.ok) return null;
+    const rows = (await r.json().catch(() => null)) as MeetRow[] | null;
+    return Array.isArray(rows) ? rows : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Back into the two shapes the app has always read: the array of the club's own meets, and the
+ *  map of every meet's status. */
+export function meetsAsClubStateRows(rows: MeetRow[]) {
+  const at = rows.reduce((a, r) => (r.updated_at && r.updated_at > a ? r.updated_at : a), "");
+  const updated_at = at || new Date().toISOString();
+  const custom = rows
+    .filter((r) => r.club_built && r.name)
+    .map((r) => ({
+      name: r.name,
+      location: r.location || "",
+      date: r.meet_date || "",
+      course: r.course || "LCM",
+      entries: 0,
+      events: Array.isArray(r.events) ? r.events : [],
+    }));
+  const status: Record<string, string> = {};
+  for (const r of rows) if (r.name) status[r.name] = r.status || "Upcoming";
+  return [
+    { key: "vx_custom_meets", value: custom, updated_at },
+    { key: "vx_meet_status", value: status, updated_at },
+  ];
+}
 
 function svc() {
   return { apikey: SB_SERVICE, Authorization: "Bearer " + SB_SERVICE };
@@ -201,6 +249,12 @@ export async function GET(request: Request) {
   if (!Array.isArray(rows)) return Response.json({ error: "could not read the club record" }, { status: 502 });
 
   // Same row shape the client's own pull() returns, so applyPull needs no special case.
+  // The meets and their statuses left club_state for a table of their own (club_meets), because
+  // the shared document is last-write-wins and a device replaying unsent writes put its whole
+  // stale calendar back over a corrected date. A family still reads them the way it always has:
+  // the two keys are rebuilt here from the table, so the portal needs no change and no parent
+  // gets a direct read of the club's meets.
+  const meetRows = await fetchMeets();
   const out = rows
     .map((r) => {
       if (CLUB_KEYS.includes(r.key)) return r;
@@ -211,6 +265,8 @@ export async function GET(request: Request) {
       return null;   // unreachable — `wanted` is built from the five lists
     })
     .filter(Boolean);
+
+  if (meetRows) out.push(...meetsAsClubStateRows(meetRows));
 
   return Response.json(
     { rows: out, swimmers: [...mine] },
