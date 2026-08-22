@@ -4344,6 +4344,11 @@ describe("InBody sheet", () => {
       // behind, which is not a fact the tablet can act on or should show. The marks themselves
       // are in attendance_marks and cached in vx_attend_log, both listed here already.
       vx_attend_unsent: "which of this device's register marks have not reached the database yet",
+      // Same shape, same reason, for the meet sheet: which of this device's entry writes and
+      // removals the database has not taken. It is this device's outbox — the other iPad cannot
+      // act on being told this one is behind, and the entries themselves are in
+      // meet_declarations and cached in vx_meet_entries, both accounted for already.
+      vx_entries_unsent: "which of this device's entry writes have not reached the database yet",
     };
     // 2. A local copy of a database table, so the screen can draw before the read comes back.
     //    The table is the truth; losing the copy costs nothing.
@@ -7194,13 +7199,13 @@ describe("InBody sheet", () => {
     const run = (before, after, meet = "Doha Open") => {
       const sent = [], deleted = [];
       const ctx = { meetEntries: { [meet]: before, "Other Meet": [E("s9", "50 Free", 1, 1)] },
-        forceUpdate() {}, _saveJSON() {} };
+        forceUpdate() {}, _saveJSON() {}, _saveLocalOnly() {}, setState() {}, _entUnsent: {} };
       const restore = globalThis.window;
       globalThis.window = {
         __vxUpsert: (t, rows) => { sent.push([t, rows]); return Promise.resolve(true); },
         __vxDelete: (t, qs) => { deleted.push([t, qs]); return Promise.resolve(true); },
       };
-      try { bind("_entriesSave", ctx, ["_entryId", "_entryToRow"])(meet, after); }
+      try { bind("_entriesSave", ctx, ["_entryId", "_entryToRow", "_entriesLanded", "_entriesUnsent"])(meet, after); }
       finally { globalThis.window = restore; }
       return { sent, deleted, ctx };
     };
@@ -7210,6 +7215,31 @@ describe("InBody sheet", () => {
       eq(rows.length, 1);
       eq(rows[0].id, "Doha Open::s2::50 Fly");
     });
+    // THE SEEDING WAS NEVER SENT. autoSeedMeet moved the heat and lane on the very objects the
+    // meet already held, so this diff compared each entry against itself and found nothing to
+    // write. The sheet seeded on screen, the database was never told, and the next poll handed
+    // back everybody in heat 1, lane 1.
+    it("seeding a meet sends the seeding", () => {
+      const meet = "Test";
+      const held = [E("s1", "50 Free", 1, 1), E("s2", "50 Free", 1, 1)];
+      const ctx = { meetEntries: { [meet]: held }, state: {}, forceUpdate() {}, _saveJSON() {},
+        _saveLocalOnly() {}, _entUnsent: {}, setState() {},
+        allSwimmersFlat: () => [
+          { id: "s1", name: "s1", gender: "Girls", age: 12, pbs: [{ event: "50 Free", sec: 30 }] },
+          { id: "s2", name: "s2", gender: "Girls", age: 12, pbs: [{ event: "50 Free", sec: 31 }] }],
+        _ageFromDob: () => null };
+      const sent = [];
+      const restore = globalThis.window;
+      globalThis.window = { __vxUpsert: (t, rows) => { sent.push(...rows); return Promise.resolve(true); } };
+      try {
+        bind("autoSeedMeet", ctx, ["_seedConfig", "_seedConfigNormalise", "_seedConfigDefaults",
+          "_laneOrder", "_seedGroupOf", "_seedGenderOf", "_ageBandFor", "_swAge",
+          "_entriesSave", "_entryId", "_entryToRow", "_entriesLanded", "_entriesUnsent"])(meet);
+      } finally { globalThis.window = restore; }
+      eq(sent.length, 2, "both swimmers moved off lane 1, so both are written");
+      eq(sent.find((r) => r.sw_id === "s1").lane, 4, "and the row carries the seeded lane");
+    });
+
     it("re-seeding writes the entries whose heat or lane moved, and only those", () => {
       const rows = run([E("s1", "100 Free", 1, 1), E("s2", "100 Free", 1, 2)],
         [E("s1", "100 Free", 2, 4), E("s2", "100 Free", 1, 2)]).sent.flatMap(([, r]) => r);
@@ -7222,6 +7252,117 @@ describe("InBody sheet", () => {
       eq(/id=in\.\(/.test(deleted[0][1]), true);
       eq(/s2%3A%3A50%20Fly|s2::50 Fly/.test(decodeURIComponent(deleted[0][1])) || /s2/.test(deleted[0][1]), true);
     });
+    // THE SEEDING CAME UNDONE THREE SECONDS AFTER IT WAS DONE. The live poll re-reads
+    // meet_declarations every second or two, and the read that was already in flight when the
+    // coach pressed Auto-seed answers with the rows as they were before it — so every swimmer
+    // went back to heat 1, lane 1 while the coach watched, and an entry the table had never
+    // heard of vanished off the sheet entirely.
+    describe("a read in flight does not undo the seeding it overtook", () => {
+      const E = (swId, event, heat, lane) => ({ swId, name: swId, event, heat, lane });
+      const fetchWith = (serverRows, ctxPatch = {}) => {
+        const ctx = { meetEntries: {}, forceUpdate() {}, _saveLocalOnly() {}, _entUnsent: {},
+          _entriesMigrateOnce() {}, ...ctxPatch };
+        const restore = globalThis.window;
+        globalThis.window = { __vxSelect: () => Promise.resolve(serverRows) };
+        const run = bind("_entriesFetch", ctx, ["_entryId", "_entriesUnsent"]);
+        return run().then(() => { globalThis.window = restore; return ctx; })
+          .catch((e) => { globalThis.window = restore; throw e; });
+      };
+      const row = (meet, sw, ev, heat, lane) =>
+        ({ meet, sw_id: sw, sw_name: sw, event: ev, heat, lane });
+
+      itAsync("a seeded lane written since the read went out is kept, not taken back", async () => {
+        const ctx = await fetchWith(
+          [row("Test", "s1", "50 Free", 1, 1)],                       // the answer, from before
+          { meetEntries: { Test: [E("s1", "50 Free", 2, 4)] },         // what the seeding just did
+            _entryWriteTs: { "Test::s1::50 Free": Date.now() + 5000 } });
+        eq(ctx.meetEntries.Test[0].heat + "/" + ctx.meetEntries.Test[0].lane, "2/4");
+      });
+
+      itAsync("a write the database refused is still kept", async () => {
+        const ctx = await fetchWith(
+          [row("Test", "s1", "50 Free", 1, 1)],
+          { meetEntries: { Test: [E("s1", "50 Free", 3, 5)] },
+            _entUnsent: { "Test::s1::50 Free": "w" } });
+        eq(ctx.meetEntries.Test[0].lane, 5);
+      });
+
+      itAsync("an entry the table has never heard of does not vanish off the sheet", async () => {
+        const ctx = await fetchWith(
+          [row("Test", "s1", "50 Free", 1, 1)],
+          { meetEntries: { Test: [E("s1", "50 Free", 1, 1), E("s2", "50 Free", 1, 2)] },
+            _entUnsent: { "Test::s2::50 Free": "w" } });
+        eq(ctx.meetEntries.Test.length, 2);
+        eq(ctx.meetEntries.Test.some((e) => e.swId === "s2"), true);
+      });
+
+      itAsync("a scratch this device made is not undone by the row still being there", async () => {
+        const ctx = await fetchWith(
+          [row("Test", "s1", "50 Free", 1, 1), row("Test", "s2", "50 Free", 1, 2)],
+          { meetEntries: { Test: [E("s1", "50 Free", 1, 1)] },
+            _entUnsent: { "Test::s2::50 Free": "d" } });
+        eq(ctx.meetEntries.Test.length, 1);
+      });
+
+      // The other half of it: another coach's seeding must still arrive. Only the rows THIS
+      // device has a newer answer for are held back.
+      itAsync("another device's seeding still comes through", async () => {
+        const ctx = await fetchWith(
+          [row("Test", "s1", "50 Free", 4, 6)],
+          { meetEntries: { Test: [E("s1", "50 Free", 1, 1)] } });
+        eq(ctx.meetEntries.Test[0].heat + "/" + ctx.meetEntries.Test[0].lane, "4/6");
+      });
+
+      itAsync("and a swimmer another device scratched goes off this one's sheet too", async () => {
+        const ctx = await fetchWith([row("Test", "s1", "50 Free", 1, 1)],
+          { meetEntries: { Test: [E("s1", "50 Free", 1, 1), E("s2", "50 Free", 1, 2)] } });
+        eq(ctx.meetEntries.Test.length, 1);
+      });
+    });
+
+    // The write that never answers at all: with no live session it is parked for the sign-in and
+    // its promise never settles. Recording the outcome when it settles therefore never runs —
+    // which is the whole reason the seeding came undone — so the mark goes on before the send.
+    itAsync("a write that never answers is still remembered as this device's", async () => {
+      const ctx = { meetEntries: {}, forceUpdate() {}, _saveJSON() {}, _saveLocalOnly() {},
+        _entUnsent: {}, setState() {} };
+      const restore = globalThis.window;
+      globalThis.window = { __vxUpsert: () => new Promise(() => {}) };   // never settles
+      bind("_entriesSave", ctx, ["_entryId", "_entryToRow", "_entriesLanded", "_entriesUnsent"])(
+        "Test", [E("s1", "50 Free", 2, 4)]);
+      await new Promise((r) => setTimeout(r, 5));
+      globalThis.window = restore;
+      eq(ctx._entUnsent["Test::s1::50 Free"], "w");
+    });
+
+    itAsync("and the mark comes off once the database does take it", async () => {
+      const ctx = { meetEntries: {}, forceUpdate() {}, _saveJSON() {}, _saveLocalOnly() {},
+        _entUnsent: {}, setState() {} };
+      const restore = globalThis.window;
+      globalThis.window = { __vxUpsert: () => Promise.resolve(true) };
+      bind("_entriesSave", ctx, ["_entryId", "_entryToRow", "_entriesLanded", "_entriesUnsent"])(
+        "Test", [E("s1", "50 Free", 2, 4)]);
+      await new Promise((r) => setTimeout(r, 5));
+      globalThis.window = restore;
+      eq(ctx._entUnsent["Test::s1::50 Free"], undefined);
+    });
+
+    // A write that never reached the database must say so: the sheet on this iPad is right and
+    // the one the other coach prints is not.
+    itAsync("a refused write is reported rather than looking saved", async () => {
+      const notes = [];
+      const ctx = { meetEntries: {}, forceUpdate() {}, _saveJSON() {}, _saveLocalOnly() {},
+        _entUnsent: {}, setState: (p) => notes.push(p.shareNote) };
+      const restore = globalThis.window;
+      globalThis.window = { __vxUpsert: () => Promise.resolve(false) };
+      bind("_entriesSave", ctx, ["_entryId", "_entryToRow", "_entriesLanded", "_entriesUnsent"])(
+        "Test", [E("s1", "50 Free", 2, 4)]);
+      await new Promise((r) => setTimeout(r, 5));
+      globalThis.window = restore;
+      eq(/has not reached the database/.test(notes.join(" ")), true);
+      eq(ctx._entUnsent["Test::s1::50 Free"], "w", "and it is remembered as this device's alone");
+    });
+
     it("another meet's entries are never touched", () => {
       const { sent, deleted, ctx } = run([E("s1", "100 Free", 1, 1)], [E("s1", "100 Free", 1, 1), E("s2", "50 Fly", 1, 2)]);
       for (const [, rows] of sent) for (const r of rows) eq(r.meet, "Doha Open");

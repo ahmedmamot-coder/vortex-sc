@@ -7282,7 +7282,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-22b';
+const VX_BUILD='2026-08-22c';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -9535,7 +9535,12 @@ class Component extends DCLogic {
   // final heat of each group is the fastest. Heat numbers run on across the groups of an event,
   // because a sheet with two "Heat 1"s in the same event is two heats nobody can call.
   autoSeedMeet(meetName){
-    const list=(this.meetEntries[meetName]||[]).slice();
+    // Copies, not the entries themselves. Seeding used to move the heat and lane on the very
+    // objects the meet already held, so the save's "what changed?" compared each entry against
+    // itself, found nothing, and sent nothing: the sheet seeded on screen and the database was
+    // never told. The next poll then answered with the sheet it still had — everybody in heat 1,
+    // lane 1 — which is what put a seeded meet back to how it started while a coach watched.
+    const list=(this.meetEntries[meetName]||[]).map(e=>({...e}));
     if(!list.length) return;
     const c=this._seedConfig();
     const flat=this.allSwimmersFlat();
@@ -11943,18 +11948,68 @@ class Component extends DCLogic {
     try{ this.audit('meet.entries', meetName, {meet:meetName, entries:(list||[]).length}); }catch(e){}
     const before={}; ((this.meetEntries||{})[meetName]||[]).forEach(e=>{ const id=this._entryId(meetName,e); if(id) before[id]=e; });
     this.meetEntries={...this.meetEntries, [meetName]:list};
+    // When this device last wrote each entry. The live poll re-reads meet_declarations every
+    // second or two, and a read that was already in flight when the seeding was written answers
+    // with the rows as they were BEFORE it — which is how a seeded meet put itself back into
+    // heat 1, lane 1 a few seconds after the coach watched it seed correctly.
+    const ts=(this._entryWriteTs=this._entryWriteTs||{}); const now=Date.now();
     // Still written, so a device that has not run the SQL yet behaves exactly as before.
     this._saveJSON('vx_meet_entries', this.meetEntries); this.forceUpdate();
-    if(!window.__vxUpsert) return;
     const changed=[], seen={};
-    list.forEach(e=>{ const id=this._entryId(meetName,e); if(!id) return; seen[id]=true;
+    list.forEach(e=>{ const id=this._entryId(meetName,e); if(!id) return; seen[id]=true; ts[id]=now;
       const was=before[id];
       if(!was || JSON.stringify(was)!==JSON.stringify(e)) changed.push(this._entryToRow(meetName, e)); });
     const gone=Object.keys(before).filter(id=>!seen[id]);
+    gone.forEach(id=>{ ts[id]=now; });
+    if(!window.__vxUpsert){
+      // No sync on this device at all: every row is this device's alone, and the poll that would
+      // overwrite them never runs either. Nothing to record.
+      return;
+    }
+    // Marked as this device's BEFORE it is sent, and unmarked only when the database says yes.
+    // Doing it the other way round is what let the seeding come undone: with no live session
+    // the write is parked for the sign-in and its promise never settles at all, so a
+    // "record it when it fails" line never runs — and the next poll, finding nothing to say
+    // this device knew better, took the old sheet back.
+    const wrote=changed.map(r=>r.id);
+    if(wrote.length) this._entriesLanded(wrote, 'w', false);
+    if(gone.length) this._entriesLanded(gone, 'd', false);
+    const send=(mode, rows, ids)=>{
+      let p;
+      try{ p=Promise.resolve(mode==='d'
+        ? (window.__vxDelete ? window.__vxDelete('meet_declarations', 'id=in.('+ids.map(encodeURIComponent).join(',')+')') : false)
+        : window.__vxUpsert('meet_declarations', rows)); }
+      catch(e){ p=Promise.resolve(false); }
+      // Whenever it finally answers — including long after the wait below has given up, when a
+      // parked write goes out on the next sign-in — a yes clears the mark.
+      p.then(ok=>{ if(ok) this._entriesLanded(ids, mode, true); }).catch(()=>{});
+      return Promise.race([ p.catch(()=>false), new Promise(r=>setTimeout(()=>r(false), 8000)) ]);
+    };
     (async()=>{
-      try{ for(let i=0;i<changed.length;i+=200) await window.__vxUpsert('meet_declarations', changed.slice(i,i+200)); }catch(e){}
-      try{ if(gone.length && window.__vxDelete) await window.__vxDelete('meet_declarations', 'id=in.('+gone.map(encodeURIComponent).join(',')+')'); }catch(e){}
+      let ok=true;
+      for(let i=0;i<changed.length;i+=200){
+        const batch=changed.slice(i,i+200);
+        if(!(await send('w', batch, batch.map(r=>r.id)))) ok=false;
+      }
+      if(gone.length && !(await send('d', null, gone))) ok=false;
+      // Refused, or sent with no session behind it. The seeding stays on screen and on this
+      // device either way — but a coach printing a heat sheet from the other iPad would be
+      // printing the old one, and that is worth saying out loud rather than looking fine.
+      if(!ok) this.setState({shareNote:'Seeded on this device — it has not reached the database yet. Sign out and back in, then seed again so the other devices get it.'});
     })();
+  }
+  // Which entries are still only on this device, as { entryId: 'w' | 'd' } — a write that was
+  // refused, or a removal that was. Kept on this device only: it is about this device's outbox,
+  // and telling the other iPad that this one is behind is not something it can act on.
+  _entriesUnsent(){
+    if(this._entUnsent) return this._entUnsent;
+    try{ this._entUnsent=JSON.parse(localStorage.getItem('vx_entries_unsent')||'{}')||{}; }catch(e){ this._entUnsent={}; }
+    return this._entUnsent;
+  }
+  _entriesLanded(ids, mode, ok){
+    const m=this._entriesUnsent();
+    (ids||[]).forEach(id=>{ if(!id) return; if(ok) delete m[id]; else m[id]=mode; });
+    try{ this._saveLocalOnly('vx_entries_unsent', m); }catch(e){}
   }
   // A swimmer swims an event once at a meet, so that is the identity — re-seeding the same
   // entry corrects its heat and lane rather than adding a second one.
@@ -11964,11 +12019,30 @@ class Component extends DCLogic {
     updated_at:new Date().toISOString() }; }
   async _entriesFetch(){
     if(!window.__vxSelect) return;
+    // Taken before the read goes out: an entry written here after this moment is newer than
+    // anything this answer can contain, however fast the answer comes back.
+    const startedAt=Date.now();
     const rows=await window.__vxSelect('meet_declarations', 'select=*&limit=40000');
     if(rows==null) return;   // a failed read, not a meet with nobody entered
-    const map={}; rows.forEach(r=>{ if(!r || !r.meet) return;
-      (map[r.meet]=map[r.meet]||[]).push({swId:r.sw_id, name:r.sw_name||'', event:r.event,
+    const unsent=this._entriesUnsent(); const ts=this._entryWriteTs||{};
+    // This device's own copy, by entry id, so a row it holds the newer answer for can be kept
+    // rather than taken from the answer.
+    const mine={}; Object.keys(this.meetEntries||{}).forEach(m=>
+      (this.meetEntries[m]||[]).forEach(e=>{ const id=this._entryId(m,e); if(id) mine[id]={meet:m, e}; }));
+    const map={}, took={};
+    const put=(meet, e)=>{ (map[meet]=map[meet]||[]).push(e); };
+    rows.forEach(r=>{ if(!r || !r.meet) return;
+      const id=this._entryId(r.meet, {swId:r.sw_id, event:r.event});
+      if(id && unsent[id]==='d') return;                        // removed here; the removal has not landed
+      took[id]=1;
+      if(id && (unsent[id]==='w' || (ts[id]||0)>=startedAt) && mine[id]) return put(mine[id].meet, mine[id].e);
+      put(r.meet, {swId:r.sw_id, name:r.sw_name||'', event:r.event,
         heat:r.heat==null?1:r.heat, lane:r.lane==null?1:r.lane}); });
+    // An entry this device made that the table has never heard of — a refused write, or one
+    // still in flight — is still an entry. Dropping it here is how a girl entered on this iPad
+    // disappeared off the sheet a moment after she was added.
+    Object.keys(mine).forEach(id=>{ if(took[id]) return;
+      if(unsent[id]==='w' || (ts[id]||0)>=startedAt) put(mine[id].meet, mine[id].e); });
     this.meetEntries=map; try{ this._saveLocalOnly('vx_meet_entries', map); }catch(e){}
     this.forceUpdate();
     this._entriesMigrateOnce();
