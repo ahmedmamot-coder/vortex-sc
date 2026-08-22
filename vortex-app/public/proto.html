@@ -7282,7 +7282,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-22a';
+const VX_BUILD='2026-08-22b';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -7660,7 +7660,25 @@ class Component extends DCLogic {
   }
   // The day a swim happened, whichever of those shapes it was recorded in. Sorting a progression
   // needs a comparable date, not a label — "30 Jul" sorts against "5 Jun" alphabetically.
-  _resultISO(r){ return (r && (this._toISODate(r.meetDate) || this._toISODate(r.date))) || ''; }
+  _resultISO(r){
+    if(!r) return '';
+    const own=this._toISODate(r.meetDate) || this._toISODate(r.date);
+    if(own) return own;
+    // Nothing on the swim itself. A swim still knows which meet it was swum at, and the club
+    // knows when that meet was — which is how the history the earlier bug stripped of its dates
+    // gets them back, without anybody retyping a season of results.
+    return this._meetDateISO(r.meet);
+  }
+  // A meet's date as ISO, or '' — deliberately not _meetISO, whose fallback to today would stamp
+  // last season's swims with this morning.
+  _meetDateISO(meetName){
+    const nm=String(meetName||'').trim();
+    if(!nm || nm==='Time trial') return '';
+    let list=[];
+    try{ list=this.allMeets()||[]; }catch(e){ return ''; }
+    const hit=list.find(m=>String((m&&m.name)||'').trim().toLowerCase()===nm.toLowerCase());
+    return hit ? this._toISODate(hit.date) : '';
+  }
   // Label a date the app has stored, which is always ISO.
   //
   // shortDate above reads month first, and every ISO date was being fed to it by reversing the
@@ -14113,7 +14131,10 @@ class Component extends DCLogic {
       return {x:x.toFixed(1), y:y.toFixed(1), t:r.time, labelY:labelY.toFixed(1), anchor, color, sec:r.sec, date:(r.date||this._resultISO(r)), meet:r.meet}; });
     const linePts=dots.map(d=>d.x+','+d.y).join(' ');
     const lineArea = n>1 ? ('8,86 '+linePts+' 292,86') : '';
-    const caption = n>1 ? (this.shortDate(rs[0].date)+' \u2192 '+this.shortDate(rs[n-1].date)+' \u00b7 '+n+' swims') : ('Single swim \u00b7 '+this.shortDate(rs[0].date));
+    // Labelled from the same date the swim was placed by, so a history that only knows its meet
+    // reads "30 Jan → 5 Jun" rather than an arrow with nothing either side of it.
+    const label=(r)=>this.shortDate(r.date || this._resultISO(r));
+    const caption = n>1 ? (label(rs[0])+' \u2192 '+label(rs[n-1])+' \u00b7 '+n+' swims') : ('Single swim \u00b7 '+label(rs[0]));
     const drop = (n>1 && rs[0].sec>rs[n-1].sec) ? ('\u2212'+(rs[0].sec-rs[n-1].sec).toFixed(2)+'s vs first') : '';
     const best = dots.find(d=>d.sec===bestSec);
     const swims = dots.slice().reverse().map(d=>({date:this.shortDate(d.date), meet:d.meet, time:d.t, dotColor:d.color}));
