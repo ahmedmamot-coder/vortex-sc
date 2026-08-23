@@ -41,6 +41,19 @@ database repairs them:
 Verified by replaying the device's actual stale payload: 1 swim went in,
 33 landed.
 
+Two properties this trigger must keep, both learned the hard way on the evening
+it was written — it blocked every `vx_roster_edits` save for about an hour:
+
+- **`security definer`.** A trigger runs as the signed-in user, so it needed
+  rights on `vx_apply_test_meet` that no coach has. Granting those helpers to
+  `authenticated` would let any signed-in user rewrite roster documents, so the
+  trigger runs as owner instead. Without this, every write returns
+  `permission denied for function vx_apply_test_meet`, which PostgREST reports
+  to the app as a flat 403 — indistinguishable from a login problem.
+- **It cannot throw.** The repair is wrapped so that any failure inside it lets
+  the write through untouched and logs a warning. Protecting one meet is never
+  worth refusing a coach's save; the worst this guard may do is nothing.
+
 **This is scaffolding, not a design.** Remove it once race results live in their
 own per-row table, as meets, entries, attendance and swimmer status already do:
 
