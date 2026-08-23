@@ -357,6 +357,37 @@ describe("shipped source", () => {
       } finally { ctx.restore(); }
     });
 
+    // The club's own case, with the club's own ids. The connector says there is exactly one
+    // Melek Riabi — r240, base squad Vortex A — and the screen was showing two of him, in
+    // Vortex B and in Legend. That is one swimmer moved twice: Vortex A → Vortex B → Legend,
+    // with the entry copied at each step instead of moved. Legend is where he was last put, and
+    // Legend is the only squad he has not been moved OUT of, which is what decides it.
+    it("Melek Riabi, r240, is in Legend and nowhere else", () => {
+      const melekSquads = [{ id: "vortexa", name: "Vortex A" }, { id: "vortexb", name: "Vortex B" },
+                           { id: "legend", name: "Legend" }];
+      const ctx = {
+        squads: melekSquads,
+        squadById: { vortexa: melekSquads[0], vortexb: melekSquads[1], legend: melekSquads[2] },
+        rosterEdits: {
+          edits: {},
+          deleted: { vortexa: { r240: true }, vortexb: { r240: true } },
+          added: { vortexb: [{ id: "r240", name: "Melek Riabi", age: 17 }],
+                   legend: [{ id: "r240", name: "Melek Riabi", age: 17 }] },
+        },
+        roster: {},
+      };
+      const realWin = globalThis.window;
+      globalThis.window = { ...(realWin || {}), VX_ROSTER: { vortexa: [{ id: "r240", name: "Melek Riabi", age: 16 }], vortexb: [], legend: [] } };
+      try {
+        bind("rebuildRoster", ctx, ["_patchAnywhere", "_ageFromDob", "_dobParts"]);
+        ctx.rebuildRoster();
+        const where = melekSquads.filter((sq) => (ctx.roster[sq.id] || []).some((sw) => sw.id === "r240"));
+        eq(where.length, 1, "Melek Riabi is still listed in " + where.length + " squads: "
+           + where.map((s) => s.name).join(" and "));
+        eq(where[0].id, "legend", "he was resolved to " + where[0].name + ", not the squad he was last moved to");
+      } finally { globalThis.window = realWin; }
+    });
+
     it("the saved-roster count counts a duplicated swimmer once", () => {
       const ctx = app({ edits: {}, deleted: {}, added: {} });
       try {
