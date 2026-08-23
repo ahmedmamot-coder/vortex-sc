@@ -21,15 +21,31 @@
 import { SB_URL, SB_SERVICE } from "@/lib/wearable";
 import rosterExport from "../../scripts/data/roster-export.json";
 
-type RawSwimmer = { first: string; last: string; age?: number; gender?: string; pbs?: unknown[]; results?: unknown[] };
+type RawSwimmer = { id?: string; first: string; last: string; age?: number; gender?: string; pbs?: unknown[]; results?: unknown[] };
 type RawSquad = { slug: string; name: string; age_range?: string; coach_name?: string; swimmers?: RawSwimmer[] };
 
 export type Swimmer = { id: string; name: string; squad: string; squadName: string; age: number | null; gender: string | null };
 
 const SQUADS = (rosterExport as { squads: RawSquad[] }).squads || [];
 
-/** A swimmer's id as the rest of the app writes it: the squad slug and a slug of the name. */
+/**
+ * A swimmer's id, as the DATABASE writes it — "r3", not a slug of their name.
+ *
+ * This used to build `squad::first-last` and call it "the id the rest of the app writes", which
+ * it never was. attendance_marks and invoices are keyed by the app's own roster ids, so nothing
+ * built here could ever join against them: nameOf() fell through to printing the raw id, so
+ * "who is missing training" answered with a column of "r222", and swimmer_progress matched no
+ * marks at all and reported "no register taken for this swimmer" for children who had simply
+ * been marked absent. A wrong answer given confidently, which is the one thing this connector
+ * was supposed not to do.
+ *
+ * The ids live in scripts/data/roster-export.json now, joined from public/assets/roster.js,
+ * which is where the app has always kept them. A swimmer without one — an export regenerated
+ * by something that drops the field — falls back to the old slug so nothing throws, and the
+ * "every swimmer carries the id the database knows them by" test fails loudly instead.
+ */
 function swimmerId(squadSlug: string, s: RawSwimmer): string {
+  if (s.id) return s.id;
   const base = `${s.first} ${s.last}`.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   return `${squadSlug}::${base}`;
 }
