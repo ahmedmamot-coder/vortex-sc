@@ -7178,7 +7178,7 @@ describe("InBody sheet", () => {
       const rows = ctx()._rosterRowsFrom(EDITS);
       eq(rows.length, 3);
       const by = Object.fromEntries(rows.map((r) => [r.id, r]));
-      eq(by["junior::sw1"].patch.name, "Aria Baker");
+      eq(by["junior::sw1"].edit_patch.name, "Aria Baker");
       eq(by["junior::sw9"].deleted, true);
       eq(by["seniora::sw_new"].added, true);
       eq(by["seniora::sw_new"].patch.name, "New Swimmer", "an added swimmer carries their whole record");
@@ -7203,7 +7203,7 @@ describe("InBody sheet", () => {
       const junior = rows.filter((r) => r.id === "junior::sw1");
       eq(junior.length, 1, "two rows with one key take the whole batch down with them");
       eq(junior[0].deleted, true);
-      eq(junior[0].patch.dob, "2014-03-02", "and the date of birth must survive the move");
+      eq(junior[0].edit_patch.dob, "2014-03-02", "and the date of birth must survive the move");
     });
     it("a duplicate key can never be sent, whatever builds the rows", () => {
       const c = ctx();
@@ -8621,3 +8621,72 @@ describe("the connector knows who a swimmer is", () => {
 });
 
 await report();
+
+/* -------------------------------------------------- the roster, one row per change
+   This migration has been attempted once and was switched off after it lost data twice
+   in an hour: 301 dates of birth, then a club of 317 swimmers reduced to 272. What it
+   cannot be allowed to do is drop anything on the way to rows and back. */
+describe("turning the roster document into rows", () => {
+  const ctx = {};
+  const toRows  = bind("_rosterRowsFrom", ctx, ["_rosterRowsFrom"]);
+  const toDoc   = bind("_rosterEditsFrom", ctx, ["_rosterEditsFrom"]);
+  const dedupe  = bind("_dedupeRows", ctx, ["_dedupeRows"]);
+
+  // Every shape the club's real document contains, including the one that loses data.
+  const doc = {
+    edits: {
+      junior:  { r1: { dob: "02/07/2014", name: "Dan Malek" } },
+      // r263 is BOTH edited and added in the same squad — a swimmer the club added, whose
+      // date of birth was typed in afterwards. This is the case that cost the dates.
+      vortexa: { r263: { dob: "11/03/2015", age: 11 }, r9: { gender: "Girls" } },
+    },
+    deleted: { junior: { r7: true } },
+    added: {
+      vortexa: [{ id: "r263", name: "Aeyron Terence Tero", gender: "Boys" },
+                { id: "swms01", name: "Ava Kim Cahill", gender: "Girls" }],
+      legend:  [{ id: "r240", name: "Melek Riabi", gender: "Boys" }],
+    },
+  };
+
+  const rows = dedupe(toRows(doc));
+  const back = toDoc(rows);
+
+  it("a batch never names the same row twice", () => {
+    // Postgres rejects a whole batch that names one row twice, and a rejected batch of 500
+    // is 500 swimmers not written. That is how the dates of birth went.
+    const ids = rows.map((r) => r.id);
+    eq(new Set(ids).size, ids.length, `duplicate row ids: ${ids.join(", ")}`);
+  });
+
+  it("a swimmer who has moved squads keeps a row in both", () => {
+    // 165 of the club's swimmers have moved. A move is a removal from one squad and an
+    // addition to another, and both halves have to survive or the swimmer lands nowhere.
+    eq(rows.some((r) => r.id === "junior::r7" && r.deleted), true);
+    eq(rows.some((r) => r.id === "legend::r240" && r.added), true);
+  });
+
+  it("a typed-in date survives a swimmer who was also added to the same squad", () => {
+    // The bug: one field held both halves, so the added record replaced the typed one and
+    // the date of birth disappeared. Kept apart, both come back.
+    const row = rows.find((r) => r.id === "vortexa::r263");
+    eq(row.added, true);
+    eq(row.patch.name, "Aeyron Terence Tero", "the added record is gone");
+    eq(row.edit_patch.dob, "11/03/2015", "the typed-in date is gone");
+  });
+
+  it("rows turn back into exactly the document they came from", () => {
+    // The whole migration in one assertion. Anything this does not reproduce is something
+    // the club would have lost the moment the rows became the truth.
+    eq(JSON.stringify(back.edits),   JSON.stringify(doc.edits),   "edits changed");
+    eq(JSON.stringify(back.deleted), JSON.stringify(doc.deleted), "deleted changed");
+    eq(JSON.stringify(back.added),   JSON.stringify(doc.added),   "added changed");
+  });
+
+  it("rows written before edit_patch existed are still read", () => {
+    // The table already holds rows from the first attempt, which kept the edits patch in
+    // `patch`. Reading those as nothing would empty the club on the first fetch.
+    const old = [{ id: "junior::r1", squad_id: "junior", sw_id: "r1",
+                   patch: { dob: "02/07/2014" }, deleted: false, added: false }];
+    eq(toDoc(old).edits.junior.r1.dob, "02/07/2014");
+  });
+});

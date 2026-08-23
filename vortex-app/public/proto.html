@@ -9329,9 +9329,13 @@ class Component extends DCLogic {
     const e=ed||{edits:{}, deleted:{}, added:{}};
     const by={};
     const row=(sq, sw)=>{ const k=sq+'::'+sw;
-      return (by[k] = by[k] || { id:k, squad_id:sq, sw_id:sw, patch:{}, deleted:false, added:false }); };
+      return (by[k] = by[k] || { id:k, squad_id:sq, sw_id:sw, patch:{}, edit_patch:{}, deleted:false, added:false }); };
+    // A swimmer can be BOTH edited and added in the same squad — somebody the club added, whose
+    // date of birth was typed in afterwards. The two halves are kept apart, because one row that
+    // has to hold both in a single field can only hold one, and the half it drops is the typed
+    // one. That is what "301 dates of birth" was.
     Object.keys(e.edits||{}).forEach(sq=>Object.keys(e.edits[sq]||{}).forEach(sw=>{
-      row(sq, sw).patch = e.edits[sq][sw]||{};
+      row(sq, sw).edit_patch = e.edits[sq][sw]||{};
     }));
     Object.keys(e.deleted||{}).forEach(sq=>Object.keys(e.deleted[sq]||{}).forEach(sw=>{
       if((e.deleted[sq]||{})[sw]) row(sq, sw).deleted = true;
@@ -9346,10 +9350,12 @@ class Component extends DCLogic {
     (rows||[]).forEach(r=>{
       if(!r || !r.squad_id || !r.sw_id) return;
       if(r.deleted) (e.deleted[r.squad_id]=e.deleted[r.squad_id]||{})[r.sw_id]=true;
-      if(r.added){ (e.added[r.squad_id]=e.added[r.squad_id]||[]).push(r.patch||{}); }
-      else if(r.patch && Object.keys(r.patch).length){
-        (e.edits[r.squad_id]=e.edits[r.squad_id]||{})[r.sw_id]=r.patch;
-      }
+      if(r.added) (e.added[r.squad_id]=e.added[r.squad_id]||[]).push(r.patch||{});
+      // `edit_patch` is the typed-in half and comes back whether or not the swimmer was also
+      // added here. Rows written before that column existed carry it in `patch` instead.
+      const ep=(r.edit_patch && Object.keys(r.edit_patch).length) ? r.edit_patch
+             : (!r.added && r.patch && Object.keys(r.patch).length) ? r.patch : null;
+      if(ep) (e.edits[r.squad_id]=e.edits[r.squad_id]||{})[r.sw_id]=ep;
     });
     return e;
   }
@@ -9375,7 +9381,12 @@ class Component extends DCLogic {
     if(!window.__vxSelect) return;
     const rows=await window.__vxSelect('vx_roster', 'select=*&limit=5000');
     if(rows==null) return;                     // table missing: keep the single-document fallback
-    if(!rows.length){ try{ await this._rosterSeed(); }catch(e){} return; }
+    // An empty table is NOT an invitation to fill it from here. This device's copy of the roster
+    // may be hours old — that is the whole reason the document model loses work — and seeding
+    // from it would write one device's stale view in as the club's truth, permanently. The table
+    // is filled from the database's own document instead (vx_roster_seed_from_document), and
+    // until it has been, the single document stays the truth.
+    if(!rows.length) return;
     this.rosterRows=rows;
     this._rosterSent=this._rowKeyMap(this._rosterRowsFrom(this._rosterEditsFrom(rows)));
     this.rosterEdits=this._rosterEditsFrom(rows);
