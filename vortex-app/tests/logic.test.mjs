@@ -1501,6 +1501,127 @@ describe("the club's meets are rows, not one document", () => {
   });
 });
 
+/* -------------------------------------------- the meet's results, out of the app
+   A Hy-Tek file is only worth writing if something can read it back. The app
+   already parses the club's own .hy3 files, so the export is checked by putting
+   it through that parser — not by looking at it. */
+describe("exporting a meet's results", () => {
+  const SW = [
+    { id:"g1", name:"Aisha Karim", gender:"Girls", age:12, squadName:"Junior", dob:"2014-03-09",
+      pbs:[{event:"50 Free", sec:31.0}],
+      entries:[{event:"50 Free", sec:31.00, meet:"Spring Cup", meetDate:"2026-03-01"},
+               {event:"50 Free", sec:29.10, meet:"Test", meetDate:"2026-08-22"}] },
+    { id:"b1", name:"Dan Malek", gender:"Boys", age:12, squadName:"Junior", dob:"2014-07-02",
+      pbs:[{event:"50 Free", sec:28.7}],
+      entries:[{event:"50 Free", sec:28.70, meet:"Test", meetDate:"2026-08-22"}] },
+    { id:"b2", name:"Omar Nour", gender:"Boys", age:11, squadName:"Junior", dob:"2015-01-20",
+      pbs:[], entries:[] },      // entered, disqualified, never has a time
+  ];
+  const ctx = () => ({
+    squads:[{id:"junior", name:"Junior"}],
+    roster:{ junior: SW },
+    customMeets:[{name:"Test", date:"8/22/2026", course:"LCM", events:[]}],
+    meetsMeta:[],
+    meetEntries:{ Test:[ {swId:"g1", name:"Aisha Karim", event:"50 Free", heat:1, lane:4},
+                         {swId:"b1", name:"Dan Malek", event:"50 Free", heat:2, lane:4},
+                         {swId:"b2", name:"Omar Nour", event:"50 Free", heat:2, lane:5} ] },
+    meetMarks:{ "Test::b2::50 Free":{mark:"DQ"} },
+    state:{}, setState(p){ Object.assign(this.state, p); },
+    brandConfig:{clubName:"Vortex Swimming Club"},
+    todayISO:()=>"2026-08-22", audit(){}, _loadJSON:(k,f)=>f,
+  });
+  const rowDeps = ["_meetSwims","_meetPlaces","_meetMarksFor","_meetMarks","_markKey","_swEntries",
+                   "_resultISO","_meetDateISO","_toISODate","_bestBefore","allSwimmersFlat","fmt",
+                   "allMeets"];
+
+  describeRows();
+  function describeRows() {
+    const rows = bind("_meetResultRows", ctx(), rowDeps)("Test");
+    it("every swim of the meet is there, and the DQ with them", () => eq(rows.length, 3));
+    it("the fastest is first", () => eq(rows[0].sw.name, "Dan Malek"));
+    it("a personal best is marked", () =>
+      eq(/PB -1\.90s/.test(rows.find((r) => r.sw.id === "g1").note), true));
+    it("the disqualified lane carries no time", () => {
+      const dq = rows.find((r) => r.sw.id === "b2");
+      eq(dq.sec, null); eq(dq.mark, "DQ");
+    });
+  }
+
+  describeHy3();
+  function describeHy3() {
+    const c = ctx();
+    const txt = bind("_hy3Text", c, [...rowDeps, "_hy3Line", "_meetResultRows", "_meetISO", "_bdayISO", "_swAge", "_ageFromDob", "_dobParts"])("Test");
+
+    it("the app recognises its own file as a Hy-Tek one", () =>
+      eq(bind("_looksHy3", {}, [])(txt), true));
+
+    // The parser that reads the club's real Hy-Tek files, run over ours.
+    const back = bind("meetParseHy3", {}, [])(txt);
+    it("both swimmers with a time come back out", () => eq(back.length, 2));
+    it("the names survive the round trip", () =>
+      eq(back.map((s) => s.name).sort().join("|"), "Aisha Karim|Dan Malek"));
+    it("the times come back to the hundredth", () => {
+      const dan = back.find((s) => s.name === "Dan Malek");
+      eq(dan.results[0].sec, 28.7);
+    });
+    it("the event comes back as the event it was", () => {
+      const dan = back.find((s) => s.name === "Dan Malek");
+      eq(dan.results[0].dist + " " + dan.results[0].stroke, "50 Free");
+    });
+    it("the course is carried", () => {
+      const dan = back.find((s) => s.name === "Dan Malek");
+      eq(dan.results[0].course, "L");
+    });
+    it("the meet name is carried", () => {
+      const dan = back.find((s) => s.name === "Dan Malek");
+      eq(dan.results[0].meet, "Test");
+    });
+    it("the date of birth survives, which is what the D1 record is for", () => {
+      const dan = back.find((s) => s.name === "Dan Malek");
+      eq(dan.dob, "2014-07-02");
+    });
+    it("a swimmer who was disqualified is not written in as a time", () =>
+      eq(back.some((s) => s.name === "Omar Nour"), false));
+    it("a meet with nothing recorded produces no file rather than an empty one", () => {
+      const c2 = ctx(); c2.roster.junior = SW.map((s) => ({ ...s, entries: [] }));
+      eq(bind("_hy3Text", c2, [...rowDeps, "_hy3Line", "_meetResultRows", "_meetISO", "_bdayISO", "_swAge", "_ageFromDob", "_dobParts"])("Test"), "");
+    });
+  }
+
+  describeXlsx();
+  function describeXlsx() {
+    // A spreadsheet is a zip of XML. Checked here as far as JS can: the bytes are a zip, the
+    // parts an .xlsx must have are in it, and the values reached the sheet. Excel opening it is
+    // checked by unzipping the real download in the driven test.
+    const c = ctx();
+    const files = [];
+    c._downloadFile = (n, d) => { files.push({ n, d }); return true; };
+    bind("exportResultsXlsx", c, [...rowDeps, "_meetResultRows", "_meetISO", "_swAge", "_ageFromDob",
+      "_dobParts", "exportXlsx", "_zipStore", "_crc32", "_xlsxSheetXml", "_xmlEsc", "_fmtDMY"])("Test");
+
+    it("a file is produced", () => eq(files.length, 1));
+    it("named for the meet, as a spreadsheet", () => eq(files[0].n, "vortex-results-test.xlsx"));
+    it("and it is a zip", () => {
+      const b = files[0].d;
+      eq(b[0] + "," + b[1] + "," + b[2] + "," + b[3], "80,75,3,4", "PK\u0003\u0004");
+    });
+    it("carrying the parts Excel requires", () => {
+      const txt = new TextDecoder().decode(files[0].d);
+      eq(/\[Content_Types\]\.xml/.test(txt), true);
+      eq(/xl\/worksheets\/sheet1\.xml/.test(txt), true);
+      eq(/xl\/workbook\.xml/.test(txt), true);
+    });
+    it("with the result in the sheet", () => {
+      const txt = new TextDecoder().decode(files[0].d);
+      // Split into First / Last, which is the shape a meet host's spreadsheet wants.
+      eq(/>Malek</.test(txt), true, "the surname, in its own column");
+      eq(/>Dan</.test(txt), true, "the first name, in its own column");
+      eq(/28\.70/.test(txt), true, "the time as it is read");
+      eq(/Disqualified/.test(txt), true, "the DQ is part of the result of the meet");
+    });
+  }
+});
+
 /* -------------------------------------------------------------------- billing
    Money is the one place where "roughly right" is not good enough. A fee that is
    billed twice, billed to a swimmer who is signed off injured, or counted as

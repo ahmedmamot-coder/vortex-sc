@@ -4304,6 +4304,10 @@ if ('serviceWorker' in navigator) {
                             </div>
                           </div>
                           <button onclick="{{ onPrintResults }}" style="width:100%;margin-top:11px;display:flex;align-items:center;justify-content:center;gap:8px;background:#0A0F1A;color:#fff;border:none;border-radius:12px;padding:12px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer"><i data-lucide="printer" style="width:16px;height:16px"></i>View / print results sheet</button>
+                          <div style="display:flex;gap:8px;margin-top:8px">
+                            <button onclick="{{ onExportResultsHy3 }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:7px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border:none;border-radius:12px;padding:11px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer"><i data-lucide="file-down" style="width:15px;height:15px"></i>Hy-Tek file</button>
+                            <button onclick="{{ onExportResultsXlsx }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:7px;background:#0C7A4F;color:#fff;border:none;border-radius:12px;padding:11px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer"><i data-lucide="table" style="width:15px;height:15px"></i>Excel</button>
+                          </div>
                         </sc-if>
                         <p style="margin:0 2px;font-size:11px;color:#9AA2B4;line-height:1.5">Times saved here go straight into the swimmer's history, so their PB, their chart and their family's app are all up to date before the next heat is called. Got a lane wrong? Undo takes the swim back out again.</p>
                       </sc-if>
@@ -7363,7 +7367,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-23a';
+const VX_BUILD='2026-08-23b';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -12334,6 +12338,96 @@ class Component extends DCLogic {
         rows.push([last, first, sw.gender==='Girls'?'F':'M', this._swAge?this._swAge(sw):(sw.age||''), e.event, this._pbTimeFor(e.swId, e.event)]); });
     this.exportCsv('vortex-entries-'+meetName.replace(/[^a-z0-9]+/gi,'-').toLowerCase()+'.csv', rows);
   }
+  // ---- The meet's results, out of the app ----------------------------------------------------
+  // Every swim of one meet, in order, as the sheet shows it. Shared by both exports so the
+  // spreadsheet and the Hy-Tek file can never disagree about who came third.
+  _meetResultRows(meetName){
+    const flat=this.allSwimmersFlat();
+    const swims=this._meetSwims(meetName), places=this._meetPlaces(meetName);
+    const marks=this._meetMarksFor(meetName);
+    const out=[];
+    Object.keys(swims).forEach(k=>{ const s2=swims[k]; const sw=flat.find(x=>x.id===s2.swId); if(!sw) return;
+      const before=this._bestBefore(sw, s2.event, meetName);
+      const drop=(before!=null && s2.sec<before) ? (before-s2.sec) : 0;
+      out.push({ sw, event:s2.event, sec:s2.sec, time:this.fmt(s2.sec), place:places[k]||null,
+        note: before==null ? 'First time' : (drop>0 ? ('PB -'+drop.toFixed(2)+'s') : ''), mark:'' }); });
+    // A lane that ended in a DQ or an empty block is part of the result of the meet.
+    (this.meetEntries[meetName]||[]).forEach(e=>{ const m=marks[e.swId+'|'+e.event]; if(!m) return;
+      const sw=flat.find(x=>x.id===e.swId); if(!sw) return;
+      out.push({ sw, event:e.event, sec:null, time:(m==='DQ'?'DQ':'NS'), place:null, note:'', mark:m }); });
+    return out.sort((a,b)=> String(a.event).localeCompare(String(b.event))
+      || ((a.place||99)-(b.place||99)) || String(a.sw.name).localeCompare(String(b.sw.name)));
+  }
+  exportResultsXlsx(meetName){
+    const meet=this.allMeets().find(m=>m.name===meetName)||{};
+    const rows=[['Meet','Date','Course','Event','Place','Last name','First name','Gender','Age','Squad','Time','Seconds','Note']];
+    const dateLabel=this._fmtDMY(this._meetISO(meet), true);
+    this._meetResultRows(meetName).forEach(r=>{
+      const parts=String(r.sw.name||'').trim().split(/\s+/); const first=parts.shift()||''; const last=parts.join(' ')||first;
+      rows.push([meetName, dateLabel, meet.course||'LCM', r.event, r.place||'', last, first,
+        r.sw.gender==='Girls'?'F':'M', this._swAge(r.sw)||'', r.sw.squadName||'',
+        r.time, r.sec==null?'':r.sec, r.mark ? (r.mark==='DQ'?'Disqualified':'Did not start') : r.note]);
+    });
+    if(rows.length===1) return this.setState({meetDayMsg:'No times recorded yet — nothing to export.'});
+    this.exportXlsx('vortex-results-'+meetName.replace(/[^a-z0-9]+/gi,'-').toLowerCase()+'.xlsx', 'Results', rows);
+    try{ this.audit('meet.export', meetName, {meet:meetName, format:'xlsx', rows:rows.length-1}); }catch(e){}
+    this.setState({meetDayMsg:(rows.length-1)+' result'+(rows.length===2?'':'s')+' exported to Excel ✓'});
+  }
+  // A Hy-Tek results file (.hy3), in the same record layout this app reads the club's own Hy-Tek
+  // files in: B1 the meet, D1 the athlete, E1 the event, E2 the swim. Times are total seconds,
+  // which is what Hy-Tek stores. A DQ has no time, so it is not written as one.
+  _hy3Line(code, fields){
+    let line=code.padEnd(2,' ');
+    fields.forEach(f=>{ const at=f[0], val=String(f[1]==null?'':f[1]);
+      if(line.length<at) line=line.padEnd(at,' ');
+      line=line.slice(0,at)+val+line.slice(at+val.length); });
+    return line;
+  }
+  exportResultsHy3(meetName){
+    const txt=this._hy3Text(meetName);
+    if(!txt) return this.setState({meetDayMsg:'No times recorded yet — nothing to export.'});
+    this._downloadFile('vortex-results-'+meetName.replace(/[^a-z0-9]+/gi,'-').toLowerCase()+'.hy3', txt, 'text/plain;charset=utf-8');
+    const n=(txt.match(/\nE2/g)||[]).length;
+    try{ this.audit('meet.export', meetName, {meet:meetName, format:'hy3', swims:n}); }catch(e){}
+    this.setState({meetDayMsg:n+' swim'+(n===1?'':'s')+' exported as a Hy-Tek file ✓'});
+  }
+  // The file itself, as text, so it can be read back through the same parser that reads the
+  // club's Hy-Tek files — which is the only check that means anything here.
+  _hy3Text(meetName){
+    const meet=this.allMeets().find(m=>m.name===meetName)||{};
+    const iso=this._meetISO(meet), p=iso.split('-');
+    const mmddyyyy = p.length===3 ? (p[1]+p[2]+p[0]) : '';
+    const course = (meet.course==='SCM') ? 'S' : 'L';
+    const STROKE={Free:'A', Back:'B', Breast:'C', Fly:'D', IM:'E'};
+    const results=this._meetResultRows(meetName).filter(r=>r.sec!=null);
+    if(!results.length) return '';
+    const lines=[];
+    lines.push(this._hy3Line('A1', [[2,'02'],[6,'Vortex SC'],[45,'Vortex Swimming Club']]));
+    lines.push(this._hy3Line('B1', [[2,String(meetName).slice(0,45)],[47,mmddyyyy],[55,mmddyyyy],
+      [97, course==='S' ? 'Short Course Meters' : 'Long Course Meters']]));
+    // Grouped by swimmer, because that is the shape of the file: an athlete, then their swims.
+    const bySw={};
+    results.forEach(r=>{ (bySw[r.sw.id]=bySw[r.sw.id]||{sw:r.sw, list:[]}).list.push(r); });
+    Object.keys(bySw).forEach(id=>{
+      const sw=bySw[id].sw;
+      const parts=String(sw.name||'').trim().split(/\s+/); const first=parts.shift()||''; const last=parts.join(' ')||first;
+      const dobISO=this._bdayISO ? (this._bdayISO(sw)||'') : '';
+      const d=String(dobISO).split('-');
+      const dob = d.length===3 ? (d[1]+d[2]+d[0]) : '00000000';
+      lines.push(this._hy3Line('D1', [[2, sw.gender==='Girls'?'F':'M'], [8, last.slice(0,20)],
+        [28, first.slice(0,20)], [48,'000'], [51, dob], [60, String(this._swAge(sw)||0)]]));
+      bySw[id].list.forEach(r=>{
+        const m=String(r.event).match(/(\d+)\s*(Free|Back|Breast|Fly|IM)/i);
+        if(!m) return;
+        const dist=String(parseInt(m[1],10)).padStart(3,'0');
+        const stroke=STROKE[m[2].charAt(0).toUpperCase()+m[2].slice(1).toLowerCase()]||'A';
+        lines.push(this._hy3Line('E1', [[18, dist], [21, stroke]]));
+        lines.push(this._hy3Line('E2', [[5, r.sec.toFixed(2).padStart(7,' ')], [12, course],
+          [80, mmddyyyy], [90, r.place?String(r.place):'']]));
+      });
+    });
+    return lines.join('\r\n')+'\r\n';
+  }
   ageFromDob(dobStr){ const a=this._ageFromDob(dobStr); return a==null?0:a; }
   entryAddNewSwimmer(meetName){ const S=this.state;
     const name=S.entryNewName.trim();
@@ -14418,6 +14512,113 @@ class Component extends DCLogic {
     const a=Object.assign(document.createElement('a'), {href:url, download:filename});
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(()=>URL.revokeObjectURL(url), 2000);
+  }
+  // ---- Files that are not CSV --------------------------------------------------------------
+  // Saving a file has one awkward case and it is the club's: <a download> is inert in the iPad
+  // app's web view, so a tap does nothing and says nothing. Text goes through the share sheet the
+  // same way the CSV export does; a spreadsheet is bytes, so it is offered as base64 first and
+  // falls back to the link, which is what a desktop browser wants anyway.
+  _downloadFile(filename, data, mime){
+    const isText = typeof data === 'string';
+    if(window.__vxNative && window.__vxSaveFile){
+      try{
+        if(isText){ if(window.__vxSaveFile(filename, data, mime)) return true; }
+        else {
+          let bin=''; data.forEach(b=>{ bin+=String.fromCharCode(b); });
+          if(window.__vxSaveFile(filename, btoa(bin), mime+';base64')) return true;
+        }
+      }catch(e){}
+    }
+    const blob=new Blob([data], {type:mime});
+    const url=URL.createObjectURL(blob);
+    const a=Object.assign(document.createElement('a'), {href:url, download:filename});
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 2000);
+    return true;
+  }
+  _crc32(bytes){
+    let t=this._crcTable;
+    if(!t){ t=this._crcTable=new Int32Array(256);
+      for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c = (c&1) ? (0xEDB88320 ^ (c>>>1)) : (c>>>1); t[n]=c; } }
+    let c=-1;
+    for(let i=0;i<bytes.length;i++) c = (c>>>8) ^ t[(c ^ bytes[i]) & 0xFF];
+    return (c ^ -1) >>> 0;
+  }
+  // A zip with nothing compressed in it. An .xlsx is a zip of XML, and "stored" is a legal
+  // method — so a spreadsheet can be written here without pulling a library over the wire onto
+  // a phone that may be on poolside 4G.
+  _zipStore(files){
+    const enc=new TextEncoder();
+    const parts=[], central=[]; let offset=0;
+    const u16=n=>[n&0xFF,(n>>8)&0xFF], u32=n=>[n&0xFF,(n>>8)&0xFF,(n>>16)&0xFF,(n>>24)&0xFF];
+    files.forEach(f=>{
+      const name=enc.encode(f.name), body=(typeof f.data==='string')?enc.encode(f.data):f.data;
+      const crc=this._crc32(body);
+      const local=[].concat([0x50,0x4B,0x03,0x04], u16(20), u16(0), u16(0), u16(0), u16(0),
+        u32(crc), u32(body.length), u32(body.length), u16(name.length), u16(0));
+      parts.push(new Uint8Array(local), name, body);
+      central.push({name, crc, size:body.length, offset});
+      offset += local.length + name.length + body.length;
+    });
+    const dir=[];
+    central.forEach(c=>{
+      dir.push(...[].concat([0x50,0x4B,0x01,0x02], u16(20), u16(20), u16(0), u16(0), u16(0), u16(0),
+        u32(c.crc), u32(c.size), u32(c.size), u16(c.name.length), u16(0), u16(0), u16(0), u16(0),
+        u32(0), u32(c.offset)));
+      dir.push(...c.name);
+    });
+    const dirBytes=new Uint8Array(dir);
+    const end=new Uint8Array([].concat([0x50,0x4B,0x05,0x06], u16(0), u16(0),
+      u16(files.length), u16(files.length), u32(dirBytes.length), u32(offset), u16(0)));
+    let total=offset+dirBytes.length+end.length;
+    const out=new Uint8Array(total); let at=0;
+    parts.forEach(p=>{ out.set(p, at); at+=p.length; });
+    out.set(dirBytes, at); at+=dirBytes.length; out.set(end, at);
+    return out;
+  }
+  _xmlEsc(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').split('"').join('&quot;'); }
+  // One sheet of rows. Numbers are written as numbers so Excel can sort and total them; a time
+  // like "1:05.42" is text, because it is a time and not a quantity.
+  _xlsxSheetXml(rows){
+    const col=(n)=>{ let s2=''; n++; while(n>0){ const m=(n-1)%26; s2=String.fromCharCode(65+m)+s2; n=(n-m-1)/26; } return s2; };
+    const body=(rows||[]).map((row,r)=>{
+      const cells=(row||[]).map((v,c)=>{
+        const ref=col(c)+(r+1);
+        if(typeof v==='number' && isFinite(v)) return '<c r="'+ref+'"><v>'+v+'</v></c>';
+        return '<c r="'+ref+'" t="inlineStr"><is><t xml:space="preserve">'+this._xmlEsc(v)+'</t></is></c>';
+      }).join('');
+      return '<row r="'+(r+1)+'">'+cells+'</row>';
+    }).join('');
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      +'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+      +body+'</sheetData></worksheet>';
+  }
+  exportXlsx(filename, sheetName, rows){
+    const name=this._xmlEsc(String(sheetName||'Sheet1').slice(0,31).replace(/[\\\/\?\*\[\]:]/g,' '));
+    const files=[
+      {name:'[Content_Types].xml', data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        +'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        +'<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        +'<Default Extension="xml" ContentType="application/xml"/>'
+        +'<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+        +'<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+        +'</Types>'},
+      {name:'_rels/.rels', data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        +'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        +'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+        +'</Relationships>'},
+      {name:'xl/workbook.xml', data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        +'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+        +'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        +'<sheets><sheet name="'+name+'" sheetId="1" r:id="rId1"/></sheets></workbook>'},
+      {name:'xl/_rels/workbook.xml.rels', data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        +'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        +'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+        +'</Relationships>'},
+      {name:'xl/worksheets/sheet1.xml', data:this._xlsxSheetXml(rows)},
+    ];
+    this._downloadFile(filename, this._zipStore(files),
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   }
   exportRosterCsv(){
     const rows=[['Name','Age','Gender','Squad','Meets','PB events']];
@@ -19555,6 +19756,8 @@ class Component extends DCLogic {
       reqHasRows: this.eventRequests.filter(r=>r.status==='pending' && r.meetName===entryMeetName).length>0,
       onPrintProgram:()=>this.setState({printMode:'program', printPreviewOpen:true}),
       onPrintResults:()=>this.setState({printMode:'results', printPreviewOpen:true}),
+      onExportResultsHy3:()=>this.exportResultsHy3(entryMeetName),
+      onExportResultsXlsx:()=>this.exportResultsXlsx(entryMeetName),
       printResults,
       printIsProgram: S.printMode==='program', printIsResults: S.printMode==='results',
       printIsPlan: S.printMode!=='program' && S.printMode!=='results',
