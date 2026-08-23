@@ -388,6 +388,43 @@ describe("shipped source", () => {
       } finally { globalThis.window = realWin; }
     });
 
+    // The move that was undone in front of a coach, ten seconds after he made it.
+    //
+    // He moved Melek Riabi into Vortex B; the Move swimmers screen agreed; he opened Vortex B
+    // and the swimmer was not on the roster. The database was still holding the copy from
+    // before any of this, in which the swimmer sits under Legend with no deletion recorded
+    // against Legend — so "not moved out of Legend" outranked "moved into Vortex B ten seconds
+    // ago". The stamp has to win, or a move survives only until the next pull.
+    it("a move is not outranked by a squad the database has no deletion for", () => {
+      const sq = [{ id: "vortexa", name: "Vortex A" }, { id: "vortexb", name: "Vortex B" },
+                  { id: "legend", name: "Legend" }];
+      const ctx = {
+        squads: sq,
+        squadById: { vortexa: sq[0], vortexb: sq[1], legend: sq[2] },
+        // What a pull hands back after the merge: the move into Vortex B, alongside the copy
+        // the database still holds under Legend, which nothing has been moved out of.
+        rosterEdits: {
+          edits: {},
+          deleted: { vortexa: { r240: true }, vortexb: { r240: true } },
+          added: { vortexb: [{ id: "r240", name: "Melek Riabi", age: 17, movedAt: 1787491000000 }],
+                   legend: [{ id: "r240", name: "Melek Riabi", age: 17 }] },
+        },
+        roster: {},
+      };
+      const realWin = globalThis.window;
+      globalThis.window = { ...(realWin || {}),
+        VX_ROSTER: { vortexa: [{ id: "r240", name: "Melek Riabi", age: 16 }], vortexb: [], legend: [] } };
+      try {
+        bind("rebuildRoster", ctx, ["_patchAnywhere", "_ageFromDob", "_dobParts"]);
+        ctx.rebuildRoster();
+        const where = sq.filter((s) => (ctx.roster[s.id] || []).some((x) => x.id === "r240"));
+        eq(where.length, 1, "listed in " + where.length + " squads");
+        eq(where[0].id, "vortexb",
+           "the move was undone by a copy of the roster written before it — he is in "
+           + where[0].name + ", and the Vortex B roster does not have him");
+      } finally { globalThis.window = realWin; }
+    });
+
     it("the saved-roster count counts a duplicated swimmer once", () => {
       const ctx = app({ edits: {}, deleted: {}, added: {} });
       try {
@@ -462,6 +499,8 @@ describe("shipped source", () => {
   });
 
   describe("a pull never shows an older copy than the one on disk", () => {
+    const REAL_MERGE = new Function(
+      sourceBetween("function _rosterShaped(o){", "\n  window.__vxMergeRoster") + "\nreturn _mergeRoster;")();
     const applyPull = (rows, disk, ts) => {
       const store = { ...disk };
       Object.keys(ts).forEach((k) => { store["__vxts_" + k] = String(ts[k]); });
@@ -473,7 +512,10 @@ describe("shipped source", () => {
           get length() { return Object.keys(store).length; },
           key: (i) => Object.keys(store)[i],
         },
-        window: { __VX_PULLED: {} },
+        // The real _mergeRoster, taken whole from the shipped source. applyPull merges the
+        // roster on the way down rather than replacing it, and a sandbox without this would
+        // silently take the branch that does not — testing the fallback and calling it the fix.
+        window: { __VX_PULLED: {}, __vxMergeRoster: REAL_MERGE },
         origSet: (k, v) => { store[k] = v; },
         pushKey: (k, v) => pushed.push([k, v]),
         // The real scope has this; the sandbox has to as well. It is not decoration — applyPull's
@@ -498,6 +540,36 @@ describe("shipped source", () => {
       eq(JSON.parse(out.disk.vx_sw_meta).s1.inbody.length, 1, "and disk must keep it too");
       eq(out.pushed.length, 1, "the newer copy is pushed up so the server catches up");
     });
+    // A move must survive a pull carrying a copy written before it — this is the one that
+    // undid a coach's move in front of him.
+    //
+    // Taking the database's copy whole is right for a record one device owns. The roster is one
+    // document every phone in the club writes, so the copy arriving is only ever the newest
+    // copy OF A MERGE; replacing rather than merging threw away whatever this device had done
+    // that the writer of that copy had not heard about. Here that is the move itself — and,
+    // worse, the stamp that says when it happened, so nothing downstream could even tell which
+    // answer was newer afterwards.
+    it("a move on this device survives a pull carrying the copy from before it", () => {
+      const MINE = { edits: {},
+        deleted: { vortexa: { r240: true }, vortexb: { r240: true }, legend: { r240: true } },
+        added: { vortexb: [{ id: "r240", name: "Melek Riabi", movedAt: 1787491000000 }], legend: [] } };
+      // What the database was still holding: the swimmer under Legend, unstamped, with no
+      // deletion recorded against Legend.
+      const THEIRS = { edits: {},
+        deleted: { vortexa: { r240: true }, vortexb: { r240: true } },
+        added: { vortexb: [], legend: [{ id: "r240", name: "Melek Riabi" }] } };
+      const out = applyPull(
+        [{ key: "vx_roster_edits", value: THEIRS, updated_at: "2026-08-23T16:36:00Z" }],
+        { vx_roster_edits: JSON.stringify(MINE) },
+        {});
+      const got = out.mirror.vx_roster_edits;
+      eq((got.added.vortexb || []).some((s) => s && s.id === "r240"), true,
+         "the pull put the swimmer back where he came from — the move was undone seconds after it was made");
+      eq((got.added.legend || []).some((s) => s && s.id === "r240"), false,
+         "and left a second copy of him under the old squad");
+      eq((got.deleted.vortexa || {}).r240, true, "a deletion the database knows about was dropped");
+    });
+
     it("a genuinely newer server copy is still taken", () => {
       const out = applyPull(
         [{ key: "vx_sw_meta", value: SHEET, updated_at: "2026-08-09T14:00:00Z" }],
@@ -8422,9 +8494,13 @@ describe("a device's own write does not outrank the database for ever", () => {
   it("applyPull was found", () => eq(pull.includes("takeRemote"), true, "applyPull moved or was renamed"));
   it("a copy the database already holds is not sent back", () => {
     const sends = pull.match(/pushKey\(r\.key,/g) || [];
-    eq(sends.length, 2, "expected the two catch-up pushes; found " + sends.length);
+    eq(sends.length, 3, "expected the three catch-up pushes; found " + sends.length);
     eq(/if\(_mineStr!==_remoteStr\) pushKey\(r\.key,/.test(pull), true, "the mirror is pushed unconditionally");
     eq(/if\(localVal!==_remoteStr\) pushKey\(r\.key,/.test(pull), true, "the disk copy is pushed unconditionally");
+    // The third is the roster merged on the way down. Same rule, and the same reason: it is
+    // sent only when merging actually produced something the database is not already holding,
+    // so a device with nothing to add sends nothing and this cannot become a write per pull.
+    eq(/if\(_bothStr!==_incoming\)\{/.test(pull), true, "the merged roster is pushed unconditionally");
   });
 });
 
