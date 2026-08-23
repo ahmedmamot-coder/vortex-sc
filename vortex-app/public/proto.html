@@ -1381,9 +1381,47 @@ if ('serviceWorker' in navigator) {
       try{ origSet('__vxsize_'+r.key, String(_remoteStr.length)); }catch(e){}
       var takeRemote = ((localVal==null && !haveMirror) || !localTs || remoteTs>=localTs);
       if(takeRemote){
-        var _incoming=_remoteStr;
+        var _incoming=_remoteStr, _mirrorVal=r.value;
+        // The roster is merged on the way DOWN as well as on the way up.
+        //
+        // Taking the database's copy whole is right for a record one device owns. The roster is
+        // not that: it is one document every phone in the club writes, so "the newest copy" is
+        // never the whole truth — it is the newest copy OF A MERGE, and a pull that replaces
+        // rather than merges throws away whatever this device did that the writer of that copy
+        // had not heard about yet.
+        //
+        // A coach moved a swimmer into Vortex B and watched him move back out again seconds
+        // later. That is this: the move was on this device and on its way up, a pull carrying a
+        // copy written before it arrived, and the move was gone — from the screen and from the
+        // device — with nothing said. Sending it up was already a merge for exactly this reason.
+        // Receiving had no such protection, which left every move a coach makes only as safe as
+        // the twenty seconds before the next pull.
+        //
+        // Merging both ways is what makes a move stick: deletions stay a union, a filled field
+        // still never loses to an empty one, and a swimmer is in one squad — the one they were
+        // moved to most recently, whichever device did the moving.
+        if(r.key==="vx_roster_edits" && localVal!=null && window.__vxMergeRoster){
+          try{
+            var _mine=JSON.parse(localVal);
+            var _shaped=function(o){ return !!(o && typeof o==="object" && !Array.isArray(o)
+              && (o.edits!==undefined || o.deleted!==undefined || o.added!==undefined)); };
+            // Anything not in the overlay shape is left exactly as it was handled before: a
+            // document this does not recognise is not something to merge on a guess.
+            if(_shaped(_mine) && _shaped(r.value)){
+              var _both=window.__vxMergeRoster(_mine, r.value);
+              var _bothStr=JSON.stringify(_both);
+              if(_bothStr!==_incoming){
+                _mirrorVal=_both; _incoming=_bothStr;
+                // The database is now the one that is behind. Sending the merge back settles it
+                // in one write: the next pull merges the same two copies to the same answer and
+                // has nothing left to send, so this cannot become a write per pull.
+                try{ pushKey(r.key, _bothStr); }catch(e){}
+              }
+            }
+          }catch(e){}
+        }
         _keepReplaced(r.key, localVal, _incoming);
-        window.__VX_PULLED[r.key]=r.value;      // DB copy → in-memory mirror
+        window.__VX_PULLED[r.key]=_mirrorVal;   // DB copy, merged with this device's → mirror
         origSet(r.key, _incoming);
       } else if(haveMirror){
         // Judging this device's copy the newer one is not a reason to send it. If the database is
@@ -9105,16 +9143,25 @@ class Component extends DCLogic {
     // — in the database, and on every phone that has pulled since. They are read here, so this
     // is where they stop being shown twice, without waiting for anyone to move anybody again.
     //
-    // Which of the copies is the swimmer's real squad: the one they were not moved OUT of, and
-    // then the one moved to most recently. Copies left by the old behaviour carry no stamp and
-    // rank below any that does; when nothing tells them apart, squad order decides, so every
-    // device picks the same one rather than each picking its own.
+    // Which of the copies is the swimmer's real squad: THE ONE MOVED TO MOST RECENTLY, first and
+    // above everything else. Only where nothing has a stamp does the older signal decide — the
+    // squad they were not moved out of — and then squad order, so every device picks the same
+    // one rather than each picking its own.
+    //
+    // The order of those two is the whole of it, and having it the other way round undid a move
+    // in front of a coach. He moved a swimmer into Vortex B; the screen agreed; a moment later
+    // the swimmer was in Legend and gone from the Vortex B roster. The database still held the
+    // copy from before any of this, in which the swimmer sits under Legend with no deletion
+    // recorded against Legend — so when a pull handed that back, "not moved out of Legend" beat
+    // "moved into Vortex B ten seconds ago" and quietly reverted the move. A stamp says what
+    // happened and when; the absence of a deletion only says nothing has happened yet.
     const addedHome={};
     this.squads.forEach(sq=>{
       (ed.added[sq.id]||[]).forEach(sw=>{
         if(!sw || !sw.id) return;
+        const at=(typeof sw.movedAt==='number')?sw.movedAt:0;
         const left=!!(ed.deleted[sq.id]||{})[sw.id];
-        const rank=[left?0:1, (typeof sw.movedAt==='number')?sw.movedAt:0];
+        const rank=[at, left?0:1];
         const cur=addedHome[sw.id];
         if(!cur || rank[0]>cur.rank[0] || (rank[0]===cur.rank[0] && rank[1]>cur.rank[1]))
           addedHome[sw.id]={sq:sq.id, rank};
