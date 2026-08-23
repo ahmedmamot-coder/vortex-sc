@@ -21,7 +21,9 @@
 import { SB_URL, SB_SERVICE } from "@/lib/wearable";
 import rosterExport from "../../scripts/data/roster-export.json";
 
-type RawSwimmer = { id?: string; first: string; last: string; age?: number; gender?: string; pbs?: unknown[]; results?: unknown[] };
+// movedAt is stamped by the app when a swimmer is moved between squads; it is what decides
+// which squad an overlay holding them under several actually means.
+type RawSwimmer = { id?: string; movedAt?: number; first: string; last: string; age?: number; gender?: string; pbs?: unknown[]; results?: unknown[] };
 type RawSquad = { slug: string; name: string; age_range?: string; coach_name?: string; swimmers?: RawSwimmer[] };
 
 export type Swimmer = { id: string; name: string; squad: string; squadName: string; age: number | null; gender: string | null };
@@ -138,6 +140,31 @@ export type Roster = {
  */
 export function mergeRoster(base: RawSquad[], ed: Edits): RawSquad[] {
   const anywhere = patchAnywhere(ed);
+
+  // WHICH SQUAD A SWIMMER IS ACTUALLY IN, when the overlay says more than one.
+  //
+  // Moves used to append the swimmer to the squad they joined without taking them out of the
+  // one they left, so overlays holding the same child under two or three squads exist — in the
+  // database, and on every device that has pulled since. Reading `added` per squad and trusting
+  // it therefore puts one child in several squads at once and counts them once in each, which
+  // is the exact double-count this merge is supposed to prevent.
+  //
+  // The app settles it in rebuildRoster() and this follows it deliberately, because the two
+  // disagreeing about which squad a swimmer is in would be worse than either answer: most
+  // recently moved to wins first, and only where nothing carries a stamp does "the squad they
+  // were not deleted out of" decide, then squad order so the choice is the same everywhere.
+  // The order matters — the other way round, a stale copy with no deletion recorded beats a
+  // move made ten seconds ago and silently undoes it.
+  const home: Record<string, { sq: string; at: number; kept: number }> = {};
+  for (const sq of base) {
+    for (const sw of ed.added[sq.slug] || []) {
+      if (!sw || !sw.id) continue;
+      const at = typeof sw.movedAt === "number" ? sw.movedAt : 0;
+      const kept = (ed.deleted[sq.slug] || {})[sw.id] ? 0 : 1;
+      const cur = home[sw.id];
+      if (!cur || at > cur.at || (at === cur.at && kept > cur.kept)) home[sw.id] = { sq: sq.slug, at, kept };
+    }
+  }
   const patchFor = (slug: string, id: string): Patch | undefined => {
     const here = (ed.edits[slug] || {})[id];
     const other = anywhere[id];
@@ -152,7 +179,7 @@ export function mergeRoster(base: RawSquad[], ed: Edits): RawSquad[] {
     // A swimmer the club added carries their whole record; an edit typed for them before a move
     // is filed under the squad they left, so the patch goes on underneath rather than over.
     const added = (ed.added[sq.slug] || [])
-      .filter((s) => s && s.id && !gone[s.id])
+      .filter((s) => s && s.id && (home[s.id] || {}).sq === sq.slug)
       .map((s) => applyPatch(s, patchFor(sq.slug, s.id as string)));
     return { ...sq, swimmers: [...kept, ...added] };
   });

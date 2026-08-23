@@ -8917,6 +8917,55 @@ describe("the squads are the club's, not the export's", () => {
     eq(MCP_DATA.nameOf(roster, "r3"), "Leaves Club", "a departed swimmer went back to being an id");
   });
 
+  it("a swimmer the overlay holds under three squads is in exactly one", () => {
+    // The case that made this merge wrong on real data, and it is not hypothetical: moves used
+    // to append the swimmer to the squad they joined without removing them from the one they
+    // left, so overlays holding one child under two or three squads are in the database and on
+    // every device that has pulled since. Reading `added` per squad and trusting it counts that
+    // child once in each — the exact double-count this is supposed to prevent.
+    const three = MCP_DATA.mergeRoster(
+      [{ slug: "junior", name: "Junior", swimmers: [] },
+       { slug: "seniorb", name: "Senior B", swimmers: [] },
+       { slug: "legend", name: "Legend", swimmers: [] }],
+      { edits: {}, deleted: {},
+        added: {
+          legend:  [{ id: "r5", first: "One", last: "Child", movedAt: 1000 }],
+          junior:  [{ id: "r5", first: "One", last: "Child", movedAt: 3000 }],
+          seniorb: [{ id: "r5", first: "One", last: "Child", movedAt: 2000 }],
+        } });
+    const where = three.filter((sq) => sq.swimmers.some((s) => s.id === "r5")).map((sq) => sq.slug);
+    eq(where, ["junior"], "one child, counted in " + where.length + " squads");
+  });
+
+  it("the squad moved to most recently wins over the one with no deletion against it", () => {
+    // The order of those two rules undid a move in front of a coach when it was the other way
+    // round: a stale copy with no deletion recorded beat a move made ten seconds earlier. A
+    // stamp says what happened and when; a missing deletion only says nothing has happened yet.
+    const moved = MCP_DATA.mergeRoster(
+      [{ slug: "legend", name: "Legend", swimmers: [] },
+       { slug: "vortexb", name: "Vortex B", swimmers: [] }],
+      { edits: {},
+        // Nothing deleted against Legend — the older, weaker signal.
+        deleted: { vortexb: {} },
+        added: {
+          legend:  [{ id: "r6", first: "Just", last: "Moved" }],
+          vortexb: [{ id: "r6", first: "Just", last: "Moved", movedAt: 9000 }],
+        } });
+    const where = moved.filter((sq) => sq.swimmers.some((s) => s.id === "r6")).map((sq) => sq.slug);
+    eq(where, ["vortexb"], "the move was quietly undone by a copy that predates it");
+  });
+
+  it("with no stamp anywhere, the squad they were not deleted out of wins", () => {
+    const old = MCP_DATA.mergeRoster(
+      [{ slug: "adva", name: "Advanced A", swimmers: [] },
+       { slug: "junior", name: "Junior", swimmers: [] }],
+      { edits: {}, deleted: { adva: { r7: true } },
+        added: { adva: [{ id: "r7", first: "No", last: "Stamp" }],
+                 junior: [{ id: "r7", first: "No", last: "Stamp" }] } });
+    const where = old.filter((sq) => sq.swimmers.some((s) => s.id === "r7")).map((sq) => sq.slug);
+    eq(where, ["junior"]);
+  });
+
   it("an overlay missing a part does not take the roster with it", () => {
     // An overlay written by an older build, or half restored, can arrive without `deleted`. The
     // app guards this for the same reason: it is not a wrong roster, it is a crash.
