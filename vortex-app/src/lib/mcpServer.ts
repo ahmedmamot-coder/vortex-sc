@@ -19,8 +19,9 @@
 //     where "if a secret is set, check it" meant "if nobody set one, let everyone in".
 
 import {
-  squads, findSwimmers, swimmerRecord, attendance, invoices, nameOf,
+  squads, findSwimmers, swimmerRecord, attendance, invoices, nameOf, loadRoster,
 } from "@/lib/mcpData";
+import type { Roster } from "@/lib/mcpData";
 
 type Json = Record<string, unknown>;
 type RpcId = string | number | null;
@@ -128,20 +129,20 @@ export const TOOLS = [
   },
 ];
 
-async function callTool(name: string, args: Json): Promise<unknown> {
+async function callTool(name: string, args: Json, roster: Roster): Promise<unknown> {
   switch (name) {
     case "club_overview": {
-      const sq = squads();
+      const sq = squads(roster);
       return { squads: sq, swimmers: sq.reduce((n, s) => n + s.swimmers, 0) };
     }
 
     case "find_swimmer": {
-      const hits = findSwimmers(String(args.name || ""));
+      const hits = findSwimmers(roster, String(args.name || ""));
       return hits.length ? { matches: hits } : { matches: [], note: "No swimmer by that name." };
     }
 
     case "swimmer_progress": {
-      const rec = swimmerRecord(String(args.id || ""));
+      const rec = swimmerRecord(roster, String(args.id || ""));
       if (!rec) return { error: "No swimmer with that id. Use find_swimmer first." };
       const days = Number(args.days) > 0 ? Number(args.days) : 30;
       const marks = await attendance(daysAgo(days), today(), rec.swimmer.squad);
@@ -183,7 +184,7 @@ async function callTool(name: string, args: Json): Promise<unknown> {
       })).sort((a, b) => parseInt(a.rate) - parseInt(b.rate));
 
       const concern = Object.entries(bySwimmer)
-        .map(([id, v]) => ({ name: nameOf(id), squad: v.squad, sessions: v.total,
+        .map(([id, v]) => ({ name: nameOf(roster, id), squad: v.squad, sessions: v.total,
                              attended: v.present, rate: Math.round((v.present / v.total) * 100) }))
         .filter((r) => r.sessions >= 3 && r.rate < below)
         .sort((a, b) => a.rate - b.rate)
@@ -222,7 +223,7 @@ async function callTool(name: string, args: Json): Promise<unknown> {
         unpaidSwimmers: unpaid
           .sort((a, b) => (Number(b.total) || 0) - (Number(a.total) || 0))
           .slice(0, 60)
-          .map((i) => ({ name: nameOf(i.sw_id), squad: i.sq_id, amount: money(Number(i.total) || 0), due: i.due, status: i.status })),
+          .map((i) => ({ name: nameOf(roster, i.sw_id), squad: i.sq_id, amount: money(Number(i.total) || 0), due: i.due, status: i.status })),
       };
     }
 
@@ -282,7 +283,20 @@ export async function handleRpc(request: Request, pathToken?: string | null): Pr
       const name = String(params.name || "");
       if (!TOOLS.some((t) => t.name === name)) return rpcError(id, -32602, `No tool called ${name}.`);
       try {
-        return textResult(id, await callTool(name, params.arguments || {}));
+        // One read of the club's roster per call, shared by every tool in it. Squad membership
+        // comes from the club as it is now rather than from the bundled export, which the club
+        // has moved on from — Pre-Team reads as 3 swimmers there and 36 in its own register.
+        const roster = await loadRoster();
+        const out = await callTool(name, params.arguments || {}, roster);
+        // Not knowing is not the same as nothing having changed. If the overlay could not be
+        // read, the squads and names in this answer are the snapshot's, and the answer says so
+        // rather than presenting a stale roster as the club.
+        if (!roster.live && out && typeof out === "object" && !Array.isArray(out)) {
+          (out as Json).rosterNote =
+            "the club's live roster could not be read, so squads, headcounts and names here come "
+            + "from the bundled snapshot and may be out of date";
+        }
+        return textResult(id, out);
       } catch (e) {
         // A thrown tool is reported as a tool result, not a transport error, so the model can
         // say what went wrong instead of the connection simply looking broken.

@@ -26,7 +26,7 @@ type RawSquad = { slug: string; name: string; age_range?: string; coach_name?: s
 
 export type Swimmer = { id: string; name: string; squad: string; squadName: string; age: number | null; gender: string | null };
 
-const SQUADS = (rosterExport as { squads: RawSquad[] }).squads || [];
+const BASE = (rosterExport as { squads: RawSquad[] }).squads || [];
 
 /**
  * A swimmer's id, as the DATABASE writes it — "r3", not a slug of their name.
@@ -50,13 +50,140 @@ function swimmerId(squadSlug: string, s: RawSwimmer): string {
   return `${squadSlug}::${base}`;
 }
 
-export function allSwimmers(): Swimmer[] {
+// ------------------------------------------------------- the club as it is now, not as exported
+//
+// roster-export.json is a snapshot. The club has moved on from it: Pre-Team reads as 3 swimmers
+// there while its register covers 36, because every squad move since the export lives in the
+// club's own overlay and not in the file. Answering "how many swimmers are in Pre-Team" out of
+// the snapshot is the same class of mistake as the ids were — a confident number that is not
+// the club.
+//
+// The overlay is vx_roster_edits in club_state, and it is the same three parts the app itself
+// merges in rebuildRoster(): `deleted` per squad, `edits` per squad per swimmer, and `added`
+// per squad. A squad move is recorded as deleted-here plus added-there, which is why membership
+// cannot be read off the base alone.
+
+export type Patch = { name?: string; first?: string; last?: string; age?: number; gender?: string };
+export type Edits = {
+  edits: Record<string, Record<string, Patch>>;
+  deleted: Record<string, Record<string, unknown>>;
+  added: Record<string, RawSwimmer[]>;
+};
+
+/**
+ * The club's roster overlay, or null if it could not be read.
+ *
+ * Null is not "there are no edits" — it is "we do not know", and the caller has to say so rather
+ * than serve the snapshot as though it were the club.
+ */
+async function rosterEdits(): Promise<Edits | null> {
+  const rows = await rest("club_state?select=key,value&key=eq.vx_roster_edits");
+  if (!rows) return null;
+  const raw = (rows[0] as { value?: unknown } | undefined)?.value;
+  // An overlay written by an older build, or half written, can be missing a part. The app guards
+  // this the same way: a missing `deleted` is not a wrong roster, it is every device crashing.
+  const e = (raw && typeof raw === "object" && !Array.isArray(raw)) ? raw as Partial<Edits> : {};
+  const obj = <T,>(v: unknown) => (v && typeof v === "object" && !Array.isArray(v) ? v as T : {} as T);
+  return {
+    edits: obj<Edits["edits"]>(e.edits),
+    deleted: obj<Edits["deleted"]>(e.deleted),
+    added: obj<Edits["added"]>(e.added),
+  };
+}
+
+/** A swimmer's edits filed under any squad — a rename typed before a move stays under the old one. */
+function patchAnywhere(ed: Edits): Record<string, Patch> {
+  const out: Record<string, Patch> = {};
+  for (const bySwimmer of Object.values(ed.edits)) {
+    for (const [id, patch] of Object.entries(bySwimmer || {})) out[id] = { ...out[id], ...patch };
+  }
+  return out;
+}
+
+function applyPatch(s: RawSwimmer, patch?: Patch): RawSwimmer {
+  if (!patch) return s;
+  const out: RawSwimmer = { ...s, ...patch };
+  // The app stores a rename as one `name`; first and last are what everything else reads.
+  if (patch.name) {
+    const parts = patch.name.trim().split(/\s+/);
+    out.first = parts[0] || s.first;
+    out.last = parts.slice(1).join(" ") || s.last;
+  }
+  return out;
+}
+
+function fullName(s: RawSwimmer): string {
+  return `${s.first || ""} ${s.last || ""}`.trim();
+}
+
+export type Roster = {
+  /** Squad membership as it stands, once the club's own edits are applied. */
+  squads: RawSquad[];
+  /** False when the overlay could not be read and these are the bundled snapshot's squads. */
+  live: boolean;
+  /**
+   * Every id ever seen, base and added alike, mapped to a name.
+   *
+   * Deliberately a superset of current membership. attendance_marks and invoices keep rows for
+   * swimmers who have since left, and resolving those to an id again — after the whole point of
+   * the last fix was that they resolve to children — would be a quiet regression.
+   */
+  names: Map<string, string>;
+};
+
+/**
+ * The snapshot with the club's edits applied — pure, so the merge can be tested without a
+ * database. Squad moves, departures, additions and renames all land here, and each one of them
+ * is a way the exported file and the club disagree.
+ */
+export function mergeRoster(base: RawSquad[], ed: Edits): RawSquad[] {
+  const anywhere = patchAnywhere(ed);
+  const patchFor = (slug: string, id: string): Patch | undefined => {
+    const here = (ed.edits[slug] || {})[id];
+    const other = anywhere[id];
+    return (here && other) ? { ...other, ...here } : (here || other);
+  };
+
+  const merged: RawSquad[] = base.map((sq) => {
+    const gone = ed.deleted[sq.slug] || {};
+    const kept = (sq.swimmers || [])
+      .filter((s) => !gone[swimmerId(sq.slug, s)])
+      .map((s) => applyPatch(s, patchFor(sq.slug, swimmerId(sq.slug, s))));
+    // A swimmer the club added carries their whole record; an edit typed for them before a move
+    // is filed under the squad they left, so the patch goes on underneath rather than over.
+    const added = (ed.added[sq.slug] || [])
+      .filter((s) => s && s.id && !gone[s.id])
+      .map((s) => applyPatch(s, patchFor(sq.slug, s.id as string)));
+    return { ...sq, swimmers: [...kept, ...added] };
+  });
+  return merged;
+}
+
+export async function loadRoster(): Promise<Roster> {
+  // Base names first, and never removed: a swimmer who has left the club still has marks and
+  // invoices with their id on them, and those rows should name a child, not an id.
+  const names = new Map<string, string>();
+  for (const sq of BASE) {
+    for (const s of sq.swimmers || []) names.set(swimmerId(sq.slug, s), fullName(s));
+  }
+
+  const ed = await rosterEdits();
+  if (!ed) return { squads: BASE, live: false, names };
+
+  const merged = mergeRoster(BASE, ed);
+  for (const sq of merged) {
+    for (const s of sq.swimmers || []) names.set(swimmerId(sq.slug, s), fullName(s));
+  }
+  return { squads: merged, live: true, names };
+}
+
+export function allSwimmers(roster: Roster): Swimmer[] {
   const out: Swimmer[] = [];
-  for (const sq of SQUADS) {
+  for (const sq of roster.squads) {
     for (const s of sq.swimmers || []) {
       out.push({
         id: swimmerId(sq.slug, s),
-        name: `${s.first} ${s.last}`.trim(),
+        name: fullName(s),
         squad: sq.slug,
         squadName: sq.name,
         age: typeof s.age === "number" ? s.age : null,
@@ -67,8 +194,8 @@ export function allSwimmers(): Swimmer[] {
   return out;
 }
 
-export function squads() {
-  return SQUADS.map((sq) => ({
+export function squads(roster: Roster) {
+  return roster.squads.map((sq) => ({
     slug: sq.slug,
     name: sq.name,
     ageRange: sq.age_range || null,
@@ -77,22 +204,22 @@ export function squads() {
   }));
 }
 
-export function findSwimmers(query: string, limit = 10): Swimmer[] {
+export function findSwimmers(roster: Roster, query: string, limit = 10): Swimmer[] {
   const q = String(query || "").trim().toLowerCase();
   if (!q) return [];
-  return allSwimmers()
+  return allSwimmers(roster)
     .filter((s) => s.name.toLowerCase().includes(q))
     .slice(0, limit);
 }
 
 /** The raw PBs and results the roster carries for one swimmer. */
-export function swimmerRecord(id: string): { swimmer: Swimmer; pbs: unknown[]; results: unknown[] } | null {
-  for (const sq of SQUADS) {
+export function swimmerRecord(roster: Roster, id: string): { swimmer: Swimmer; pbs: unknown[]; results: unknown[] } | null {
+  for (const sq of roster.squads) {
     for (const s of sq.swimmers || []) {
       if (swimmerId(sq.slug, s) !== id) continue;
       return {
         swimmer: {
-          id, name: `${s.first} ${s.last}`.trim(), squad: sq.slug, squadName: sq.name,
+          id, name: fullName(s), squad: sq.slug, squadName: sq.name,
           age: typeof s.age === "number" ? s.age : null, gender: s.gender || null,
         },
         pbs: s.pbs || [],
@@ -143,9 +270,14 @@ export async function invoices(period?: string, status?: string): Promise<Invoic
   return (await rest(`invoices?${qs}`)) as Invoice[] | null;
 }
 
-/** Map a bare or squad-qualified swimmer id to a display name, for rows that carry only an id. */
-export function nameOf(swId: string): string {
+/**
+ * Map a bare or squad-qualified swimmer id to a display name, for rows that carry only an id.
+ *
+ * Resolved against every id the roster has ever carried, not just current membership: the marks
+ * and invoices this names include swimmers who have since left the club, and printing "r222" for
+ * them again would undo the fix that made this column readable in the first place.
+ */
+export function nameOf(roster: Roster, swId: string): string {
   const bare = String(swId || "").split("::").pop() || "";
-  const hit = allSwimmers().find((s) => s.id === swId || s.id.split("::").pop() === bare);
-  return hit ? hit.name : swId;
+  return roster.names.get(swId) || roster.names.get(bare) || swId;
 }
