@@ -4303,6 +4303,7 @@ if ('serviceWorker' in navigator) {
                               </sc-for>
                             </div>
                           </div>
+                          <button onclick="{{ onPrintResults }}" style="width:100%;margin-top:11px;display:flex;align-items:center;justify-content:center;gap:8px;background:#0A0F1A;color:#fff;border:none;border-radius:12px;padding:12px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer"><i data-lucide="printer" style="width:16px;height:16px"></i>View / print results sheet</button>
                         </sc-if>
                         <p style="margin:0 2px;font-size:11px;color:#9AA2B4;line-height:1.5">Times saved here go straight into the swimmer's history, so their PB, their chart and their family's app are all up to date before the next heat is called. Got a lane wrong? Undo takes the swim back out again.</p>
                       </sc-if>
@@ -6725,6 +6726,35 @@ if ('serviceWorker' in navigator) {
                         </div>
                       </sc-for>
                     </sc-if>
+                    <sc-if value="{{ printIsResults }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:flex;align-items:center;gap:12px;border-bottom:3px solid {{ printResults.accent }};padding-bottom:14px;margin-bottom:18px">
+                        <img src="assets/b798adf9.png" alt="Vortex SC" style="width:44px;height:44px">
+                        <div style="flex:1"><div style="font-family:'Funnel Display',sans-serif;font-weight:700;font-size:22px;color:#0C1116;letter-spacing:-.02em">{{ printResults.clubName }}</div><div style="font-size:12px;color:#7A8296;font-weight:600;letter-spacing:.04em;text-transform:uppercase">Results</div></div>
+                        <div style="text-align:right"><div style="font-weight:700;font-size:14px;color:{{ printResults.accent }}">{{ printResults.squadName }}</div><div style="font-size:11px;color:#7A8296">{{ printResults.printDate }}</div></div>
+                      </div>
+                      <p style="margin:0 0 3px;font-size:16px;font-weight:700;color:#0C1116">{{ printResults.meetName }}</p>
+                      <p style="margin:0 0 4px;font-size:11.5px;color:#7A8296">{{ printResults.meta }}</p>
+                      <p style="margin:0 0 16px;font-size:11.5px;color:#7A8296">{{ printResults.summary }}</p>
+                      <sc-for list="{{ printResults.events }}" as="re" hint-placeholder-count="3">
+                        <div style="margin-bottom:15px">
+                          <p style="margin:0 0 7px;font-size:12.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:{{ printResults.accent }}">{{ re.event }}</p>
+                          <table style="width:100%;border-collapse:collapse">
+                            <sc-for list="{{ re.rows }}" as="rr" hint-placeholder-count="4">
+                              <tr style="border-bottom:1px solid #EEF1F5">
+                                <td style="padding:6px 8px 6px 0;width:40px"><span style="display:inline-block;min-width:30px;text-align:center;background:{{ rr.medal }};color:{{ rr.medalFg }};border-radius:6px;padding:2px 6px;font-size:10px;font-weight:700">{{ rr.place }}</span></td>
+                                <td style="padding:6px 0;color:#3A4152;font-size:13px">{{ rr.name }}<span style="display:block;font-size:9.5px;color:#9AA2B4">{{ rr.squad }}</span></td>
+                                <td style="padding:6px 0;text-align:right;white-space:nowrap"><span style="font-family:monospace;font-weight:700;font-size:12.5px;color:#0C1116">{{ rr.time }}</span><sc-if value="{{ rr.noteShow }}" hint-placeholder-val="{{ false }}"><span style="display:block;font-size:9.5px;font-weight:700;color:#0C7A4F">{{ rr.note }}</span></sc-if></td>
+                              </tr>
+                            </sc-for>
+                          </table>
+                          <sc-if value="{{ re.marksShow }}" hint-placeholder-val="{{ false }}">
+                            <sc-for list="{{ re.marks }}" as="rm" hint-placeholder-count="1">
+                              <div style="display:flex;align-items:center;gap:8px;padding:4px 0"><span style="font-family:monospace;font-weight:700;font-size:11px;color:#B42318;min-width:34px">{{ rm.mark }}</span><span style="font-size:12px;color:#7A8296">{{ rm.name }} — {{ rm.markFull }}</span></div>
+                            </sc-for>
+                          </sc-if>
+                        </div>
+                      </sc-for>
+                    </sc-if>
                     <div style="margin-top:22px;padding-top:12px;border-top:1px solid #EEF1F5;display:flex;align-items:center;justify-content:space-between">
                       <span style="font-size:10.5px;color:#9AA2B4">Generated from the Vortex SC coaching app</span>
                       <span style="display:flex;align-items:center;gap:6px"><img src="assets/b798adf9.png" alt="" style="height:18px;width:18px"><span style="font-weight:700;font-size:12px;color:#0C1116;letter-spacing:.01em">VORTEX SWIMMING CLUB</span></span>
@@ -7290,6 +7320,35 @@ if ('serviceWorker' in navigator) {
         </div>
       </sc-for>
     </sc-if>
+    <sc-if value="{{ printIsResults }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;align-items:center;gap:12px;border-bottom:3px solid {{ printResults.accent }};padding-bottom:14px;margin-bottom:18px">
+        <img src="assets/b798adf9.png" alt="Vortex SC" style="width:44px;height:44px">
+        <div style="flex:1"><div style="font-family:'Funnel Display',sans-serif;font-weight:700;font-size:22px;color:#0C1116;letter-spacing:-.02em">{{ printResults.clubName }}</div><div style="font-size:12px;color:#7A8296;font-weight:600;letter-spacing:.04em;text-transform:uppercase">Results</div></div>
+        <div style="text-align:right"><div style="font-weight:700;font-size:14px;color:{{ printResults.accent }}">{{ printResults.squadName }}</div><div style="font-size:11px;color:#7A8296">{{ printResults.printDate }}</div></div>
+      </div>
+      <p style="margin:0 0 3px;font-size:16px;font-weight:700;color:#0C1116">{{ printResults.meetName }}</p>
+      <p style="margin:0 0 4px;font-size:11.5px;color:#7A8296">{{ printResults.meta }}</p>
+      <p style="margin:0 0 16px;font-size:11.5px;color:#7A8296">{{ printResults.summary }}</p>
+      <sc-for list="{{ printResults.events }}" as="re" hint-placeholder-count="3">
+        <div style="margin-bottom:15px">
+          <p style="margin:0 0 7px;font-size:12.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:{{ printResults.accent }}">{{ re.event }}</p>
+          <table style="width:100%;border-collapse:collapse">
+            <sc-for list="{{ re.rows }}" as="rr" hint-placeholder-count="4">
+              <tr style="border-bottom:1px solid #EEF1F5">
+                <td style="padding:6px 8px 6px 0;width:40px"><span style="display:inline-block;min-width:30px;text-align:center;background:{{ rr.medal }};color:{{ rr.medalFg }};border-radius:6px;padding:2px 6px;font-size:10px;font-weight:700">{{ rr.place }}</span></td>
+                <td style="padding:6px 0;color:#3A4152;font-size:13px">{{ rr.name }}<span style="display:block;font-size:9.5px;color:#9AA2B4">{{ rr.squad }}</span></td>
+                <td style="padding:6px 0;text-align:right;white-space:nowrap"><span style="font-family:monospace;font-weight:700;font-size:12.5px;color:#0C1116">{{ rr.time }}</span><sc-if value="{{ rr.noteShow }}" hint-placeholder-val="{{ false }}"><span style="display:block;font-size:9.5px;font-weight:700;color:#0C7A4F">{{ rr.note }}</span></sc-if></td>
+              </tr>
+            </sc-for>
+          </table>
+          <sc-if value="{{ re.marksShow }}" hint-placeholder-val="{{ false }}">
+            <sc-for list="{{ re.marks }}" as="rm" hint-placeholder-count="1">
+              <div style="display:flex;align-items:center;gap:8px;padding:4px 0"><span style="font-family:monospace;font-weight:700;font-size:11px;color:#B42318;min-width:34px">{{ rm.mark }}</span><span style="font-size:12px;color:#7A8296">{{ rm.name }} — {{ rm.markFull }}</span></div>
+            </sc-for>
+          </sc-if>
+        </div>
+      </sc-for>
+    </sc-if>
     <div style="margin-top:22px;padding-top:12px;border-top:1px solid #EEF1F5;display:flex;align-items:center;justify-content:space-between">
       <span style="font-size:10.5px;color:#9AA2B4">Generated from the Vortex SC coaching app</span>
     <span style="display:flex;align-items:center;gap:6px"><img src="assets/b798adf9.png" alt="" style="height:18px;width:18px"><span style="font-weight:700;font-size:12px;color:#0C1116;letter-spacing:.01em">VORTEX SWIMMING CLUB</span></span>
@@ -7304,7 +7363,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-22f';
+const VX_BUILD='2026-08-23a';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -16857,6 +16916,43 @@ class Component extends DCLogic {
     let mdDq=0, mdNs=0;
     entriesList.forEach(e=>{ const m=mdMarks[e.swId+'|'+e.event]; if(m==='DQ') mdDq++; else if(m) mdNs++; });
     const mdMarkLine=[mdDq?(mdDq+' DQ'):'', mdNs?(mdNs+' no-show'+(mdNs===1?'':'s')):''].filter(Boolean).join(' · ');
+    // ---- The results sheet, to read on screen and to print ----
+    // Built from the same swims the board on the wall is built from, so the two cannot disagree.
+    // Every finisher, not the first eight: a sheet that stops at eighth place is not the result
+    // of the meet, and the swimmer in ninth is exactly the one who wants it on paper.
+    const printResults = (()=>{
+      const byEvent={};
+      Object.keys(mdSwims).forEach(k=>{ const s2=mdSwims[k]; (byEvent[s2.event]=byEvent[s2.event]||[]).push(s2); });
+      const markedByEvent={};
+      entriesList.forEach(e=>{ const m=mdMarks[e.swId+'|'+e.event]; if(!m) return;
+        (markedByEvent[e.event]=markedByEvent[e.event]||[]).push({name:e.name,
+          mark: m==='DQ'?'DQ':'N/S', markFull: m==='DQ'?'Disqualified':'Did not start'}); });
+      const events=Object.keys(byEvent).concat(Object.keys(markedByEvent).filter(ev=>!byEvent[ev]))
+        .filter((v,i,a)=>a.indexOf(v)===i).sort();
+      let swims=0, pbs=0;
+      const rows=events.map(ev=>{
+        const list=(byEvent[ev]||[]).slice().sort((a,b)=>a.sec-b.sec);
+        return { event:ev,
+          rows:list.map((s2,i)=>{ const sw=mdFlatById[s2.swId];
+            const before=sw ? this._bestBefore(sw, ev, entryMeetName) : null;
+            const drop=(before!=null && s2.sec<before) ? (before-s2.sec) : 0;
+            swims++; if(before==null || drop>0) pbs++;
+            return { place:mdOrdinal(i+1), name:(sw&&sw.name)||'—', squad:(sw&&sw.squadName)||'',
+              time:this.fmt(s2.sec),
+              note: before==null ? 'First time' : (drop>0 ? ('PB −'+drop.toFixed(2)+'s') : ''),
+              noteShow: before==null || drop>0,
+              medal: i===0?'#C89B3C':(i===1?'#9AA2B4':(i===2?'#B0762F':'#EEF1F5')),
+              medalFg: i<3?'#fff':'#7A8296' }; }),
+          marks:(markedByEvent[ev]||[]), marksShow:!!(markedByEvent[ev]||[]).length };
+      });
+      const meta=[entryMeetCourse, this._fmtDMY(entryMeetISO, true)].filter(Boolean).join(' · ');
+      return { clubName:this.brandConfig.clubName||'Vortex Swimming Club', accent:squad.accent,
+        squadName: S.toolScopeClub ? 'Club-wide' : squad.name, meetName:entryMeetName, meta,
+        printDate:new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}),
+        events:rows, hasEvents:rows.length>0,
+        summary: swims+' swim'+(swims===1?'':'s')+' · '+pbs+' personal best'+(pbs===1?'':'s')
+          +(mdMarkLine?(' · '+mdMarkLine):'') };
+    })();
 
     // ---- Academy ----
     const acadTabs=['trials','ladder','schedule','fees'];
@@ -19458,7 +19554,10 @@ class Component extends DCLogic {
         onDismiss:()=>this.reqDecide(r.id,'dismissed') })),
       reqHasRows: this.eventRequests.filter(r=>r.status==='pending' && r.meetName===entryMeetName).length>0,
       onPrintProgram:()=>this.setState({printMode:'program', printPreviewOpen:true}),
-      printIsProgram: S.printMode==='program', printIsPlan: S.printMode!=='program',
+      onPrintResults:()=>this.setState({printMode:'results', printPreviewOpen:true}),
+      printResults,
+      printIsProgram: S.printMode==='program', printIsResults: S.printMode==='results',
+      printIsPlan: S.printMode!=='program' && S.printMode!=='results',
       onPrintPlanMode:()=>this.setState({printMode:'plan'}),
       printProgram:{ clubName:this.brandConfig.clubName||'Vortex Swimming Club', accent:squad.accent, squadName:squad.name, meetName:entryMeetName, printDate:new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}),
         heats:(()=>{ const list=(this.meetEntries[entryMeetName]||[]).filter(e=>entryRoster.some(sw=>sw.id===e.swId));
