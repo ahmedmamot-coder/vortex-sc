@@ -267,6 +267,163 @@ describe("shipped source", () => {
     });
   });
 
+  /* ---------------------------------------------------------------- moving a swimmer
+     A swimmer moved between squads appeared in BOTH of them, and was back where they
+     started after a reload. Reported from poolside with a screenshot: one search for
+     "mele" listing Melek Riabi twice, age 17, once in Vortex B and once in Legend.
+
+     The roster is a base list with `deleted` and `added` laid over it, and `deleted` is
+     applied to the BASE list only. A swimmer who lives in `added` — everyone the club has
+     added, and everyone already moved once — was appended to the new squad with their old
+     entry left in place, so both squads showed them. */
+  describe("moving a swimmer between squads", () => {
+    const squads = [{ id: "vortexb", name: "Vortex B" }, { id: "legend", name: "Legend" },
+                    { id: "junior", name: "Junior" }];
+    const BASE = { vortexb: [{ id: "base1", name: "Base Swimmer" }], legend: [], junior: [] };
+    const melek = { id: "sw_melek", name: "Melek Riabi", age: 17 };
+
+    // The real methods, over a stub club: three squads, one base swimmer, and Melek added.
+    const app = (rosterEdits) => {
+      const ctx = {
+        squads,
+        squadById: { vortexb: squads[0], legend: squads[1], junior: squads[2] },
+        rosterEdits,
+        roster: {},
+        saved: 0,
+        persistRosterEdits() { this.saved++; this.rebuildRoster(); return true; },
+        setState() {},
+        forceUpdate() {},
+        _promoMeta: () => ({}),
+        _savePromo() {},
+        audit() {},
+      };
+      const realWin = globalThis.window;
+      globalThis.window = { ...(realWin || {}), VX_ROSTER: BASE };
+      const fns = ["rebuildRoster", "_rosterMoveEntry", "promoteSwimmer", "_rosterTotalFor"];
+      for (const f of fns) bind(f, ctx, ["_patchAnywhere", "_ageFromDob", "_dobParts"]);
+      ctx.rebuildRoster();
+      ctx.restore = () => { globalThis.window = realWin; };
+      return ctx;
+    };
+
+    const squadsOf = (ctx, id) =>
+      squads.filter((sq) => (ctx.roster[sq.id] || []).some((sw) => sw.id === id)).map((sq) => sq.id);
+
+    it("a swimmer the club added is in exactly one squad after a move", () => {
+      const ctx = app({ edits: {}, deleted: {}, added: { vortexb: [melek] } });
+      try {
+        ctx.promoteSwimmer("sw_melek", "vortexb", "legend");
+        eq(squadsOf(ctx, "sw_melek").join(","), "legend",
+           "the swimmer was appended to the new squad and left in the old one");
+      } finally { ctx.restore(); }
+    });
+
+    it("and after a second move, not three copies", () => {
+      const ctx = app({ edits: {}, deleted: {}, added: { vortexb: [melek] } });
+      try {
+        ctx.promoteSwimmer("sw_melek", "vortexb", "legend");
+        ctx.promoteSwimmer("sw_melek", "legend", "junior");
+        eq(squadsOf(ctx, "sw_melek").join(","), "junior", "every move left another copy behind");
+      } finally { ctx.restore(); }
+    });
+
+    it("a swimmer from the base list still moves", () => {
+      const ctx = app({ edits: {}, deleted: {}, added: {} });
+      try {
+        ctx.promoteSwimmer("base1", "vortexb", "legend");
+        eq(squadsOf(ctx, "base1").join(","), "legend");
+      } finally { ctx.restore(); }
+    });
+
+    // The move that used to be impossible to undo: back to the squad they started in, which
+    // is also the squad they are marked deleted from.
+    it("a swimmer can be moved back to the squad they came from", () => {
+      const ctx = app({ edits: {}, deleted: {}, added: {} });
+      try {
+        ctx.promoteSwimmer("base1", "vortexb", "legend");
+        ctx.promoteSwimmer("base1", "legend", "vortexb");
+        eq(squadsOf(ctx, "base1").join(","), "vortexb", "moving a swimmer home lost them entirely");
+      } finally { ctx.restore(); }
+    });
+
+    // Overlays holding the same swimmer under two squads are already saved, in the database
+    // and on phones. They must show once without waiting for anyone to move anybody again.
+    it("an overlay that already holds the duplicate shows the swimmer once", () => {
+      const ctx = app({ edits: {}, deleted: { vortexb: { sw_melek: true } },
+                        added: { vortexb: [melek], legend: [{ ...melek, movedAt: 1000 }] } });
+      try {
+        eq(squadsOf(ctx, "sw_melek").join(","), "legend",
+           "the copy the old move left behind is still on the roster");
+      } finally { ctx.restore(); }
+    });
+
+    // The club's own case, with the club's own ids. The connector says there is exactly one
+    // Melek Riabi — r240, base squad Vortex A — and the screen was showing two of him, in
+    // Vortex B and in Legend. That is one swimmer moved twice: Vortex A → Vortex B → Legend,
+    // with the entry copied at each step instead of moved. Legend is where he was last put, and
+    // Legend is the only squad he has not been moved OUT of, which is what decides it.
+    it("Melek Riabi, r240, is in Legend and nowhere else", () => {
+      const melekSquads = [{ id: "vortexa", name: "Vortex A" }, { id: "vortexb", name: "Vortex B" },
+                           { id: "legend", name: "Legend" }];
+      const ctx = {
+        squads: melekSquads,
+        squadById: { vortexa: melekSquads[0], vortexb: melekSquads[1], legend: melekSquads[2] },
+        rosterEdits: {
+          edits: {},
+          deleted: { vortexa: { r240: true }, vortexb: { r240: true } },
+          added: { vortexb: [{ id: "r240", name: "Melek Riabi", age: 17 }],
+                   legend: [{ id: "r240", name: "Melek Riabi", age: 17 }] },
+        },
+        roster: {},
+      };
+      const realWin = globalThis.window;
+      globalThis.window = { ...(realWin || {}), VX_ROSTER: { vortexa: [{ id: "r240", name: "Melek Riabi", age: 16 }], vortexb: [], legend: [] } };
+      try {
+        bind("rebuildRoster", ctx, ["_patchAnywhere", "_ageFromDob", "_dobParts"]);
+        ctx.rebuildRoster();
+        const where = melekSquads.filter((sq) => (ctx.roster[sq.id] || []).some((sw) => sw.id === "r240"));
+        eq(where.length, 1, "Melek Riabi is still listed in " + where.length + " squads: "
+           + where.map((s) => s.name).join(" and "));
+        eq(where[0].id, "legend", "he was resolved to " + where[0].name + ", not the squad he was last moved to");
+      } finally { globalThis.window = realWin; }
+    });
+
+    it("the saved-roster count counts a duplicated swimmer once", () => {
+      const ctx = app({ edits: {}, deleted: {}, added: {} });
+      try {
+        const dup = { edits: {}, deleted: { vortexb: { sw_melek: true } },
+                      added: { vortexb: [melek], legend: [{ ...melek, movedAt: 1000 }] } };
+        eq(ctx._rosterTotalFor(dup), 2,
+           "the check that decides whether a save held counted the duplicate, and read a good save as lost");
+      } finally { ctx.restore(); }
+    });
+
+    // The half that survived a reload. The database still has the swimmer where they were,
+    // because no other device has heard about the move yet.
+    describe("against a database that has not heard about the move", () => {
+      const src = sourceBetween("function _rosterShaped(o){", "\n  window.__vxMergeRoster");
+      const merge = new Function(src + "\nreturn _mergeRoster;")();
+
+      const theirs = { edits: {}, deleted: {}, added: { vortexb: [melek] } };
+      const mine = { edits: {}, deleted: { vortexb: { sw_melek: true } },
+                     added: { legend: [{ ...melek, movedAt: 1700000000000 }] } };
+
+      it("the move is not undone by the copy the database holds", () => {
+        const out = merge(mine, theirs);
+        eq((out.added.vortexb || []).length, 0,
+           "the merge put the swimmer back in the squad they had just been moved out of");
+        eq((out.added.legend || []).length, 1);
+      });
+
+      it("a swimmer nobody has moved is still kept", () => {
+        const other = { id: "n1", name: "New" };
+        const out = merge({ edits: {}, deleted: {}, added: {} },
+                          { edits: {}, deleted: {}, added: { junior: [other] } });
+        eq((out.added.junior || []).length, 1, "a swimmer added on another device was dropped");
+      });
+    });
+  });
+
   describe("a roster this device cannot read", () => {
     const FULL = { edits: { r1: { dob: "2012-01-01" }, r2: { dob: "2013-02-02" } }, deleted: { r9: 1 }, added: {} };
     const EMPTY = { edits: {}, deleted: {}, added: {} };
