@@ -33,10 +33,22 @@ database repairs them:
   document, finding each swimmer by id wherever they currently sit and skipping
   any who have left the roster.
 - `vx_restore_test_meet()` — applies it to the live row. Returns the swim count.
-- `vx_guard_test_meet_trg` on `club_state` — before each write, if an incoming
-  `vx_roster_edits` document carries fewer than 30 Test swims, the swims are put
-  back into it. The write still succeeds, so the device sees no error and stops
-  destroying the meet.
+- `vx_apply_test_entries(doc)` / `vx_apply_test_marks(doc)` — the same for the
+  meet's entry list and its DQ/N-S marks, which live in `vx_meet_entries` and
+  `vx_meet_marks`. A mark is never put back over a lane that now has a time.
+- `vx_guard_test_meet_trg` on `club_state` — before each write, repairs an
+  incoming `vx_roster_edits`, `vx_meet_entries` or `vx_meet_marks` document that
+  has lost the meet. The write still succeeds, so the device sees no error and
+  stops destroying the meet.
+
+It repairs a wipe, not an edit. Each key has a threshold — fewer than 30 swims,
+three or more entries missing, fewer than six marks — below which the document is
+treated as a stale copy. Deleting one entry or clearing one N/S by hand stays
+under the threshold and goes through untouched.
+
+Guarding the swims alone was not enough: the device's next push took the entry
+list from 41 to 36 and the marks from 10 to 5 — the whole 50 Free block, which
+its copy predated — while the swims held at 33.
 
 Verified by replaying the device's actual stale payload: 1 swim went in,
 33 landed.
