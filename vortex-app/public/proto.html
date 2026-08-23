@@ -859,6 +859,37 @@ if ('serviceWorker' in navigator) {
         });
       });
     });
+    // A swimmer is in one squad, and unioning `added` cannot know that.
+    //
+    // This is the half of the duplicate that survived a reload. One device moves a swimmer from
+    // Vortex B to Legend; the database still has them under Vortex B, because the other devices
+    // have not heard yet. The union above keeps both, so the copy sent up has the swimmer in two
+    // squads — and the next pull hands that back to the device that had just moved them. The
+    // move looked undone, and the swimmer was on two rosters everywhere in the club.
+    //
+    // `movedAt` is what tells the two apart: the entry written by the newer move carries the
+    // later stamp. An entry with no stamp was written before moves recorded one and loses to any
+    // that has it, which is what retires the copies already stored. Where neither side has a
+    // stamp there is nothing to go on, and this device's answer wins — the same tie-break the
+    // rest of this merge uses.
+    var mineSq={};
+    Object.keys((mine && mine.added) || {}).forEach(function(sq){
+      ((mine.added[sq])||[]).forEach(function(sw){ if(sw && sw.id) mineSq[sw.id]=sq; });
+    });
+    var home={};
+    Object.keys(out.added).forEach(function(sq){
+      (out.added[sq]||[]).forEach(function(sw){
+        if(!sw || !sw.id) return;
+        var at=(typeof sw.movedAt==="number") ? sw.movedAt : 0;
+        var cur=home[sw.id];
+        if(!cur || at>cur.at || (at===cur.at && mineSq[sw.id]===sq)) home[sw.id]={sq:sq, at:at};
+      });
+    });
+    Object.keys(out.added).forEach(function(sq){
+      out.added[sq]=(out.added[sq]||[]).filter(function(sw){
+        return !sw || !sw.id || home[sw.id].sq===sq;
+      });
+    });
     return out;
   }
   window.__vxMergeRoster = _mergeRoster;
@@ -9068,6 +9099,27 @@ class Component extends DCLogic {
       const other=anywhere[id];
       return (here&&other) ? {...other, ...here} : (here||other);
     };
+    // A swimmer is in one squad. Nothing used to hold anybody to that: a move appended the
+    // swimmer to the squad they joined without taking them out of the one they left (see
+    // _rosterMoveEntry), so overlays holding the same swimmer under two or three squads exist
+    // — in the database, and on every phone that has pulled since. They are read here, so this
+    // is where they stop being shown twice, without waiting for anyone to move anybody again.
+    //
+    // Which of the copies is the swimmer's real squad: the one they were not moved OUT of, and
+    // then the one moved to most recently. Copies left by the old behaviour carry no stamp and
+    // rank below any that does; when nothing tells them apart, squad order decides, so every
+    // device picks the same one rather than each picking its own.
+    const addedHome={};
+    this.squads.forEach(sq=>{
+      (ed.added[sq.id]||[]).forEach(sw=>{
+        if(!sw || !sw.id) return;
+        const left=!!(ed.deleted[sq.id]||{})[sw.id];
+        const rank=[left?0:1, (typeof sw.movedAt==='number')?sw.movedAt:0];
+        const cur=addedHome[sw.id];
+        if(!cur || rank[0]>cur.rank[0] || (rank[0]===cur.rank[0] && rank[1]>cur.rank[1]))
+          addedHome[sw.id]={sq:sq.id, rank};
+      });
+    });
     const merged={};
     this.squads.forEach(sq=>{
       const arr=(base[sq.id]||[]).filter(sw=>!(ed.deleted[sq.id]||{})[sw.id]).map(sw=>{
@@ -9079,10 +9131,12 @@ class Component extends DCLogic {
       });
       // A swimmer the club added carries their whole record here, but a date typed for them
       // before a move is filed in `edits` under the squad they left — same gap, other half.
-      const extra=(ed.added[sq.id]||[]).map(sw=>{
-        const p=(sw&&sw.id)?patchFor(sq.id, sw.id):null;
-        return p ? {...p, ...sw} : sw;
-      });
+      const extra=(ed.added[sq.id]||[])
+        .filter(sw=>!sw || !sw.id || (addedHome[sw.id]||{}).sq===sq.id)
+        .map(sw=>{
+          const p=(sw&&sw.id)?patchFor(sq.id, sw.id):null;
+          return p ? {...p, ...sw} : sw;
+        });
       merged[sq.id]=[...arr, ...extra];
       // A stored age goes stale the moment a birthday passes, and it is read straight from the
       // swimmer in about twenty places — the talent board, the promotion checks, the relay age
@@ -9105,10 +9159,26 @@ class Component extends DCLogic {
   _rosterTotalFor(ed){
     try{
       const base=window.VX_ROSTER||{}; const e=ed||{edits:{},deleted:{},added:{}};
+      // Counted the way the roster is BUILT, which means once per swimmer. An overlay holding
+      // the same swimmer under two squads — what every move used to produce — counted them
+      // twice here while the screen, which rebuilds and shows them once, counted them once. The
+      // two numbers are compared to decide whether a save held, so the gap between them read as
+      // "NOT saved" on a roster that had saved perfectly well.
+      const seen={};
       let n=0;
       (this.squads||[]).forEach(sq=>{
-        const kept=(base[sq.id]||[]).filter(sw=>!((e.deleted||{})[sq.id]||{})[sw.id]).length;
-        n += kept + (((e.added||{})[sq.id])||[]).length;
+        (base[sq.id]||[]).forEach(sw=>{
+          if(!sw || ((e.deleted||{})[sq.id]||{})[sw.id]) return;
+          if(sw.id){ if(seen[sw.id]) return; seen[sw.id]=1; }
+          n++;
+        });
+      });
+      (this.squads||[]).forEach(sq=>{
+        (((e.added||{})[sq.id])||[]).forEach(sw=>{
+          if(!sw) return;
+          if(sw.id){ if(seen[sw.id]) return; seen[sw.id]=1; }
+          n++;
+        });
       });
       return n;
     }catch(err){ return -1; }
@@ -10325,7 +10395,12 @@ class Component extends DCLogic {
       if(newSquadId){
         const sw={...this.rosterEdits.added[squadId].find(s=>s.id===id)};
         this.rosterEdits.added[squadId]=this.rosterEdits.added[squadId].filter(s=>s.id!==id);
-        this.rosterEdits.added[newSquadId]=[...(this.rosterEdits.added[newSquadId]||[]), sw];
+        // Stamped, like every other squad change. Changing a swimmer's squad in this editor is
+        // the same move as the one on the Move swimmers screen, and the merge decides between
+        // two devices that disagree about a swimmer's squad by which entry is stamped later. An
+        // unstamped one loses that to a device still holding the squad they came from, so the
+        // move would be undone by the next pull. See _rosterMoveEntry.
+        this.rosterEdits.added[newSquadId]=[...(this.rosterEdits.added[newSquadId]||[]), {...sw, movedAt:Date.now()}];
       }
     } else {
       this.rosterEdits.edits[squadId]=this.rosterEdits.edits[squadId]||{};
@@ -10335,7 +10410,7 @@ class Component extends DCLogic {
         if(full){
           this.rosterEdits.deleted[squadId]=this.rosterEdits.deleted[squadId]||{};
           this.rosterEdits.deleted[squadId][id]=true;
-          const sw={...full, ...patch};
+          const sw={...full, ...patch, movedAt:Date.now()};
           this.rosterEdits.added[newSquadId]=[...(this.rosterEdits.added[newSquadId]||[]), sw];
         }
       }
@@ -12051,6 +12126,41 @@ class Component extends DCLogic {
   promoMarkReviewed(swId){ const m=this._promoMeta(swId); this._savePromo(swId, {...m, lastReview:new Date().toISOString().slice(0,10)}); }
   promoSuggest(swId){ const m=this._promoMeta(swId); this._savePromo(swId, {...m, suggested:true, suggestedAt:new Date().toISOString().slice(0,10), lastReview:new Date().toISOString().slice(0,10)}); }
   promoDismiss(swId){ const m=this._promoMeta(swId); this._savePromo(swId, {...m, suggested:false}); }
+  // One swimmer's move, written into the overlay. Every move in the app goes through here.
+  //
+  // The roster on screen is the base list with three things laid over it: `edits` (fields
+  // changed), `deleted` (taken out) and `added` (whole records the club owns). A move used to
+  // write only two of them — mark the swimmer deleted from the squad they left, append them to
+  // the squad they joined — and that is right ONLY while the swimmer is still in the base
+  // list, because `deleted` is applied to the base list and to nothing else.
+  //
+  // Every swimmer the club has added lives in `added`, and so does every swimmer who has been
+  // moved even once. Moving one of those appended them to the new squad while their old entry
+  // sat untouched in the old one, so they showed up in BOTH — twice in a search, twice in the
+  // squad counts, twice in every total built from the roster. A third move made three of them.
+  //
+  // So the entry MOVES rather than being copied: taken out of `added` wherever it is, then put
+  // back once under the new squad. `deleted` is still marked for the squad they left, which is
+  // what takes them out of the base list when that is where they came from.
+  _rosterMoveEntry(sw, fromSquadId, toSquadId){
+    const ed=this.rosterEdits;
+    ed.edits=ed.edits||{}; ed.deleted=ed.deleted||{}; ed.added=ed.added||{};
+    // Out of EVERY squad, not only the one being left. A roster that has been through the old
+    // behaviour already holds copies under squads nobody is looking at, and they are in the
+    // database and on every phone — so the first move of a swimmer after this ships is also
+    // what clears the copies the old move left behind them.
+    Object.keys(ed.added).forEach(sq=>{
+      ed.added[sq]=(ed.added[sq]||[]).filter(s=>!s || s.id!==sw.id);
+    });
+    ed.deleted[fromSquadId]=ed.deleted[fromSquadId]||{};
+    ed.deleted[fromSquadId][sw.id]=true;
+    // When this move happened, kept on the record itself. Two devices can hold the same swimmer
+    // under different squads — one has moved them, the other has not heard yet — and the merge
+    // has no other way to tell which of those two answers is the newer one. Without it the
+    // merge unions them, and the duplicate this method exists to prevent arrives back from the
+    // database on the next pull. See _mergeRoster.
+    ed.added[toSquadId]=[...(ed.added[toSquadId]||[]), {...sw, movedAt:Date.now()}];
+  }
   // Move many swimmers in one go. promoteSwimmer saves and rebuilds the whole roster on
   // every call, which would freeze the app if looped over a few hundred swimmers.
   _moveSwimmersBatch(moves){
@@ -12062,24 +12172,22 @@ class Component extends DCLogic {
       // roster is rebuilt only from squads that exist, so a swimmer sent to a missing one
       // would disappear from every screen while still sitting in the stored edits.
       if(!this.squadById[mv.to]){ lost++; return; }
-      this.rosterEdits.deleted[mv.from]=this.rosterEdits.deleted[mv.from]||{};
-      this.rosterEdits.deleted[mv.from][mv.swId]=true;
-      this.rosterEdits.added[mv.to]=[...(this.rosterEdits.added[mv.to]||[]), sw];
+      this._rosterMoveEntry(sw, mv.from, mv.to);
       n++;
     });
     if(lost) this.setState({shareNote:lost+' swimmer'+(lost===1?'':'s')+' were not moved \u2014 that squad no longer exists.'});
     if(!n) return;
-    this._saveJSON('vx_roster_edits', this.rosterEdits);   // one save
-    this.rebuildRoster();                                   // one rebuild
+    // One save, one rebuild — and the same check every other roster change gets. A move used
+    // to write straight to _saveJSON, so it was the one roster change in the app that never
+    // asked the database whether it had held, and the one that could not say so when it had not.
+    this.persistRosterEdits();
     this.setState({shareNote:n+' swimmer'+(n===1?'':'s')+' moved \u2713'});
   }
   promoteSwimmer(swId, fromSquadId, toSquadId){
     const sw=(this.roster[fromSquadId]||[]).find(x=>x.id===swId); if(!sw) return;
     if(!this.squadById[toSquadId]) return this.setState({shareNote:'That squad no longer exists \u2014 nobody was moved.'});
-    this.rosterEdits.deleted[fromSquadId]=this.rosterEdits.deleted[fromSquadId]||{}; this.rosterEdits.deleted[fromSquadId][swId]=true;
-    this.rosterEdits.added[toSquadId]=[...(this.rosterEdits.added[toSquadId]||[]), sw];
-    this._saveJSON('vx_roster_edits', this.rosterEdits);
-    this.rebuildRoster();
+    this._rosterMoveEntry(sw, fromSquadId, toSquadId);
+    this.persistRosterEdits();
     const m=this._promoMeta(swId); this._savePromo(swId, {...m, suggested:false, lastReview:new Date().toISOString().slice(0,10)});
     try{ this.audit('swimmer.move', swId, {swimmer:swId, from:((this.squadById[fromSquadId]||{}).name||fromSquadId), to:((this.squadById[toSquadId]||{}).name||toSquadId)}); }catch(e){}
     this.setState({shareNote:sw.name+' moved to '+(this.squadById[toSquadId]?this.squadById[toSquadId].name:toSquadId)+' ✓'});
