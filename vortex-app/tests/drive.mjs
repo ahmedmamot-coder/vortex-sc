@@ -2245,6 +2245,226 @@ scene("every tool screen renders without a broken binding or chart", async (brow
 });
 
 // ---------------------------------------------------------------------------------------------
+// Move swimmers, reported from poolside with a screenshot: a search for "mele" listing Melek
+// Riabi twice, age 17, once in Vortex B and once in Legend — and after a reload the move was
+// gone. This is the screen and the dropdown a coach actually uses, driven twice, because the
+// duplicate only appears on the SECOND move of a swimmer: the first puts them in `added`, and it
+// was moving somebody who is already in `added` that copied them instead of moving them.
+// ---------------------------------------------------------------------------------------------
+scene("a swimmer moved twice is in one squad, and is still there after a reload", async (browser) => {
+  const page = await openApp(browser);
+  // "Move swimmers" is a tile on the Technical Director hub, which is the screen this session
+  // lands on — not inside Club Administration.
+  const openMove = async () => {
+    await tap(page, "Move swimmers");
+    await page.waitForTimeout(700);
+  };
+  await openMove();
+
+  // Every row on the screen, read the way a coach reads it: the name, and the "now in …" line
+  // under it. This is the screenshot that was reported, in data form.
+  const rowsFor = (name) => page.evaluate((wanted) => {
+    const out = [];
+    for (const sel of document.querySelectorAll("select")) {
+      // The row div, two up from the select. Not a style selector: the browser rewrites the
+      // style attribute it is given ("border-radius:14px" comes back "border-radius: 14px"),
+      // so matching on one finds nothing and the scene reports an empty screen.
+      const row = sel.parentElement && sel.parentElement.parentElement;
+      if (!row) continue;
+      // The name and the "now in …" line are the LAST two: the initials badge is a span with a
+      // span inside it too, so it comes first and is not the name.
+      const spans = [...row.querySelectorAll(":scope > span > span")].slice(-2);
+      const nm = ((spans[0] || {}).textContent || "").trim();
+      const sub = ((spans[1] || {}).textContent || "").trim();
+      if (wanted && nm !== wanted) continue;
+      out.push({ name: nm, sub, squadId: sel.value });
+    }
+    return out;
+  }, name);
+
+  const search = async (text) => {
+    const box = await page.$('input[placeholder="Search any swimmer…"]');
+    if (!box) throw new Error("the Move swimmers screen had no search box");
+    await box.click();
+    await page.evaluate(() => {
+      const b = document.querySelector('input[placeholder="Search any swimmer…"]');
+      const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+      set.call(b, "");
+      b.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await box.type(text, { delay: 20 });
+    await page.waitForTimeout(600);
+  };
+
+  const first = (await rowsFor(null))[0];
+  if (!first) throw new Error("the Move swimmers screen listed nobody");
+  const opts = await page.evaluate(() =>
+    [...document.querySelector("select").options].map((o) => ({ id: o.value, label: o.textContent.trim() })));
+  const others = opts.filter((o) => o.id !== first.squadId);
+  if (others.length < 2) throw new Error("need two other squads to move through");
+
+  // Narrow to this one swimmer, so the row being moved is the row being read.
+  await search(first.name);
+  const mine = await rowsFor(first.name);
+  if (mine.length !== 1)
+    throw new Error("the club has " + mine.length + " swimmers named " + first.name + " — picking another");
+
+  const move = async (to) => {
+    await page.evaluate((id) => {
+      const sel = document.querySelector("select");
+      sel.value = id;
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    }, to);
+    await page.waitForTimeout(800);
+  };
+
+  await move(others[0].id);
+  let seen = await rowsFor(first.name);
+  eq(seen.length, 1, "after ONE move " + first.name + " was listed " + seen.length + " times: "
+     + seen.map((r) => r.sub).join(" | "));
+
+  // The second move is the one that duplicated: the swimmer is now in `added`, and moving
+  // somebody already in `added` copied them instead of moving them.
+  await move(others[1].id);
+  seen = await rowsFor(first.name);
+  eq(seen.length, 1, "after a SECOND move " + first.name + " was listed " + seen.length + " times: "
+     + seen.map((r) => r.sub).join(" | ") + " — this is the duplicate a coach photographed");
+  eq(seen[0].squadId, others[1].id, "the second move did not take");
+
+  // And the half a reload decided. The overlay on the device is what a reload reads back.
+  const stored = await page.evaluate((name) => {
+    const ed = JSON.parse(localStorage.getItem("vx_roster_edits") || "{}");
+    return Object.keys(ed.added || {}).filter((sq) => (ed.added[sq] || []).some((s) => s && s.name === name));
+  }, first.name);
+  eq(stored.length, 1, "the saved roster holds " + first.name + " under " + stored.length
+     + " squads: " + stored.join(", "));
+  eq(stored[0], others[1].id, "the saved roster has them in the wrong squad");
+
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForTimeout(1800);
+  await openMove();
+  await search(first.name);
+  seen = await rowsFor(first.name);
+  eq(seen.length, 1, "after a reload " + first.name + " was listed " + seen.length + " times");
+  eq(seen[0].squadId, others[1].id,
+     "after a reload the move was gone — " + seen[0].sub + " — which is what was reported");
+
+  return first.name + ": " + first.squadId + " → " + others[0].id + " → " + others[1].id + ", held over a reload";
+});
+
+// ---------------------------------------------------------------------------------------------
+// The whole journey, the way a coach makes it: move a swimmer on Move swimmers, then open the
+// squad they were moved INTO and look for them on its roster. The move screen agreeing is not
+// the same as the swimmer being there, and that gap is exactly what was reported — the move
+// screen said "now in Vortex B" and the Vortex B roster did not have him.
+//
+// Then a pull carrying the copy the database held BEFORE the move, which is what actually
+// undid it: another phone in the club had not heard yet, and its copy came back and won.
+// ---------------------------------------------------------------------------------------------
+scene("a swimmer moved is on the new squad's own roster, and a pull cannot undo it", async (browser) => {
+  const page = await openApp(browser);
+  await tap(page, "Move swimmers");
+  await page.waitForTimeout(700);
+
+  const rowsFor = (name) => page.evaluate((wanted) => {
+    const out = [];
+    for (const sel of document.querySelectorAll("select")) {
+      const row = sel.parentElement && sel.parentElement.parentElement;
+      if (!row) continue;
+      const spans = [...row.querySelectorAll(":scope > span > span")].slice(-2);
+      const nm = ((spans[0] || {}).textContent || "").trim();
+      if (wanted && nm !== wanted) continue;
+      out.push({ name: nm, sub: ((spans[1] || {}).textContent || "").trim(), squadId: sel.value });
+    }
+    return out;
+  }, name);
+
+  const search = async (box, text) => {
+    const el = await page.$(box);
+    if (!el) throw new Error("no search box matching " + box);
+    await el.click();
+    await page.evaluate((sel) => {
+      const b = document.querySelector(sel);
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set.call(b, "");
+      b.dispatchEvent(new Event("input", { bubbles: true }));
+    }, box);
+    await el.type(text, { delay: 20 });
+    await page.waitForTimeout(600);
+  };
+
+  const first = (await rowsFor(null))[0];
+  if (!first) throw new Error("the Move swimmers screen listed nobody");
+  const opts = await page.evaluate(() =>
+    [...document.querySelector("select").options].map((o) => ({ id: o.value, label: o.textContent.trim() })));
+  const target = opts.find((o) => o.id !== first.squadId);
+
+  await search('input[placeholder="Search any swimmer…"]', first.name);
+  if ((await rowsFor(first.name)).length !== 1)
+    throw new Error("more than one swimmer named " + first.name);
+
+  await page.evaluate((o) => {
+    window.__driveFrom = o.from;
+    const sel = document.querySelector("select");
+    sel.value = o.id;
+    sel.dispatchEvent(new Event("change", { bubbles: true }));
+  }, { id: target.id, from: first.squadId });
+  await page.waitForTimeout(900);
+
+  // Now open that squad and look at its roster — the step the move screen cannot answer for.
+  // Back to the hub, then into the squad from its tile — the way a coach gets there.
+  const openSquadRoster = async () => {
+    await page.evaluate(() => {
+      const i = document.querySelector('svg.lucide-arrow-left, i[data-lucide="arrow-left"]');
+      const b = i && i.closest("button");
+      if (b) b.click();
+    });
+    await page.waitForTimeout(800);
+    await tap(page, target.label);
+    await page.waitForTimeout(1000);
+    const here = await page.evaluate(() => (document.body.innerText || "").slice(0, 400));
+    if (!here.includes(target.label))
+      throw new Error("did not land on " + target.label + "; screen begins: " + here.slice(0, 120));
+  };
+  await openSquadRoster();
+
+  // The squad's own roster lists everyone in it, so the name is either on this screen or it
+  // is not in the squad.
+  const onRoster = () => page.evaluate((nm) => (document.body.innerText || "").includes(nm), first.name);
+  eq(await onRoster(), true,
+     first.name + " was moved into " + target.label + " and is not on its roster");
+
+  // The copy the database held before the move, arriving late. This is the club's real case:
+  // another phone that has not heard, whose copy used to come back and win.
+  const undone = await page.evaluate((swName) => {
+    const ed = JSON.parse(localStorage.getItem("vx_roster_edits") || "{}");
+    let sq = null, rec = null;
+    for (const [k, list] of Object.entries(ed.added || {}))
+      for (const s of list || []) if (s && s.name === swName) { sq = k; rec = s; }
+    if (!rec) return null;
+    // Their copy: the swimmer still under the squad he came from, with no stamp and no
+    // deletion recorded against it — exactly what the database was holding.
+    const theirs = JSON.parse(JSON.stringify(ed));
+    theirs.added = { ...theirs.added, [sq]: [] };
+    const old = { ...rec }; delete old.movedAt;
+    theirs.added[window.__driveFrom] = [...(theirs.added[window.__driveFrom] || []), old];
+    delete (theirs.deleted || {})[window.__driveFrom];
+    return { merged: window.__vxMergeRoster(ed, theirs), sq };
+  }, first.name);
+  if (undone === null) throw new Error("the move never reached the roster overlay at all");
+
+  const stillThere = (undone.merged.added[undone.sq] || []).some((s) => s && s.name === first.name);
+  eq(stillThere, true,
+     "a copy of the roster written before the move put " + first.name + " back where he came from");
+
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForTimeout(1800);
+  await openSquadRoster();
+  eq(await onRoster(), true, first.name + " was gone from " + target.label + " after a reload");
+
+  return first.name + " → " + target.label + ", on its roster, through a stale pull and a reload";
+});
+
+// ---------------------------------------------------------------------------------------------
 const only = process.argv[2];
 await start();
 const browser = await chromium.launch({ executablePath: CHROME });
