@@ -8781,6 +8781,7 @@ describe("the club as a connector", () => {
    roster ids. Two id spaces that can never meet: every lookup missed, and both tools reported
    the miss as fact rather than as a failure to look. */
 const MCP_DATA = await import("../src/lib/mcpData.ts");
+const BUNDLED = await MCP_DATA.loadRoster();
 
 describe("the connector knows who a swimmer is", () => {
   const EXPORT = JSON.parse(
@@ -8818,7 +8819,7 @@ describe("the connector knows who a swimmer is", () => {
   it("a swimmer's id is not a slug of their name", () => {
     // The exact shape of the old bug: an id built from the name looks plausible and joins to
     // nothing. If one comes back, the fallback in swimmerId() has quietly become the norm.
-    const slugs = MCP_DATA.allSwimmers().filter((s) => s.id.includes("::"));
+    const slugs = MCP_DATA.allSwimmers(BUNDLED).filter((s) => s.id.includes("::"));
     eq(slugs.length, 0, `${slugs.length} swimmers still have a name-slug id, e.g. ${slugs[0]?.id}`);
   });
 
@@ -8829,14 +8830,14 @@ describe("the connector knows who a swimmer is", () => {
     // Written as a literal id on purpose. Asking allSwimmers() for an id and feeding it back is
     // circular — it passes just as happily when both sides are name-slugs that match the
     // database nowhere. "r3" is what attendance_marks actually holds for this child.
-    eq(MCP_DATA.nameOf("r3"), "Arissa Afiq");
-    eq(MCP_DATA.allSwimmers().find((s) => s.id === "r3")?.name, "Arissa Afiq");
+    eq(MCP_DATA.nameOf(BUNDLED, "r3"), "Arissa Afiq");
+    eq(MCP_DATA.allSwimmers(BUNDLED).find((s) => s.id === "r3")?.name, "Arissa Afiq");
   });
 
   it("a swimmer the roster has never heard of is returned as-is, not as a wrong name", () => {
     // The database holds ids for swimmers added after this export (swms…). Guessing a name for
     // one of those would be worse than showing the id, so nameOf hands it back unchanged.
-    eq(MCP_DATA.nameOf("swms01fgni_15167"), "swms01fgni_15167");
+    eq(MCP_DATA.nameOf(BUNDLED, "swms01fgni_15167"), "swms01fgni_15167");
   });
 
   it("swimmer_progress can reach the marks it was missing", () => {
@@ -8844,12 +8845,177 @@ describe("the connector knows who a swimmer is", () => {
     // now the same id, so a real register can be found; before, the comparison was a name-slug
     // against "r3" and every swimmer looked like they had never been marked.
     // A mark as the database stores one, for a swimmer the roster knows.
-    const someone = MCP_DATA.allSwimmers()[0];
+    const someone = MCP_DATA.allSwimmers(BUNDLED)[0];
     const mark = { squad_id: someone.squad, day: "2026-08-01", sw_id: someone.id, status: "present" };
     const bare = someone.id.split("::").pop();
     eq((mark.sw_id || "").split("::").pop() === bare, true,
        "the swimmer's id and the mark's sw_id no longer meet — swimmer_progress is blind again");
-    eq(MCP_DATA.nameOf(mark.sw_id), someone.name);
+    eq(MCP_DATA.nameOf(BUNDLED, mark.sw_id), someone.name);
+  });
+});
+
+/* --------------------------------------------- the squads are the club's, not the export's
+   club_overview said Pre-Team had 3 swimmers while Pre-Team's own register covered 36. Both
+   numbers were real: 3 is what the roster export was exported with, and 36 is the club. Every
+   squad move since that file was written lives in the club's overlay (vx_roster_edits) and not
+   in the file, and a move is recorded as deleted-here plus added-there — so membership cannot
+   be read off the snapshot at all, only rebuilt from it.
+
+   Same shape of mistake as the ids: a confident number that is not the club. */
+describe("the squads are the club's, not the export's", () => {
+  const base = [
+    { slug: "preteam", name: "Pre-Team", swimmers: [
+      { id: "r1", first: "Stays", last: "Put" },
+      { id: "r2", first: "Moves", last: "Up" },
+      { id: "r3", first: "Leaves", last: "Club" },
+    ] },
+    { slug: "advb", name: "Advanced B", swimmers: [{ id: "r4", first: "Already", last: "Here" }] },
+  ];
+  // One of each way the club and the file disagree.
+  const edits = {
+    edits:   { advb: { r2: { name: "Moves Up-Married" } } },
+    deleted: { preteam: { r2: true, r3: true } },
+    added:   { advb: [{ id: "r2", first: "Moves", last: "Up" }, { id: "r9", first: "Joined", last: "Later" }] },
+  };
+  const merged = MCP_DATA.mergeRoster(base, edits);
+  const by = (slug) => merged.find((sq) => sq.slug === slug).swimmers.map((s) => s.id);
+
+  it("a swimmer who moved squad is in the new one and not the old", () => {
+    // The delete and the add are two halves of one move. Honouring only the add would put a
+    // child in two squads at once and count them twice in the headcount.
+    eq(by("preteam").includes("r2"), false, "still in the squad they left");
+    eq(by("advb").includes("r2"), true, "never arrived in the squad they moved to");
+  });
+
+  it("a swimmer who left the club is out of the roster", () => {
+    eq(by("preteam"), ["r1"]);
+  });
+
+  it("a swimmer the club added is in it", () => {
+    eq(by("advb"), ["r4", "r2", "r9"]);
+  });
+
+  it("the headcount is the merged squad, not the exported one", () => {
+    // The bug as it was reported: Pre-Team exported with 3, and 3 was the answer given.
+    eq(base.find((sq) => sq.slug === "preteam").swimmers.length, 3, "fixture drifted");
+    eq(MCP_DATA.squads({ squads: merged, live: true, names: new Map() })
+        .find((sq) => sq.slug === "preteam").swimmers, 1);
+  });
+
+  it("a rename filed under the squad they moved to is applied", () => {
+    const moved = merged.find((sq) => sq.slug === "advb").swimmers.find((s) => s.id === "r2");
+    eq(moved.last, "Up-Married", "the club renamed them and the connector kept the old name");
+  });
+
+  it("a swimmer who has left still has a name for the marks they left behind", () => {
+    // The trap in making membership live: attendance_marks and invoices keep rows for swimmers
+    // who have gone, and resolving those against current membership only would print their id —
+    // undoing the fix that made that column readable at all.
+    const roster = { squads: merged, live: true,
+                     names: new Map([["r3", "Leaves Club"], ["r1", "Stays Put"]]) };
+    eq(MCP_DATA.allSwimmers(roster).some((s) => s.id === "r3"), false, "still counted as a member");
+    eq(MCP_DATA.nameOf(roster, "r3"), "Leaves Club", "a departed swimmer went back to being an id");
+  });
+
+  it("a swimmer the overlay holds under three squads is in exactly one", () => {
+    // The case that made this merge wrong on real data, and it is not hypothetical: moves used
+    // to append the swimmer to the squad they joined without removing them from the one they
+    // left, so overlays holding one child under two or three squads are in the database and on
+    // every device that has pulled since. Reading `added` per squad and trusting it counts that
+    // child once in each — the exact double-count this is supposed to prevent.
+    const three = MCP_DATA.mergeRoster(
+      [{ slug: "junior", name: "Junior", swimmers: [] },
+       { slug: "seniorb", name: "Senior B", swimmers: [] },
+       { slug: "legend", name: "Legend", swimmers: [] }],
+      { edits: {}, deleted: {},
+        added: {
+          legend:  [{ id: "r5", first: "One", last: "Child", movedAt: 1000 }],
+          junior:  [{ id: "r5", first: "One", last: "Child", movedAt: 3000 }],
+          seniorb: [{ id: "r5", first: "One", last: "Child", movedAt: 2000 }],
+        } });
+    const where = three.filter((sq) => sq.swimmers.some((s) => s.id === "r5")).map((sq) => sq.slug);
+    eq(where, ["junior"], "one child, counted in " + where.length + " squads");
+  });
+
+  it("the squad moved to most recently wins over the one with no deletion against it", () => {
+    // The order of those two rules undid a move in front of a coach when it was the other way
+    // round: a stale copy with no deletion recorded beat a move made ten seconds earlier. A
+    // stamp says what happened and when; a missing deletion only says nothing has happened yet.
+    const moved = MCP_DATA.mergeRoster(
+      [{ slug: "legend", name: "Legend", swimmers: [] },
+       { slug: "vortexb", name: "Vortex B", swimmers: [] }],
+      { edits: {},
+        // Nothing deleted against Legend — the older, weaker signal.
+        deleted: { vortexb: {} },
+        added: {
+          legend:  [{ id: "r6", first: "Just", last: "Moved" }],
+          vortexb: [{ id: "r6", first: "Just", last: "Moved", movedAt: 9000 }],
+        } });
+    const where = moved.filter((sq) => sq.swimmers.some((s) => s.id === "r6")).map((sq) => sq.slug);
+    eq(where, ["vortexb"], "the move was quietly undone by a copy that predates it");
+  });
+
+  it("with no stamp anywhere, the squad they were not deleted out of wins", () => {
+    const old = MCP_DATA.mergeRoster(
+      [{ slug: "adva", name: "Advanced A", swimmers: [] },
+       { slug: "junior", name: "Junior", swimmers: [] }],
+      { edits: {}, deleted: { adva: { r7: true } },
+        added: { adva: [{ id: "r7", first: "No", last: "Stamp" }],
+                 junior: [{ id: "r7", first: "No", last: "Stamp" }] } });
+    const where = old.filter((sq) => sq.swimmers.some((s) => s.id === "r7")).map((sq) => sq.slug);
+    eq(where, ["junior"]);
+  });
+
+  it("an overlay missing a part does not take the roster with it", () => {
+    // An overlay written by an older build, or half restored, can arrive without `deleted`. The
+    // app guards this for the same reason: it is not a wrong roster, it is a crash.
+    eq(MCP_DATA.mergeRoster(base, { edits: {}, deleted: {}, added: {} }).length, 2);
+    const bare = MCP_DATA.mergeRoster(base, { edits: {}, deleted: {}, added: {} });
+    eq(bare.find((sq) => sq.slug === "preteam").swimmers.length, 3, "an empty overlay changed the club");
+  });
+
+  it("a date of birth in the overlay does not escape through the merge", () => {
+    // The one that would matter. The roster export has no dob, but the club's overlay does — the
+    // app carries one on a swimmer record and the connector now reads that overlay to get squad
+    // membership right. This file's whole safety argument is that what it exposes is an
+    // allowlist rather than a filter, and this is the check that the new input did not quietly
+    // route around it. These are children; a date of birth is identifying on its own.
+    const withDob = MCP_DATA.mergeRoster(
+      [{ slug: "preteam", name: "Pre-Team", swimmers: [] }],
+      { edits: {}, deleted: {},
+        added: { preteam: [{ id: "r77", first: "Has", last: "Dob", age: 7,
+                             dob: "2019-04-01", medical_note: "asthma" }] } });
+    const roster = { squads: withDob, live: true, names: new Map([["r77", "Has Dob"]]) };
+
+    const listed = MCP_DATA.allSwimmers(roster)[0];
+    eq(Object.keys(listed).sort().join(","), "age,gender,id,name,squad,squadName");
+    eq("dob" in listed, false, "a date of birth reached the connector's output");
+
+    const rec = MCP_DATA.swimmerRecord(roster, "r77");
+    eq(Object.keys(rec.swimmer).sort().join(","), "age,gender,id,name,squad,squadName");
+    eq(JSON.stringify(rec).includes("2019-04-01"), false, "a date of birth reached swimmer_progress");
+    eq(JSON.stringify(rec).includes("asthma"), false, "a medical note reached swimmer_progress");
+  });
+
+  itAsync("a roster it could not read is served as the snapshot and SAID to be", async () => {
+    // The whole point of the previous fix was that a failure to look is not a finding. The same
+    // rule applies here: no overlay means the squads are the export's, and the answer has to
+    // carry that rather than present a stale roster as the club. No service key in this suite,
+    // so this is that path.
+    eq(BUNDLED.live, false, "the suite reached a database — this case is no longer being tested");
+    eq(BUNDLED.squads.length, 9);
+
+    const r = await (await MCP.handleRpc(
+      new Request("https://vortexswimmingclub.com/api/mcp", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: "Bearer " + MCP_TOKEN },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call",
+                               params: { name: "club_overview", arguments: {} } }),
+      }))).json();
+    const body = JSON.parse(r.result.content[0].text);
+    eq(typeof body.rosterNote, "string",
+       "the answer served the snapshot's squads without saying that is what they are");
+    eq(/could not be read/.test(body.rosterNote), true);
   });
 });
 
