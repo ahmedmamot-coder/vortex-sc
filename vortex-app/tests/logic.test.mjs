@@ -8620,7 +8620,6 @@ describe("the connector knows who a swimmer is", () => {
   });
 });
 
-await report();
 
 /* -------------------------------------------------- the roster, one row per change
    This migration has been attempted once and was switched off after it lost data twice
@@ -8690,3 +8689,52 @@ describe("turning the roster document into rows", () => {
     eq(toDoc(old).edits.junior.r1.dob, "02/07/2014");
   });
 });
+
+/* ---------------------------------------------------- a refusal that outlived its cause
+   A write refused with "permission denied for function vx_apply_test_meet" — a fault in the
+   database, fixed an hour later. The queue had branded it permanently refused, so nothing ever
+   asked again and a coach was told for thirteen hours that their account was not allowed to
+   make a change the database had been accepting all night. */
+describe("retrying a write the database once refused", () => {
+  // The real filter out of __vxRetryFailed, lifted from the shipped source.
+  const src = sourceBetween("    // A refusal is not always permanent", "    if(!a.length) return");
+  const split = (all) => {
+    let parked = null;
+    const _failSave = (v) => { parked = v; };
+    const retry = runInSandbox(src + "\nreturn a;", { all, _failSave });
+    return { retry, parked };
+  };
+
+  const minutesAgo = (m) => Date.now() - m * 60000;
+
+  it("a refusal is not retried in the 45-second loop", () => {
+    // Retrying a refusal every 45 seconds is the same refusal on a loop — that is what the
+    // "keep the refusals" rule was protecting against, and it still holds.
+    const out = split([{ sig: "a", refused: true, ts: minutesAgo(1) }]);
+    eq(out.retry.length, 0);
+    eq(out.parked.length, 1, "a fresh refusal must stay parked");
+  });
+
+  it("a refusal is offered again once its cause has had time to be fixed", () => {
+    // Ten minutes on, ask once more. This is the whole difference between a banner that clears
+    // itself when somebody fixes the database and one that has to be dismissed by hand.
+    const out = split([{ sig: "a", refused: true, ts: minutesAgo(11) }]);
+    eq(out.retry.length, 1, "a refusal older than ten minutes is never asked again");
+    eq(out.parked.length, 0);
+  });
+
+  it("an ordinary failure is still retried straight away", () => {
+    // A network drop is not a refusal and must not be slowed down to ten-minute intervals.
+    const out = split([{ sig: "b", refused: false, ts: minutesAgo(0) }]);
+    eq(out.retry.length, 1);
+  });
+
+  it("a refusal with no timestamp is offered rather than parked forever", () => {
+    // Queue entries written by older builds have no ts. Reading that as "just now" would park
+    // them for good, which is the bug this fixes.
+    const out = split([{ sig: "c", refused: true }]);
+    eq(out.retry.length, 1);
+  });
+});
+
+await report();

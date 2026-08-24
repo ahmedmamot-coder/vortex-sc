@@ -513,8 +513,20 @@ if ('serviceWorker' in navigator) {
     // is made of.
     if(live===false) return {tried:0, fixed:0, signedOut:true};
     var all=_failLoad(); if(!all.length) return {tried:0, fixed:0};
-    var a=all.filter(function(x){ return !x.refused; });
-    _failSave(all.filter(function(x){ return x.refused; }));   // keep the refusals, retry the rest
+    // A refusal is not always permanent, and treating it as permanent is how a red banner
+    // outlives its cause. One write was refused with "permission denied for function
+    // vx_apply_test_meet" — a fault in the database, fixed an hour later. Nothing ever asked
+    // again, so a coach was told for thirteen hours that their account was not allowed to make
+    // a change the database had been accepting all night.
+    //
+    // What a 403 depends on — this account's permissions, and the policies on the table — are
+    // exactly the things somebody changes to fix it. So refusals stay out of the 45-second loop,
+    // and are re-offered every ten minutes. A cause that has been fixed heals itself; one that
+    // has not costs six attempts an hour and says the same thing.
+    var REFUSED_RETRY_MS = 600000;
+    var _dueAgain = function(x){ return !!x.refused && (Date.now() - (x.ts || x.since || 0)) > REFUSED_RETRY_MS; };
+    var a=all.filter(function(x){ return !x.refused || _dueAgain(x); });
+    _failSave(all.filter(function(x){ return x.refused && !_dueAgain(x); }));
     if(!a.length) return {tried:0, fixed:0};
     var fixed=0;
     return a.reduce(function(p, it){
