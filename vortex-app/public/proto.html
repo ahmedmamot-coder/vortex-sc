@@ -10272,6 +10272,116 @@ class Component extends DCLogic {
     this.adminEditSwimmer(hit.squadId, swId, {pbs:entries});
     if(!quiet) this.setState({meetDayMsg:'Removed '+hit.name+' — '+event});
   }
+  // ---- The times, in rows of their own --------------------------------------------------------
+  // A swim is written into the swimmer's record inside vx_roster_edits, and vx_roster_edits is
+  // ONE document holding the whole club: every swimmer, and every time any of them has ever
+  // swum. It is the only key the app merges rather than replaces on a pull — which is more than
+  // the others get, and still not enough. A merge resolves a swimmer two devices both changed by
+  // taking one of them whole, so a tablet that loaded the roster this morning and saves any
+  // swimmer this afternoon sends that swimmer's record AS IT WAS THIS MORNING. Every time typed
+  // into that swimmer at the meet in between is inside the copy it wrote over, and nobody is
+  // told, because from the document's point of view nothing failed.
+  //
+  // The club has lost the same meet's results three times. The third time the only surviving
+  // copy was a printed sheet.
+  //
+  // So every swim is also written to swim_times, one row each — the same move already made for
+  // the entries, the meets, the squads and the statuses. Two coaches typing two lanes touch two
+  // rows and cannot overwrite each other at all. The roster document is still written, so every
+  // screen reads a time exactly where it did before; what this adds is a copy the document
+  // cannot reach, and _timesFetch puts a lost time back from it.
+  //
+  // A swimmer swims an event once at a meet, so that is the identity of the swim: correcting a
+  // mistyped time updates the row it belongs to rather than recording a second race.
+  _timeId(meetName, swId, event){
+    return (swId && event) ? (((meetName||'').trim()||'Time trial')+'::'+swId+'::'+event) : '';
+  }
+  _timeToRow(swId, name, p){
+    return { id:this._timeId(p.meet, swId, p.event), meet:((p.meet||'').trim()||'Time trial'),
+      sw_id:swId, sw_name:name||'', event:p.event, sec:+p.sec,
+      course:(p.course==='S'?'S':'L'), course_label:p.courseLabel||(p.course==='S'?'SCM':'LCM'),
+      meet_date:p.meetDate||'', updated_at:new Date().toISOString() };
+  }
+  // What the table holds, by row id, as this device last saw it.
+  _timeRows(){ return (this.timeRows = this.timeRows || {}); }
+  // Bring the table into line with one swimmer's swims after any change to them — a time typed
+  // at the meet, a time corrected, a lane struck out, a whole history edited in Admin. Every one
+  // of those paths ends at adminEditSwimmer, so reconciling there is the one place that cannot
+  // be forgotten. It matters that a removal deletes its row: a row left behind for a swim the
+  // coach took back out is a row _timesFetch would faithfully put back the next morning.
+  _timesReconcile(swId, name, entries){
+    if(!swId) return;
+    const rows=this._timeRows();
+    const want={};
+    (entries||[]).forEach(p=>{ if(!p || !p.event || !(+p.sec>0)) return;
+      const r=this._timeToRow(swId, name, p); if(r.id) want[r.id]=r; });
+    const had=Object.keys(rows).filter(id=>rows[id] && rows[id].sw_id===swId);
+    const changed=Object.keys(want).filter(id=>{ const was=rows[id];
+      return !was || +was.sec!==+want[id].sec || was.course!==want[id].course
+          || (was.meet_date||'')!==(want[id].meet_date||'') || (was.sw_name||'')!==(want[id].sw_name||''); })
+      .map(id=>want[id]);
+    const gone=had.filter(id=>!want[id]);
+    Object.keys(want).forEach(id=>{ rows[id]=want[id]; });
+    gone.forEach(id=>{ delete rows[id]; });
+    if(!window.__vxUpsert) return;
+    // Sent and forgotten on purpose. The roster write has already happened and the screen
+    // already shows the time; making the coach wait on a second write — or telling them it
+    // failed — would be reporting on the backup copy, not on their swim.
+    try{ if(changed.length) Promise.resolve(window.__vxUpsert('swim_times', changed)).catch(()=>{}); }catch(e){}
+    try{ if(gone.length && window.__vxDelete)
+      Promise.resolve(window.__vxDelete('swim_times',
+        'id=in.('+gone.map(encodeURIComponent).join(',')+')')).catch(()=>{}); }catch(e){}
+  }
+  // Read the rows, and put back anything the roster document has lost.
+  async _timesFetch(){
+    if(!window.__vxSelect) return;
+    const rows=await window.__vxSelect('swim_times', 'select=*&limit=40000');
+    if(rows==null) return;                      // table missing / offline → keep what we have
+    // An empty answer is not the same as "nobody has ever swum". A read refused by row-level
+    // security is not an error: PostgREST answers 200 with []. Taking that literally would wipe
+    // this device's picture of the table on the one morning it was the copy that mattered.
+    if(!rows.length && Object.keys(this._timeRows()).length) return;
+    const held={};
+    rows.forEach(r=>{ if(!r || !r.id || !r.sw_id || !r.event) return; held[r.id]=r; });
+    this.timeRows=held;
+    // A row the roster has no swim for is a time the document lost. The roster is what every
+    // screen reads, so putting it back means putting it back there.
+    const missing={};
+    this.allSwimmersFlat().forEach(sw=>{
+      const mine=this._swEntries(sw)||[];
+      const have={}; mine.forEach(p=>{ const id=this._timeId(p.meet, sw.id, p.event); if(id) have[id]=true; });
+      Object.keys(held).forEach(id=>{ const r=held[id];
+        if(r.sw_id!==sw.id || have[id]) return;
+        (missing[sw.id]=missing[sw.id]||{sw, add:[]}).add.push({event:r.event, sec:+r.sec,
+          course:(r.course==='S'?'S':'L'), courseLabel:r.course_label||(r.course==='S'?'SCM':'LCM'),
+          meet:(r.meet==='Time trial')?'':(r.meet||''), meetDate:r.meet_date||''});
+      });
+    });
+    const ids=Object.keys(missing);
+    if(ids.length){
+      ids.forEach(id=>{ const m=missing[id];
+        this.adminEditSwimmer(m.sw.squadId, id, {pbs:[...(this._swEntries(m.sw)||[]), ...m.add]}); });
+      const n=ids.reduce((a,id)=>a+missing[id].add.length, 0);
+      try{ this.audit('meet.times.restore', n+' swim'+(n===1?'':'s'), {swims:n, swimmers:ids.length}); }catch(e){}
+      this.setState({meetDayMsg:n+' time'+(n===1?'':'s')+' put back from the database ✓'});
+    }
+    this._timesMigrateOnce();
+  }
+  // First run on a device: every swim the roster holds that the table has never been told about.
+  // After this the two are in step and every later change goes through _timesReconcile.
+  async _timesMigrateOnce(){
+    if(this._timesMigrated || !window.__vxUpsert) return; this._timesMigrated=true;
+    const rows=this._timeRows(); const push=[];
+    this.allSwimmersFlat().forEach(sw=>{
+      (this._swEntries(sw)||[]).forEach(p=>{ if(!p || !p.event || !(+p.sec>0)) return;
+        const r=this._timeToRow(sw.id, sw.name, p);
+        if(r.id && !rows[r.id]){ rows[r.id]=r; push.push(r); } });
+    });
+    if(!push.length) return;
+    for(let i=0;i<push.length;i+=200){
+      try{ if(!(await window.__vxUpsert('swim_times', push.slice(i,i+200)))) return; }catch(e){ return; }
+    }
+  }
   toggleCompEvent(ev){ const cur=this.state.compEvents.slice(); const i=cur.indexOf(ev); if(i>=0) cur.splice(i,1); else cur.push(ev); this.setState({compEvents:cur}); }
   createCompetition(){ const S=this.state;
     if(!S.compName.trim()) return this.setState({compErr:'Enter a competition name.'});
@@ -10435,7 +10545,14 @@ class Component extends DCLogic {
     this.setState({swEditPbs:pbs, swEditPbTimeDraft:'', swEditPbMeet:'', swEditPbMeetDate:''}); }
   swEditRemovePb(idx){ const S=this.state; this.setState({swEditPbs:(S.swEditPbs||[]).filter((p,i)=>i!==idx)}); }
   adminEditSwimmer(squadId, id, patch, newSquadId){
-    if(patch.pbs){ const d=this._deriveFromEntries(patch.pbs); const top=d.top; patch.pbs=d.pbs; patch.results=d.results; patch.entries=d.entries; patch.meets=d.meets; patch.meetCount=d.meetCount; patch.topEvent=top?top.event:'—'; patch.topTime=top?top.time:'—'; patch.topSec=top?top.sec:999; }
+    if(patch.pbs){ const d=this._deriveFromEntries(patch.pbs); const top=d.top; patch.pbs=d.pbs; patch.results=d.results; patch.entries=d.entries; patch.meets=d.meets; patch.meetCount=d.meetCount; patch.topEvent=top?top.event:'—'; patch.topTime=top?top.time:'—'; patch.topSec=top?top.sec:999;
+      // Every path that changes a swimmer's times arrives here — the meet-day keypad, a
+      // correction, a struck lane, the whole history edited in Admin. Mirroring the swims to
+      // their own rows at this one point is what makes them survive the roster document.
+      try{ this._timesReconcile(id,
+        (patch.name||'').trim() || ((((this.roster||{})[squadId]||[]).find(s=>s&&s.id===id)||{}).name||''),
+        d.entries); }catch(e){}
+    }
     const addedIdx=(this.rosterEdits.added[squadId]||[]).findIndex(s=>s.id===id);
     if(addedIdx>=0){
       this.rosterEdits.added[squadId]=this.rosterEdits.added[squadId].map(s=> s.id===id? {...s, ...patch, name:patch.name?patch.name.trim():s.name}:s);
@@ -15225,7 +15342,7 @@ class Component extends DCLogic {
   // empty; this re-fetches them with the signed-in user's JWT so their data appears.
   _refetchAll(){
     try{ this._repullOnce(); }catch(e){}
-    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_swStatusFetch','_wearFetch','_wearStatusFetch','_hrSetsFetch','_wellnessFetch','_inbodyFetch','_invoicesFetch','_membershipsFetch','_entriesFetch','_meetsFetch','_planCustomFetch','_familyFetch']
+    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_swStatusFetch','_wearFetch','_wearStatusFetch','_hrSetsFetch','_wellnessFetch','_inbodyFetch','_invoicesFetch','_membershipsFetch','_entriesFetch','_timesFetch','_meetsFetch','_planCustomFetch','_familyFetch']
       .forEach((f)=>{ try{ if(typeof this[f]==='function') this[f](); }catch(e){} });
     try{ this._attendFetchStaged(); }catch(e){}
   }
@@ -15242,7 +15359,7 @@ class Component extends DCLogic {
     // marks until one of them signed out. Both halves are fixed: the subscription above, and
     // this call.
     try{ this._attendFetchStaged(); }catch(e){}
-    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_swStatusFetch','_wellnessFetch','_inbodyFetch','_invoicesFetch','_membershipsFetch','_entriesFetch','_meetsFetch','_hrSetsFetch','_wearFetch','_planCustomFetch']
+    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_swStatusFetch','_wellnessFetch','_inbodyFetch','_invoicesFetch','_membershipsFetch','_entriesFetch','_timesFetch','_meetsFetch','_hrSetsFetch','_wearFetch','_planCustomFetch']
       .forEach((f)=>{ try{ if(typeof this[f]==='function') this[f](); }catch(e){} });
   }
   // Stage B: give a signed-in staff member a real Supabase Auth session (JWT) in the background,
@@ -15941,6 +16058,9 @@ class Component extends DCLogic {
     this._invoicesFetch();
     this._membershipsFetch();
     this._entriesFetch();
+    // The times have rows of their own now, and this is the read that puts back any the
+    // roster document lost between one device's pull and another's save.
+    this._timesFetch();
     this._meetsFetch();
     this._attendFetchStaged();
     // Status is a table now, not a key in the shared document, so it needs loading here with the
