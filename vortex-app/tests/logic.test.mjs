@@ -69,6 +69,148 @@ describe("session clock", () => {
   it("formats an evening start", () => eq(clock(18 * 3600), "6:00 PM"));
 });
 
+/* ------------------------------------------------------- the printed session
+   A coach prints the session and tapes it to the wall or the lane rope; a swimmer
+   reads it from the water, wet, at arm's length and further. Two things decide
+   whether that works: how big the words are, and whether the whole session is on
+   the one sheet in front of them rather than a second page nobody carries to the
+   pool deck. _fitPrintSheet() is what settles both — it sizes the sheet to the
+   page, shrinking a long session to fit and growing a short one until the paper
+   is full. */
+describe("session printed on one page", () => {
+  const MM = 96 / 25.4, MAX_W = 186 * MM, MAX_H = 273 * MM;   // A4 less the 12mm @page margin
+
+  /** A stand-in for the sheet's CSSStyleDeclaration: enough of it to be measured and set. */
+  function fakeStyle() {
+    const props = Object.create(null);
+    return {
+      display: "", position: "", left: "", top: "", visibility: "", transformOrigin: "",
+      setProperty(name, value) { props[name] = String(value); },
+      removeProperty(name) { delete props[name]; if (typeof this[name] === "string") this[name] = ""; },
+      get(name) { return props[name]; },
+      has(name) { return name in props; },
+    };
+  }
+
+  /**
+   * A sheet whose height answers to the width it is laid out at, the way the real one does:
+   * `rows` set rows of `rowH` each, whose text needs `textPx` and wraps when the sheet is
+   * narrower than that. The app resets zoom before every measurement, so this reports plain
+   * layout pixels — exactly what a browser hands back at zoom 1.
+   */
+  function fakeSheet({ rows = 30, rowH = 34, textPx = 400 } = {}) {
+    const style = fakeStyle();
+    return {
+      style,
+      get scrollHeight() {
+        const w = parseFloat(style.get("width") || "0");
+        return w ? rows * rowH * Math.ceil(textPx / w) : 0;
+      },
+    };
+  }
+
+  const zoomOf = (sheet) => parseFloat(sheet.style.get("zoom") || "1");
+  /** What the browser would actually print: the sheet as the fit left it, scaled by its zoom. */
+  const printedHeight = (sheet) => sheet.scrollHeight * zoomOf(sheet);
+
+  // Growing needs the browser to support `zoom`; the shrink path has always assumed it.
+  const withZoomSupport = (ok) => { globalThis.CSS = { supports: () => ok }; };
+  const fit = (sheet, zoomOk = true) => { withZoomSupport(zoomOk); bind("_fitPrintSheet", {})(sheet); return sheet; };
+
+  // A session twice as long as the page. It has to come down to fit.
+  const long = fit(fakeSheet({ rows: 40, rowH: (2 * MAX_H) / 40 }));
+  it("a long session is shrunk", () => eq(zoomOf(long) < 1, true, `zoom was ${zoomOf(long)}`));
+  it("a long session lands on one page", () =>
+    eq(printedHeight(long) <= MAX_H, true, `printed ${printedHeight(long)} > ${MAX_H}`));
+  it("and is not shrunk further than it has to be", () =>
+    eq(zoomOf(long) > 0.45, true, `zoom was ${zoomOf(long)} — half the page would have done`));
+
+  // A short session used to print small in the middle of an empty page. It should fill it.
+  const short = fit(fakeSheet({ rows: 8, rowH: (0.4 * MAX_H) / 8 }));
+  it("a short session is grown, not left adrift on a mostly empty page", () =>
+    eq(zoomOf(short) > 1.5, true, `zoom was ${zoomOf(short)}`));
+  it("growing still stops at one page", () =>
+    eq(printedHeight(short) <= MAX_H, true, `printed ${printedHeight(short)} > ${MAX_H}`));
+  it("growth is capped, so a two-set session is not a poster", () =>
+    eq(zoomOf(short) <= 1.9, true, `zoom was ${zoomOf(short)}`));
+
+  // Nearly a full page: there is a little room left and the words should take it.
+  const nearly = fit(fakeSheet({ rows: 24, rowH: (0.9 * MAX_H) / 24 }));
+  it("a nearly-full session takes the last of the page", () =>
+    eq(zoomOf(nearly) > 1.03 && zoomOf(nearly) <= 1.12, true, `zoom was ${zoomOf(nearly)}`));
+  it("and does not spill over doing it", () =>
+    eq(printedHeight(nearly) <= MAX_H, true, `printed ${printedHeight(nearly)} > ${MAX_H}`));
+
+  // Whatever the zoom, the sheet still has to print the full width of the paper.
+  it("the printed sheet still fills the width", () => {
+    const w = parseFloat(short.style.get("width")), k = zoomOf(short);
+    eq(Math.abs(w * k - MAX_W) < 1, true, `${w} × ${k} = ${w * k}, not ${MAX_W}`);
+  });
+
+  // A session no page can hold at a readable size stops at the floor rather than
+  // printing something nobody can read from the water.
+  const huge = fit(fakeSheet({ rows: 60, rowH: (6 * MAX_H) / 60 }));
+  it("never shrinks past legible", () => eq(zoomOf(huge) >= 0.35, true, `zoom was ${zoomOf(huge)}`));
+
+  // Firefox before 126 ignores `zoom`. Growing there would lay the sheet out narrow and
+  // then not scale it up — half a page of paper, wasted.
+  const noZoom = fit(fakeSheet({ rows: 8, rowH: (0.4 * MAX_H) / 8 }), false);
+  it("a browser without zoom is left alone rather than printed narrow", () =>
+    eq(noZoom.style.has("zoom") || noZoom.style.has("width"), false));
+
+  // The same element is on screen the rest of the time. Nothing from the fit may survive.
+  it("the fit is stripped off the sheet afterwards", () => {
+    const sheet = fit(fakeSheet({ rows: 8, rowH: (0.4 * MAX_H) / 8 }));
+    globalThis.document = { getElementById: () => sheet };
+    bind("_printRestore", { _printAnchor: null })();
+    eq(sheet.style.has("zoom") || sheet.style.has("width") || sheet.style.display !== "", false);
+  });
+});
+
+/* ---------------------------------------------------- print sheet, in the water
+   Everything above only decides the scale. The sizes it scales are in the sheet's
+   own markup, in both copies of it — the print preview a coach checks, and the
+   hidden #vx-print-sheet the printer is actually given. Small grey type was the
+   whole complaint: a swimmer in the water cannot read 11px, and neither can a
+   coach on the deck. */
+describe("printed plan is readable from the water", () => {
+  // Both copies of the plan block: the preview (pvsec/pvset) and the print sheet (psec/pset).
+  const blocks = SOURCE.split('<sc-if value="{{ printIsPlan }}" hint-placeholder-val="{{ true }}">')
+    .slice(1)
+    .map((s) => s.slice(0, s.indexOf('<sc-if value="{{ printIsProgram }}"')));
+  it("both the preview and the printed sheet are checked", () => eq(blocks.length, 2));
+
+  // Only the sets and section headings — the club name and the date above them are
+  // identification, not the workout, and nobody reads those from the lane.
+  const setRows = blocks.map((b) => {
+    const a = b.indexOf('<sc-for list="{{ printSheet.sections }}"');
+    return b.slice(a);
+  });
+
+  for (const [i, rows] of setRows.entries()) {
+    const which = i === 0 ? "preview" : "print sheet";
+    const sizes = [...rows.matchAll(/font-size:([\d.]+)px/g)].map((m) => Number(m[1]));
+
+    it(`${which}: every printed size is set`, () => eq(sizes.length > 10, true, `only ${sizes.length}`));
+    it(`${which}: nothing on the sheet is under 12px`, () => {
+      const small = sizes.filter((s) => s < 12);
+      eq(small.length, 0, `still printing at ${small.join(", ")}px`);
+    });
+    it(`${which}: the set itself is 18px or bigger`, () => {
+      const setText = /<td style="[^"]*font-size:(\d+)px;font-weight:700;line-height:1\.3;vertical-align:top">/.exec(rows);
+      eq(setText !== null && Number(setText[1]) >= 18, true, "the line the swimmer reads is the one that matters");
+    });
+    it(`${which}: the distance is 20px or bigger`, () => {
+      const dist = /<td style="[^"]*font-weight:800;font-size:(\d+)px;line-height:1\.2;color:\{\{ printSheet\.accent \}\}/.exec(rows);
+      eq(dist !== null && Number(dist[1]) >= 20, true);
+    });
+    it(`${which}: the set text is black, not grey`, () =>
+      eq(/color:#3A4152;font-size/.test(rows), false, "#3A4152 on a wet page is not readable"));
+    it(`${which}: the set text is bold`, () =>
+      eq(/font-size:18px;font-weight:700/.test(rows), true));
+  }
+});
+
 /* --------------------------------------------------------------- membership
    Package pricing and renewal windows the club bills against. */
 describe("academy membership", () => {

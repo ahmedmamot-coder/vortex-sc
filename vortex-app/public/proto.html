@@ -6744,32 +6744,32 @@ if ('serviceWorker' in navigator) {
                       <div style="text-align:right"><div style="font-weight:700;font-size:14px;color:{{ printSheet.accent }}">{{ printSheet.squadName }}</div><div style="font-size:11px;color:#7A8296">{{ printSheet.printDate }}</div></div>
                     </div>
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-                      <div><div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#9AA2B4;font-weight:700">Session · {{ printSheet.zoneLabel }}</div><div style="font-size:20px;font-weight:700;color:#0C1116;margin-top:2px">{{ printSheet.title }}</div><div style="font-size:12px;color:#7A8296;margin-top:2px">{{ printSheet.coach }}</div><div style="font-family:monospace;font-size:12px;font-weight:700;color:{{ printSheet.accent }};margin-top:3px">{{ printSheet.timeWindow }}</div></div>
-                      <div style="text-align:right"><div style="font-size:26px;font-weight:700;color:{{ printSheet.accent }};font-family:monospace">{{ printSheet.total }}</div><div style="font-size:11px;color:#9AA2B4;text-transform:uppercase;letter-spacing:.06em">metres</div></div>
+                      <div><div style="font-size:12.5px;letter-spacing:.1em;text-transform:uppercase;color:#5B6478;font-weight:800">Session · {{ printSheet.zoneLabel }}</div><div style="font-size:25px;font-weight:800;color:#0C1116;margin-top:2px">{{ printSheet.title }}</div><div style="font-size:15px;font-weight:700;color:#3A4152;margin-top:2px">{{ printSheet.coach }}</div><div style="font-family:monospace;font-size:15px;font-weight:800;color:{{ printSheet.accent }};margin-top:3px">{{ printSheet.timeWindow }}</div></div>
+                      <div style="text-align:right"><div style="font-size:32px;font-weight:800;color:{{ printSheet.accent }};font-family:monospace">{{ printSheet.total }}</div><div style="font-size:12.5px;font-weight:800;color:#5B6478;text-transform:uppercase;letter-spacing:.06em">metres</div></div>
                     </div>
                     <sc-for list="{{ printSheet.sections }}" as="pvsec" hint-placeholder-count="4">
                       <div style="margin-bottom:14px">
-                        <div style="display:flex;align-items:center;gap:7px;margin-bottom:7px"><span style="width:9px;height:9px;border-radius:50%;background:{{ pvsec.dot }}"></span><span style="font-weight:700;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#0C1116">{{ pvsec.title }}</span><span style="font-size:12px;color:#9AA2B4">· {{ pvsec.subtotal }}m</span><span style="margin-left:auto;font-family:monospace;font-size:11px;font-weight:700;color:#7A8296">{{ pvsec.startLabel }}</span></div>
+                        <div style="display:flex;align-items:center;gap:7px;margin-bottom:7px"><span style="width:9px;height:9px;border-radius:50%;background:{{ pvsec.dot }}"></span><span style="font-weight:800;font-size:18px;letter-spacing:.05em;text-transform:uppercase;color:#0C1116">{{ pvsec.title }}</span><span style="font-size:15px;font-weight:700;color:#5B6478">· {{ pvsec.subtotal }}m</span><span style="margin-left:auto;font-family:monospace;font-size:14px;font-weight:800;color:#5B6478">{{ pvsec.startLabel }}</span></div>
                         <div style="display:flex;align-items:stretch;gap:7px">
-                        <sc-if value="{{ pvsec.isRounds }}" hint-placeholder-val="{{ false }}"><div style="flex:none;width:26px;display:flex;align-items:center;justify-content:center;border:2.5px solid #7C4DFF;border-right:none;border-radius:7px 0 0 7px"><span style="font-family:monospace;font-weight:800;font-size:12px;color:#7C4DFF">{{ pvsec.roundsLabel }}</span></div></sc-if>
+                        <sc-if value="{{ pvsec.isRounds }}" hint-placeholder-val="{{ false }}"><div style="flex:none;width:30px;display:flex;align-items:center;justify-content:center;border:2.5px solid #7C4DFF;border-right:none;border-radius:7px 0 0 7px"><span style="font-family:monospace;font-weight:800;font-size:15px;color:#7C4DFF">{{ pvsec.roundsLabel }}</span></div></sc-if>
                         <table style="flex:1;width:100%;border-collapse:collapse">
                           <sc-for list="{{ pvsec.sets }}" as="pvset" hint-placeholder-count="3">
                             <tr style="border-bottom:2px solid #C9B8F5">
-                              <td style="padding:7px 8px 7px 0;font-family:monospace;font-weight:700;color:{{ printSheet.accent }};width:56px;vertical-align:top">{{ pvset.dist }}m<sc-if value="{{ pvset.hasDistSend }}" hint-placeholder-val="{{ false }}"><br><span style="font-size:9.5px;color:#2733D6;font-weight:700">{{ pvset.distSend }}</span></sc-if><sc-if value="{{ pvset.zoneCode }}" hint-placeholder-val="{{ false }}"><br><span style="font-size:9px;color:#9AA2B4;font-weight:700">{{ pvset.zoneCode }}</span></sc-if></td>
-                              <td style="padding:7px 0;color:#3A4152;font-size:13px;vertical-align:top">
+                              <td style="padding:9px 10px 9px 0;font-family:monospace;font-weight:800;font-size:20px;line-height:1.2;color:{{ printSheet.accent }};width:76px;vertical-align:top">{{ pvset.dist }}m<sc-if value="{{ pvset.hasDistSend }}" hint-placeholder-val="{{ false }}"><br><span style="font-size:13.5px;color:#2733D6;font-weight:800">{{ pvset.distSend }}</span></sc-if><sc-if value="{{ pvset.zoneCode }}" hint-placeholder-val="{{ false }}"><br><span style="font-size:12.5px;color:#5B6478;font-weight:800">{{ pvset.zoneCode }}</span></sc-if></td>
+                              <td style="padding:9px 0;color:#0C1116;font-size:18px;font-weight:700;line-height:1.3;vertical-align:top">
                                 {{ pvset.txt }}
-                                <sc-if value="{{ pvset.hasZone }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:{{ squad.accent }};font-weight:700;margin-top:2px">Zone: {{ pvset.zoneStr }}</div></sc-if>
-                                <sc-if value="{{ pvset.hasStrokes }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#067EEA;font-weight:700;margin-top:2px">Stroke: {{ pvset.strokesStr }}</div></sc-if>
-                                <sc-if value="{{ pvset.hasTypes }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#0A0F1A;font-weight:700;margin-top:2px">Type: {{ pvset.typesStr }}</div></sc-if>
-                                <sc-if value="{{ pvset.hasLabels }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#4F46E5;font-weight:700;margin-top:2px">Focus: {{ pvset.labelsStr }}</div></sc-if>
-                                <sc-if value="{{ pvset.hasGroups }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#0E7490;font-weight:700;margin-top:2px">Groups: {{ pvset.groupsStr }}</div></sc-if>
-                                <sc-if value="{{ pvset.hasSwimmers }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#3730A3;font-weight:700;margin-top:2px">Swimmers: {{ pvset.swimmersStr }}</div></sc-if>
-                                <sc-if value="{{ pvset.hasSendoff }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#2733D6;font-weight:700;margin-top:2px">Send-off: {{ pvset.sendoffStr }}</div></sc-if>
-                                <sc-if value="{{ pvset.hasEquip }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#3B2FD6;font-weight:600;margin-top:2px">Tools: {{ pvset.equipStr }}</div></sc-if>
-                                <sc-if value="{{ pvset.hasRest }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#9A6206;font-weight:700;margin-top:2px">Rest: {{ pvset.restStr }}</div></sc-if>
-                                <sc-if value="{{ pvset.hasHr }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#C81E4B;font-weight:700;margin-top:2px">{{ pvset.hrStr }}</div></sc-if>
+                                <sc-if value="{{ pvset.hasZone }}" hint-placeholder-val="{{ false }}"><div style="font-size:14.5px;color:{{ squad.accent }};font-weight:700;margin-top:3px">Zone: {{ pvset.zoneStr }}</div></sc-if>
+                                <sc-if value="{{ pvset.hasStrokes }}" hint-placeholder-val="{{ false }}"><div style="font-size:14.5px;color:#067EEA;font-weight:700;margin-top:3px">Stroke: {{ pvset.strokesStr }}</div></sc-if>
+                                <sc-if value="{{ pvset.hasTypes }}" hint-placeholder-val="{{ false }}"><div style="font-size:14.5px;color:#0A0F1A;font-weight:700;margin-top:3px">Type: {{ pvset.typesStr }}</div></sc-if>
+                                <sc-if value="{{ pvset.hasLabels }}" hint-placeholder-val="{{ false }}"><div style="font-size:14.5px;color:#4F46E5;font-weight:700;margin-top:3px">Focus: {{ pvset.labelsStr }}</div></sc-if>
+                                <sc-if value="{{ pvset.hasGroups }}" hint-placeholder-val="{{ false }}"><div style="font-size:14.5px;color:#0E7490;font-weight:700;margin-top:3px">Groups: {{ pvset.groupsStr }}</div></sc-if>
+                                <sc-if value="{{ pvset.hasSwimmers }}" hint-placeholder-val="{{ false }}"><div style="font-size:14.5px;color:#3730A3;font-weight:700;margin-top:3px">Swimmers: {{ pvset.swimmersStr }}</div></sc-if>
+                                <sc-if value="{{ pvset.hasSendoff }}" hint-placeholder-val="{{ false }}"><div style="font-size:14.5px;color:#2733D6;font-weight:700;margin-top:3px">Send-off: {{ pvset.sendoffStr }}</div></sc-if>
+                                <sc-if value="{{ pvset.hasEquip }}" hint-placeholder-val="{{ false }}"><div style="font-size:14.5px;color:#3B2FD6;font-weight:700;margin-top:3px">Tools: {{ pvset.equipStr }}</div></sc-if>
+                                <sc-if value="{{ pvset.hasRest }}" hint-placeholder-val="{{ false }}"><div style="font-size:14.5px;color:#9A6206;font-weight:700;margin-top:3px">Rest: {{ pvset.restStr }}</div></sc-if>
+                                <sc-if value="{{ pvset.hasHr }}" hint-placeholder-val="{{ false }}"><div style="font-size:14.5px;color:#C81E4B;font-weight:700;margin-top:3px">{{ pvset.hrStr }}</div></sc-if>
                               </td>
-                              <td style="padding:7px 0 7px 8px;text-align:right;width:74px;white-space:nowrap;vertical-align:top"><span style="display:block;font-family:monospace;font-weight:700;font-size:11px;color:#7A8296">{{ pvset.timeLabel }}</span><span style="display:block;font-family:monospace;font-weight:700;color:#0C1116">{{ pvset.setMetres }}m</span></td>
+                              <td style="padding:9px 0 9px 8px;text-align:right;width:92px;white-space:nowrap;vertical-align:top"><span style="display:block;font-family:monospace;font-weight:800;font-size:13.5px;color:#5B6478">{{ pvset.timeLabel }}</span><span style="display:block;font-family:monospace;font-weight:800;font-size:18px;color:#0C1116">{{ pvset.setMetres }}m</span></td>
                             </tr>
                           </sc-for>
                         </table>
@@ -7338,32 +7338,32 @@ if ('serviceWorker' in navigator) {
       <div style="text-align:right"><div style="font-weight:700;font-size:14px;color:{{ printSheet.accent }}">{{ printSheet.squadName }}</div><div style="font-size:11px;color:#7A8296">{{ printSheet.printDate }}</div></div>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-      <div><div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#9AA2B4;font-weight:700">Session · {{ printSheet.zoneLabel }}</div><div style="font-size:20px;font-weight:700;color:#0C1116;margin-top:2px">{{ printSheet.title }}</div><div style="font-size:12px;color:#7A8296;margin-top:2px">{{ printSheet.coach }}</div><div style="font-family:monospace;font-size:12px;font-weight:700;color:{{ printSheet.accent }};margin-top:3px">{{ printSheet.timeWindow }}</div></div>
-      <div style="text-align:right"><div style="font-size:26px;font-weight:700;color:{{ printSheet.accent }};font-family:monospace">{{ printSheet.total }}</div><div style="font-size:11px;color:#9AA2B4;text-transform:uppercase;letter-spacing:.06em">metres</div></div>
+      <div><div style="font-size:12.5px;letter-spacing:.1em;text-transform:uppercase;color:#5B6478;font-weight:800">Session · {{ printSheet.zoneLabel }}</div><div style="font-size:25px;font-weight:800;color:#0C1116;margin-top:2px">{{ printSheet.title }}</div><div style="font-size:15px;font-weight:700;color:#3A4152;margin-top:2px">{{ printSheet.coach }}</div><div style="font-family:monospace;font-size:15px;font-weight:800;color:{{ printSheet.accent }};margin-top:3px">{{ printSheet.timeWindow }}</div></div>
+      <div style="text-align:right"><div style="font-size:32px;font-weight:800;color:{{ printSheet.accent }};font-family:monospace">{{ printSheet.total }}</div><div style="font-size:12.5px;font-weight:800;color:#5B6478;text-transform:uppercase;letter-spacing:.06em">metres</div></div>
     </div>
     <sc-for list="{{ printSheet.sections }}" as="psec" hint-placeholder-count="4">
       <div style="margin-bottom:14px;break-inside:avoid">
-        <div style="display:flex;align-items:center;gap:7px;margin-bottom:7px"><span style="width:9px;height:9px;border-radius:50%;background:{{ psec.dot }}"></span><span style="font-weight:700;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#0C1116">{{ psec.title }}</span><span style="font-size:12px;color:#9AA2B4">· {{ psec.subtotal }}m</span><span style="margin-left:auto;font-family:monospace;font-size:11px;font-weight:700;color:#7A8296">{{ psec.startLabel }}</span></div>
+        <div style="display:flex;align-items:center;gap:7px;margin-bottom:7px"><span style="width:9px;height:9px;border-radius:50%;background:{{ psec.dot }}"></span><span style="font-weight:800;font-size:18px;letter-spacing:.05em;text-transform:uppercase;color:#0C1116">{{ psec.title }}</span><span style="font-size:15px;font-weight:700;color:#5B6478">· {{ psec.subtotal }}m</span><span style="margin-left:auto;font-family:monospace;font-size:14px;font-weight:800;color:#5B6478">{{ psec.startLabel }}</span></div>
         <div style="display:flex;align-items:stretch;gap:7px">
-        <sc-if value="{{ psec.isRounds }}" hint-placeholder-val="{{ false }}"><div style="flex:none;width:26px;display:flex;align-items:center;justify-content:center;border:2.5px solid #7C4DFF;border-right:none;border-radius:7px 0 0 7px"><span style="font-family:monospace;font-weight:800;font-size:12px;color:#7C4DFF">{{ psec.roundsLabel }}</span></div></sc-if>
+        <sc-if value="{{ psec.isRounds }}" hint-placeholder-val="{{ false }}"><div style="flex:none;width:30px;display:flex;align-items:center;justify-content:center;border:2.5px solid #7C4DFF;border-right:none;border-radius:7px 0 0 7px"><span style="font-family:monospace;font-weight:800;font-size:15px;color:#7C4DFF">{{ psec.roundsLabel }}</span></div></sc-if>
         <table style="flex:1;width:100%;border-collapse:collapse">
           <sc-for list="{{ psec.sets }}" as="pset" hint-placeholder-count="3">
             <tr style="border-bottom:2px solid #C9B8F5">
-              <td style="padding:7px 8px 7px 0;font-family:monospace;font-weight:700;color:{{ printSheet.accent }};width:56px;vertical-align:top">{{ pset.dist }}m<sc-if value="{{ pset.hasDistSend }}" hint-placeholder-val="{{ false }}"><br><span style="font-size:9.5px;color:#2733D6;font-weight:700">{{ pset.distSend }}</span></sc-if><sc-if value="{{ pset.zoneCode }}" hint-placeholder-val="{{ false }}"><br><span style="font-size:9px;color:#9AA2B4;font-weight:700">{{ pset.zoneCode }}</span></sc-if></td>
-              <td style="padding:7px 0;color:#3A4152;font-size:13px;vertical-align:top">
+              <td style="padding:9px 10px 9px 0;font-family:monospace;font-weight:800;font-size:20px;line-height:1.2;color:{{ printSheet.accent }};width:76px;vertical-align:top">{{ pset.dist }}m<sc-if value="{{ pset.hasDistSend }}" hint-placeholder-val="{{ false }}"><br><span style="font-size:13.5px;color:#2733D6;font-weight:800">{{ pset.distSend }}</span></sc-if><sc-if value="{{ pset.zoneCode }}" hint-placeholder-val="{{ false }}"><br><span style="font-size:12.5px;color:#5B6478;font-weight:800">{{ pset.zoneCode }}</span></sc-if></td>
+              <td style="padding:9px 0;color:#0C1116;font-size:18px;font-weight:700;line-height:1.3;vertical-align:top">
                 {{ pset.txt }}
-                <sc-if value="{{ pset.hasZone }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:{{ squad.accent }};font-weight:700;margin-top:2px">Zone: {{ pset.zoneStr }}</div></sc-if>
-                <sc-if value="{{ pset.hasStrokes }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#067EEA;font-weight:700;margin-top:2px">Stroke: {{ pset.strokesStr }}</div></sc-if>
-                <sc-if value="{{ pset.hasTypes }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#0A0F1A;font-weight:700;margin-top:2px">Type: {{ pset.typesStr }}</div></sc-if>
-                <sc-if value="{{ pset.hasLabels }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#4F46E5;font-weight:700;margin-top:2px">Focus: {{ pset.labelsStr }}</div></sc-if>
-                <sc-if value="{{ pset.hasGroups }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#0E7490;font-weight:700;margin-top:2px">Groups: {{ pset.groupsStr }}</div></sc-if>
-                <sc-if value="{{ pset.hasSwimmers }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#3730A3;font-weight:700;margin-top:2px">Swimmers: {{ pset.swimmersStr }}</div></sc-if>
-                <sc-if value="{{ pset.hasSendoff }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#2733D6;font-weight:700;margin-top:2px">Send-off: {{ pset.sendoffStr }}</div></sc-if>
-                <sc-if value="{{ pset.hasEquip }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#3B2FD6;font-weight:600;margin-top:2px">Tools: {{ pset.equipStr }}</div></sc-if>
-                <sc-if value="{{ pset.hasRest }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#9A6206;font-weight:700;margin-top:2px">Rest: {{ pset.restStr }}</div></sc-if>
-                <sc-if value="{{ pset.hasHr }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:#C81E4B;font-weight:700;margin-top:2px">{{ pset.hrStr }}</div></sc-if>
+                <sc-if value="{{ pset.hasZone }}" hint-placeholder-val="{{ false }}"><div style="font-size:14.5px;color:{{ squad.accent }};font-weight:700;margin-top:3px">Zone: {{ pset.zoneStr }}</div></sc-if>
+                <sc-if value="{{ pset.hasStrokes }}" hint-placeholder-val="{{ false }}"><div style="font-size:14.5px;color:#067EEA;font-weight:700;margin-top:3px">Stroke: {{ pset.strokesStr }}</div></sc-if>
+                <sc-if value="{{ pset.hasTypes }}" hint-placeholder-val="{{ false }}"><div style="font-size:14.5px;color:#0A0F1A;font-weight:700;margin-top:3px">Type: {{ pset.typesStr }}</div></sc-if>
+                <sc-if value="{{ pset.hasLabels }}" hint-placeholder-val="{{ false }}"><div style="font-size:14.5px;color:#4F46E5;font-weight:700;margin-top:3px">Focus: {{ pset.labelsStr }}</div></sc-if>
+                <sc-if value="{{ pset.hasGroups }}" hint-placeholder-val="{{ false }}"><div style="font-size:14.5px;color:#0E7490;font-weight:700;margin-top:3px">Groups: {{ pset.groupsStr }}</div></sc-if>
+                <sc-if value="{{ pset.hasSwimmers }}" hint-placeholder-val="{{ false }}"><div style="font-size:14.5px;color:#3730A3;font-weight:700;margin-top:3px">Swimmers: {{ pset.swimmersStr }}</div></sc-if>
+                <sc-if value="{{ pset.hasSendoff }}" hint-placeholder-val="{{ false }}"><div style="font-size:14.5px;color:#2733D6;font-weight:700;margin-top:3px">Send-off: {{ pset.sendoffStr }}</div></sc-if>
+                <sc-if value="{{ pset.hasEquip }}" hint-placeholder-val="{{ false }}"><div style="font-size:14.5px;color:#3B2FD6;font-weight:700;margin-top:3px">Tools: {{ pset.equipStr }}</div></sc-if>
+                <sc-if value="{{ pset.hasRest }}" hint-placeholder-val="{{ false }}"><div style="font-size:14.5px;color:#9A6206;font-weight:700;margin-top:3px">Rest: {{ pset.restStr }}</div></sc-if>
+                <sc-if value="{{ pset.hasHr }}" hint-placeholder-val="{{ false }}"><div style="font-size:14.5px;color:#C81E4B;font-weight:700;margin-top:3px">{{ pset.hrStr }}</div></sc-if>
               </td>
-              <td style="padding:7px 0 7px 8px;text-align:right;width:74px;white-space:nowrap;vertical-align:top"><span style="display:block;font-family:monospace;font-weight:700;font-size:11px;color:#7A8296">{{ pset.timeLabel }}</span><span style="display:block;font-family:monospace;font-weight:700;color:#0C1116">{{ pset.setMetres }}m</span></td>
+              <td style="padding:9px 0 9px 8px;text-align:right;width:92px;white-space:nowrap;vertical-align:top"><span style="display:block;font-family:monospace;font-weight:800;font-size:13.5px;color:#5B6478">{{ pset.timeLabel }}</span><span style="display:block;font-family:monospace;font-weight:800;font-size:18px;color:#0C1116">{{ pset.setMetres }}m</span></td>
             </tr>
           </sc-for>
         </table>
@@ -15834,9 +15834,15 @@ class Component extends DCLogic {
       +'#vx-print-sheet [style*="break-inside:avoid"]{break-inside:avoid;page-break-inside:avoid}'
       +'table{border-collapse:collapse;width:100%} @page{size:A4;margin:12mm}'
       +'</style></head><body>'+sheet.outerHTML
-      +'<scr'+'ipt>(function(){var s=document.getElementById("vx-print-sheet");if(!s)return;var MM=96/25.4,maxW=186*MM,maxH=273*MM,k=1;'
-      +'for(var i=0;i<7;i++){s.style.zoom="1";s.style.width=(maxW/k)+"px";var lh=s.scrollHeight,ph=lh*k;if(!lh||ph<=maxH)break;k=k*(maxH/ph)*0.985;}'
-      +'s.style.width=(maxW/k)+"px";s.style.zoom=(k<1?String(k):"");})();</scr'+'ipt>'
+      // Same one-page fit as _fitPrintSheet(), run inside the new window: shrink a long
+      // session to fit, grow a short one until the paper is full.
+      +'<scr'+'ipt>(function(){var s=document.getElementById("vx-print-sheet");if(!s)return;'
+      +'var MM=96/25.4,maxW=186*MM,maxH=273*MM,MIN=0.35,MAX=1.9,k=1;'
+      +'function ph(z){s.style.zoom="1";s.style.width=(maxW/z)+"px";return s.scrollHeight*z;}'
+      +'var h1=ph(1);'
+      +'if(h1>maxH){for(var i=0;i<7;i++){var p=ph(k);if(!p||p<=maxH)break;k=Math.max(MIN,k*(maxH/p)*0.985);if(k<=MIN)break;}}'
+      +'else if(h1){var lo=1,hi=MAX;for(var j=0;j<8;j++){var mid=(lo+hi)/2;if(ph(mid)<=maxH)lo=mid;else hi=mid;}k=lo*0.99;}'
+      +'s.style.width=(maxW/k)+"px";s.style.zoom=(k!==1?String(k):"");})();</scr'+'ipt>'
       +'</body></html>';
     w.document.open(); w.document.write(html); w.document.close();
     const doPrint=()=>{ try{ w.focus(); w.print(); }catch(e){} };
@@ -15851,30 +15857,53 @@ class Component extends DCLogic {
     document.body.appendChild(sheet);
     this._fitPrintSheet(sheet);
   }
-  // Shrink the whole sheet so a session always prints on ONE A4 page.
-  // Uses `zoom`, not `transform`: zoom changes the real layout box so the browser
-  // paginates the smaller sheet. `transform` is visual only — the page count would not change.
+  // Fit the whole session onto ONE A4 page, at the largest type that page will hold.
+  // A long session is shrunk until it fits; a short one is GROWN until the paper is full,
+  // because a coach reads this from the deck and a swimmer reads it from the water — half a
+  // page of white space is size that was available and not used.
+  // Uses `zoom`, not `transform`: zoom changes the real layout box so the browser paginates
+  // the resized sheet. `transform` is visual only — the page count would not change.
   _fitPrintSheet(sheet){
     try{
       const MM=96/25.4, maxW=186*MM, maxH=273*MM;   // A4 minus the 12mm @page margin
+      const MIN=0.35, MAX=1.9;                      // never shrink past legible, never a poster
       const st=sheet.style;
       st.removeProperty('zoom'); st.removeProperty('transform'); st.removeProperty('width');
       const prev={display:st.display, position:st.position, left:st.left, top:st.top, visibility:st.visibility};
       st.display='block'; st.position='absolute'; st.left='-10000px'; st.top='0'; st.visibility='hidden';
-      let k=1;
-      for(let i=0;i<7;i++){
-        // Always measure with zoom reset, then work out the printed height ourselves — browsers
-        // disagree on whether measured sizes already include an element's own zoom.
+      // Printed height at zoom k. Always measure with zoom reset and scale the result here —
+      // browsers disagree on whether a measured size already includes the element's own zoom.
+      const physHeightAt=(k)=>{
         st.setProperty('zoom','1','important');
         st.setProperty('width', (maxW/k)+'px', 'important');
-        const layoutH=sheet.scrollHeight, physH=layoutH*k;
-        if(!layoutH || physH<=maxH) break;
-        k=Math.max(0.35, k*(maxH/physH)*0.985);                 // safety margin; never shrink past legible
-        if(k<=0.35) break;
-      }
+        return sheet.scrollHeight*k;
+      };
+      // Growing needs zoom to actually be supported: without it the sheet would print at the
+      // narrow width we laid it out at, which is worse than leaving it alone. Shrinking has
+      // always made that bet — a sheet laid out wider than the page and not zoomed down
+      // overflows either way — so only the growth path asks.
+      const canGrow = typeof CSS!=='undefined' && !!CSS.supports && CSS.supports('zoom','1.5');
+      let k=1;
+      const h1=physHeightAt(1);
+      if(h1>maxH){
+        for(let i=0;i<7;i++){
+          const physH=physHeightAt(k);
+          if(!physH || physH<=maxH) break;
+          k=Math.max(MIN, k*(maxH/physH)*0.985);                // safety margin
+          if(k<=MIN) break;
+        }
+      } else if(h1 && canGrow){
+        // Bisect for the largest zoom that still fits on the one page.
+        let lo=1, hi=MAX;
+        for(let i=0;i<8;i++){
+          const mid=(lo+hi)/2;
+          if(physHeightAt(mid)<=maxH) lo=mid; else hi=mid;
+        }
+        k=lo*0.99;                                              // a hair under, so a printer's
+      }                                                         // rounding cannot spill page 2
       st.setProperty('width', (maxW/k)+'px', 'important');       // keep the printed width full-bleed
       st.display=prev.display; st.position=prev.position; st.left=prev.left; st.top=prev.top; st.visibility=prev.visibility;
-      if(k<1) st.setProperty('zoom', String(k), 'important');
+      if(k!==1) st.setProperty('zoom', String(k), 'important');
       else { st.removeProperty('zoom'); st.removeProperty('width'); }
     }catch(e){}
   }
