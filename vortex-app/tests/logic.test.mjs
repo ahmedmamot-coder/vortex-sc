@@ -1932,6 +1932,218 @@ describe("the club's meets are rows, not one document", () => {
   });
 });
 
+/* ------------------------------------------- the times are rows, not one document
+   The club has lost the same meet's results three times. Not to a failed write — to a
+   successful one: vx_roster_edits holds every swimmer and every time any of them has ever
+   swum, and a device that loaded it in the morning and saved any swimmer in the afternoon
+   sends that swimmer's record as it was in the morning. The times typed at the meet in
+   between are inside the copy it wrote over, and nothing reports a failure, because
+   nothing failed.
+
+   swim_times is one row per swim. These check the two halves that make it a safety net:
+   the rows follow every change to a swimmer's times, and a time the document has lost is
+   put back from them. */
+describe("the times outlive the document that holds them", () => {
+  const ctxWith = (patch = {}) => ({
+    timeRows: {}, roster: {}, squads: [], state: {}, forceUpdate() {},
+    setState(p) { Object.assign(this.state, p); }, audit() {},
+    _deriveFromEntries: (list) => ({ pbs: list, results: list, entries: list, meets: [],
+                                     meetCount: 0, top: null }),
+    ...patch });
+  const deps = ["_timeId", "_timeToRow", "_timeRows"];
+
+  // Sent, deleted, and what the device thinks the table now holds — for one reconcile.
+  const reconcile = (ctx, swId, name, entries) => {
+    const sent = [], deleted = [];
+    const restore = globalThis.window;
+    globalThis.window = { __vxUpsert: (t, rows) => { sent.push([t, rows]); return Promise.resolve(true); },
+                          __vxDelete: (t, qs) => { deleted.push([t, qs]); return Promise.resolve(true); } };
+    try { bind("_timesReconcile", ctx, deps)(swId, name, entries); }
+    finally { globalThis.window = restore; }
+    return { sent, deleted, rows: ctx.timeRows };
+  };
+
+  const swim = (extra = {}) => ({ event: "200 Free", sec: 125.8, course: "L", courseLabel: "LCM",
+                                  meet: "Test", meetDate: "2026-08-22", ...extra });
+
+  describe("a swim is one row, and the same swim is always the same row", () => {
+    const id = (ctx = ctxWith()) => bind("_timeId", ctx, []);
+
+    it("a swimmer swims an event once at a meet, so that is its identity", () =>
+      eq(id()("Test", "r256", "400 Free"), "Test::r256::400 Free"));
+
+    // Without this, every time trial in the club shares one id and they overwrite each other.
+    it("a swim with no meet named is still a swim, under a name of its own", () =>
+      eq(id()("", "r256", "400 Free"), "Time trial::r256::400 Free"));
+
+    it("a row with nothing to identify it is not written at all", () =>
+      eq(id()("Test", "", "400 Free") + "|" + id()("Test", "r256", ""), "|"));
+
+    it("the row carries the time, the course and the day it was swum", () => {
+      const r = bind("_timeToRow", ctxWith(), ["_timeId"])("r256", "Mohamed Sherif Basha",
+        swim({ event: "400 Free", sec: 308.6 }));
+      eq(r.sec + " " + r.course + " " + r.course_label + " " + r.meet_date,
+         "308.6 L LCM 2026-08-22");
+      eq(r.sw_name, "Mohamed Sherif Basha", "so a row read raw says who swam it");
+    });
+  });
+
+  describe("the rows follow every change to a swimmer's times", () => {
+    it("a time typed at the meet is written as its own row", () => {
+      const out = reconcile(ctxWith(), "r256", "Mohamed Sherif Basha", [swim()]);
+      eq(out.sent.length, 1);
+      eq(out.sent[0][0], "swim_times");
+      eq(out.sent[0][1][0].id, "Test::r256::200 Free");
+    });
+
+    // A mistyped time corrected is the same race, not a second one.
+    it("a corrected time updates the row rather than adding another", () => {
+      const ctx = ctxWith();
+      reconcile(ctx, "r256", "Basha", [swim()]);
+      const out = reconcile(ctx, "r256", "Basha", [swim({ sec: 124.11 })]);
+      eq(out.sent.length, 1, "the correction went out");
+      eq(out.sent[0][1].length, 1);
+      eq(out.sent[0][1][0].sec, 124.11);
+      eq(Object.keys(out.rows).length, 1, "and there is still one row for the swim");
+    });
+
+    it("a time that has not changed is not sent again", () => {
+      const ctx = ctxWith();
+      reconcile(ctx, "r256", "Basha", [swim()]);
+      eq(reconcile(ctx, "r256", "Basha", [swim()]).sent.length, 0);
+    });
+
+    // The half that keeps the net from becoming a trap: a lane struck out must take its row
+    // with it, or the next _timesFetch faithfully puts the wrong time back.
+    it("a swim taken back out deletes its row", () => {
+      const ctx = ctxWith();
+      reconcile(ctx, "r256", "Basha", [swim(), swim({ event: "400 Free", sec: 308.6 })]);
+      const out = reconcile(ctx, "r256", "Basha", [swim()]);
+      eq(out.deleted.length, 1);
+      eq(out.deleted[0][0], "swim_times");
+      eq(out.deleted[0][1].includes(encodeURIComponent("Test::r256::400 Free")), true);
+      eq(Object.keys(out.rows).length, 1);
+    });
+
+    it("one swimmer's swims are never mistaken for another's", () => {
+      const ctx = ctxWith();
+      reconcile(ctx, "r256", "Basha", [swim()]);
+      const out = reconcile(ctx, "r231", "Ramez Nasr", [swim({ event: "400 IM", sec: 329.68 })]);
+      eq(out.deleted.length, 0, "recording Ramez's race must not delete Basha's");
+      eq(Object.keys(out.rows).length, 2);
+    });
+
+    it("a lane with no time in it is not a swim", () => {
+      const out = reconcile(ctxWith(), "r256", "Basha", [swim({ sec: 0 }), swim({ event: "" })]);
+      eq(out.sent.length, 0);
+    });
+  });
+
+  describe("a time the document lost is put back", () => {
+    const SW = (extra = {}) => ({ id: "r256", name: "Mohamed Sherif Basha", squadId: "vortexb",
+                                  entries: [], ...extra });
+    const row = (extra = {}) => ({ id: "Test::r256::400 Free", meet: "Test", sw_id: "r256",
+      sw_name: "Mohamed Sherif Basha", event: "400 Free", sec: 308.6, course: "L",
+      course_label: "LCM", meet_date: "2026-08-22", ...extra });
+
+    const readWith = (rows, patch = {}) => {
+      const saved = [];
+      const ctx = ctxWith({ _timesMigrated: true,
+        allSwimmersFlat: () => patch.flat || [SW()],
+        adminEditSwimmer(squadId, id, p) { saved.push({ squadId, id, pbs: p.pbs }); },
+        ...patch });
+      const restore = globalThis.window;
+      globalThis.window = { __vxSelect: () => Promise.resolve(rows) };
+      return bind("_timesFetch", ctx, [...deps, "_swEntries", "_resultISO", "_toISODate", "todayISO", "_timesMigrateOnce"])()
+        .then(() => { globalThis.window = restore; return { ctx, saved }; })
+        .catch((e) => { globalThis.window = restore; throw e; });
+    };
+
+    itAsync("the swim comes back into the swimmer the screens read", async () => {
+      const { saved } = await readWith([row()]);
+      eq(saved.length, 1);
+      eq(saved[0].squadId + " " + saved[0].id, "vortexb r256");
+      eq(saved[0].pbs.length, 1);
+      eq(saved[0].pbs[0].event + " " + saved[0].pbs[0].sec, "400 Free 308.6");
+      eq(saved[0].pbs[0].meet, "Test", "under the meet it was swum at");
+    });
+
+    itAsync("it says so, rather than putting the times back in silence", async () => {
+      const { ctx } = await readWith([row()]);
+      eq(/1 time put back/.test(ctx.state.meetDayMsg || ""), true, ctx.state.meetDayMsg);
+    });
+
+    // The other half. A boot that rewrites the roster document every time is the very
+    // mechanism this is here to defend against.
+    itAsync("a roster that has every swim is left alone", async () => {
+      const { saved } = await readWith([row()], { flat: [SW({
+        entries: [{ event: "400 Free", sec: 308.6, course: "L", meet: "Test", meetDate: "2026-08-22" }] })] });
+      eq(saved.length, 0);
+    });
+
+    itAsync("a swim recorded for someone else is not put into this swimmer", async () => {
+      const { saved } = await readWith([row({ id: "Test::r231::400 IM", sw_id: "r231",
+                                              event: "400 IM", sec: 329.68 })]);
+      eq(saved.length, 0);
+    });
+
+    // A SELECT refused by row-level security is not an error: PostgREST answers 200 with [].
+    // Read literally, that is "nobody in this club has ever swum".
+    itAsync("an empty read does not erase what this device knows the table holds", async () => {
+      const { ctx } = await readWith([], { timeRows: { "Test::r256::400 Free": row() } });
+      eq(Object.keys(ctx.timeRows).length, 1);
+    });
+
+    itAsync("a table this device cannot reach at all changes nothing", async () => {
+      const { ctx, saved } = await readWith(null, { timeRows: { "Test::r256::400 Free": row() } });
+      eq(saved.length, 0);
+      eq(Object.keys(ctx.timeRows).length, 1);
+    });
+
+    itAsync("a time trial comes back as a time trial, not as a meet called one", async () => {
+      const { saved } = await readWith([row({ id: "Time trial::r256::400 Free", meet: "Time trial" })]);
+      eq(saved[0].pbs[0].meet, "", "or the same swim would get a second row on the next save");
+    });
+  });
+
+  // Wiring. Every path that changes a swimmer's times — the meet-day keypad, a correction, a
+  // struck lane, a history edited in Admin — goes through adminEditSwimmer, so that is the one
+  // place the mirror cannot be forgotten.
+  describe("nothing changes a time without the rows hearing about it", () => {
+    it("saving a swimmer's times reconciles their rows", () => {
+      const seen = [];
+      const ctx = ctxWith({ rosterEdits: { added: {}, edits: {}, deleted: {} },
+        roster: { vortexb: [{ id: "r256", name: "Mohamed Sherif Basha" }] },
+        persistRosterEdits: () => true,
+        _timesReconcile(id, name, entries) { seen.push({ id, name, n: (entries || []).length }); } });
+      bind("adminEditSwimmer", ctx, [])("vortexb", "r256", { pbs: [swim()] });
+      eq(seen.length, 1);
+      eq(seen[0].id + " " + seen[0].n, "r256 1");
+      eq(seen[0].name, "Mohamed Sherif Basha", "named from the roster when the patch does not");
+    });
+
+    it("a change that touches no times does not touch the rows", () => {
+      const seen = [];
+      const ctx = ctxWith({ rosterEdits: { added: {}, edits: {}, deleted: {} },
+        persistRosterEdits: () => true,
+        _timesReconcile() { seen.push(1); } });
+      bind("adminEditSwimmer", ctx, [])("vortexb", "r256", { name: "Mohamed S Basha" });
+      eq(seen.length, 0);
+    });
+
+    it("the read runs on boot, not only once a coach opens a meet", () =>
+      eq(/this\._timesFetch\(\);/.test(SOURCE), true));
+
+    it("and again whenever the app refetches everything", () =>
+      eq(SOURCE.split("'_timesFetch'").length - 1, 2));
+  });
+
+  // The document is still written — every screen reads a time out of the roster, and a device
+  // that has not run swim_times.sql must behave exactly as it did before.
+  it("the roster is still the copy the app reads", () =>
+    eq(/this\.adminEditSwimmer\(hit\.squadId, swId, \{pbs:entries\}\);/.test(SOURCE), true));
+});
+
 /* -------------------------------------------- the meet's results, out of the app
    A Hy-Tek file is only worth writing if something can read it back. The app
    already parses the club's own .hy3 files, so the export is checked by putting
