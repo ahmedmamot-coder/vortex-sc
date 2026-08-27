@@ -1138,7 +1138,10 @@ if ('serviceWorker' in navigator) {
   // allowed" send a person to completely different places, and that was being written to a
   // console nobody has open on a phone at the poolside.
   window.__vxLastWriteErr = null;
-  window.__vxUpsert = function(table, rows){ return ready().then(function(){ if(!_haveTok()){ _vxQueue(function(){ window.__vxUpsert(table, rows); }); _failAdd("upsert", table, rows, NOTSENT, "waiting for the sign-in to land"); return false; } return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":"resolution=merge-duplicates,return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(r.ok){ window.__vxLastWriteErr=null; _blockClearTable(table); return true; } if(r.status===401||r.status===403){ _vxQueue(function(){ window.__vxUpsert(table, rows); }); } return r.text().then(function(t){ try{console.warn("vx upsert "+table+" HTTP "+r.status+": "+t);}catch(e){} _failAdd("upsert", table, rows, r.status, t); var said=""; try{ said=(JSON.parse(t)||{}).message||""; }catch(e){} window.__vxLastWriteErr={table:table, status:r.status, said:said||String(t||"").slice(0,200)}; return false; }); }).catch(function(e){ _failAdd("upsert", table, rows, 0, "network: "+(e&&e.message)); window.__vxLastWriteErr={table:table, status:0, said:"it could not be sent from this device"+((e&&e.message)?(" ("+e.message+")"):"")}; return false; }); });
+  // `opts.ignoreDuplicates` sends a write that may only fill gaps: a row that already exists is
+  // left exactly as it is. For a seed — a write whose whole purpose is to populate something
+  // empty — that is the difference between doing nothing and replacing what a club already had.
+  window.__vxUpsert = function(table, rows, opts){ return ready().then(function(){ if(!_haveTok()){ _vxQueue(function(){ window.__vxUpsert(table, rows, opts); }); _failAdd("upsert", table, rows, NOTSENT, "waiting for the sign-in to land"); return false; } return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":((opts&&opts.ignoreDuplicates)?"resolution=ignore-duplicates":"resolution=merge-duplicates")+",return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(r.ok){ window.__vxLastWriteErr=null; _blockClearTable(table); return true; } if(r.status===401||r.status===403){ _vxQueue(function(){ window.__vxUpsert(table, rows, opts); }); } return r.text().then(function(t){ try{console.warn("vx upsert "+table+" HTTP "+r.status+": "+t);}catch(e){} _failAdd("upsert", table, rows, r.status, t); var said=""; try{ said=(JSON.parse(t)||{}).message||""; }catch(e){} window.__vxLastWriteErr={table:table, status:r.status, said:said||String(t||"").slice(0,200)}; return false; }); }).catch(function(e){ _failAdd("upsert", table, rows, 0, "network: "+(e&&e.message)); window.__vxLastWriteErr={table:table, status:0, said:"it could not be sent from this device"+((e&&e.message)?(" ("+e.message+")"):"")}; return false; }); });
   };
   // Supabase Realtime (websocket) — best-effort live updates. On any change to `table`, calls
   // onChange(). Auto-reconnects, heartbeats, and re-auths on token refresh. If realtime isn't
@@ -8824,6 +8827,17 @@ class Component extends DCLogic {
     if(!window.__vxSelect) return;
     const rows=await window.__vxSelect('vx_squads_t', 'select=*&order=sort.asc&limit=200');
     if(rows==null) return;                    // table missing or unreadable: keep the fallback
+    // An empty answer is not the same as "this club has no squads". A row-level-security
+    // refusal on a SELECT is answered 200 with [], which arrives here looking exactly like a
+    // table nobody has filled yet — and the seed below then writes the nine default squads
+    // over the club's real ones. That is not hypothetical: a set of renames made at 12:54 was
+    // gone by 13:51, replaced by defaults, and the only trace left was the audit line saying
+    // the rename had happened. The same guard already stands in front of the meets and the
+    // swimmer statuses, for the same reason.
+    if(!rows.length && Array.isArray(this.squadRows) && this.squadRows.length){
+      try{ console.warn('vx: squads read came back empty while this device holds squad rows — keeping them'); }catch(e){}
+      return;
+    }
     if(!rows.length){ try{ await this._squadsSeed(); }catch(e){} return; }
     this.squadRows=rows;
     this._rebuildSquads(); try{ this.rebuildRoster(); }catch(e){}
@@ -8851,11 +8865,28 @@ class Component extends DCLogic {
     // happening; it is simply the app writing to Supabase without pause for as long as the tab is
     // open, on every staff device at once.
     if(this._squadsSeeded) return;
+    // Ask the database who it thinks this device is, rather than trusting a token this device
+    // has not yet seen refused. The empty read that sent us here is exactly what a session the
+    // policies do not accept looks like, and seeding on that answer is what overwrites a club.
+    // vx_is_staff() is granted to authenticated, so the app can simply ask.
+    if(!(await this._dbSaysStaff())) return;
     const rows=(this.squads||[]).map((sq,i)=>this._squadRow(sq, i));
     if(!rows.length) return;
-    const ok=await window.__vxUpsert('vx_squads_t', rows);
+    // Fill, never replace. If the read was a refusal rather than an empty table, every one of
+    // these rows already exists and the write must leave all of them alone.
+    const ok=await window.__vxUpsert('vx_squads_t', rows, {ignoreDuplicates:true});
     if(ok){ this._squadsSeeded=true; return this._squadsFetch(); }
     if(this._policyRefused(window.__vxLastWriteErr)) this._policyHold('squads');
+  }
+  // Does the database itself say this device is staff? Every other check here reads something
+  // this device stored about itself, which is the wrong question when what went wrong is that
+  // the database stopped agreeing. This asks it directly, with the app's own token.
+  async _dbSaysStaff(){
+    try{
+      if(!window.__vxRpc) return false;
+      const r=await window.__vxRpc('vx_is_staff', {});
+      return r===true;
+    }catch(e){ return false; }
   }
   _squadRow(sq, sort){
     return { id:sq.id, name:sq.name||'', ages:sq.ages||'', accent:sq.accent||'#2733D6',
