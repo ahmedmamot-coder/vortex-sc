@@ -6736,7 +6736,9 @@ if ('serviceWorker' in navigator) {
                   <div style="flex:1"><h1 style="font-size:19px;font-weight:700;margin:0">Print preview</h1><p style="margin:1px 0 0;font-size:11.5px;color:rgba(255,255,255,.55)">Review before printing or saving as PDF</p></div>
                 </div>
                 <div class="vx-scroll" style="flex:1;overflow-y:auto;padding:14px 15px 14px">
-                  <div class="vx-pattern-bg" style="border-radius:16px;padding:20px;box-shadow:0 4px 18px rgba(11,20,40,.1)">
+                  <div id="vx-preview-host" style="width:100%;display:flex;justify-content:center">
+                  <div style="width:{{ printPaperBoxW }};height:{{ printPaperBoxH }};flex:none;overflow:hidden;border-radius:12px;box-shadow:0 4px 18px rgba(11,20,40,.12);background:#fff">
+                  <div class="vx-pattern-bg" style="width:{{ printPaperInnerW }};height:{{ printPaperInnerH }};overflow:hidden;padding:20px;zoom:{{ printPaperZoom }}">
                     <sc-if value="{{ printIsPlan }}" hint-placeholder-val="{{ true }}">
                     <div style="display:flex;align-items:center;gap:12px;border-bottom:3px solid {{ printSheet.accent }};padding-bottom:14px;margin-bottom:18px">
                       <img src="assets/b798adf9.png" alt="Vortex SC" style="width:44px;height:44px">
@@ -6831,6 +6833,8 @@ if ('serviceWorker' in navigator) {
                       <span style="font-size:10.5px;color:#9AA2B4">Generated from the Vortex SC coaching app</span>
                       <span style="display:flex;align-items:center;gap:6px"><img src="assets/b798adf9.png" alt="" style="height:18px;width:18px"><span style="font-weight:700;font-size:12px;color:#0C1116;letter-spacing:.01em">VORTEX SWIMMING CLUB</span></span>
                     </div>
+                  </div>
+                  </div>
                   </div>
                 </div>
                 <div style="flex:none;padding:12px 15px 22px;background:#fff;border-top:1px solid #E5E9F0;display:flex;gap:10px">
@@ -7696,7 +7700,7 @@ class Component extends DCLogic {
       meetsMsg:'', meetsMsgOk:false,
       showVortexId:false,
       compBuildOpen:false, compName:'', compLocation:'', compDate:'', compCourse:'LCM', compEvents:[], compErr:'',
-      printPreviewOpen:false,
+      printPreviewOpen:false, printPaperScale:1, printPaperZoom:1,
       staffEditId:null, staffForm:{name:'',pin:''}, staffAddOpen:false, staffAddForm:{name:'',user:'',pass:'',email:'',pin:'',role:'Coach',phone:'',squadId:''}, staffAddMsg:'', staffAddOk:false, staffAddBusy:false, meetsCalForm:{name:'',date:'',place:''},
       settingsMsg:'',
       pushOn:(function(){ try{ return localStorage.getItem('vx_push_on')==='1'; }catch(e){ return false; } })(),
@@ -15854,56 +15858,92 @@ class Component extends DCLogic {
     document.body.appendChild(sheet);
     this._fitPrintSheet(sheet);
   }
-  // Fit the whole session onto ONE A4 page, at the largest type that page will hold.
-  // A long session is shrunk until it fits; a short one is GROWN until the paper is full,
-  // because a coach reads this from the deck and a swimmer reads it from the water — half a
-  // page of white space is size that was available and not used.
+  // The zoom at which a sheet fills one A4 page and no more. Two callers want this number:
+  // the sheet the printer is handed, and the paper the coach checks in the preview. It is the
+  // same measurement for both, which is the only reason the preview can promise to be what
+  // comes out. Leaves the element exactly as it found it.
   //
   // The budget is deliberately under the paper: Safari prints headers and footers by default
   // and takes the room for them out of the page, and every printer keeps an unprintable edge.
-  // Sizing to the full 273mm is how a sheet that measured as fitting still came out on two
-  // pages. The height set at the end is the backstop for whatever that margin does not cover:
-  // the sheet is exactly one page tall, so there is no second page for anything to flow onto.
+  // Sizing to the full 273mm is how a sheet that measured as fitting still came out on two.
+  _pageFitZoom(el){
+    const MM=96/25.4, maxW=186*MM, budget=273*MM*0.94;
+    const MIN=0.35, MAX=1.9;                      // never shrink past legible, never a poster
+    const st=el.style;
+    const had={zoom:st.zoom, width:st.width, display:st.display, position:st.position,
+               left:st.left, top:st.top, visibility:st.visibility};
+    st.display='block'; st.position='absolute'; st.left='-10000px'; st.top='0'; st.visibility='hidden';
+    // Printed height at zoom k. Always measure with zoom reset and scale the result here —
+    // browsers disagree on whether a measured size already includes the element's own zoom.
+    const physHeightAt=(k)=>{
+      st.setProperty('zoom','1','important');
+      st.setProperty('width', (maxW/k)+'px', 'important');
+      return el.scrollHeight*k;
+    };
+    let k=1;
+    try{
+      // Bisect for the largest zoom that still fits the budget. Printed height rises with the
+      // zoom (a narrower layout is never shorter), so the fit is a single crossing to find.
+      if(!physHeightAt(1)) k=1;                             // nothing rendered — leave it alone
+      else if(physHeightAt(MAX)<=budget) k=MAX;             // a short session: fill the paper
+      else if(physHeightAt(MIN)>budget) k=MIN;              // longer than one legible page
+      else {
+        let lo=MIN, hi=MAX;
+        for(let i=0;i<12;i++){ const mid=(lo+hi)/2; if(physHeightAt(mid)<=budget) lo=mid; else hi=mid; }
+        k=lo;
+      }
+    } finally {
+      st.removeProperty('zoom'); st.removeProperty('width');
+      st.display=had.display; st.position=had.position; st.left=had.left; st.top=had.top; st.visibility=had.visibility;
+      if(had.zoom) st.zoom=had.zoom;
+      if(had.width) st.width=had.width;
+    }
+    return k;
+  }
+  // Fit the whole session onto ONE A4 page, at the largest type that page will hold. A long
+  // session is shrunk until it fits; a short one is GROWN until the paper is full, because a
+  // coach reads this from the deck and a swimmer reads it from the water — half a page of
+  // white space is size that was available and not used.
+  //
+  // The height set at the end is the backstop for whatever the budget does not cover: the
+  // sheet is exactly one page tall, so there is no second page for anything to flow onto.
   //
   // Uses `zoom`, not `transform`: zoom changes the real layout box so the browser paginates
   // the resized sheet. `transform` is visual only — the page count would not change.
   _fitPrintSheet(sheet){
     try{
-      const MM=96/25.4, maxW=186*MM, maxH=273*MM;   // A4 minus the 12mm @page margin
-      const budget=maxH*0.94;                       // headers, footers, unprintable edge
-      const MIN=0.35, MAX=1.9;                      // never shrink past legible, never a poster
+      const MM=96/25.4, maxW=186*MM, budget=273*MM*0.94;
       // Every part of this needs `zoom` to be honoured. Without it the sheet would print at
       // whatever width it was laid out at and ignore the height — worse than not fitting at
       // all — so a browser that lacks zoom (Firefox before 126) is left exactly as it is.
       if(!(typeof CSS!=='undefined' && CSS.supports && CSS.supports('zoom','1.5'))) return;
       const st=sheet.style;
       ['zoom','transform','width','height','overflow'].forEach(p=>st.removeProperty(p));
-      const prev={display:st.display, position:st.position, left:st.left, top:st.top, visibility:st.visibility};
-      st.display='block'; st.position='absolute'; st.left='-10000px'; st.top='0'; st.visibility='hidden';
-      // Printed height at zoom k. Always measure with zoom reset and scale the result here —
-      // browsers disagree on whether a measured size already includes the element's own zoom.
-      const physHeightAt=(k)=>{
-        st.setProperty('zoom','1','important');
-        st.setProperty('width', (maxW/k)+'px', 'important');
-        return sheet.scrollHeight*k;
-      };
-      // Bisect for the largest zoom that still fits the budget. Printed height rises with the
-      // zoom (a narrower layout is never shorter), so the fit is a single crossing to find.
-      let k;
-      if(!physHeightAt(1)) { k=1; }                          // nothing rendered — leave it alone
-      else if(physHeightAt(MAX)<=budget) k=MAX;              // a short session: fill the paper
-      else if(physHeightAt(MIN)>budget) k=MIN;               // longer than one legible page
-      else {
-        let lo=MIN, hi=MAX;
-        for(let i=0;i<12;i++){ const mid=(lo+hi)/2; if(physHeightAt(mid)<=budget) lo=mid; else hi=mid; }
-        k=lo;
-      }
+      const k=this._pageFitZoom(sheet);
       st.setProperty('width', (maxW/k)+'px', 'important');   // keep the printed width full-bleed
       st.setProperty('height', (budget/k)+'px', 'important');// exactly one page, whatever happens
       st.setProperty('overflow','hidden','important');
-      st.display=prev.display; st.position=prev.position; st.left=prev.left; st.top=prev.top; st.visibility=prev.visibility;
       st.setProperty('zoom', String(k), 'important');
     }catch(e){}
+  }
+  // The preview shows the paper: the same width the printer is given, at the same fit, scaled
+  // down to whatever room the screen has. Shown at phone width instead, it wrapped where the
+  // paper does not and stacked what the paper prints across — so a coach checking it was
+  // checking a layout that was not the one that came out.
+  _measurePrintPaper(){
+    if(!this.state.printPreviewOpen) return;
+    const host=document.getElementById('vx-preview-host');
+    const sheet=document.getElementById('vx-print-sheet');
+    if(!host || !sheet) return;
+    const w=host.clientWidth;
+    if(!w) return;
+    const scale=Math.min(1, w/(186*96/25.4));
+    let k=1; try{ k=this._pageFitZoom(sheet); }catch(e){}
+    // Measuring happens after every render, and setting state renders again: only speak up
+    // when the answer actually moved, or the two would call each other for ever.
+    if(Math.abs(scale-(this._paperScale||0))<0.002 && Math.abs(k-(this._paperZoom||0))<0.002) return;
+    this._paperScale=scale; this._paperZoom=k;
+    this.setState({printPaperScale:scale, printPaperZoom:k});
   }
   _printRestore(){
     const sheet=document.getElementById('vx-print-sheet');
@@ -15920,6 +15960,8 @@ class Component extends DCLogic {
   componentDidMount(){ this._applyLang(); this._icons(); setTimeout(()=>{ try{ this.birthdayRun(); }catch(e){} }, 6000); this._clock=setInterval(()=>{ if(this.state.clockRunning && this.state.tool==='clock') this.tickClock(); }, 1000);
     this._onBeforePrint=()=>this._printEscape(); this._onAfterPrint=()=>this._printRestore();
     window.addEventListener('beforeprint', this._onBeforePrint); window.addEventListener('afterprint', this._onAfterPrint);
+    this._onPaperResize=()=>{ try{ this._measurePrintPaper(); }catch(e){} };
+    window.addEventListener('resize', this._onPaperResize);
     if(location.hash==='#print-preview') this.setState({screen:'app', pickedId:'ahmed', view:'squad', squadId:'seniora', tab:'plans', printPreviewOpen:true});
     this._checkRecoveryHash();
     this._checkOAuthHash();
@@ -16126,6 +16168,7 @@ class Component extends DCLogic {
     this.setState({liveClock, batteryPct, batteryWidth, netOnline: online});
   }
   componentDidUpdate(){ this._icons();
+    try{ this._measurePrintPaper(); }catch(e){}
     // Re-translate whatever was just drawn (no-op when the app is in English).
     if(this.lang==='ar' || this._langApplied){ try{ this._applyLang(); }catch(e){} }
     const v=this._activeVideo();
@@ -16133,7 +16176,7 @@ class Component extends DCLogic {
     // Remember where we are, so a page refresh returns to the SAME screen (not the hub).
     try{ const s=this.state; if(s.screen==='app'){ const nav={view:s.view, squadId:s.squadId, tab:s.tab, tool:s.tool||null, swimmerId:s.swimmerId||null, adminSection:s.adminSection||null, famTab:s.famTab||null, familyActiveIdx:s.familyActiveIdx||0}; const j=JSON.stringify(nav); if(j!==this._lastNavJson){ this._lastNavJson=j; localStorage.setItem('vx_nav', j); } } }catch(e){}
   }
-  componentWillUnmount(){ clearInterval(this._clock); clearTimeout(this._t); clearInterval(this._statusInt); clearInterval(this._syncInt); clearInterval(this._loungeInt); clearInterval(this._attendInt); clearInterval(this._liveInt); clearInterval(this._plansInt); clearInterval(this._staffInt); try{ document.removeEventListener('visibilitychange', this._onVis); }catch(e){} window.removeEventListener('beforeprint', this._onBeforePrint); window.removeEventListener('afterprint', this._onAfterPrint); window.removeEventListener('online', this._onStatusEvt); window.removeEventListener('offline', this._onStatusEvt); if(this._battery){ try{ this._battery.removeEventListener('levelchange', this._onStatusEvt); this._battery.removeEventListener('chargingchange', this._onStatusEvt); }catch(e){} } }
+  componentWillUnmount(){ clearInterval(this._clock); clearTimeout(this._t); clearInterval(this._statusInt); clearInterval(this._syncInt); clearInterval(this._loungeInt); clearInterval(this._attendInt); clearInterval(this._liveInt); clearInterval(this._plansInt); clearInterval(this._staffInt); try{ document.removeEventListener('visibilitychange', this._onVis); }catch(e){} window.removeEventListener('beforeprint', this._onBeforePrint); window.removeEventListener('afterprint', this._onAfterPrint); window.removeEventListener('resize', this._onPaperResize); window.removeEventListener('online', this._onStatusEvt); window.removeEventListener('offline', this._onStatusEvt); if(this._battery){ try{ this._battery.removeEventListener('levelchange', this._onStatusEvt); this._battery.removeEventListener('chargingchange', this._onStatusEvt); }catch(e){} } }
   // Icons drawn for what the screen actually does, rather than the nearest library match:
   // a register with a tick AND roll lines, a podium with three real steps because we rank
   // swimmers, a stopwatch with its crown. Rendered before lucide runs and the data-lucide
@@ -18643,6 +18686,12 @@ class Component extends DCLogic {
       // otherwise the zoom-to-fit sizing stays applied and the app looks stuck zoomed.
       onConfirmPrint:()=>{ this._printEscape(); setTimeout(()=>window.print(), 30); setTimeout(()=>this._printRestore(), 2500); },
       printPreviewOpen:S.printPreviewOpen,
+      // The preview paper, in the printer's own units: 186x273mm of printable A4, laid out at
+      // the width the sheet is given and then scaled by the page fit and by the room on screen.
+      ...(()=>{ const MM=96/25.4, W=186*MM, H=273*MM, sc=S.printPaperScale||1, k=S.printPaperZoom||1;
+        return { printPaperBoxW: Math.round(W*sc)+'px', printPaperBoxH: Math.round(H*sc)+'px',
+                 printPaperInnerW: (W/k)+'px', printPaperInnerH: (H*0.94/k)+'px',
+                 printPaperZoom: (k*sc).toFixed(4) }; })(),
       printSheet:{ accent:squad.accent, clubName:this.brandConfig.clubName||'Vortex Swimming Club', squadName:squad.name, printDate:new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}), zoneLabel:(zoneRows[zi]?zoneRows[zi].code+' \u00b7 '+zoneRows[zi].name:zName), title:sessionTitle||'Session', coach:squad.coach, total:planTotalN.toLocaleString(),
         timeWindow:this._fmtClockAmPm(planClock.startSec)+' \u2013 '+this._fmtClockAmPm(planClock.endSec)+' \u00b7 '+this._fmtDur(planClock.endSec-planClock.startSec),
         // startLabel is the section's start time, and the printed sheet has a slot for it on every

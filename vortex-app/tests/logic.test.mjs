@@ -119,7 +119,11 @@ describe("session printed on one page", () => {
 
   // Growing needs the browser to support `zoom`; the shrink path has always assumed it.
   const withZoomSupport = (ok) => { globalThis.CSS = { supports: () => ok }; };
-  const fit = (sheet, zoomOk = true) => { withZoomSupport(zoomOk); bind("_fitPrintSheet", {})(sheet); return sheet; };
+  const fit = (sheet, zoomOk = true) => {
+    withZoomSupport(zoomOk);
+    bind("_fitPrintSheet", {}, ["_pageFitZoom"])(sheet);
+    return sheet;
+  };
 
   // A session twice as long as the page. It has to come down to fit.
   const long = fit(fakeSheet({ rows: 40, rowH: (2 * MAX_H) / 40 }));
@@ -170,6 +174,14 @@ describe("session printed on one page", () => {
   });
   it("and what does not fit is clipped rather than paginated", () =>
     eq(short.style.get("overflow"), "hidden"));
+
+  // The preview draws the paper with this same number. If it ever measured separately, the
+  // two could drift and the coach would again be checking a layout that is not what prints.
+  it("the preview is fitted by the same measurement as the print sheet", () => {
+    const preview = methodSource("_measurePrintPaper").body;
+    eq(/this\._pageFitZoom\(sheet\)/.test(preview), true, "the preview measures its own way");
+    eq(/getElementById\('vx-print-sheet'\)/.test(preview), true, "and not off the sheet that prints");
+  });
 
   // The same element is on screen the rest of the time. Nothing from the fit may survive.
   it("the fit is stripped off the sheet afterwards", () => {
