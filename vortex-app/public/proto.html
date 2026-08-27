@@ -3182,9 +3182,9 @@ if ('serviceWorker' in navigator) {
                                   <span style="display:flex;align-items:center;gap:3px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:3px 5px;flex:none"><i data-lucide="ruler" style="width:18px;height:18px;color:{{ squad.accent }}"></i><button onclick="{{ st.onDistDec }}" style="width:23px;height:23px;border:none;border-radius:6px;background:#EEF1F5;color:#3A4152;font-size:16px;font-weight:700;cursor:pointer;line-height:1;padding:0">−</button><input value="{{ st.dist }}" oninput="{{ st.onDist }}" type="number" inputmode="numeric" style="width:42px;border:none;text-align:center;font-family:var(--font-mono);font-weight:700;font-size:14px;color:{{ squad.accent }};outline:none;background:none;padding:0"><button onclick="{{ st.onDistInc }}" style="width:23px;height:23px;border:none;border-radius:6px;background:#EEF1F5;color:#3A4152;font-size:16px;font-weight:700;cursor:pointer;line-height:1;padding:0">+</button><span style="font-size:11px;color:#9AA2B4;font-weight:700">m</span></span>
                                   <span style="display:flex;align-items:center;gap:3px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:3px 5px;flex:none" title="Circuit rounds — repeat this whole set"><i data-lucide="rotate-cw" style="width:16px;height:16px;color:#7A8296"></i><button onclick="{{ st.onCircuitDec }}" style="width:23px;height:23px;border:none;border-radius:6px;background:#EEF1F5;color:#3A4152;font-size:16px;font-weight:700;cursor:pointer;line-height:1;padding:0">−</button><span style="min-width:16px;text-align:center;font-family:var(--font-mono);font-weight:700;font-size:14px;color:#0C1116">{{ st.circuit }}</span><button onclick="{{ st.onCircuitInc }}" style="width:23px;height:23px;border:none;border-radius:6px;background:#EEF1F5;color:#3A4152;font-size:16px;font-weight:700;cursor:pointer;line-height:1;padding:0">+</button><span style="font-size:9px;color:#9AA2B4;font-weight:800;letter-spacing:.04em">RDS</span></span>
                                   <span style="flex:1;min-width:30px;text-align:right;font-family:var(--font-mono);font-size:11px;font-weight:700;color:#9AA2B4">{{ st.setMetres }}m</span>
-                                  <button onclick="{{ st.onRemove }}" style="flex:none;width:24px;height:24px;border-radius:7px;border:none;background:#F4F6F8;color:#9AA2B4;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:14px;height:14px"></i></button>
+                                  <button onclick="{{ st.onUp }}" title="Move this set up" style="flex:none;width:24px;height:24px;border-radius:7px;border:none;background:{{ st.upBg }};color:{{ st.upFg }};cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="chevron-up" style="width:15px;height:15px"></i></button><button onclick="{{ st.onDown }}" title="Move this set down" style="flex:none;width:24px;height:24px;border-radius:7px;border:none;background:{{ st.downBg }};color:{{ st.downFg }};cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="chevron-down" style="width:15px;height:15px"></i></button><button onclick="{{ st.onRemove }}" style="flex:none;width:24px;height:24px;border-radius:7px;border:none;background:#F4F6F8;color:#9AA2B4;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:14px;height:14px"></i></button>
                                 </div>
-                                <input value="{{ st.txt }}" oninput="{{ st.onTxt }}" placeholder="Notes — e.g. build, descend 1–4 (optional)…" style="width:100%;box-sizing:border-box;border:none;outline:none;background:none;font-family:inherit;font-size:12.5px;color:#3A4152;padding:6px 2px 0">
+                                <textarea value="{{ st.txt }}" oninput="{{ st.onTxt }}" rows="{{ st.txtRows }}" placeholder="Notes — one line per thing, press Enter for the next (e.g. 1- 25 kick / 25 swim)…" style="width:100%;box-sizing:border-box;border:none;outline:none;background:none;font-family:inherit;font-size:12.5px;line-height:1.45;color:#3A4152;padding:6px 2px 0;resize:vertical;overflow:hidden;white-space:pre-wrap"></textarea>
                                 <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:9px">
                                   <span style="font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#B9C0CC;align-self:center;margin-right:2px">Type</span>
                                   <sc-for list="{{ st.types }}" as="ty" hint-placeholder-count="5">
@@ -6762,7 +6762,7 @@ if ('serviceWorker' in navigator) {
                             <tr style="border-bottom:2px solid #C9B8F5">
                               <td style="padding:7px 10px 7px 0;font-family:monospace;font-weight:800;font-size:24px;line-height:1.2;color:{{ printSheet.accent }};width:76px;vertical-align:top">{{ pvset.dist }}m<sc-if value="{{ pvset.hasDistSend }}" hint-placeholder-val="{{ false }}"><br><span style="font-size:13.5px;color:#2733D6;font-weight:800">{{ pvset.distSend }}</span></sc-if><sc-if value="{{ pvset.zoneCode }}" hint-placeholder-val="{{ false }}"><br><span style="font-size:12.5px;color:#5B6478;font-weight:800">{{ pvset.zoneCode }}</span></sc-if></td>
                               <td style="padding:7px 0;color:#0C1116;font-size:22px;font-weight:700;line-height:1.32;vertical-align:top">
-                                {{ pvset.txt }}
+                                <span style="white-space:pre-line">{{ pvset.txt }}</span>
                                 <div style="display:inline;line-height:1.42">
                                 <sc-if value="{{ pvset.hasStrokes }}" hint-placeholder-val="{{ false }}"><span style="display:inline-block;font-size:16px;color:#067EEA;font-weight:700;margin:0 11px 0 0;white-space:nowrap">Stroke: {{ pvset.strokesStr }}</span></sc-if>
                                 <sc-if value="{{ pvset.hasTypes }}" hint-placeholder-val="{{ false }}"><span style="display:inline-block;font-size:16px;color:#0A0F1A;font-weight:700;margin:0 11px 0 0;white-space:nowrap">Type: {{ pvset.typesStr }}</span></sc-if>
@@ -7357,7 +7357,7 @@ if ('serviceWorker' in navigator) {
             <tr style="border-bottom:2px solid #C9B8F5">
               <td style="padding:7px 10px 7px 0;font-family:monospace;font-weight:800;font-size:24px;line-height:1.2;color:{{ printSheet.accent }};width:76px;vertical-align:top">{{ pset.dist }}m<sc-if value="{{ pset.hasDistSend }}" hint-placeholder-val="{{ false }}"><br><span style="font-size:13.5px;color:#2733D6;font-weight:800">{{ pset.distSend }}</span></sc-if><sc-if value="{{ pset.zoneCode }}" hint-placeholder-val="{{ false }}"><br><span style="font-size:12.5px;color:#5B6478;font-weight:800">{{ pset.zoneCode }}</span></sc-if></td>
               <td style="padding:7px 0;color:#0C1116;font-size:22px;font-weight:700;line-height:1.32;vertical-align:top">
-                {{ pset.txt }}
+                <span style="white-space:pre-line">{{ pset.txt }}</span>
                 <div style="display:inline;line-height:1.42">
                 <sc-if value="{{ pset.hasStrokes }}" hint-placeholder-val="{{ false }}"><span style="display:inline-block;font-size:16px;color:#067EEA;font-weight:700;margin:0 11px 0 0;white-space:nowrap">Stroke: {{ pset.strokesStr }}</span></sc-if>
                 <sc-if value="{{ pset.hasTypes }}" hint-placeholder-val="{{ false }}"><span style="display:inline-block;font-size:16px;color:#0A0F1A;font-weight:700;margin:0 11px 0 0;white-space:nowrap">Type: {{ pset.typesStr }}</span></sc-if>
@@ -15533,6 +15533,18 @@ class Component extends DCLogic {
     });
     this.closeLadder();
   }
+  // Move one set up or down inside its section. A coach writes a session in the order it comes
+  // to them and then wants the main set third rather than first; before this the only way was to
+  // delete it and type the whole thing again.
+  movePlanSet(id, secId, setId, dir){
+    this.mutatePlan(id, p=>{
+      const sec=(p.sections||[]).find(x=>x.id===secId); if(!sec) return;
+      const sets=sec.sets||[]; const i=sets.findIndex(x=>x.id===setId);
+      const j=i+dir;
+      if(i<0 || j<0 || j>=sets.length) return;   // already at the end it is being moved towards
+      const row=sets[i]; sets[i]=sets[j]; sets[j]=row;
+    });
+  }
   removePlanSet(id, secId, setId){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); if(sec) sec.sets=(sec.sets||[]).filter(x=>x.id!==setId); }); }
   toggleEquip(id, secId, setId, gear){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); const s=sec&&(sec.sets||[]).find(x=>x.id===setId); if(!s)return; s.equip=s.equip||[]; const i=s.equip.indexOf(gear); if(i>=0) s.equip.splice(i,1); else s.equip.push(gear); }); }
   toggleType(id, secId, setId, ty){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); const s=sec&&(sec.sets||[]).find(x=>x.id===setId); if(!s)return; s.types=s.types||[]; const i=s.types.indexOf(ty); if(i>=0) s.types.splice(i,1); else s.types.push(ty); }); }
@@ -16667,6 +16679,15 @@ class Component extends DCLogic {
           onDistDec:()=>this.stepSetField(S.squadId,sm.id,s.id,'dist',-1,0,25), onDistInc:()=>this.stepSetField(S.squadId,sm.id,s.id,'dist',1,0,25),
           onDist:(e)=>this.setSetField(S.squadId,sm.id,s.id,'dist', Math.max(0, parseInt(e.target.value||'0',10)||0)),
           onTxt:(e)=>this.setSetField(S.squadId,sm.id,s.id,'txt', e.target.value),
+          // The notes box grows with what is written in it. Bound rather than measured: every
+          // keystroke re-renders this card, and a height set on the element by hand would be
+          // painted over by the next one.
+          txtRows: Math.max(1, Math.min(8, String(s.txt||'').split('\n').length)),
+          canUp: sxi>0, canDown: sxi<sets.length-1,
+          upBg: sxi>0?'#F4F6F8':'#FAFBFC', upFg: sxi>0?'#3A4152':'#D7DCE4',
+          downBg: sxi<sets.length-1?'#F4F6F8':'#FAFBFC', downFg: sxi<sets.length-1?'#3A4152':'#D7DCE4',
+          onUp:()=>this.movePlanSet(S.squadId,sm.id,s.id,-1),
+          onDown:()=>this.movePlanSet(S.squadId,sm.id,s.id,1),
           onRemove:()=>this.removePlanSet(S.squadId,sm.id,s.id)
         }; }),
         onAdd:()=>this.addPlanSet(S.squadId,sm.id), onAddLadder:()=>this.openLadder(sm.id) };

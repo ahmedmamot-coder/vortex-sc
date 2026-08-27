@@ -69,6 +69,58 @@ describe("session clock", () => {
   it("formats an evening start", () => eq(clock(18 * 3600), "6:00 PM"));
 });
 
+/* ------------------------------------------------------ writing a set, and putting it in order
+   Two things a coach asked for after using the plan editor for a season: notes that can run to
+   more than one line (a main set is "1- 25 kick / 25 swim", then "2- 25 drill / 25 swim", not
+   one long sentence), and a way to make the set that is third be the first without deleting it
+   and typing it again. */
+describe("a set can be written over lines and moved in the order", () => {
+  const planWith = (ids) => ({ sections: [{ id: "sec1", sets: ids.map((id) => ({ id })) }] });
+  /** Run the shipped movePlanSet against a plan and report the order it leaves. */
+  function moved(ids, setId, dir) {
+    let out = null;
+    const ctx = { mutatePlan: (id, fn) => { const p = planWith(ids); fn(p); out = p.sections[0].sets.map((s) => s.id); } };
+    bind("movePlanSet", ctx)("squad", "sec1", setId, dir);
+    return out;
+  }
+
+  it("a set moves up past the one above it", () => eq(moved(["a", "b", "c"], "b", -1).join(), "b,a,c"));
+  it("and down past the one below", () => eq(moved(["a", "b", "c"], "b", 1).join(), "a,c,b"));
+  it("the third can be made the first, one step at a time", () => {
+    eq(moved(["a", "b", "c"], "c", -1).join(), "a,c,b");
+    eq(moved(["a", "c", "b"], "c", -1).join(), "c,a,b");
+  });
+  it("the first will not move off the top", () => eq(moved(["a", "b", "c"], "a", -1).join(), "a,b,c"));
+  it("the last will not move off the bottom", () => eq(moved(["a", "b", "c"], "c", 1).join(), "a,b,c"));
+  it("a set that is not there changes nothing", () => eq(moved(["a", "b"], "zz", -1).join(), "a,b"));
+  it("a section that is not there changes nothing", () => {
+    let out = "untouched";
+    const ctx = { mutatePlan: (id, fn) => { const p = planWith(["a", "b"]); fn(p); out = p.sections[0].sets.map((s) => s.id).join(); } };
+    bind("movePlanSet", ctx)("squad", "nope", "a", 1);
+    eq(out, "a,b");
+  });
+
+  // The notes field is a textarea now, so Enter starts a line instead of doing nothing, and the
+  // box is as tall as what has been written.
+  it("the notes field takes more than one line", () => {
+    eq(/<textarea value="\{\{ st\.txt \}\}"[^>]*rows="\{\{ st\.txtRows \}\}"/.test(SOURCE), true,
+      "still a single-line input");
+  });
+  it("and the sheet that prints keeps the line breaks", () => {
+    const kept = SOURCE.match(/<span style="white-space:pre-line">\{\{ p[v]?set\.txt \}\}<\/span>/g) || [];
+    eq(kept.length, 2, `expected the set text wrapped in both copies of the sheet, found ${kept.length}`);
+  });
+  // Scoped to the coach's own words, and to nothing else. Put on the cell, pre-line turns the
+  // template's own indentation into blank printed lines: the sheet grew until the fit hit its
+  // 0.35 floor and a session that had been comfortable was suddenly the smallest type allowed.
+  it("but not around the markup's own whitespace", () => {
+    const cells = SOURCE.match(/<td style="padding:7px 0;color:#0C1116;font-size:22px[^"]*"/g) || [];
+    eq(cells.length, 2);
+    eq(cells.some((c) => /white-space:pre-line/.test(c)), false,
+      "every newline in the template would print as a blank line");
+  });
+});
+
 /* --------------------------------------------------- the squads table, and a seed that overwrote
    The club's squads moved from one document into a row each. The app fills that table the
    first time it finds it empty — and an empty answer is what a row-level-security refusal
@@ -355,7 +407,7 @@ describe("printed plan is readable from the water", () => {
       eq(small.length, 0, `still printing at ${small.join(", ")}px`);
     });
     it(`${which}: the set itself is 18px or bigger`, () => {
-      const setText = /<td style="[^"]*font-size:(\d+)px;font-weight:700;line-height:1\.32;vertical-align:top">/.exec(rows);
+      const setText = /<td style="[^"]*font-size:(\d+)px;font-weight:700;line-height:1\.32;vertical-align:top[^"]*">/.exec(rows);
       eq(setText !== null && Number(setText[1]) >= 22, true, "the line the swimmer reads is the one that matters");
     });
     it(`${which}: the distance is 22px or bigger`, () => {
