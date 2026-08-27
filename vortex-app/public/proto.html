@@ -9119,8 +9119,12 @@ class Component extends DCLogic {
       // Only the two that swapped are written. Rewriting the whole list to record an order is
       // what made a single document dangerous in the first place.
       const at=(id)=>ids.indexOf(id);
+      // Only id and sort go up. Sending the whole row would carry this device's copy of the
+      // name, ages and colour with it — and a device holding an older copy would put the old
+      // name back on a squad someone else had just renamed, without anyone touching a name.
+      // A reorder is an order; it has no business writing anything else.
       const moved=this.squadRows.filter(r=>at(r.id)!==this.squadRows.indexOf(r))
-        .map(r=>({...r, sort:at(r.id), updated_at:new Date().toISOString()}));
+        .map(r=>({id:r.id, sort:at(r.id), updated_at:new Date().toISOString()}));
       this.squadRows=this.squadRows.map(r=>({...r, sort:at(r.id)})).sort((a,b)=>a.sort-b.sort);
       this._rebuildSquads(); this.forceUpdate();
       try{ if(window.__vxUpsert && moved.length) window.__vxUpsert('vx_squads_t', moved); }catch(e){}
@@ -10468,6 +10472,12 @@ class Component extends DCLogic {
     this.setState({swEditPbs:pbs, swEditPbTimeDraft:'', swEditPbMeet:'', swEditPbMeetDate:''}); }
   swEditRemovePb(idx){ const S=this.state; this.setState({swEditPbs:(S.swEditPbs||[]).filter((p,i)=>i!==idx)}); }
   adminEditSwimmer(squadId, id, patch, newSquadId){
+    // Every other change a coach makes writes an audit line; editing a swimmer wrote none. So
+    // when ten dates of birth were entered and were not there the next day, there was nothing
+    // to say whether they had been refused at the time or lost afterwards — the two want
+    // completely different fixes. Names and dates stay out of it; the fields are enough.
+    try{ this.audit('swimmer.edit', (this.squadById[squadId]||{}).name||squadId,
+      {squad:squadId, swimmer:id, changed:Object.keys(patch||{}).join(','), movedTo:newSquadId||''}); }catch(err){}
     if(patch.pbs){ const d=this._deriveFromEntries(patch.pbs); const top=d.top; patch.pbs=d.pbs; patch.results=d.results; patch.entries=d.entries; patch.meets=d.meets; patch.meetCount=d.meetCount; patch.topEvent=top?top.event:'—'; patch.topTime=top?top.time:'—'; patch.topSec=top?top.sec:999; }
     const addedIdx=(this.rosterEdits.added[squadId]||[]).findIndex(s=>s.id===id);
     if(addedIdx>=0){

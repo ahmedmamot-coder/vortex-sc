@@ -121,6 +121,67 @@ describe("a set can be written over lines and moved in the order", () => {
   });
 });
 
+/* ---------------------------------------------- what a device is allowed to say about a squad
+   The club's squad names have been replaced twice in one day by a device that knew less than
+   the database did. The seed was the first way in and is shut (see below). This is the second:
+   any write that carries a whole row carries this device's copy of the name with it. */
+describe("a reorder writes the order and nothing else", () => {
+  function movedRows(rows, id, dir) {
+    let sent = null;
+    globalThis.window = globalThis.window || {};
+    // Put the global back afterwards: these run before the rest of the file, and a test further
+    // down takes "there is no __vxUpsert here" as its signal to stop.
+    const had = Object.prototype.hasOwnProperty.call(window, "__vxUpsert");
+    const prev = window.__vxUpsert;
+    window.__vxUpsert = (table, payload) => { sent = payload; return true; };
+    const ctx = {
+      squads: rows.map((r) => ({ id: r.id })),
+      squadRows: rows,
+      _rebuildSquads() {}, forceUpdate() {}, _currentSquadEdits: () => ({}), _saveSquads() {},
+    };
+    try { bind("squadMove", ctx)(id, dir); }
+    finally { if (had) window.__vxUpsert = prev; else delete window.__vxUpsert; }
+    return sent;
+  }
+  const rows = () => [
+    { id: "vortexa", name: "Vortex SD", ages: "16", accent: "#8A22D5", sort: 0 },
+    { id: "vortexb", name: "Vortex LD", ages: "15", accent: "#5D22CF", sort: 1 },
+  ];
+
+  it("the move is sent", () => eq(movedRows(rows(), "vortexb", -1).length > 0, true));
+  it("it carries the id and the new place", () => {
+    const sent = movedRows(rows(), "vortexb", -1);
+    eq(sent.every((r) => r.id && typeof r.sort === "number"), true);
+  });
+  it("and no name, so it cannot put an old one back", () => {
+    const sent = movedRows(rows(), "vortexb", -1);
+    eq(sent.some((r) => "name" in r), false, "a reorder would rename a squad it never touched");
+  });
+  it("nor ages or colour", () => {
+    const sent = movedRows(rows(), "vortexb", -1);
+    eq(sent.some((r) => "ages" in r || "accent" in r), false);
+  });
+});
+
+/* --------------------------------------------------------- an edit that leaves a trace
+   Ten dates of birth were entered and were not in the database the next day. Nothing in the
+   audit log said whether they had been refused at the time or lost afterwards, because
+   editing a swimmer was the one change that wrote no audit line at all. */
+describe("editing a swimmer is recorded", () => {
+  it("the edit writes an audit line naming the fields", () => {
+    const src = methodSource("adminEditSwimmer").body;
+    eq(/this\.audit\('swimmer\.edit'/.test(src), true, "still silent");
+    eq(/changed:Object\.keys\(patch\|\|\{\}\)\.join\(','\)/.test(src), true,
+      "it has to say which fields, or it answers nothing");
+  });
+  it("and the line carries no name or date of its own", () => {
+    const src = methodSource("adminEditSwimmer").body;
+    const line = (src.match(/this\.audit\('swimmer\.edit'[^;]*;/) || [""])[0];
+    eq(/patch\.name|patch\.dob/.test(line), false,
+      "an audit log is not the place for a child's name and date of birth");
+  });
+});
+
 /* --------------------------------------------------- the squads table, and a seed that overwrote
    The club's squads moved from one document into a row each. The app fills that table the
    first time it finds it empty — and an empty answer is what a row-level-security refusal
