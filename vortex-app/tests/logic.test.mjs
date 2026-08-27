@@ -69,6 +69,104 @@ describe("session clock", () => {
   it("formats an evening start", () => eq(clock(18 * 3600), "6:00 PM"));
 });
 
+/* --------------------------------------------------- the squads table, and a seed that overwrote
+   The club's squads moved from one document into a row each. The app fills that table the
+   first time it finds it empty — and an empty answer is what a row-level-security refusal
+   looks like too, because PostgREST answers one with 200 and []. So a device the policies
+   did not accept read "no squads", seeded the nine defaults, and every rename the club had
+   made was replaced. The audit log kept the only trace: five squad.edit lines at 12:54, and
+   nine default rows written at 13:51. */
+describe("the squads table is filled, never overwritten", () => {
+  const squadsOf = (n) => Array.from({ length: n }, (_, i) => ({ id: "sq" + i, name: "Squad " + i }));
+
+  /** The app around _squadsFetch: what it holds, and what it would do next. */
+  function ctxFor({ read, held = null, staff = true, stubSeed = true }) {
+    const seen = { seeded: 0, upsert: null, rebuilt: 0 };
+    globalThis.window = globalThis.window || {};
+    window.__vxSelect = async () => read;
+    window.__vxRpc = async () => staff;
+    window.__vxUpsert = async (table, rows, opts) => { seen.upsert = { table, rows, opts }; return true; };
+    const ctx = {
+      squadRows: held,
+      squads: squadsOf(9),
+      _rebuildSquads() { seen.rebuilt++; },
+      rebuildRoster() {},
+      forceUpdate() {},
+      _isFullAccess: () => true,
+      _dbAnon: () => false,
+      _policyHeld: () => false,
+      _policyHold() {},
+      _policyRefused: () => false,
+      seen,
+    };
+    // Each case runs one real method and stubs the other, or bind() would hand back the stub.
+    if (stubSeed) ctx._squadsSeed = async function () { seen.seeded++; };
+    else ctx._squadsFetch = async function () {};
+    return ctx;
+  }
+
+  // A refusal read as an empty table is the whole fault. It must not seed, and it must not
+  // drop what this device already has.
+  itAsync("an empty read never replaces the squads this device holds", async () => {
+    const ctx = ctxFor({ read: [], held: [{ id: "vortexa", name: "Vortex A" }] });
+    await bind("_squadsFetch", ctx)();
+    eq(ctx.seen.seeded, 0, "it seeded over a table it could not read");
+    eq(ctx.squadRows.length, 1, "it dropped the rows this device had");
+  });
+
+  itAsync("a table that really is empty is still seeded", async () => {
+    const ctx = ctxFor({ read: [], held: null });
+    await bind("_squadsFetch", ctx)();
+    eq(ctx.seen.seeded, 1);
+  });
+
+  itAsync("rows that come back are what the app shows", async () => {
+    const ctx = ctxFor({ read: [{ id: "vortexa", name: "Vortex Elite" }], held: null });
+    await bind("_squadsFetch", ctx)();
+    eq(ctx.squadRows[0].name, "Vortex Elite");
+  });
+
+  itAsync("a table the app cannot read at all leaves everything alone", async () => {
+    const ctx = ctxFor({ read: null, held: [{ id: "vortexa", name: "Vortex A" }] });
+    await bind("_squadsFetch", ctx)();
+    eq(ctx.seen.seeded, 0);
+    eq(ctx.squadRows.length, 1);
+  });
+
+  // And the seed itself: it fills, and it asks the database who it is first.
+  itAsync("the seed can only fill a gap, never replace a row", async () => {
+    const ctx = ctxFor({ read: [], held: null, stubSeed: false });
+    await bind("_squadsSeed", ctx, ["_dbSaysStaff", "_squadRow"])();
+    eq(ctx.seen.upsert !== null && ctx.seen.upsert.opts && ctx.seen.upsert.opts.ignoreDuplicates, true,
+      "a seed that overwrites is how nine default squads replaced a club's own");
+  });
+
+  itAsync("it asks the database whether this device is staff, and believes the answer", async () => {
+    const ctx = ctxFor({ read: [], held: null, staff: false, stubSeed: false });
+    await bind("_squadsSeed", ctx, ["_dbSaysStaff", "_squadRow"])();
+    eq(ctx.seen.upsert, null, "it seeded on a session the database does not accept");
+  });
+
+  itAsync("the nine rows it writes are the club's own squads", async () => {
+    const ctx = ctxFor({ read: [], held: null, stubSeed: false });
+    await bind("_squadsSeed", ctx, ["_dbSaysStaff", "_squadRow"])();
+    eq(ctx.seen.upsert.rows.length, 9);
+    eq(ctx.seen.upsert.rows[0].id, "sq0");
+  });
+
+  // The write helper has to carry the distinction, or none of the above means anything.
+  it("the upsert helper sends ignore-duplicates when it is asked to", () => {
+    const src = sourceBetween("window.__vxUpsert = function", "// Supabase Realtime");
+    eq(/ignoreDuplicates\)\?"resolution=ignore-duplicates":"resolution=merge-duplicates"/.test(src), true,
+      "the option is accepted but not sent");
+  });
+  it("and a queued retry keeps it", () => {
+    const src = sourceBetween("window.__vxUpsert = function", "// Supabase Realtime");
+    eq(/_vxQueue\(function\(\)\{ window\.__vxUpsert\(table, rows, opts\); \}\)/.test(src), true,
+      "the retry would go back to overwriting");
+  });
+});
+
 /* ------------------------------------------------------- the printed session
    A coach prints the session and tapes it to the wall or the lane rope; a swimmer
    reads it from the water, wet, at arm's length and further. Two things decide
