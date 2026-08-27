@@ -79,6 +79,10 @@ describe("session clock", () => {
    is full. */
 describe("session printed on one page", () => {
   const MM = 96 / 25.4, MAX_W = 186 * MM, MAX_H = 273 * MM;   // A4 less the 12mm @page margin
+  // The fit works to less than the whole page on purpose: Safari prints headers and footers
+  // by default and takes the room out of the page, and every printer keeps an unprintable
+  // edge. Sizing to the full 273mm is how a sheet that measured as fitting came out on two.
+  const BUDGET = MAX_H * 0.94;
 
   /** A stand-in for the sheet's CSSStyleDeclaration: enough of it to be measured and set. */
   function fakeStyle() {
@@ -121,7 +125,7 @@ describe("session printed on one page", () => {
   const long = fit(fakeSheet({ rows: 40, rowH: (2 * MAX_H) / 40 }));
   it("a long session is shrunk", () => eq(zoomOf(long) < 1, true, `zoom was ${zoomOf(long)}`));
   it("a long session lands on one page", () =>
-    eq(printedHeight(long) <= MAX_H, true, `printed ${printedHeight(long)} > ${MAX_H}`));
+    eq(printedHeight(long) <= BUDGET, true, `printed ${printedHeight(long)} > ${BUDGET}`));
   it("and is not shrunk further than it has to be", () =>
     eq(zoomOf(long) > 0.45, true, `zoom was ${zoomOf(long)} — half the page would have done`));
 
@@ -130,7 +134,7 @@ describe("session printed on one page", () => {
   it("a short session is grown, not left adrift on a mostly empty page", () =>
     eq(zoomOf(short) > 1.5, true, `zoom was ${zoomOf(short)}`));
   it("growing still stops at one page", () =>
-    eq(printedHeight(short) <= MAX_H, true, `printed ${printedHeight(short)} > ${MAX_H}`));
+    eq(printedHeight(short) <= BUDGET, true, `printed ${printedHeight(short)} > ${BUDGET}`));
   it("growth is capped, so a two-set session is not a poster", () =>
     eq(zoomOf(short) <= 1.9, true, `zoom was ${zoomOf(short)}`));
 
@@ -139,7 +143,7 @@ describe("session printed on one page", () => {
   it("a nearly-full session takes the last of the page", () =>
     eq(zoomOf(nearly) > 1.03 && zoomOf(nearly) <= 1.12, true, `zoom was ${zoomOf(nearly)}`));
   it("and does not spill over doing it", () =>
-    eq(printedHeight(nearly) <= MAX_H, true, `printed ${printedHeight(nearly)} > ${MAX_H}`));
+    eq(printedHeight(nearly) <= BUDGET, true, `printed ${printedHeight(nearly)} > ${BUDGET}`));
 
   // Whatever the zoom, the sheet still has to print the full width of the paper.
   it("the printed sheet still fills the width", () => {
@@ -158,6 +162,15 @@ describe("session printed on one page", () => {
   it("a browser without zoom is left alone rather than printed narrow", () =>
     eq(noZoom.style.has("zoom") || noZoom.style.has("width"), false));
 
+  // Whatever the fit measured, the sheet is then pinned to exactly one page. This is the
+  // backstop for the part no measurement can see: the browser's own print chrome.
+  it("the sheet is pinned to one page, so nothing can flow onto a second", () => {
+    const h = parseFloat(short.style.get("height")), k = zoomOf(short);
+    eq(Math.abs(h * k - BUDGET) < 1, true, `${h} × ${k} = ${h * k}, not ${BUDGET}`);
+  });
+  it("and what does not fit is clipped rather than paginated", () =>
+    eq(short.style.get("overflow"), "hidden"));
+
   // The same element is on screen the rest of the time. Nothing from the fit may survive.
   it("the fit is stripped off the sheet afterwards", () => {
     const sheet = fit(fakeSheet({ rows: 8, rowH: (0.4 * MAX_H) / 8 }));
@@ -165,6 +178,41 @@ describe("session printed on one page", () => {
     bind("_printRestore", { _printAnchor: null })();
     eq(sheet.style.has("zoom") || sheet.style.has("width") || sheet.style.display !== "", false);
   });
+});
+
+/* --------------------------------------------------- one line, not four stacked
+   Type / Tools / Stroke / Rest used to be four stacked lines under every set, so a
+   sixteen-set session ran to five lines a set and off the bottom of the page. They
+   run along the set's own line now and wrap only when they must — which is what
+   buys the size back. */
+describe("a set is one line, not five", () => {
+  const blocks = SOURCE.split('<sc-if value="{{ printIsPlan }}" hint-placeholder-val="{{ true }}">')
+    .slice(1)
+    .map((s) => s.slice(0, s.indexOf('<sc-if value="{{ printIsProgram }}"')));
+
+  for (const [i, block] of blocks.entries()) {
+    const which = i === 0 ? "preview" : "print sheet";
+
+    it(`${which}: the detail chips run along the line`, () => {
+      const chips = block.match(/display:inline-block;font-size:\d+px/g) || [];
+      eq(chips.length >= 6, true, `only ${chips.length} chips are inline`);
+    });
+    it(`${which}: none of them is a stacked block any more`, () =>
+      eq(/<div style="font-size:1[0-9.]+px;color:[^"]+;font-weight:700;margin-top/.test(block), false));
+    it(`${which}: they share one line box under the set`, () =>
+      eq(/<div style="display:inline;line-height:1\.4/.test(block), true));
+
+    // The left column already prints "@ 1:40" and the zone code under the distance. The
+    // chips repeated both off the same two fields, costing a line a set for nothing.
+    it(`${which}: the send-off is printed once, not twice`, () => {
+      eq(/Send-off: \{\{/.test(block), false, "still repeating the left column");
+      eq(/\{\{ p[v]?set\.distSend \}\}/.test(block), true, "and the left column still has it");
+    });
+    it(`${which}: the zone is printed once, not twice`, () => {
+      eq(/>Zone: \{\{/.test(block), false, "still repeating the left column");
+      eq(/\{\{ p[v]?set\.zoneCode \}\}/.test(block), true, "and the left column still has it");
+    });
+  }
 });
 
 /* ---------------------------------------------------- print sheet, in the water
@@ -197,17 +245,17 @@ describe("printed plan is readable from the water", () => {
       eq(small.length, 0, `still printing at ${small.join(", ")}px`);
     });
     it(`${which}: the set itself is 18px or bigger`, () => {
-      const setText = /<td style="[^"]*font-size:(\d+)px;font-weight:700;line-height:1\.3;vertical-align:top">/.exec(rows);
-      eq(setText !== null && Number(setText[1]) >= 18, true, "the line the swimmer reads is the one that matters");
+      const setText = /<td style="[^"]*font-size:(\d+)px;font-weight:700;line-height:1\.32;vertical-align:top">/.exec(rows);
+      eq(setText !== null && Number(setText[1]) >= 22, true, "the line the swimmer reads is the one that matters");
     });
-    it(`${which}: the distance is 20px or bigger`, () => {
+    it(`${which}: the distance is 22px or bigger`, () => {
       const dist = /<td style="[^"]*font-weight:800;font-size:(\d+)px;line-height:1\.2;color:\{\{ printSheet\.accent \}\}/.exec(rows);
-      eq(dist !== null && Number(dist[1]) >= 20, true);
+      eq(dist !== null && Number(dist[1]) >= 22, true);
     });
     it(`${which}: the set text is black, not grey`, () =>
       eq(/color:#3A4152;font-size/.test(rows), false, "#3A4152 on a wet page is not readable"));
     it(`${which}: the set text is bold`, () =>
-      eq(/font-size:18px;font-weight:700/.test(rows), true));
+      eq(/font-size:22px;font-weight:700/.test(rows), true));
   }
 });
 
