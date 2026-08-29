@@ -1902,10 +1902,12 @@ describe("editing a meet the club built", () => {
     meetsMeta: [{ name: "Nautilus Invitational Swim Meet 2026", date: "1/30/2026", course: "LCM" }],
     state: {}, forceUpdate() {}, _saveJSON(k, v) { this.saved = { k, v }; }, audit() {},
     meetStatus: {}, _saveLocalOnly(k, v) { this.saved = { k, v }; }, _meetUnsent: {},
+    meetInfo: {},
     setState: function (p) { Object.assign(this.state, p); },
   });
   const deps = ["_toISODate", "_mdyFromISO", "_fmtDMY", "_sayMeetSaved", "_meetsPush",
-                "_meetLanded", "_meetsUnsent"];
+                "_meetLanded", "_meetsUnsent", "_isCustomMeet", "setMeetInfo", "_meetInfo",
+                "MEET_INFO_BLANK", "allMeets", "_sayIfNotSaved", "_clubStateLanded"];
 
   it("the club's own meet can be edited", () =>
     eq(bind("_isCustomMeet", ctx(), [])("Test"), true));
@@ -1914,7 +1916,7 @@ describe("editing a meet the club built", () => {
 
   it("opening the editor starts from the date the meet already has", () => {
     const c = ctx();
-    bind("meetEditOpen", c, ["_toISODate"])("Test");
+    bind("meetEditOpen", c, ["_toISODate", "_meetInfo", "MEET_INFO_BLANK", "allMeets"])("Test");
     eq(c.state.meetEditDraft.date, "2026-07-30");
   });
 
@@ -1993,6 +1995,309 @@ describe("editing a meet the club built", () => {
     bind("meetEditSave", c, deps)();
     eq(c.customMeets[1].date, "9/1/2026");
   });
+});
+
+/* --------------------------------------------------- one name, one method
+   The app is one class of about six hundred methods in a single file, and a second
+   definition of a name that already exists does not fail anywhere: it silently
+   replaces the first for the entire class.
+
+   It happened while this very screen was being built. A helper for "the last day of
+   this meet" was called _meetISO — which already existed, meaning a meet's day for
+   filing a swim under, with a deliberate fallback to today. Every caller of the old
+   one — the meet-day screen, the entries sheet, the results header — quietly started
+   using the new one, and an undated meet would have stopped reading as today.
+
+   Nothing in a linter catches this, so this does. */
+describe("the app class defines each method once", () => {
+  // Three of these were already here when the rule was written. Each is a real shadowing:
+  // the first definition is dead code and the second is the one that runs. They are listed
+  // rather than fixed so that this test can start failing on the NEXT one, which is what it
+  // is for — untangling three unrelated ones belongs in their own change.
+  const KNOWN = ["setLang", "_applyLang", "_fmtDMY"];
+  it("has no method defined twice", () => {
+    const cls = SOURCE.slice(SOURCE.indexOf("class Component extends DCLogic"));
+    // A Map, not an object: `seen["constructor"]` is truthy on a bare {} whatever the class
+    // holds, which is its own version of the mistake this test is about.
+    const seen = new Map(), dupes = [];
+    // Method definitions sit at exactly two spaces of indent in this class; anything
+    // deeper is a nested object or a function body.
+    for (const m of cls.matchAll(/^  (?:async )?([A-Za-z_$][\w$]*)\s*\(/gm)) {
+      const name = m[1];
+      if (seen.get(name)) { if (!dupes.includes(name)) dupes.push(name); } else seen.set(name, 1);
+    }
+    eq(dupes.filter((d) => !KNOWN.includes(d)), [],
+       "a second definition silently replaces the first for the whole class");
+  });
+  // And the three that are known stay known: fix one and it comes off this list.
+  it("still has exactly the shadowed methods it is known to have", () =>
+    eq(KNOWN.every((k) => (SOURCE.match(new RegExp("^  " + k + "\\(", "gm")) || []).length === 2), true));
+});
+
+/* ------------------------------------------ what a meet is, beyond a name and a date
+   Eighteen meets in one list, newest import first, with next month's meet somewhere
+   inside it — and each card carrying four things: name, day, venue, course. That is a
+   fixture list, not a meet, and every question a parent actually had (when do entries
+   close, what time is warm-up, can my child make the standard) was answered on
+   WhatsApp, once per family, every week. */
+describe("a meet's own details", () => {
+  const ctx = (info = {}) => ({
+    meetInfo: info, state: {}, forceUpdate() {},
+    _saveJSON(k, v) { this.saved = { k, v }; },
+  });
+  const deps = ["MEET_INFO_BLANK", "_meetInfo"];
+
+  it("a meet nobody has filled in reads as blank, not as undefined", () => {
+    const info = bind("_meetInfo", ctx(), deps)("VIS");
+    eq(info.deadline, "");
+    eq(info.warmup, "");
+    eq(info.infoUrl, "");
+  });
+  it("what the club typed comes back", () => {
+    const info = bind("_meetInfo", ctx({ VIS: { warmup: "07:00", fee: "50 QAR" } }), deps)("VIS");
+    eq(info.warmup, "07:00");
+    eq(info.fee, "50 QAR");
+    eq(info.notes, "", "and the rest is still blank rather than missing");
+  });
+  // The document is synced and last-write-wins, so a device that read a half-written copy
+  // must not be able to put a number or an object where the screen expects a string.
+  it("anything that is not text is ignored", () => {
+    const info = bind("_meetInfo", ctx({ VIS: { warmup: { at: 7 }, fee: 50 } }), deps)("VIS");
+    eq(info.warmup, "");
+    eq(info.fee, "");
+  });
+  it("a record emptied back out is dropped rather than kept as blanks", () => {
+    const c = ctx({ VIS: { warmup: "07:00" } });
+    bind("setMeetInfo", c, [...deps, "setMeetInfo"])("VIS", { warmup: "" });
+    eq(Object.keys(c.meetInfo).length, 0, "one entry per meet on file is not a record of anything");
+    eq(c.saved.k, "vx_meet_info");
+  });
+  it("and a record with something in it is kept", () => {
+    const c = ctx();
+    bind("setMeetInfo", c, [...deps, "setMeetInfo"])("VIS", { deadline: "2026-11-20" });
+    eq(c.meetInfo.VIS.deadline, "2026-11-20");
+  });
+});
+
+/* --------------------------------------------------- coming up, and already swum
+   Two lists, because they are read for opposite reasons. What decides which is not
+   the date alone: a status a coach has set is the only part a person has actually
+   asserted, and it has to win. */
+describe("splitting the meets in two", () => {
+  const ctx = (status = {}, info = {}) => ({
+    customMeets: [], meetsMeta: [], meetStatus: status, meetInfo: info,
+    todayISO: () => "2026-08-29",
+  });
+  const deps = ["_toISODate", "_meetLastISO", "_meetInfo", "MEET_INFO_BLANK", "allMeets",
+                "_meetIsDone", "todayISO"];
+  const done = (m, status = {}, info = {}) => bind("_meetIsDone", ctx(status, info), deps)(m);
+
+  it("a meet whose day has passed is done", () =>
+    eq(done({ name: "Spring Cup", date: "6/5/2026" }), true));
+  it("a meet still ahead is not", () =>
+    eq(done({ name: "VIS", date: "12/4/2026" }), false));
+  // Today's meet is today's problem, not last month's record.
+  it("a meet being swum today is not done", () =>
+    eq(done({ name: "Today", date: "8/29/2026" }), false));
+  it("Completed wins even before the day arrives", () =>
+    eq(done({ name: "VIS", date: "12/4/2026" }, { VIS: "Completed" }), true));
+  // A meet still marked "Entries open" the morning after is what the club is working on,
+  // and dropping it into the history is how the entries get forgotten.
+  it("a live status wins even after the day has passed", () => {
+    eq(done({ name: "Spring Cup", date: "6/5/2026" }, { "Spring Cup": "Entries open" }), false);
+    eq(done({ name: "Spring Cup", date: "6/5/2026" }, { "Spring Cup": "In progress" }), false);
+  });
+  // Three days of racing: the meet is not over on the first morning.
+  it("a meet that runs several days is judged on its last one", () =>
+    eq(done({ name: "VIS", date: "8/27/2026" }, {}, { VIS: { endDate: "2026-08-31" } }), false));
+  // Better to see a meet you have finished with than to lose one you have not.
+  it("a meet with no readable date is treated as still ahead", () =>
+    eq(done({ name: "Unknown", date: "" }), false));
+
+  it("each list is in the order it is read in", () => {
+    const c = ctx();
+    c.customMeets = [
+      { name: "Late", date: "12/4/2026" },
+      { name: "Old", date: "2/1/2026" },
+      { name: "Soon", date: "9/10/2026" },
+      { name: "Recent", date: "6/5/2026" },
+    ];
+    const split = bind("_meetsSplit", c, [...deps, "_meetsSplit"])();
+    eq(split.upcoming.map((m) => m.name), ["Soon", "Late"], "the next one first");
+    eq(split.done.map((m) => m.name), ["Recent", "Old"], "the most recent one first");
+  });
+});
+
+/* ------------------------------------------------- can my child swim this meet
+   The cut times were in the app for a year and could only be read one event at a
+   time, on a coach's seed screen. The question a parent asks is the other way
+   round — for THIS meet, which events can my child enter — and the club already
+   holds both halves of the answer. */
+describe("qualifying times for one swimmer", () => {
+  const ctx = (cuts) => ({ meetCuts: cuts });
+  const deps = ["parseTimeStr", "EVENT_CATALOG", "fmt", "_meetQualFor"];
+  const sw = { pbs: [
+    { event: "50 Free", sec: 29.1 },
+    { event: "100 Free", sec: 66.4 },
+    { event: "200 IM", sec: 160.0 },
+  ] };
+  const rows = (cuts) => bind("_meetQualFor", ctx(cuts), deps)(sw, "VIS");
+
+  it("a personal best inside the cut is qualified", () => {
+    const r = rows({ VIS: { "50 Free": "29.50" } });
+    eq(r[0].qualified, true);
+    eq(r[0].gap, "", "there is nothing left to go");
+  });
+  // Exactly on the standard is in, not out. This is the one that gets argued about.
+  it("dead on the cut qualifies", () =>
+    eq(rows({ VIS: { "50 Free": "29.10" } })[0].qualified, true));
+  it("outside it says how far, to the hundredth", () => {
+    const r = rows({ VIS: { "100 Free": "1:05.00" } });
+    eq(r[0].qualified, false);
+    eq(r[0].gap, "+1.40", "a hundredth is the unit the sport is timed in");
+  });
+  it("no time on file is said plainly rather than counted as a miss", () => {
+    const r = rows({ VIS: { "100 Back": "1:14.20" } });
+    eq(r[0].pb, "No time yet");
+    eq(r[0].qualified, false);
+    eq(r[0].gap, "");
+  });
+  it("an event with no standard set is not listed", () => {
+    const r = rows({ VIS: { "50 Free": "29.50", "100 Fly": "" } });
+    eq(r.map((x) => x.event), ["50 Free"]);
+  });
+  it("nor is one whose standard cannot be read as a time", () =>
+    eq(rows({ VIS: { "50 Free": "TBC" } }).length, 0));
+  it("a meet with no standards at all has nothing to show", () =>
+    eq(rows({}).length, 0));
+  it("they come out in the order a program is written in", () =>
+    eq(rows({ VIS: { "200 IM": "2:40.00", "50 Free": "29.50", "100 Free": "1:05.00" } })
+        .map((x) => x.event), ["50 Free", "100 Free", "200 IM"]));
+
+  it("the summary counts what is already met", () => {
+    const c = ctx({ VIS: { "50 Free": "29.50", "100 Free": "1:05.00" } });
+    eq(bind("_meetQualCount", c, [...deps, "_meetQualCount"])(sw, "VIS"), { qualified: 1, total: 2 });
+  });
+});
+
+/* ------------------------------------------------------------------------ camps
+   Not meets, and deliberately not filed as them: a camp has no event program, no
+   entry, no result and no cut time. Putting one in customMeets would place it in
+   the entries sheet, the results screen and every "18 meets on record" count. */
+describe("camps", () => {
+  const ctx = (camps) => ({ camps, state: {}, forceUpdate() {}, todayISO: () => "2026-08-29",
+                            _saveJSON(k, v) { this.saved = { k, v }; } });
+  const deps = ["_campsShaped", "_toISODate", "_campsSorted", "_campIsDone", "_campsSplit", "todayISO"];
+
+  it("a document that is not a list is not a list of camps", () => {
+    eq(bind("_campsShaped", ctx(null), deps)(null), []);
+    eq(bind("_campsShaped", ctx({}), deps)({ a: 1 }), []);
+  });
+  it("and an entry with no name is not a camp", () =>
+    eq(bind("_campsShaped", ctx([]), deps)([{ id: "c1" }, null, { id: "c2", name: "Winter" }]).length, 1));
+
+  it("a camp is over the day after its last day", () => {
+    const isDone = bind("_campIsDone", ctx([]), deps);
+    eq(isDone({ start: "2026-08-25", end: "2026-09-02" }), false, "it is running now");
+    eq(isDone({ start: "2026-08-01", end: "2026-08-28" }), true);
+    eq(isDone({ start: "2026-08-29", end: "" }), false, "a one-day camp today has not happened yet");
+  });
+  it("upcoming camps come out soonest first", () => {
+    const c = ctx([{ id: "b", name: "Late", start: "2026-12-20" },
+                   { id: "a", name: "Soon", start: "2026-09-05" },
+                   { id: "z", name: "Old", start: "2026-02-01" }]);
+    const split = bind("_campsSplit", c, deps)();
+    eq(split.upcoming.map((x) => x.name), ["Soon", "Late"]);
+    eq(split.done.map((x) => x.name), ["Old"]);
+  });
+  it("saving an existing camp edits it rather than adding a second", () => {
+    const c = ctx([{ id: "c1", name: "Winter", place: "Aspire" }]);
+    bind("campSave", c, [...deps, "campSave"])({ id: "c1", name: "Winter", place: "Hamad" });
+    eq(c.camps.length, 1);
+    eq(c.camps[0].place, "Hamad");
+    eq(c.saved.k, "vx_camps");
+  });
+  it("a camp with no name is never stored", () => {
+    const c = ctx([]);
+    bind("campSave", c, [...deps, "campSave"])({ id: "c1", name: "   " });
+    eq(c.camps.length, 0);
+  });
+  it("and one can be removed", () => {
+    const c = ctx([{ id: "c1", name: "Winter" }, { id: "c2", name: "Summer" }]);
+    bind("campDelete", c, [...deps, "campDelete"])("c1");
+    eq(c.camps.map((x) => x.name), ["Summer"]);
+  });
+});
+
+/* ------------------------------------ the details of a meet the club did not build
+   The day, venue and course of an imported meet belong to whoever ran it. The entry
+   deadline, the warm-up time and the club's own note about it do not — and until now
+   an imported meet had nowhere at all to put them. */
+describe("meet details on an imported meet", () => {
+  const ctx = () => ({
+    customMeets: [{ name: "Test", date: "7/30/2026", location: "Hamad", course: "LCM" }],
+    meetsMeta: [{ name: "Nautilus Invitational Swim Meet 2026", date: "1/30/2026", course: "LCM" }],
+    meetInfo: {}, meetStatus: {}, state: {}, forceUpdate() {}, audit() {},
+    _saveJSON(k, v) { this.savedDoc = { k, v }; }, _saveLocalOnly(k, v) { this.savedLocal = { k, v }; },
+    _meetUnsent: {}, setState: function (p) { Object.assign(this.state, p); },
+  });
+  const deps = ["_toISODate", "_mdyFromISO", "_fmtDMY", "_sayMeetSaved", "_meetsPush",
+                "_meetLanded", "_meetsUnsent", "_isCustomMeet", "setMeetInfo", "_meetInfo",
+                "MEET_INFO_BLANK", "allMeets", "_sayIfNotSaved", "_clubStateLanded"];
+
+  it("its editor opens, where before it could not be opened at all", () => {
+    const c = ctx();
+    bind("meetEditOpen", c, ["_toISODate", "_meetInfo", "MEET_INFO_BLANK", "allMeets"])("Nautilus Invitational Swim Meet 2026");
+    eq(c.state.meetEditName, "Nautilus Invitational Swim Meet 2026");
+  });
+  it("the details are saved and the host's own record is left alone", () => {
+    const c = ctx();
+    c.state.meetEditName = "Nautilus Invitational Swim Meet 2026";
+    c.state.meetEditDraft = { date: "2026-01-30", location: "Somewhere else", course: "SCM",
+                              deadline: "2026-01-10", warmup: "06:30" };
+    bind("meetEditSave", c, deps)();
+    eq(c.meetInfo["Nautilus Invitational Swim Meet 2026"].warmup, "06:30");
+    eq(c.savedLocal, undefined, "the imported meet's own row must not be rewritten");
+    eq(c.meetsMeta[0].date, "1/30/2026");
+  });
+  // A three-day meet entered the wrong way round reads as finished the moment it is
+  // saved, and drops straight out of the list the club is working from.
+  it("a last day before the first day is refused", () => {
+    const c = ctx();
+    c.state.meetEditName = "Test";
+    c.state.meetEditDraft = { date: "2026-12-04", endDate: "2026-12-01", course: "LCM" };
+    bind("meetEditSave", c, deps)();
+    eq(/last day cannot be before/.test(c.state.meetEditErr), true);
+    eq(Object.keys(c.meetInfo).length, 0, "and nothing is written from a refused save");
+  });
+  it("the club's own meet still saves its day and its details together", () => {
+    const c = ctx();
+    c.state.meetEditName = "Test";
+    c.state.meetEditDraft = { date: "2026-12-04", endDate: "2026-12-06", location: "Doha, HAC",
+                              course: "SCM", deadline: "2026-11-20", fee: "50 QAR per event" };
+    bind("meetEditSave", c, deps)();
+    eq(c.customMeets[0].date, "12/4/2026");
+    eq(c.customMeets[0].course, "SCM");
+    eq(c.meetInfo.Test.endDate, "2026-12-06");
+    eq(c.meetInfo.Test.fee, "50 QAR per event");
+  });
+});
+
+/* ------------------------------------------------- the meet's information sheet
+   The club calendar's attachment falls back to a base64 data URL when the upload
+   fails. club_state is one document per key, so a 900 KB entry sheet stored that
+   way is the "photo inside a record" that has twice filled every phone in the club
+   and stopped every other save on it. */
+describe("attaching a meet information sheet", () => {
+  const src = methodSource("meetInfoFilePick").body;
+  it("goes to Storage and keeps only the link", () =>
+    eq(/__vxUploadFile/.test(src), true));
+  it("never falls back to putting the file inside the record", () => {
+    eq(/FileReader/.test(src), false, "a data URL here is a megabyte inside a synced document");
+    eq(/readAsDataURL/.test(src), false);
+  });
+  it("and says so rather than attaching nothing quietly", () =>
+    eq(/could not be uploaded/.test(src), true));
 });
 
 /* ------------------------------------------------- meets, one row each
@@ -2645,6 +2950,16 @@ describe("expired session", () => {
        "the reason is captured on every failure and must not be dropped on this one");
     eq(/the database said: /.test(detail), true);
   });
+  // "no connection · retrying automatically" reads as an app in trouble, and it was shown to a
+  // coach whose work was perfectly safe. There is no server answer to quote for a dropped
+  // connection — "network: Load failed" is the browser's phrasing of "it did not arrive" — so
+  // the line says the two things that are true and useful instead.
+  it("says a dropped connection is not work the club has lost", () => {
+    const detail = sourceBetween("saveFailDetail: (S.authDead || S.sendingAnon)", "// Signed out, the Retry button is a lie");
+    eq(/S\.saveFailLast\.status===0/.test(detail), true, "a dropped connection needs its own words");
+    eq(/Nothing is lost/.test(detail), true);
+    eq(/as soon as the connection is back/.test(detail), true);
+  });
 
   // The state a coach was actually stuck in: the app still signed in, the database session
   // long gone, so every attendance mark came back 401 under "retrying automatically" — a
@@ -3077,6 +3392,46 @@ describe("expired session", () => {
       await t.win.__vxpush("vx_billing", JSON.stringify({ b: 2 }));
       await flush();
       eq(t.win.__vxBlocked().length, 0, "one document, so one answer clears the lot");
+    });
+
+    // The banner this club actually sent in: "club_state (vx_roster_edits) · no connection ·
+    // retrying automatically", on a phone that had full signal a moment either side of it.
+    //
+    // Ten sweeps is seven and a half minutes, and a phone in a pool hall is out of signal for
+    // longer than that most mornings. Every one of those failures used to count, so the tenth
+    // moved the club's roster save off the retry queue for good — and nothing replays a
+    // set-aside write. The edit stayed on that one phone, and the banner cleared itself the
+    // next time any other key saved, so nobody was ever told.
+    itAsync("a dropped connection never sets a save aside, however long it lasts", async () => {
+      const t = boot({ auth: LIVE,
+        reply: (url) => (url.includes("/club_state")
+          ? Promise.reject(new TypeError("Load failed")) : GOOD_TOKEN) });
+      const doc = JSON.stringify({ edits: { r3: { dob: "2013-04-01" } }, deleted: {}, added: {} });
+      for (let i = 0; i < 14; i++) { await t.win.__vxpush("vx_roster_edits", doc); await flush(); }
+      eq(t.win.__vxBlocked().length, 0, "the club's roster edit must stay on the retry path");
+      eq(t.win.__vxFailed().length, 1, "and be held as one change, not fourteen");
+    });
+    // Which is the point of the distinction: the moment the request gets through, it saves.
+    itAsync("and it goes up by itself when the connection comes back", async () => {
+      let offline = true;
+      const t = boot({ auth: LIVE,
+        reply: (url) => (url.includes("/club_state")
+          ? (offline ? Promise.reject(new TypeError("Load failed")) : res(200, [])) : GOOD_TOKEN) });
+      const doc = JSON.stringify({ edits: { r3: { dob: "2013-04-01" } }, deleted: {}, added: {} });
+      t.store.vx_roster_edits = doc;
+      for (let i = 0; i < 12; i++) { await t.win.__vxpush("vx_roster_edits", doc); await flush(); }
+      offline = false;
+      await t.win.__vxRetryFailed();
+      await flush();
+      eq(t.win.__vxFailed().length, 0, "twelve dropped connections must not cost the edit");
+    });
+    // The other half of the rule, unchanged: an answer repeated is still an answer.
+    itAsync("but a refusal the database keeps repeating is still set aside", async () => {
+      const t = boot({ auth: LIVE,
+        reply: (url) => (url.includes("/club_state")
+          ? res(400, { message: "column club_state.nope does not exist" }) : GOOD_TOKEN) });
+      for (let i = 0; i < 10; i++) { await t.win.__vxpush("vx_squads", JSON.stringify({ a: i })); await flush(); }
+      eq(t.win.__vxBlocked().length, 1, "ten identical refusals cannot become an eleventh answer");
     });
 
     // The club's own 401: signed in, but the database does not recognise the account as staff,
@@ -3759,6 +4114,21 @@ describe("InBody sheet", () => {
            "vx_roster_edits is in " + whole + ", which would return the whole club's roster");
       }
       eq(/requireUser/.test(SRC), true, "the family slice does not authenticate its caller");
+      // The meet details and the camps are the club telling its members what is happening.
+      // They are the same for every family and name nobody, so they belong in CLUB_KEYS —
+      // and a family screen that cannot read them shows a meet with no entry deadline on it,
+      // which is the one thing a parent came to the screen for.
+      const club = (SRC.match(/const CLUB_KEYS = \[([\s\S]*?)\]/) || [])[1] || "";
+      for (const k of ["vx_meet_info", "vx_camps"])
+        eq(new RegExp('"' + k + '"').test(club), true, k + " never reaches a family");
+      // And they are club-wide, not a slice: appearing in one of the per-swimmer lists as
+      // well would mean each was being cut down to one family's children, which for a meet's
+      // entry deadline would return an empty object and show a card with nothing on it.
+      for (const other of ["PER_SWIMMER_KEYS", "ARRAY_BY_SWID_KEYS", "PERIOD_THEN_SWIMMER_KEYS"]) {
+        const list = (SRC.match(new RegExp("const " + other + " = \\[([\\s\\S]*?)\\]")) || [])[1] || "";
+        for (const k of ["vx_meet_info", "vx_camps"])
+          eq(new RegExp(k).test(list), false, k + " is in " + other + " as well as CLUB_KEYS");
+      }
     });
 
     it("keeps the minors rules in the chat prompt too", () => {
@@ -4933,10 +5303,19 @@ describe("InBody sheet", () => {
 
     it("counts its own attempts rather than being re-queued as if it were new", () => {
       eq(/x\.sig===sig/.test(add), true, "it has to recognise the same write coming back");
-      eq(/_tries = _prior \+ 1/.test(add), true);
+      eq(/_tries = _prior \+ \(_answered \? 1 : 0\)/.test(add), true);
     });
     it("is set aside once it is clearly not going to work", () =>
       eq(/_tries >= 10/.test(add), true, "nothing ever takes it off the retry path"));
+    // The counter is evidence of one thing only: the database has read this request and refused
+    // it, over and over. A connection that dropped is evidence of the opposite — the request
+    // never arrived — and sending it again is the fix rather than a waste.
+    it("only counts the attempts the database actually answered", () => {
+      eq(/_answered = \(typeof status === "number" && status > 0\)/.test(add), true,
+         "NOTSENT is -1 and a dropped connection is 0; neither is an answer");
+      eq(/if\(_answered && _tries >= 10\)/.test(add), true,
+         "a write nobody has answered must never be set aside");
+    });
     // Set aside, not discarded — the club's work is not thrown away, it is moved off the path
     // that everything else is queued on, and named so somebody can act on it.
     it("is moved off the retry path rather than deleted", () => {
@@ -4948,8 +5327,8 @@ describe("InBody sheet", () => {
       eq(/not held up behind it/.test(add), true,
          "the consequence is the part the person reading it needs");
     });
-    // Ten attempts at 45 seconds is most of ten minutes — long enough that a real outage
-    // recovers on its own and nothing is set aside for a dropped connection.
+    // Ten answered attempts at 45 seconds is most of ten minutes of the database saying no.
+    // An outage is not counted at all, so the number only has to be generous about refusals.
     it("gives a real outage time to recover first", () => {
       const tries = parseInt((add.match(/_tries >= (\d+)/) || [])[1], 10);
       eq(tries >= 5 && tries <= 20, true, "it gives up after " + tries + " attempts");

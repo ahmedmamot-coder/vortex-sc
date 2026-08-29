@@ -113,7 +113,7 @@ if ('serviceWorker' in navigator) {
   // again. Two devices marking two swimmers inside one twenty-second pull window send two whole
   // documents, and the second one has never heard of the first. Sponsorship is one row per
   // swimmer now (swimmer_sponsors), see supabase/swimmer_sponsors.sql.
-  var SYNC = ["vx_squads","vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_entries","vx_meet_events","vx_meet_cuts","vx_seed_config","vx_meet_marks","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_memberships","vx_fee_plans","vx_billing","vx_race_splits","vx_bday_sent","vx_staff_pw_set"];
+  var SYNC = ["vx_squads","vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_entries","vx_meet_events","vx_meet_cuts","vx_meet_info","vx_camps","vx_seed_config","vx_meet_marks","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_memberships","vx_fee_plans","vx_billing","vx_race_splits","vx_bday_sent","vx_staff_pw_set"];
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
   // Auth-retry queue: if a write is rejected because we weren't signed in yet (401/403 under the
@@ -368,6 +368,24 @@ if ('serviceWorker' in navigator) {
     // Ten attempts is generous for a real outage: the retry runs every 45 seconds, so this is
     // most of ten minutes of trying before it is set aside — and set aside is not discarded, it
     // is moved off the retry path and named, so the queue behind it moves.
+    //
+    // But only attempts the database ANSWERED are counted, and that is the whole of this rule.
+    //
+    // Setting a write aside says one thing: sending these bytes again cannot work. A refusal is
+    // evidence of that — the database read the request and said no, and it will say no again.
+    // A connection that dropped is evidence of nothing at all. It says the request never got
+    // there, which is the one case where trying again is exactly the fix.
+    //
+    // Counting both together is how a roster save was lost on a poolside. Ten sweeps is seven
+    // and a half minutes; a phone in a pool hall is out of signal for longer than that most
+    // mornings. Every one of those failures was a network error, the tenth moved the save off
+    // the retry queue for good, and when the signal came back nothing replayed it — the club's
+    // whole roster edit stayed on one phone, under a banner that had by then cleared itself.
+    // That is the shape the club reported: "club_state (vx_roster_edits) · no connection".
+    //
+    // So a write nobody has answered stays on the queue and keeps trying, for as long as it
+    // takes. It does not hold anything up: the replay awaits each entry in turn and carries on
+    // past the ones that fail, and _failSave bounds the queue itself.
     var _prior = 0, _since = 0;
     try{ var _was = a.filter(function(x){ return x && x.sig===sig; })[0];
       _prior = (_was && _was.tries) || 0;
@@ -381,9 +399,12 @@ if ('serviceWorker' in navigator) {
       // whether the club is told about it never elapsed once.
       _since = (_was && (_was.since || _was.ts)) || 0;
     }catch(e){}
-    var _tries = _prior + 1;
+    // NOTSENT (-1) never left the device and 0 is a connection that dropped. Neither is an
+    // answer, so neither moves the counter.
+    var _answered = (typeof status === "number" && status > 0);
+    var _tries = _prior + (_answered ? 1 : 0);
     a=a.filter(function(x){ return x && x.sig !== sig; });
-    if(_tries >= 10){
+    if(_answered && _tries >= 10){
       _blockAdd(sig, table, payload, (said||"it could not be sent")+" \u2014 tried "+_tries
         +" times and set aside, so the rest of this device's saves are not held up behind it");
       _failSave(a);
@@ -2842,17 +2863,108 @@ if ('serviceWorker' in navigator) {
                           </div>
                         </div>
                       </sc-if>
-                      <sc-if value="{{ meetsCalEmpty }}" hint-placeholder-val="{{ false }}">
+                      <!-- Only when there is genuinely nothing. The club calendar is a second,
+                           older list; saying it is empty above a card for the meet in December
+                           reads as the app contradicting itself. -->
+                      <sc-if value="{{ famNothingPosted }}" hint-placeholder-val="{{ false }}">
                         <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:14px;box-shadow:0 1px 4px rgba(11,20,40,.04);display:flex;align-items:center;gap:10px;margin-bottom:12px"><i data-lucide="calendar-x" style="width:17px;height:17px;color:#9AA2B4"></i><span style="font-size:12px;color:#7A8296">No club meets posted yet — the club calendar will appear here.</span></div>
                       </sc-if>
-                      <div style="display:flex;flex-direction:column;gap:8px">
-                        <sc-for list="{{ famMeetsUpcoming }}" as="m" hint-placeholder-count="3">
-                          <div style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:12px 14px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
-                            <span style="flex:none;width:38px;height:38px;border-radius:11px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);display:flex;align-items:center;justify-content:center"><i data-lucide="calendar" style="width:18px;height:18px"></i></span>
-                            <span><span style="display:block;font-size:13px;font-weight:700;color:#0C1116">{{ m.name }}</span><span style="display:block;font-size:11.5px;color:#7A8296;margin-top:1px">{{ m.meta }}</span></span>
-                          </div>
-                        </sc-for>
-                      </div>
+                      <!-- The meets that are still ahead, one card each, carrying everything the
+                           club has filled in — and the qualifying times worked out against this
+                           child rather than left for a parent to do with a calculator. -->
+                      <sc-if value="{{ famHasMeetsUpcoming }}" hint-placeholder-val="{{ true }}">
+                        <div style="display:flex;flex-direction:column;gap:10px">
+                          <sc-for list="{{ famMeetsUpcoming }}" as="m" hint-placeholder-count="2">
+                            <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;box-shadow:0 2px 7px rgba(11,20,40,.05);overflow:hidden">
+                              <div style="display:flex;align-items:center;gap:12px;padding:14px 15px 11px">
+                                <span style="flex:none;width:46px;height:46px;border-radius:13px;background:linear-gradient(140deg,#3F9CFF,#0768D6);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;box-shadow:0 6px 14px rgba(7,104,214,.28)"><span style="font-size:16px;font-weight:800">{{ m.day }}</span><span style="font-size:9px;font-weight:700;letter-spacing:.4px">{{ m.mon }}</span></span>
+                                <span style="flex:1;min-width:0">
+                                  <span style="display:block;font-size:14.5px;font-weight:700;color:#0C1116">{{ m.name }}</span>
+                                  <span style="display:block;font-size:12px;color:#0C1116;font-weight:600;margin-top:2px">{{ m.dayLabel }}</span>
+                                  <span style="display:block;font-size:11.5px;color:#7A8296;margin-top:1px">{{ m.meta }}</span>
+                                </span>
+                                <span style="flex:none;background:{{ m.statusBg }};color:{{ m.statusFg }};border-radius:999px;padding:4px 10px;font-size:10.5px;font-weight:700">{{ m.status }}</span>
+                              </div>
+                              <sc-if value="{{ m.hasDeadline }}" hint-placeholder-val="{{ false }}">
+                                <div style="display:flex;align-items:center;gap:8px;margin:0 15px 11px;background:#FFF6E8;border:1px solid #F3E4C0;border-radius:10px;padding:9px 11px">
+                                  <i data-lucide="alarm-clock" style="width:15px;height:15px;color:#9A6206;flex:none"></i>
+                                  <span style="font-size:12px;font-weight:700;color:#7A5A0C">{{ m.deadlineLine }}</span>
+                                </div>
+                              </sc-if>
+                              <div style="padding:0 15px 14px;display:flex;flex-direction:column;gap:9px">
+                                <sc-if value="{{ m.hasDetails }}" hint-placeholder-val="{{ true }}">
+                                  <div style="background:#F8FAFC;border:1px solid #EEF1F5;border-radius:11px;padding:10px 11px;display:flex;flex-direction:column;gap:6px">
+                                    <sc-for list="{{ m.detailRows }}" as="d" hint-placeholder-count="4">
+                                      <div style="display:flex;align-items:center;gap:9px">
+                                        <i data-vx-icon="{{ d.icon }}" style="width:14px;height:14px;color:#9AA2B4;flex:none"></i>
+                                        <span style="flex:none;width:82px;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4;font-weight:700">{{ d.label }}</span>
+                                        <span style="flex:1;min-width:0;font-size:12.5px;color:#0C1116;font-weight:600">{{ d.value }}</span>
+                                      </div>
+                                    </sc-for>
+                                  </div>
+                                </sc-if>
+                                <sc-if value="{{ m.hasQual }}" hint-placeholder-val="{{ false }}">
+                                  <div style="background:#FAF7FF;border:1px solid #E6DBFF;border-radius:11px;padding:10px 11px">
+                                    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:7px">
+                                      <span style="font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#5D22CF;font-weight:800">Qualifying times</span>
+                                      <span style="font-size:11px;color:#7A8296;text-align:right">{{ m.qualSummary }}</span>
+                                    </div>
+                                    <div style="display:flex;flex-direction:column;gap:5px">
+                                      <sc-for list="{{ m.qualRows }}" as="q" hint-placeholder-count="4">
+                                        <div style="display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #EFE8FF;border-radius:9px;padding:7px 9px">
+                                          <span style="flex:1;min-width:0;font-size:12px;font-weight:600;color:#0C1116">{{ q.event }}</span>
+                                          <span style="flex:none;text-align:right"><span style="display:block;font-family:var(--font-mono);font-size:11.5px;color:#0C1116">{{ q.pb }}</span><span style="display:block;font-size:9.5px;color:#9AA2B4">needs {{ q.cut }}</span></span>
+                                          <span style="flex:none;background:{{ q.markBg }};color:{{ q.markFg }};border-radius:7px;padding:4px 8px;font-size:10.5px;font-weight:700">{{ q.mark }}</span>
+                                        </div>
+                                      </sc-for>
+                                    </div>
+                                  </div>
+                                </sc-if>
+                                <sc-if value="{{ m.hasEvents }}" hint-placeholder-val="{{ false }}">
+                                  <div style="background:#F8FAFC;border-radius:10px;padding:9px 11px"><span style="display:block;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4;font-weight:700;margin-bottom:3px">Event program</span><span style="font-size:12px;color:#3A4152;line-height:1.55">{{ m.eventsLine }}</span></div>
+                                </sc-if>
+                                <sc-if value="{{ m.hasNotes }}" hint-placeholder-val="{{ false }}">
+                                  <div style="background:#FFFBF0;border:1px solid #F3E4C0;border-radius:10px;padding:9px 11px"><span style="display:block;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:#9A6206;font-weight:700;margin-bottom:3px">From the club</span><span style="font-size:12px;color:#5A4413;line-height:1.55">{{ m.notes }}</span></div>
+                                </sc-if>
+                                <sc-if value="{{ m.hasInfoFile }}" hint-placeholder-val="{{ false }}">
+                                  <button onclick="{{ m.onViewInfoFile }}" style="display:flex;align-items:center;justify-content:center;gap:7px;width:100%;background:var(--vx-blue);color:#fff;border:none;border-radius:11px;padding:11px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer"><i data-lucide="file-text" style="width:15px;height:15px"></i>{{ m.infoFileName }}</button>
+                                </sc-if>
+                              </div>
+                            </div>
+                          </sc-for>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ famNoMeetsUpcoming }}" hint-placeholder-val="{{ false }}">
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:14px;box-shadow:0 1px 4px rgba(11,20,40,.04);display:flex;align-items:center;gap:10px"><i data-lucide="calendar-check" style="width:17px;height:17px;color:#9AA2B4"></i><span style="font-size:12px;color:#7A8296;line-height:1.5">No meets coming up just yet. The club posts them here as soon as the dates are confirmed.</span></div>
+                      </sc-if>
+
+                      <!-- Camps, beside the meets — the other half of what a family plans around. -->
+                      <sc-if value="{{ famHasCamps }}" hint-placeholder-val="{{ false }}">
+                        <div style="display:flex;flex-direction:column;gap:9px;margin-top:12px">
+                          <h3 style="margin:0 2px;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#7A8296">Camps &amp; training weeks</h3>
+                          <sc-for list="{{ famCamps }}" as="c" hint-placeholder-count="2">
+                            <div style="background:#fff;border:1px solid #E5E9F0;border-radius:15px;padding:13px 14px;box-shadow:0 2px 7px rgba(11,20,40,.05);display:flex;flex-direction:column;gap:8px">
+                              <div style="display:flex;align-items:center;gap:12px">
+                                <span style="flex:none;width:44px;height:44px;border-radius:13px;background:linear-gradient(140deg,#34D77E,#0C9F5F);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;box-shadow:0 6px 14px rgba(12,159,95,.28)"><span style="font-size:15px;font-weight:800">{{ c.day }}</span><span style="font-size:8.5px;font-weight:700;letter-spacing:.4px">{{ c.mon }}</span></span>
+                                <span style="flex:1;min-width:0"><span style="display:block;font-size:14px;font-weight:700;color:#0C1116">{{ c.name }}</span><span style="display:block;font-size:12px;color:#0C1116;font-weight:600;margin-top:2px">{{ c.when }}</span></span>
+                                <sc-if value="{{ c.hasCost }}" hint-placeholder-val="{{ false }}"><span style="flex:none;background:#E9FBF2;color:#0C7A4F;border-radius:999px;padding:5px 11px;font-size:11px;font-weight:800">{{ c.cost }}</span></sc-if>
+                              </div>
+                              <div style="background:#F8FAFC;border:1px solid #EEF1F5;border-radius:11px;padding:9px 11px;display:flex;flex-direction:column;gap:6px">
+                                <sc-if value="{{ c.hasPlace }}" hint-placeholder-val="{{ false }}">
+                                  <div style="display:flex;align-items:center;gap:9px"><i data-lucide="map-pin" style="width:14px;height:14px;color:#9AA2B4;flex:none"></i><span style="flex:none;width:66px;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4;font-weight:700">Where</span><span style="flex:1;min-width:0;font-size:12.5px;color:#0C1116;font-weight:600">{{ c.place }}</span></div>
+                                </sc-if>
+                                <sc-if value="{{ c.hasWho }}" hint-placeholder-val="{{ false }}">
+                                  <div style="display:flex;align-items:center;gap:9px"><i data-lucide="users" style="width:14px;height:14px;color:#9AA2B4;flex:none"></i><span style="flex:none;width:66px;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4;font-weight:700">Who</span><span style="flex:1;min-width:0;font-size:12.5px;color:#0C1116;font-weight:600">{{ c.who }}</span></div>
+                                </sc-if>
+                                <sc-if value="{{ c.hasTimes }}" hint-placeholder-val="{{ false }}">
+                                  <div style="display:flex;align-items:center;gap:9px"><i data-lucide="timer" style="width:14px;height:14px;color:#9AA2B4;flex:none"></i><span style="flex:none;width:66px;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4;font-weight:700">Times</span><span style="flex:1;min-width:0;font-size:12.5px;color:#0C1116;font-weight:600">{{ c.times }}</span></div>
+                                </sc-if>
+                              </div>
+                              <sc-if value="{{ c.hasNotes }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#7A8296;line-height:1.55">{{ c.notes }}</span></sc-if>
+                            </div>
+                          </sc-for>
+                        </div>
+                      </sc-if>
                       <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:15px;box-shadow:0 2px 7px rgba(11,20,40,.05);margin-top:6px">
                         <p style="margin:0 0 9px;font-size:13px;font-weight:700;color:#0C1116">Request an event</p>
                         <div class="vx-scroll" style="display:flex;gap:6px;overflow-x:auto;margin-bottom:9px">
@@ -6318,37 +6430,58 @@ if ('serviceWorker' in navigator) {
                           <button onclick="{{ onMeetsMsgClear }}" aria-label="Dismiss" style="flex:none;width:22px;height:22px;border-radius:6px;border:none;background:rgba(255,255,255,.6);color:{{ meetsMsgFg }};cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:13px;height:13px"></i></button>
                         </div>
                       </sc-if>
+                      <!-- Coming up, then the season behind it. Two lists, because they are read
+                           for opposite reasons: one is a thing to prepare for, the other a thing
+                           to look up, and eighteen of the second used to sit on top of the first. -->
                       <div style="display:flex;flex-direction:column;gap:8px">
-                        <sc-for list="{{ meetRows }}" as="m" hint-placeholder-count="6">
-                          <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;box-shadow:0 1px 4px rgba(11,20,40,.04);overflow:hidden">
+                        <sc-if value="{{ meetsHasUpcoming }}" hint-placeholder-val="{{ true }}">
+                          <div style="display:flex;align-items:center;gap:8px;margin:4px 2px 0">
+                            <span style="width:22px;height:22px;flex:none;border-radius:7px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);display:flex;align-items:center;justify-content:center"><i data-lucide="calendar-clock" style="width:13px;height:13px"></i></span>
+                            <h3 style="margin:0;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#0C1116">Coming up</h3>
+                            <span style="font-size:11px;color:#9AA2B4">{{ meetsUpcomingLabel }}</span>
+                          </div>
+                          <sc-for list="{{ meetRowsUpcoming }}" as="m" hint-placeholder-count="3">
+                          <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;box-shadow:0 1px 4px rgba(11,20,40,.04);overflow:hidden">
                             <button onclick="{{ m.onToggle }}" style="display:flex;align-items:center;gap:11px;width:100%;text-align:left;background:none;border:none;padding:12px 13px;cursor:pointer">
                               <span style="width:36px;height:36px;flex:none;border-radius:10px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);display:flex;align-items:center;justify-content:center"><i data-lucide="medal" style="width:17px;height:17px"></i></span>
                               <span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:13px;color:#0C1116">{{ m.name }}</span><span style="display:block;font-size:11px;color:#7A8296;margin-top:1px">{{ m.meta }}</span></span>
                               <i data-vx-icon="{{ m.chevron }}" style="width:16px;height:16px;color:#AEB6C7"></i>
                             </button>
-                            <div style="padding:0 13px 10px"><button onclick="{{ m.onCycleStatus }}" style="background:{{ m.statusBg }};color:{{ m.statusFg }};border:none;border-radius:7px;padding:4px 10px;font-family:inherit;font-weight:700;font-size:10.5px;cursor:pointer">{{ m.status }}</button></div>
+                            <div style="padding:0 13px 10px;display:flex;flex-wrap:wrap;align-items:center;gap:6px">
+                              <button onclick="{{ m.onCycleStatus }}" style="background:{{ m.statusBg }};color:{{ m.statusFg }};border:none;border-radius:7px;padding:4px 10px;font-family:inherit;font-weight:700;font-size:10.5px;cursor:pointer">{{ m.status }}</button>
+                              <sc-if value="{{ m.hasCuts }}" hint-placeholder-val="{{ false }}"><span style="background:#F3EEFF;color:#5D22CF;border-radius:7px;padding:4px 9px;font-weight:700;font-size:10.5px">Qualifying times set</span></sc-if>
+                              <sc-if value="{{ m.hasInfoFile }}" hint-placeholder-val="{{ false }}"><button onclick="{{ m.onViewInfoFile }}" style="display:flex;align-items:center;gap:5px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border:none;border-radius:7px;padding:4px 9px;font-family:inherit;font-weight:700;font-size:10.5px;cursor:pointer"><i data-lucide="file-text" style="width:12px;height:12px"></i>Info sheet</button></sc-if>
+                            </div>
                             <sc-if value="{{ m.expanded }}" hint-placeholder-val="{{ false }}">
-                              <div style="padding:0 13px 12px;display:flex;flex-direction:column;gap:6px">
+                              <div style="padding:0 13px 12px;display:flex;flex-direction:column;gap:7px">
+                                <sc-if value="{{ m.hasDetails }}" hint-placeholder-val="{{ true }}">
+                                  <div style="background:#F8FAFC;border:1px solid #EEF1F5;border-radius:10px;padding:9px 10px;display:flex;flex-direction:column;gap:5px">
+                                    <sc-for list="{{ m.detailRows }}" as="d" hint-placeholder-count="4">
+                                      <div style="display:flex;align-items:center;gap:8px">
+                                        <i data-vx-icon="{{ d.icon }}" style="width:13px;height:13px;color:#9AA2B4;flex:none"></i>
+                                        <span style="flex:none;width:88px;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4;font-weight:700">{{ d.label }}</span>
+                                        <span style="flex:1;min-width:0;font-size:12px;color:#0C1116;font-weight:600">{{ d.value }}</span>
+                                      </div>
+                                    </sc-for>
+                                  </div>
+                                </sc-if>
+                                <sc-if value="{{ m.hasNotes }}" hint-placeholder-val="{{ false }}">
+                                  <div style="background:#FFFBF0;border:1px solid #F3E4C0;border-radius:10px;padding:9px 10px"><span style="display:block;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:#9A6206;font-weight:700;margin-bottom:3px">Note from the club</span><span style="font-size:12px;color:#5A4413;line-height:1.55">{{ m.notes }}</span></div>
+                                </sc-if>
                                 <sc-if value="{{ m.hasEvents }}" hint-placeholder-val="{{ false }}">
                                   <div style="background:#F8FAFC;border-radius:9px;padding:8px 10px"><span style="display:block;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4;font-weight:700;margin-bottom:3px">Event program</span><span style="font-size:12px;color:#3A4152;line-height:1.5">{{ m.eventsLine }}</span></div>
                                 </sc-if>
-                                <button onclick="{{ m.onToggleEditEvents }}" style="display:flex;align-items:center;justify-content:center;gap:7px;background:#EAF1FF;color:var(--vx-blue-dark);border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer"><i data-lucide="list-checks" style="width:14px;height:14px"></i>{{ m.editEventsLabel }}</button>
-                                <sc-if value="{{ m.canEditMeet }}" hint-placeholder-val="{{ true }}">
-                                  <button onclick="{{ m.onToggleEditMeet }}" style="display:flex;align-items:center;justify-content:center;gap:7px;background:#EAF1FF;color:var(--vx-blue-dark);border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer"><i data-lucide="calendar-days" style="width:14px;height:14px"></i>Edit date &amp; details</button>
-                                </sc-if>
-                                <sc-if value="{{ m.editingMeet }}" hint-placeholder-val="{{ false }}">
-                                  <div style="background:#F8FAFC;border:1px solid #EEF1F5;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:7px">
-                                    <p style="margin:0;font-size:10.5px;color:#7A8296;line-height:1.5">The day this meet is swum. Times already recorded keep the day they were swum on — this is the meet's own date, and it is what a swim that never had one of its own falls back to.</p>
-                                    <input value="{{ meetEdit.date }}" onchange="{{ meetEdit.onDate }}" type="date" aria-label="Meet date" style="background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
-                                    <input value="{{ meetEdit.location }}" oninput="{{ meetEdit.onLocation }}" placeholder="Location e.g. Hamad Aquatics Center" style="background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
-                                    <div style="display:flex;gap:6px">
-                                      <button onclick="{{ meetEdit.onLcm }}" style="flex:1;background:{{ meetEdit.lcmBg }};color:{{ meetEdit.lcmFg }};border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Long course (LCM)</button>
-                                      <button onclick="{{ meetEdit.onScm }}" style="flex:1;background:{{ meetEdit.scmBg }};color:{{ meetEdit.scmFg }};border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Short course (SCM)</button>
+                                <sc-if value="{{ m.hasCuts }}" hint-placeholder-val="{{ false }}">
+                                  <div style="background:#FAF7FF;border:1px solid #E6DBFF;border-radius:10px;padding:9px 10px">
+                                    <span style="display:block;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:#5D22CF;font-weight:700;margin-bottom:5px">Qualifying times</span>
+                                    <div style="display:flex;flex-wrap:wrap;gap:5px">
+                                      <sc-for list="{{ m.cutRows }}" as="q" hint-placeholder-count="6">
+                                        <span style="background:#fff;border:1px solid #E6DBFF;border-radius:7px;padding:4px 8px;font-size:11px;color:#3A4152">{{ q.event }} <b style="font-family:var(--font-mono);color:#0C1116">{{ q.time }}</b></span>
+                                      </sc-for>
                                     </div>
-                                    <sc-if value="{{ meetEdit.errShow }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:11px;color:#B42318;font-weight:600">{{ meetEdit.err }}</p></sc-if>
-                                    <button onclick="{{ meetEdit.onSave }}" style="background:#0C7A4F;color:#fff;border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">Save meet details</button>
                                   </div>
                                 </sc-if>
+                                <button onclick="{{ m.onToggleEditEvents }}" style="display:flex;align-items:center;justify-content:center;gap:7px;background:#EAF1FF;color:var(--vx-blue-dark);border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer"><i data-lucide="list-checks" style="width:14px;height:14px"></i>{{ m.editEventsLabel }}</button>
                                 <sc-if value="{{ m.editingEvents }}" hint-placeholder-val="{{ false }}">
                                   <div style="background:#F8FAFC;border:1px solid #EEF1F5;border-radius:10px;padding:10px">
                                     <p style="margin:0 0 7px;font-size:10.5px;color:#7A8296;line-height:1.5">Tap events to add or remove them from this meet's program. Parents will only be able to request these events.</p>
@@ -6359,6 +6492,59 @@ if ('serviceWorker' in navigator) {
                                     </div>
                                   </div>
                                 </sc-if>
+                                <button onclick="{{ m.onToggleEditCuts }}" style="display:flex;align-items:center;justify-content:center;gap:7px;background:#F3EEFF;color:#5D22CF;border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer"><i data-lucide="timer" style="width:14px;height:14px"></i>{{ m.editCutsLabel }}</button>
+                                <sc-if value="{{ m.editingCuts }}" hint-placeholder-val="{{ false }}">
+                                  <div style="background:#F8FAFC;border:1px solid #EEF1F5;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px">
+                                    <p style="margin:0;font-size:10.5px;color:#7A8296;line-height:1.5">The time a swimmer has to have already swum to be entered. Type it as 1:02.45 or 29.80, and leave an event blank if it has no standard. Families see these against their own child's best time.</p>
+                                    <sc-for list="{{ m.cutEditRows }}" as="q" hint-placeholder-count="8">
+                                      <div style="display:flex;align-items:center;gap:8px">
+                                        <span style="flex:1;min-width:0;font-size:12px;color:#3A4152;font-weight:600">{{ q.event }}</span>
+                                        <input value="{{ q.value }}" onchange="{{ q.onChange }}" placeholder="—" aria-label="Qualifying time" style="flex:none;width:96px;background:#fff;border:1px solid #E5E9F0;border-radius:8px;padding:7px 9px;font-family:var(--font-mono);font-size:11.5px;color:#0C1116;outline:none;text-align:center">
+                                      </div>
+                                    </sc-for>
+                                  </div>
+                                </sc-if>
+                                <button onclick="{{ m.onToggleEditMeet }}" style="display:flex;align-items:center;justify-content:center;gap:7px;background:#EAF1FF;color:var(--vx-blue-dark);border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer"><i data-lucide="calendar-days" style="width:14px;height:14px"></i>Edit date &amp; details</button>
+                                <sc-if value="{{ m.editingMeet }}" hint-placeholder-val="{{ false }}">
+                                  <div style="background:#F8FAFC;border:1px solid #EEF1F5;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:7px">
+                                    <sc-if value="{{ meetEdit.canEditCore }}" hint-placeholder-val="{{ true }}">
+                                      <p style="margin:0;font-size:10.5px;color:#7A8296;line-height:1.5">The day this meet is swum. Times already recorded keep the day they were swum on — this is the meet's own date, and it is what a swim that never had one of its own falls back to.</p>
+                                      <input value="{{ meetEdit.date }}" onchange="{{ meetEdit.onDate }}" type="date" aria-label="Meet date" style="background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                                      <input value="{{ meetEdit.location }}" oninput="{{ meetEdit.onLocation }}" placeholder="Location e.g. Hamad Aquatics Center" style="background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                                      <div style="display:flex;gap:6px">
+                                        <button onclick="{{ meetEdit.onLcm }}" style="flex:1;background:{{ meetEdit.lcmBg }};color:{{ meetEdit.lcmFg }};border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Long course (LCM)</button>
+                                        <button onclick="{{ meetEdit.onScm }}" style="flex:1;background:{{ meetEdit.scmBg }};color:{{ meetEdit.scmFg }};border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Short course (SCM)</button>
+                                      </div>
+                                    </sc-if>
+                                    <sc-if value="{{ meetEditImported }}" hint-placeholder-val="{{ false }}">
+                                      <p style="margin:0;font-size:10.5px;color:#7A8296;line-height:1.5">This meet came in with imported results, so its day, venue and course stay as the host recorded them. Everything below is the club's own and is saved here.</p>
+                                    </sc-if>
+                                    <p style="margin:4px 0 0;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4">What families need to know</p>
+                                    <div style="display:flex;gap:6px">
+                                      <label style="flex:1;display:flex;flex-direction:column;gap:3px"><span style="font-size:10.5px;color:#7A8296">Last day</span><input value="{{ meetEdit.endDate }}" onchange="{{ meetEdit.onEndDate }}" type="date" aria-label="Last day of the meet" style="background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-size:12px;color:#0C1116;outline:none"></label>
+                                      <label style="flex:1;display:flex;flex-direction:column;gap:3px"><span style="font-size:10.5px;color:#7A8296">Entries close</span><input value="{{ meetEdit.deadline }}" onchange="{{ meetEdit.onDeadline }}" type="date" aria-label="Entry deadline" style="background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-size:12px;color:#0C1116;outline:none"></label>
+                                    </div>
+                                    <div style="display:flex;gap:6px">
+                                      <input value="{{ meetEdit.warmup }}" oninput="{{ meetEdit.onWarmup }}" placeholder="Warm-up e.g. 07:00" style="flex:1;min-width:0;background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-size:12px;color:#0C1116;outline:none">
+                                      <input value="{{ meetEdit.start }}" oninput="{{ meetEdit.onStart }}" placeholder="First race e.g. 08:30" style="flex:1;min-width:0;background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-size:12px;color:#0C1116;outline:none">
+                                    </div>
+                                    <div style="display:flex;gap:6px">
+                                      <input value="{{ meetEdit.sessions }}" oninput="{{ meetEdit.onSessions }}" placeholder="Sessions e.g. 2 per day" style="flex:1;min-width:0;background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-size:12px;color:#0C1116;outline:none">
+                                      <input value="{{ meetEdit.fee }}" oninput="{{ meetEdit.onFee }}" placeholder="Entry fee e.g. 50 QAR / event" style="flex:1;min-width:0;background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-size:12px;color:#0C1116;outline:none">
+                                    </div>
+                                    <input value="{{ meetEdit.host }}" oninput="{{ meetEdit.onHost }}" placeholder="Hosted by (optional)" style="background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-size:12px;color:#0C1116;outline:none">
+                                    <textarea value="{{ meetEdit.notes }}" oninput="{{ meetEdit.onNotes }}" placeholder="Anything else families should know — transport, kit, who to ask" style="width:100%;height:64px;box-sizing:border-box;background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-size:12px;color:#0C1116;outline:none;resize:vertical"></textarea>
+                                    <label style="display:flex;align-items:center;justify-content:center;gap:7px;background:#fff;border:1px dashed #CDD3E2;border-radius:9px;padding:10px;font-size:12px;font-weight:600;color:#3A4152;cursor:pointer"><i data-lucide="file-up" style="width:14px;height:14px"></i><span>{{ meetEdit.fileLabel }}</span><input type="file" accept="application/pdf,image/*" onchange="{{ meetEdit.onFilePick }}" style="display:none"></label>
+                                    <sc-if value="{{ meetEdit.hasFile }}" hint-placeholder-val="{{ false }}">
+                                      <div style="display:flex;gap:6px">
+                                        <button onclick="{{ meetEdit.onFileView }}" style="flex:1;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border:none;border-radius:9px;padding:8px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Open the sheet</button>
+                                        <button onclick="{{ meetEdit.onFileClear }}" style="flex:none;background:#fff;color:#B42318;border:1px solid #F0D3D0;border-radius:9px;padding:8px 12px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Remove</button>
+                                      </div>
+                                    </sc-if>
+                                    <sc-if value="{{ meetEdit.errShow }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:11px;color:#B42318;font-weight:600">{{ meetEdit.err }}</p></sc-if>
+                                    <button onclick="{{ meetEdit.onSave }}" style="background:#0C7A4F;color:#fff;border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">Save meet details</button>
+                                  </div>
+                                </sc-if>
                                 <sc-for list="{{ m.top }}" as="t" hint-placeholder-count="3">
                                   <div style="display:flex;align-items:center;justify-content:space-between;background:#F8FAFC;border-radius:9px;padding:8px 10px"><span style="font-size:12px;color:#3A4152">{{ t.name }} · {{ t.event }}</span><span style="font-family:var(--font-mono);font-weight:700;font-size:12px;color:#0C1116">{{ t.time }}</span></div>
                                 </sc-for>
@@ -6366,8 +6552,198 @@ if ('serviceWorker' in navigator) {
                               </div>
                             </sc-if>
                           </div>
-                        </sc-for>
+                          </sc-for>
+                        </sc-if>
+                        <sc-if value="{{ meetsNoneAtAll }}" hint-placeholder-val="{{ false }}">
+                          <p style="margin:2px;font-size:12px;color:#9AA2B4">No meets on record yet. Add one to the calendar above, or import a set of results.</p>
+                        </sc-if>
+
+                        <sc-if value="{{ meetsHasDone }}" hint-placeholder-val="{{ true }}">
+                          <button onclick="{{ onMeetsDoneToggle }}" style="display:flex;align-items:center;gap:9px;background:none;border:none;padding:10px 2px 2px;cursor:pointer;font-family:inherit;text-align:left;width:100%">
+                            <span style="width:22px;height:22px;flex:none;border-radius:7px;background:#DCF5EA;color:#0C7A4F;display:flex;align-items:center;justify-content:center"><i data-lucide="check" style="width:13px;height:13px"></i></span>
+                            <span style="flex:1;min-width:0"><span style="display:block;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#0C1116">Already swum</span><span style="display:block;font-size:11px;color:#9AA2B4;margin-top:1px">{{ meetsDoneLabel }}</span></span>
+                            <i data-vx-icon="{{ meetsDoneChevron }}" style="width:16px;height:16px;color:#AEB6C7"></i>
+                          </button>
+                          <sc-if value="{{ meetsDoneOpen }}" hint-placeholder-val="{{ false }}">
+                            <sc-for list="{{ meetRowsDone }}" as="dm" hint-placeholder-count="3">
+                          <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;box-shadow:0 1px 4px rgba(11,20,40,.04);overflow:hidden">
+                            <button onclick="{{ dm.onToggle }}" style="display:flex;align-items:center;gap:11px;width:100%;text-align:left;background:none;border:none;padding:12px 13px;cursor:pointer">
+                              <span style="width:36px;height:36px;flex:none;border-radius:10px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);display:flex;align-items:center;justify-content:center"><i data-lucide="medal" style="width:17px;height:17px"></i></span>
+                              <span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:13px;color:#0C1116">{{ dm.name }}</span><span style="display:block;font-size:11px;color:#7A8296;margin-top:1px">{{ dm.meta }}</span></span>
+                              <i data-vx-icon="{{ dm.chevron }}" style="width:16px;height:16px;color:#AEB6C7"></i>
+                            </button>
+                            <div style="padding:0 13px 10px;display:flex;flex-wrap:wrap;align-items:center;gap:6px">
+                              <button onclick="{{ dm.onCycleStatus }}" style="background:{{ dm.statusBg }};color:{{ dm.statusFg }};border:none;border-radius:7px;padding:4px 10px;font-family:inherit;font-weight:700;font-size:10.5px;cursor:pointer">{{ dm.status }}</button>
+                              <sc-if value="{{ dm.hasCuts }}" hint-placeholder-val="{{ false }}"><span style="background:#F3EEFF;color:#5D22CF;border-radius:7px;padding:4px 9px;font-weight:700;font-size:10.5px">Qualifying times set</span></sc-if>
+                              <sc-if value="{{ dm.hasInfoFile }}" hint-placeholder-val="{{ false }}"><button onclick="{{ dm.onViewInfoFile }}" style="display:flex;align-items:center;gap:5px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border:none;border-radius:7px;padding:4px 9px;font-family:inherit;font-weight:700;font-size:10.5px;cursor:pointer"><i data-lucide="file-text" style="width:12px;height:12px"></i>Info sheet</button></sc-if>
+                            </div>
+                            <sc-if value="{{ dm.expanded }}" hint-placeholder-val="{{ false }}">
+                              <div style="padding:0 13px 12px;display:flex;flex-direction:column;gap:7px">
+                                <sc-if value="{{ dm.hasDetails }}" hint-placeholder-val="{{ true }}">
+                                  <div style="background:#F8FAFC;border:1px solid #EEF1F5;border-radius:10px;padding:9px 10px;display:flex;flex-direction:column;gap:5px">
+                                    <sc-for list="{{ dm.detailRows }}" as="d" hint-placeholder-count="4">
+                                      <div style="display:flex;align-items:center;gap:8px">
+                                        <i data-vx-icon="{{ d.icon }}" style="width:13px;height:13px;color:#9AA2B4;flex:none"></i>
+                                        <span style="flex:none;width:88px;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4;font-weight:700">{{ d.label }}</span>
+                                        <span style="flex:1;min-width:0;font-size:12px;color:#0C1116;font-weight:600">{{ d.value }}</span>
+                                      </div>
+                                    </sc-for>
+                                  </div>
+                                </sc-if>
+                                <sc-if value="{{ dm.hasNotes }}" hint-placeholder-val="{{ false }}">
+                                  <div style="background:#FFFBF0;border:1px solid #F3E4C0;border-radius:10px;padding:9px 10px"><span style="display:block;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:#9A6206;font-weight:700;margin-bottom:3px">Note from the club</span><span style="font-size:12px;color:#5A4413;line-height:1.55">{{ dm.notes }}</span></div>
+                                </sc-if>
+                                <sc-if value="{{ dm.hasEvents }}" hint-placeholder-val="{{ false }}">
+                                  <div style="background:#F8FAFC;border-radius:9px;padding:8px 10px"><span style="display:block;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4;font-weight:700;margin-bottom:3px">Event program</span><span style="font-size:12px;color:#3A4152;line-height:1.5">{{ dm.eventsLine }}</span></div>
+                                </sc-if>
+                                <sc-if value="{{ dm.hasCuts }}" hint-placeholder-val="{{ false }}">
+                                  <div style="background:#FAF7FF;border:1px solid #E6DBFF;border-radius:10px;padding:9px 10px">
+                                    <span style="display:block;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:#5D22CF;font-weight:700;margin-bottom:5px">Qualifying times</span>
+                                    <div style="display:flex;flex-wrap:wrap;gap:5px">
+                                      <sc-for list="{{ dm.cutRows }}" as="q" hint-placeholder-count="6">
+                                        <span style="background:#fff;border:1px solid #E6DBFF;border-radius:7px;padding:4px 8px;font-size:11px;color:#3A4152">{{ q.event }} <b style="font-family:var(--font-mono);color:#0C1116">{{ q.time }}</b></span>
+                                      </sc-for>
+                                    </div>
+                                  </div>
+                                </sc-if>
+                                <button onclick="{{ dm.onToggleEditEvents }}" style="display:flex;align-items:center;justify-content:center;gap:7px;background:#EAF1FF;color:var(--vx-blue-dark);border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer"><i data-lucide="list-checks" style="width:14px;height:14px"></i>{{ dm.editEventsLabel }}</button>
+                                <sc-if value="{{ dm.editingEvents }}" hint-placeholder-val="{{ false }}">
+                                  <div style="background:#F8FAFC;border:1px solid #EEF1F5;border-radius:10px;padding:10px">
+                                    <p style="margin:0 0 7px;font-size:10.5px;color:#7A8296;line-height:1.5">Tap events to add or remove them from this meet's program. Parents will only be able to request these events.</p>
+                                    <div style="display:flex;flex-wrap:wrap;gap:6px">
+                                      <sc-for list="{{ dm.eventEditChips }}" as="ce" hint-placeholder-count="18">
+                                        <button onclick="{{ ce.onToggle }}" style="background:{{ ce.bg }};color:{{ ce.fg }};border:1px solid {{ ce.border }};border-radius:8px;padding:6px 10px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer">{{ ce.label }}</button>
+                                      </sc-for>
+                                    </div>
+                                  </div>
+                                </sc-if>
+                                <button onclick="{{ dm.onToggleEditCuts }}" style="display:flex;align-items:center;justify-content:center;gap:7px;background:#F3EEFF;color:#5D22CF;border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer"><i data-lucide="timer" style="width:14px;height:14px"></i>{{ dm.editCutsLabel }}</button>
+                                <sc-if value="{{ dm.editingCuts }}" hint-placeholder-val="{{ false }}">
+                                  <div style="background:#F8FAFC;border:1px solid #EEF1F5;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px">
+                                    <p style="margin:0;font-size:10.5px;color:#7A8296;line-height:1.5">The time a swimmer has to have already swum to be entered. Type it as 1:02.45 or 29.80, and leave an event blank if it has no standard. Families see these against their own child's best time.</p>
+                                    <sc-for list="{{ dm.cutEditRows }}" as="q" hint-placeholder-count="8">
+                                      <div style="display:flex;align-items:center;gap:8px">
+                                        <span style="flex:1;min-width:0;font-size:12px;color:#3A4152;font-weight:600">{{ q.event }}</span>
+                                        <input value="{{ q.value }}" onchange="{{ q.onChange }}" placeholder="—" aria-label="Qualifying time" style="flex:none;width:96px;background:#fff;border:1px solid #E5E9F0;border-radius:8px;padding:7px 9px;font-family:var(--font-mono);font-size:11.5px;color:#0C1116;outline:none;text-align:center">
+                                      </div>
+                                    </sc-for>
+                                  </div>
+                                </sc-if>
+                                <button onclick="{{ dm.onToggleEditMeet }}" style="display:flex;align-items:center;justify-content:center;gap:7px;background:#EAF1FF;color:var(--vx-blue-dark);border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer"><i data-lucide="calendar-days" style="width:14px;height:14px"></i>Edit date &amp; details</button>
+                                <sc-if value="{{ dm.editingMeet }}" hint-placeholder-val="{{ false }}">
+                                  <div style="background:#F8FAFC;border:1px solid #EEF1F5;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:7px">
+                                    <sc-if value="{{ meetEdit.canEditCore }}" hint-placeholder-val="{{ true }}">
+                                      <p style="margin:0;font-size:10.5px;color:#7A8296;line-height:1.5">The day this meet is swum. Times already recorded keep the day they were swum on — this is the meet's own date, and it is what a swim that never had one of its own falls back to.</p>
+                                      <input value="{{ meetEdit.date }}" onchange="{{ meetEdit.onDate }}" type="date" aria-label="Meet date" style="background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                                      <input value="{{ meetEdit.location }}" oninput="{{ meetEdit.onLocation }}" placeholder="Location e.g. Hamad Aquatics Center" style="background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                                      <div style="display:flex;gap:6px">
+                                        <button onclick="{{ meetEdit.onLcm }}" style="flex:1;background:{{ meetEdit.lcmBg }};color:{{ meetEdit.lcmFg }};border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Long course (LCM)</button>
+                                        <button onclick="{{ meetEdit.onScm }}" style="flex:1;background:{{ meetEdit.scmBg }};color:{{ meetEdit.scmFg }};border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Short course (SCM)</button>
+                                      </div>
+                                    </sc-if>
+                                    <sc-if value="{{ meetEditImported }}" hint-placeholder-val="{{ false }}">
+                                      <p style="margin:0;font-size:10.5px;color:#7A8296;line-height:1.5">This meet came in with imported results, so its day, venue and course stay as the host recorded them. Everything below is the club's own and is saved here.</p>
+                                    </sc-if>
+                                    <p style="margin:4px 0 0;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4">What families need to know</p>
+                                    <div style="display:flex;gap:6px">
+                                      <label style="flex:1;display:flex;flex-direction:column;gap:3px"><span style="font-size:10.5px;color:#7A8296">Last day</span><input value="{{ meetEdit.endDate }}" onchange="{{ meetEdit.onEndDate }}" type="date" aria-label="Last day of the meet" style="background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-size:12px;color:#0C1116;outline:none"></label>
+                                      <label style="flex:1;display:flex;flex-direction:column;gap:3px"><span style="font-size:10.5px;color:#7A8296">Entries close</span><input value="{{ meetEdit.deadline }}" onchange="{{ meetEdit.onDeadline }}" type="date" aria-label="Entry deadline" style="background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:8px;font-family:inherit;font-size:12px;color:#0C1116;outline:none"></label>
+                                    </div>
+                                    <div style="display:flex;gap:6px">
+                                      <input value="{{ meetEdit.warmup }}" oninput="{{ meetEdit.onWarmup }}" placeholder="Warm-up e.g. 07:00" style="flex:1;min-width:0;background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-size:12px;color:#0C1116;outline:none">
+                                      <input value="{{ meetEdit.start }}" oninput="{{ meetEdit.onStart }}" placeholder="First race e.g. 08:30" style="flex:1;min-width:0;background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-size:12px;color:#0C1116;outline:none">
+                                    </div>
+                                    <div style="display:flex;gap:6px">
+                                      <input value="{{ meetEdit.sessions }}" oninput="{{ meetEdit.onSessions }}" placeholder="Sessions e.g. 2 per day" style="flex:1;min-width:0;background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-size:12px;color:#0C1116;outline:none">
+                                      <input value="{{ meetEdit.fee }}" oninput="{{ meetEdit.onFee }}" placeholder="Entry fee e.g. 50 QAR / event" style="flex:1;min-width:0;background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-size:12px;color:#0C1116;outline:none">
+                                    </div>
+                                    <input value="{{ meetEdit.host }}" oninput="{{ meetEdit.onHost }}" placeholder="Hosted by (optional)" style="background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-size:12px;color:#0C1116;outline:none">
+                                    <textarea value="{{ meetEdit.notes }}" oninput="{{ meetEdit.onNotes }}" placeholder="Anything else families should know — transport, kit, who to ask" style="width:100%;height:64px;box-sizing:border-box;background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-size:12px;color:#0C1116;outline:none;resize:vertical"></textarea>
+                                    <label style="display:flex;align-items:center;justify-content:center;gap:7px;background:#fff;border:1px dashed #CDD3E2;border-radius:9px;padding:10px;font-size:12px;font-weight:600;color:#3A4152;cursor:pointer"><i data-lucide="file-up" style="width:14px;height:14px"></i><span>{{ meetEdit.fileLabel }}</span><input type="file" accept="application/pdf,image/*" onchange="{{ meetEdit.onFilePick }}" style="display:none"></label>
+                                    <sc-if value="{{ meetEdit.hasFile }}" hint-placeholder-val="{{ false }}">
+                                      <div style="display:flex;gap:6px">
+                                        <button onclick="{{ meetEdit.onFileView }}" style="flex:1;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border:none;border-radius:9px;padding:8px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Open the sheet</button>
+                                        <button onclick="{{ meetEdit.onFileClear }}" style="flex:none;background:#fff;color:#B42318;border:1px solid #F0D3D0;border-radius:9px;padding:8px 12px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Remove</button>
+                                      </div>
+                                    </sc-if>
+                                    <sc-if value="{{ meetEdit.errShow }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:11px;color:#B42318;font-weight:600">{{ meetEdit.err }}</p></sc-if>
+                                    <button onclick="{{ meetEdit.onSave }}" style="background:#0C7A4F;color:#fff;border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">Save meet details</button>
+                                  </div>
+                                </sc-if>
+                                <sc-for list="{{ dm.top }}" as="t" hint-placeholder-count="3">
+                                  <div style="display:flex;align-items:center;justify-content:space-between;background:#F8FAFC;border-radius:9px;padding:8px 10px"><span style="font-size:12px;color:#3A4152">{{ t.name }} · {{ t.event }}</span><span style="font-family:var(--font-mono);font-weight:700;font-size:12px;color:#0C1116">{{ t.time }}</span></div>
+                                </sc-for>
+                                <button onclick="{{ dm.onManageEntries }}" style="display:flex;align-items:center;justify-content:center;gap:7px;background:#0A0F1A;color:#fff;border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer"><i data-lucide="list-ordered" style="width:14px;height:14px"></i>Manage entries &amp; heats</button>
+                              </div>
+                            </sc-if>
+                          </div>
+                            </sc-for>
+                          </sc-if>
+                        </sc-if>
                       </div>
+
+                      <!-- CAMPS — beside the meets, never among them. -->
+                      <button onclick="{{ onCampFormToggle }}" style="display:flex;align-items:center;gap:11px;background:#fff;border:1px solid #E5E9F0;border-radius:15px;padding:14px;cursor:pointer;font-family:inherit;text-align:left;box-shadow:0 2px 7px rgba(11,20,40,.05);margin-top:6px">
+                        <span style="width:38px;height:38px;flex:none;border-radius:11px;background:#E9FBF2;color:#0C7A4F;display:flex;align-items:center;justify-content:center"><i data-lucide="tent" style="width:18px;height:18px"></i></span>
+                        <span style="flex:1"><span style="display:block;font-weight:700;font-size:13.5px;color:#0C1116">Camps &amp; training weeks</span><span style="display:block;font-size:11.5px;color:#7A8296;margin-top:1px">Dates, who it is for, times &amp; cost — families see these beside the meets</span></span>
+                        <i data-vx-icon="{{ campFormChevron }}" style="width:18px;height:18px;color:#AEB6C7"></i>
+                      </button>
+                      <sc-if value="{{ campFormOpen }}" hint-placeholder-val="{{ false }}">
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:15px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05);display:flex;flex-direction:column;gap:9px">
+                          <input value="{{ campForm.name }}" oninput="{{ campForm.onName }}" placeholder="Camp name e.g. Winter Training Camp" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:10px 12px;font-family:inherit;font-size:13px;color:#0C1116;outline:none">
+                          <input value="{{ campForm.place }}" oninput="{{ campForm.onPlace }}" placeholder="Where" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:10px 12px;font-family:inherit;font-size:13px;color:#0C1116;outline:none">
+                          <div style="display:flex;gap:8px">
+                            <label style="flex:1;display:flex;flex-direction:column;gap:3px"><span style="font-size:10.5px;color:#7A8296">First day</span><input value="{{ campForm.start }}" onchange="{{ campForm.onStart }}" type="date" aria-label="First day of the camp" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:9px 10px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none"></label>
+                            <label style="flex:1;display:flex;flex-direction:column;gap:3px"><span style="font-size:10.5px;color:#7A8296">Last day</span><input value="{{ campForm.end }}" onchange="{{ campForm.onEnd }}" type="date" aria-label="Last day of the camp" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:9px 10px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none"></label>
+                          </div>
+                          <input value="{{ campForm.who }}" oninput="{{ campForm.onWho }}" placeholder="Who it is for e.g. Advanced A &amp; B, 11 and over" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:10px 12px;font-family:inherit;font-size:13px;color:#0C1116;outline:none">
+                          <div style="display:flex;gap:8px">
+                            <input value="{{ campForm.times }}" oninput="{{ campForm.onTimes }}" placeholder="Times e.g. 06:00–08:00 &amp; 17:00–19:00" style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:10px 12px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                            <input value="{{ campForm.cost }}" oninput="{{ campForm.onCost }}" placeholder="Cost" style="flex:none;width:110px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:10px 12px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
+                          </div>
+                          <textarea value="{{ campForm.notes }}" oninput="{{ campForm.onNotes }}" placeholder="Anything else families should know" style="width:100%;height:60px;box-sizing:border-box;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:10px 12px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none;resize:vertical"></textarea>
+                          <sc-if value="{{ campErrShow }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:12px;color:#B42318;font-weight:600">{{ campErr }}</p></sc-if>
+                          <button onclick="{{ onCampSave }}" style="background:#0C7A4F;color:#fff;border:none;border-radius:10px;padding:10px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer">{{ campFormLabel }}</button>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ campsHasUpcoming }}" hint-placeholder-val="{{ true }}">
+                        <div style="display:flex;flex-direction:column;gap:8px">
+                          <div style="display:flex;align-items:center;gap:8px;margin:4px 2px 0">
+                            <h3 style="margin:0;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#0C1116">Camps coming up</h3>
+                            <span style="font-size:11px;color:#9AA2B4">{{ campsUpcomingLabel }}</span>
+                          </div>
+                          <sc-for list="{{ campRowsUpcoming }}" as="c" hint-placeholder-count="2">
+                            <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:12px 13px;box-shadow:0 1px 4px rgba(11,20,40,.04);display:flex;flex-direction:column;gap:7px">
+                              <div style="display:flex;align-items:center;gap:11px">
+                                <span style="flex:none;width:40px;height:40px;border-radius:11px;background:#E9FBF2;color:#0C7A4F;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1"><span style="font-size:14px;font-weight:800">{{ c.day }}</span><span style="font-size:8.5px;font-weight:700;letter-spacing:.4px">{{ c.mon }}</span></span>
+                                <span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:13px;color:#0C1116">{{ c.name }}</span><span style="display:block;font-size:11px;color:#7A8296;margin-top:1px">{{ c.when }}</span></span>
+                                <button onclick="{{ c.onEdit }}" style="flex:none;background:#EAF1FF;color:var(--vx-blue-dark);border:none;border-radius:8px;padding:6px 11px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Edit</button>
+                                <button onclick="{{ c.onDelete }}" aria-label="Remove camp" style="flex:none;background:none;border:none;color:#C7CDDA;cursor:pointer"><i data-lucide="x" style="width:15px;height:15px"></i></button>
+                              </div>
+                              <span style="font-size:11.5px;color:#3A4152;line-height:1.5">{{ c.meta }}</span>
+                              <sc-if value="{{ c.hasCost }}" hint-placeholder-val="{{ false }}"><span style="align-self:flex-start;background:#F1F4F8;border-radius:7px;padding:4px 9px;font-size:11px;font-weight:700;color:#3A4152">{{ c.cost }}</span></sc-if>
+                              <sc-if value="{{ c.hasNotes }}" hint-placeholder-val="{{ false }}"><span style="font-size:11.5px;color:#7A8296;line-height:1.55">{{ c.notes }}</span></sc-if>
+                            </div>
+                          </sc-for>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ campsHasDone }}" hint-placeholder-val="{{ false }}">
+                        <button onclick="{{ onCampsDoneToggle }}" style="display:flex;align-items:center;gap:9px;background:none;border:none;padding:8px 2px 2px;cursor:pointer;font-family:inherit;text-align:left;width:100%">
+                          <span style="flex:1;min-width:0;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#7A8296">{{ campsDoneLabel }}</span>
+                          <i data-vx-icon="{{ campsDoneChevron }}" style="width:16px;height:16px;color:#AEB6C7"></i>
+                        </button>
+                        <sc-if value="{{ campsDoneOpen }}" hint-placeholder-val="{{ false }}">
+                          <div style="display:flex;flex-direction:column;gap:7px">
+                            <sc-for list="{{ campRowsDone }}" as="dc" hint-placeholder-count="2">
+                              <div style="display:flex;align-items:center;gap:10px;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:11px;padding:9px 11px">
+                                <span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;font-weight:700;color:#3A4152">{{ dc.name }}</span><span style="display:block;font-size:11px;color:#9AA2B4">{{ dc.when }}</span></span>
+                                <button onclick="{{ dc.onEdit }}" style="flex:none;background:#fff;color:#3A4152;border:1px solid #E5E9F0;border-radius:8px;padding:5px 10px;font-family:inherit;font-weight:700;font-size:11px;cursor:pointer">Edit</button>
+                                <button onclick="{{ dc.onDelete }}" aria-label="Remove camp" style="flex:none;background:none;border:none;color:#C7CDDA;cursor:pointer"><i data-lucide="x" style="width:14px;height:14px"></i></button>
+                              </div>
+                            </sc-for>
+                          </div>
+                        </sc-if>
+                      </sc-if>
                     </div>
                   </sc-if>
 
@@ -7513,7 +7889,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-23b';
+const VX_BUILD='2026-08-29a';
 // The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
 // and the repair for that read a document the migration had already disturbed. It goes back on
 // only after being run against a copy of the database, never again against the club itself.
@@ -7672,6 +8048,17 @@ class Component extends DCLogic {
     this.wearables=this._loadJSON('vx_wear_cache', {});
     this.wearConn={};
     this.meetCuts=this._loadJSON('vx_meet_cuts', {});
+    // Everything about a meet that is not its name, day, venue or course: the entry deadline,
+    // when to be on poolside, how many sessions, what it costs, and the club's own note. Keyed
+    // by meet name, exactly as the event program and the qualifying times already are — a meet
+    // built here and a meet that arrived with an import both have one, and neither needs a
+    // column adding to club_meets to get it.
+    this.meetInfo=this._loadJSON('vx_meet_info', {});
+    // Camps are not meets. There is no event program, no entry, no result and no cut time —
+    // there is a place, a run of days, who it is for and what it costs. Filing them as meets
+    // would put them in the entries sheet, the results screen and every meet count in the app,
+    // so they are their own list and are shown beside the meets rather than among them.
+    this.camps=this._loadJSON('vx_camps', []);
     this.hrSets=this._loadJSON('vx_hrsets_cache', {});
     this.wellness=this._loadJSON('vx_wellness_cache', {});
     this.eventRequests=this._loadJSON('vx_event_requests', []);
@@ -7772,6 +8159,8 @@ class Component extends DCLogic {
       swPbEventSel:'50 Free', swPbTimeDraft:'', swPbCourse:'LCM', swPbMeet:'', swPbMeetDate:'',
       swEditPbs:[], swEditPbEventSel:'50 Free', swEditPbTimeDraft:'', swEditPbCourse:'LCM', swEditPbMeet:'', swEditPbMeetDate:'',
       meetImportOpen:false, meetImportText:'', meetImportPreview:null, meetImportBusy:false, meetExpanded:null, meetEventsEditIdx:null,
+      meetCutsEditName:null, meetEditUploading:false, meetsDoneOpen:false,
+      campForm:{}, campFormOpen:false, campsDoneOpen:false, campErr:'',
       hytekMode:'paste', hytekPdfBusy:false, hytekPdfLabel:'Choose a Hy-Tek file (PDF, .hy3 or .zip)\u2026',
       calOpen:false, calName:'', calLocation:'', calDate:'', calCourse:'LCM', calErr:'',
       meetEditName:null, meetEditDraft:null, meetEditErr:'',
@@ -10447,6 +10836,150 @@ class Component extends DCLogic {
     return out; }
   setMeetCut(meetName, event, timeStr){ const t=(timeStr||'').trim(); const map={...(this.meetCuts||{})}; const meet={...(map[meetName]||{})};
     if(t){ meet[event]=t; } else { delete meet[event]; } map[meetName]=meet; this.meetCuts=map; this._saveJSON('vx_meet_cuts', map); this.forceUpdate(); }
+  // ---- A meet's own details, and the camps beside them ---------------------------------------
+  //
+  // A meet card used to carry four things: name, day, venue and course. That is a fixture list,
+  // not a meet. A parent deciding whether to enter their child needs the entry deadline first of
+  // all — miss it and nothing else matters — then where to be and when, how many days it runs,
+  // what it costs, and the club's own note about it. Every one of those was being sent round on
+  // WhatsApp and asked about again the following week.
+  //
+  // Keyed by meet name, like vx_meet_events and vx_meet_cuts, so a meet the club built and a
+  // meet that arrived with an imported result both have one. It is last-write-wins, as those
+  // two are: two people editing two different meets in the same twenty seconds is the case it
+  // cannot tell apart, and it is rare enough that the club has lived with it on the program and
+  // the cut times for a year. Anything that a swim, an entry or a result hangs off stays in
+  // club_meets, one row per meet, where a clash cannot reach it.
+  MEET_INFO_BLANK(){
+    return {endDate:'', deadline:'', warmup:'', start:'', sessions:'', fee:'', host:'', notes:'',
+            infoUrl:'', infoName:''};
+  }
+  _meetInfo(name){
+    const raw=((this.meetInfo||{})[name])||{};
+    const out=this.MEET_INFO_BLANK();
+    Object.keys(out).forEach(k=>{ const v=raw[k]; if(typeof v === 'string') out[k]=v; });
+    return out;
+  }
+  /** Does this meet carry anything beyond its name, day, venue and course? */
+  _meetHasInfo(name){
+    const i=this._meetInfo(name);
+    return Object.keys(i).some(k=>!!i[k]);
+  }
+  setMeetInfo(name, patch){
+    if(!name) return;
+    const map={...(this.meetInfo||{})};
+    const next={...this._meetInfo(name), ...(patch||{})};
+    // A record of nothing but empty strings is not a record. Dropping it keeps the document the
+    // size of what the club has actually filled in rather than one entry per meet on file.
+    if(Object.keys(next).every(k=>!next[k])) delete map[name]; else map[name]=next;
+    this.meetInfo=map; this._saveJSON('vx_meet_info', map); this.forceUpdate();
+  }
+  // ---- Upcoming or done ----------------------------------------------------------------------
+  //
+  // Eighteen meets in one list, newest import first, is a season's history with next month's
+  // meet somewhere inside it. The two are read for opposite reasons — one is a thing to prepare
+  // for, the other a thing to look up — so they are two lists.
+  //
+  // The status a coach sets wins, because it is the only part a person has actually asserted:
+  // Completed means completed even if the day has not arrived, and a meet still marked Entries
+  // open on the morning after is still what the club is working on. Only when nobody has said
+  // anything does the date decide, and a meet with no readable date is treated as upcoming —
+  // it is better to see a meet you have finished with than to lose one you have not.
+  //
+  // Deliberately not _meetISO, which already exists and means something else: that one is a
+  // meet's day for filing a swim under and falls back to TODAY when there is no date, which is
+  // right there and would be badly wrong here — every undated meet would read as swum today.
+  // Defining a second _meetISO silently replaced the first for the whole class.
+  _meetLastISO(m){
+    if(!m) return '';
+    const info=this._meetInfo(m.name);
+    return this._toISODate(info.endDate) || this._toISODate(m.date) || '';
+  }
+  _meetIsDone(m){
+    if(!m) return false;
+    const status=(this.meetStatus||{})[m.name];
+    if(status==='Completed') return true;
+    if(status && status!=='Upcoming') return false;   // Entries open / In progress are live
+    const iso=this._meetLastISO(m);
+    if(!iso) return false;
+    return iso < this.todayISO();
+  }
+  /** The club's meets, split in two and each in the order it is read in: the next one first,
+   *  the most recent one first. */
+  _meetsSplit(){
+    const all=this.allMeets();
+    const upcoming=[], done=[];
+    all.forEach(m=>{ (this._meetIsDone(m) ? done : upcoming).push(m); });
+    const iso=m=>this._meetLastISO(m);
+    upcoming.sort((a,b)=>{ const x=iso(a), y=iso(b); if(!x) return 1; if(!y) return -1; return x<y?-1:(x>y?1:0); });
+    done.sort((a,b)=>{ const x=iso(a), y=iso(b); if(!x) return 1; if(!y) return -1; return x>y?-1:(x<y?1:0); });
+    return {upcoming, done};
+  }
+  // ---- Camps ---------------------------------------------------------------------------------
+  //
+  // Not meets, and deliberately not filed as them: a camp has no event program, no entry, no
+  // result and no qualifying time, and putting one in customMeets would place it in the entries
+  // sheet, the results screen and every "18 meets on record" count in the app.
+  _campsShaped(v){ return Array.isArray(v) ? v.filter(c=>c && typeof c==='object' && c.name) : []; }
+  _campsSorted(){
+    return this._campsShaped(this.camps).slice().sort((a,b)=>{
+      const x=this._toISODate(a.start)||'', y=this._toISODate(b.start)||'';
+      if(!x) return 1; if(!y) return -1; return x<y?-1:(x>y?1:0); });
+  }
+  /** A camp is over the day after its last day — its end date, or its start when it is one day. */
+  _campIsDone(c){
+    const iso=this._toISODate(c && c.end) || this._toISODate(c && c.start) || '';
+    return !!iso && iso < this.todayISO();
+  }
+  _campsSplit(){
+    const all=this._campsSorted(); const upcoming=[], done=[];
+    all.forEach(c=>{ (this._campIsDone(c) ? done : upcoming).push(c); });
+    return {upcoming, done:done.reverse()};
+  }
+  campSave(camp){
+    if(!camp || !String(camp.name||'').trim()) return;
+    const list=this._campsShaped(this.camps).slice();
+    const i=list.findIndex(c=>c.id===camp.id);
+    if(i>=0) list[i]={...list[i], ...camp}; else list.push(camp);
+    this.camps=list; this._saveJSON('vx_camps', list); this.forceUpdate();
+  }
+  campDelete(id){
+    this.camps=this._campsShaped(this.camps).filter(c=>c.id!==id);
+    this._saveJSON('vx_camps', this.camps); this.forceUpdate();
+  }
+  // ---- Who has the time for this meet ---------------------------------------------------------
+  //
+  // The cut times were already in the app and could only be read one event at a time on the seed
+  // screen. What a coach is asked, and what a parent asks, is the other way round: for THIS meet,
+  // which of these events can my child swim? So it is answered per swimmer, per meet, against
+  // the personal best the club already holds.
+  //
+  // Slower than the cut is not a failure to report — it is how far off, which is a target. A
+  // meet with no cuts set has no qualifying to show at all, and says so rather than showing an
+  // empty table that reads as "nobody qualifies".
+  _meetQualFor(sw, meetName){
+    const cuts=((this.meetCuts||{})[meetName])||{};
+    const events=Object.keys(cuts).filter(ev=>this.parseTimeStr(cuts[ev])!=null);
+    if(!events.length || !sw) return [];
+    const order=this.EVENT_CATALOG();
+    events.sort((a,b)=>order.indexOf(a)-order.indexOf(b));
+    return events.map(ev=>{
+      const cutSec=this.parseTimeStr(cuts[ev]);
+      const pb=(sw.pbs||[]).find(p=>p.event===ev) || null;
+      const has=!!(pb && typeof pb.sec==='number');
+      const gap=has ? (pb.sec - cutSec) : null;
+      return { event:ev, cut:cuts[ev], pb: has ? this.fmt(pb.sec) : 'No time yet',
+               qualified: has && pb.sec<=cutSec,
+               // Two decimals, because a hundredth is the unit the sport is timed in and
+               // "1.4 seconds off" invites the question of which 1.4.
+               gap: (has && gap>0) ? ('+'+gap.toFixed(2)) : '' };
+    });
+  }
+  /** How many of a meet's cut times this swimmer already has — for the one-line summary. */
+  _meetQualCount(sw, meetName){
+    const rows=this._meetQualFor(sw, meetName);
+    return {qualified: rows.filter(r=>r.qualified).length, total: rows.length};
+  }
   // The event program for a meet: an admin-edited override (works for imported meets too),
   // else the meet's own events list. Used by the meets panel and the family event-request chips.
   _meetEvents(m){ if(!m) return []; const ov=(this.meetEventsMap||{})[m.name]; if(Array.isArray(ov)) return ov; return (Array.isArray(m.events)?m.events:[]); }
@@ -10499,17 +11032,47 @@ class Component extends DCLogic {
     return (this.customMeets||[]).some(m=>String((m&&m.name)||'').trim().toLowerCase()===nm); }
   _mdyFromISO(iso){ const p=String(iso||'').split('-');
     return (p.length===3) ? (parseInt(p[1],10)+'/'+parseInt(p[2],10)+'/'+p[0]) : ''; }
+  // Every meet can be given its details; only the club's own can have its day, venue and course
+  // changed. Those three came with the imported result and belong to whoever ran the meet — but
+  // the entry deadline, the warm-up time and the club's own note about it are the club's, and an
+  // imported meet had nowhere at all to put them.
   meetEditOpen(name){
-    const m=(this.customMeets||[]).find(x=>x.name===name); if(!m) return;
+    const m=(this.customMeets||[]).find(x=>x.name===name)
+         || (this.allMeets()||[]).find(x=>x.name===name);
+    if(!m) return;
+    const info=this._meetInfo(name);
     this.setState({meetEditName:name, meetEditErr:'', meetEditDraft:{
-      date:this._toISODate(m.date)||'', location:m.location||'', course:m.course||'LCM' }});
+      date:this._toISODate(m.date)||'', location:m.location||'', course:m.course||'LCM',
+      endDate:this._toISODate(info.endDate)||'', deadline:this._toISODate(info.deadline)||'',
+      warmup:info.warmup, start:info.start, sessions:info.sessions, fee:info.fee,
+      host:info.host, notes:info.notes, infoUrl:info.infoUrl, infoName:info.infoName }});
   }
   meetEditClose(){ this.setState({meetEditName:null, meetEditDraft:null, meetEditErr:''}); }
   meetEditField(k, v){ const d={...(this.state.meetEditDraft||{})}; d[k]=v; this.setState({meetEditDraft:d, meetEditErr:''}); }
   meetEditSave(){
     const S=this.state; const name=S.meetEditName; const d=S.meetEditDraft||{};
     if(!name) return;
-    const iso=this._toISODate(d.date);
+    // The end date cannot come before the first day. A three-day meet entered the wrong way
+    // round reads as finished the moment it is saved, and drops out of the upcoming list.
+    const endIso=this._toISODate(d.endDate);
+    const startIso=this._toISODate(d.date);
+    if(endIso && startIso && endIso < startIso)
+      return this.setState({meetEditErr:'The last day cannot be before the first day.'});
+    this.setMeetInfo(name, {
+      endDate:endIso||'', deadline:this._toISODate(d.deadline)||'',
+      warmup:String(d.warmup||'').trim(), start:String(d.start||'').trim(),
+      sessions:String(d.sessions||'').trim(), fee:String(d.fee||'').trim(),
+      host:String(d.host||'').trim(), notes:String(d.notes||'').trim(),
+      infoUrl:String(d.infoUrl||''), infoName:String(d.infoName||'') });
+    // An imported meet's day, venue and course stay as the host recorded them; its details are
+    // saved above and there is nothing else to write.
+    if(!this._isCustomMeet(name)){
+      try{ this.audit('meet.info', name, {meet:name}); }catch(e){}
+      this.setState({meetEditName:null, meetEditDraft:null, meetEditErr:''});
+      this.forceUpdate();
+      return this._sayIfNotSaved('vx_meet_info', name+' — details');
+    }
+    const iso=startIso;
     if(!iso) return this.setState({meetEditErr:'Pick the day the meet is swum.'});
     const dateStr=this._mdyFromISO(iso);
     const list=(this.customMeets||[]).map(m=>m.name===name
@@ -10521,6 +11084,37 @@ class Component extends DCLogic {
       settingsMsg:name+' — '+this._fmtDMY(iso, true)+' ✓'});
     this.forceUpdate();
     this._meetsPush(name).then(r=>this._sayMeetSaved(r, name+' — '+this._fmtDMY(iso, true)));
+  }
+  // The meet's information sheet.
+  //
+  // It goes to Storage and the record keeps the link. The fallback the club calendar uses — a
+  // base64 data URL when the upload fails — must not happen here: club_state is one document
+  // per key and a 900 KB entry sheet inside it is the "photo stored inside a record" that has
+  // twice filled every phone in the club and stopped every other save on it. A file that will
+  // not upload is reported rather than smuggled in.
+  async meetInfoFilePick(file){
+    if(!file) return;
+    this.setState({meetEditErr:'', meetEditUploading:true});
+    let url=null;
+    try{
+      if(window.__vxUploadFile)
+        url=await window.__vxUploadFile('meets/'+Date.now()+'-'+String(file.name||'meet-info.pdf').replace(/[^\w.\-]+/g,'_'), file);
+    }catch(e){}
+    if(!url){
+      // Storage says why it refused — "bucket not found", "permission denied", "network
+      // error" — and those three send somebody to three different places. It was being
+      // written to a console nobody has open on a phone at the poolside.
+      const why=(typeof window!=='undefined' && window.__vxUploadErr) || 'it could not be sent from this device';
+      this.setState({meetEditUploading:false,
+        meetEditErr:'That file could not be uploaded, so it has not been attached — '+why+'.'});
+      return;
+    }
+    const d={...(this.state.meetEditDraft||{}), infoUrl:url, infoName:file.name||'Meet information'};
+    this.setState({meetEditDraft:d, meetEditUploading:false});
+  }
+  meetInfoFileClear(){
+    const d={...(this.state.meetEditDraft||{}), infoUrl:'', infoName:''};
+    this.setState({meetEditDraft:d, meetEditErr:''});
   }
   swFormAddPb(){ const S=this.state; const sec=this.parseTimeStr(S.swPbTimeDraft); if(sec==null) return;
     // A full meet history: each add is its OWN result (same event may appear at several meets),
@@ -16468,6 +17062,7 @@ class Component extends DCLogic {
     // swimmer status got when it moved to a table of its own.
     try{ this._meetsFetch(); }catch(e){}
     this.eventRequests=g('vx_event_requests', this.eventRequests); this.meetCuts=g('vx_meet_cuts', this.meetCuts);
+    this.meetInfo=g('vx_meet_info', this.meetInfo); this.camps=this._campsShaped(g('vx_camps', this.camps));
     this.academyTrials=g('vx_academy_trials', this.academyTrials); this.academyFees=g('vx_academy_fees', this.academyFees);
     this.feePlans=g('vx_fee_plans', this.feePlans); this.memberships=g('vx_memberships', this.memberships); this.invoices=g('vx_invoices', this.invoices);
     this.billing=g('vx_billing', this.billing); this.raceSplitLog=g('vx_race_splits', this.raceSplitLog);
@@ -18284,11 +18879,14 @@ class Component extends DCLogic {
     const meetImportHasPreview = !!S.meetImportPreview;
     const meetImportSummary = S.meetImportPreview ? (S.meetImportPreview.count+' swimmer block(s) parsed · '+S.meetImportPreview.newSwimmers+' new · '+S.meetImportPreview.updatedSwimmers+' matched existing · '+S.meetImportPreview.newResults+' results to add'
       + (S.meetImportPreview.dobToFill ? (' · '+S.meetImportPreview.dobToFill+' date'+(S.meetImportPreview.dobToFill===1?'':'s')+' of birth to fill in') : '')) : '';
-    const meetRows=this.allMeets().map((m,i)=>{
-      const expanded=S.meetExpanded===i;
+    // Which meet is open and which is being edited are held by NAME, not by position in a list.
+    // The list is now two lists, and an index into "all meets" means something different in each
+    // of them — expanding the first upcoming meet would have opened the first completed one.
+    const buildMeetRow=(m)=>{
+      const expanded=S.meetExpanded===m.name;
       const status=this.meetStatus[m.name]||'Upcoming';
       const statusColors={'Upcoming':['#EEF1F5','#7A8296'],'Entries open':['#E5F0FE','#0959B4'],'In progress':['#FCEFD6','#9A6206'],'Completed':['#DCF5EA','#0C7A4F']};
-      const [sBg,sFg]=statusColors[status];
+      const [sBg,sFg]=statusColors[status]||statusColors['Upcoming'];
       let top=[];
       if(expanded){
         const all=[];
@@ -18296,20 +18894,132 @@ class Component extends DCLogic {
         all.sort((a,b)=>a.sec-b.sec);
         top=all.slice(0,5);
       }
-      const mEvents=this._meetEvents(m); const editingEvents=S.meetEventsEditIdx===i;
+      const mEvents=this._meetEvents(m); const editingEvents=S.meetEventsEditIdx===m.name;
       const eventEditChips = editingEvents ? this.EVENT_CATALOG().map(ev=>{ const on=mEvents.includes(ev); return {label:ev, on, bg:on?'#0A0F1A':'#F8FAFC', fg:on?'#fff':'#3A4152', border:on?'#0A0F1A':'#E5E9F0', onToggle:()=>this.toggleMeetEvent(m.name, ev)}; }) : [];
-      return { name:m.name, meta:(m.course||'LCM')+' · '+(m.date||'')+(m.location?(' · '+m.location):'')+' · '+(m.entries||0)+' entries', chevron:expanded?'chevron-up':'chevron-down', expanded, top,
+      const info=this._meetInfo(m.name);
+      const iso=this._toISODate(m.date);
+      const endIso=this._toISODate(info.endDate);
+      // "4 Dec 2026" rather than "12/4/2026". Half this club reads a date the other way round,
+      // and a meet on the fourth of December has been prepared for on the twelfth of April.
+      const dayLabel = iso ? (this._fmtDMY(iso, true) + ((endIso && endIso!==iso) ? (' – '+this._fmtDMY(endIso, true)) : '')) : (m.date||'Date not set');
+      // The detail lines, in the order somebody reads them: when, where, what shape, what it
+      // costs. Anything the club has not filled in is absent rather than shown empty.
+      const detailRows=[
+        {icon:'calendar-days', label:'Date', value:dayLabel},
+        (info.deadline && this._toISODate(info.deadline)) ? {icon:'alarm-clock', label:'Entries close', value:this._fmtDMY(this._toISODate(info.deadline), true)} : null,
+        m.location ? {icon:'map-pin', label:'Venue', value:m.location} : null,
+        {icon:'waves', label:'Course', value:(m.course==='SCM')?'Short course (25m)':'Long course (50m)'},
+        info.warmup ? {icon:'timer', label:'Warm-up', value:info.warmup} : null,
+        info.start ? {icon:'flag', label:'First race', value:info.start} : null,
+        info.sessions ? {icon:'layers', label:'Sessions', value:info.sessions} : null,
+        info.fee ? {icon:'wallet', label:'Entry fee', value:info.fee} : null,
+        info.host ? {icon:'building-2', label:'Host', value:info.host} : null,
+      ].filter(Boolean);
+      // Qualifying times, from the club's own cut list. A coach wants the standard itself; a
+      // parent gets the same numbers measured against their own child, on the family screen.
+      const cuts=((this.meetCuts||{})[m.name])||{};
+      const order=this.EVENT_CATALOG();
+      const cutEvents=Object.keys(cuts).filter(ev=>this.parseTimeStr(cuts[ev])!=null).sort((a,b)=>order.indexOf(a)-order.indexOf(b));
+      const editingCuts=S.meetCutsEditName===m.name;
+      // Only the meet's own program is offered. A cut for an event this meet does not swim is a
+      // time nobody can ever make, and it would still be counted against every swimmer.
+      const cutEditRows = editingCuts ? (mEvents.length?mEvents:this.EVENT_CATALOG()).map(ev=>({
+        event:ev, value:cuts[ev]||'',
+        onChange:(e)=>this.setMeetCut(m.name, ev, e.target.value) })) : [];
+      return { name:m.name, meta:(m.course||'LCM')+' · '+dayLabel+(m.location?(' · '+m.location):'')+' · '+(m.entries||0)+' entries', chevron:expanded?'chevron-up':'chevron-down', expanded, top,
         hasEvents: mEvents.length>0, eventsLine: mEvents.length?mEvents.join(' · '):'', eventCount:mEvents.length,
+        detailRows, hasDetails: detailRows.length>0,
+        notes: info.notes||'', hasNotes: !!info.notes,
+        hasInfoFile: !!info.infoUrl, infoFileName: info.infoName||'Meet information',
+        onViewInfoFile: ()=>this.meetsViewPdf(info.infoUrl, m.name),
+        cutRows: cutEvents.map(ev=>({event:ev, time:cuts[ev]})), hasCuts: cutEvents.length>0,
+        editingCuts, cutEditRows,
+        editCutsLabel: editingCuts ? 'Done with qualifying times'
+          : (cutEvents.length ? ('Edit qualifying times ('+cutEvents.length+')') : 'Add qualifying times'),
+        onToggleEditCuts: ()=>this.setState({meetCutsEditName: editingCuts?null:m.name}),
         editingEvents, eventEditChips, editEventsLabel: editingEvents?'Done editing events':(mEvents.length?('Edit event program ('+mEvents.length+')'):'Add event program'),
-        onToggleEditEvents:()=>this.setState({meetEventsEditIdx: editingEvents?null:i}),
-        // Only a meet the club built itself can have its details changed here.
-        canEditMeet: this._isCustomMeet(m.name),
+        onToggleEditEvents:()=>this.setState({meetEventsEditIdx: editingEvents?null:m.name}),
         editingMeet: S.meetEditName===m.name,
         onToggleEditMeet:()=>{ if(S.meetEditName===m.name) this.meetEditClose(); else this.meetEditOpen(m.name); },
-        onToggle:()=>this.setState({meetExpanded: expanded?null:i}),
+        onToggle:()=>this.setState({meetExpanded: expanded?null:m.name}),
         onManageEntries:()=>{ const idx=this.allMeets().findIndex(x=>x.name===m.name); this.setState({adminSection:null, tool:'entries', entriesMeetIdx: idx>=0?idx:0}); },
         status, statusBg:sBg, statusFg:sFg, onCycleStatus:()=>this.meetStatusCycle(m.name) };
-    });
+    };
+    const _mSplit=this._meetsSplit();
+    const meetRowsUpcoming=_mSplit.upcoming.map(buildMeetRow);
+    const meetRowsDone=_mSplit.done.map(buildMeetRow);
+    const meetsUpcomingCount=meetRowsUpcoming.length, meetsDoneCount=meetRowsDone.length;
+    const meetsUpcomingLabel=meetsUpcomingCount===1?'1 meet coming up':(meetsUpcomingCount+' meets coming up');
+    const meetsDoneLabel=meetsDoneCount===1?'1 meet swum':(meetsDoneCount+' meets swum');
+    const meetsHasUpcoming=meetsUpcomingCount>0, meetsHasDone=meetsDoneCount>0;
+    // The season's history is collapsed by default. It is looked up, not worked from, and open
+    // it was seventeen cards between a coach and the one meet they came here for.
+    const meetsDoneOpen=!!S.meetsDoneOpen;
+    const onMeetsDoneToggle=()=>this.setState({meetsDoneOpen:!S.meetsDoneOpen});
+    const meetsDoneChevron=meetsDoneOpen?'chevron-up':'chevron-down';
+
+    // -- camps --
+    //
+    // Beside the meets, not among them. A camp is the other half of what a family is asked to
+    // plan around, and until now the club sent it on WhatsApp and answered the same three
+    // questions all week: which days, who is it for, and what does it cost.
+    const _campDraft=S.campForm||{};
+    const buildCampRow=(c)=>{
+      const sIso=this._toISODate(c.start)||'', eIso=this._toISODate(c.end)||'';
+      const when = sIso ? (this._fmtDMY(sIso, true) + ((eIso && eIso!==sIso) ? (' – '+this._fmtDMY(eIso, true)) : '')) : 'Dates to be confirmed';
+      const d=sIso? new Date(sIso+'T00:00:00') : null;
+      const bits=[c.place||'', c.who||'', c.times||''].filter(Boolean);
+      return { id:c.id, name:c.name, when, place:c.place||'', who:c.who||'', times:c.times||'',
+        cost:c.cost||'', hasCost:!!c.cost, notes:c.notes||'', hasNotes:!!c.notes,
+        meta: bits.length?bits.join(' · '):'',
+        day: d?String(d.getDate()):'--', mon: d?VX_MONTHS[d.getMonth()].toUpperCase():'',
+        onEdit:()=>this.setState({campFormOpen:true, campErr:'', campForm:{
+          id:c.id, name:c.name||'', place:c.place||'', start:sIso, end:eIso,
+          who:c.who||'', times:c.times||'', cost:c.cost||'', notes:c.notes||'' }}),
+        onDelete:()=>{ if(window.confirm('Remove '+c.name+' from the calendar?')) this.campDelete(c.id); } };
+    };
+    const _cSplit=this._campsSplit();
+    const campRowsUpcoming=_cSplit.upcoming.map(buildCampRow);
+    const campRowsDone=_cSplit.done.map(buildCampRow);
+    const campsHasUpcoming=campRowsUpcoming.length>0, campsHasDone=campRowsDone.length>0;
+    const campsUpcomingLabel=campRowsUpcoming.length===1?'1 camp coming up':(campRowsUpcoming.length+' camps coming up');
+    const campsDoneLabel=campRowsDone.length===1?'1 camp finished':(campRowsDone.length+' camps finished');
+    const campsDoneOpen=!!S.campsDoneOpen;
+    const onCampsDoneToggle=()=>this.setState({campsDoneOpen:!S.campsDoneOpen});
+    const campsDoneChevron=campsDoneOpen?'chevron-up':'chevron-down';
+    const campFormOpen=!!S.campFormOpen;
+    const campFormChevron=campFormOpen?'chevron-up':'chevron-down';
+    const campFormLabel=_campDraft.id?'Save camp':'Add camp to calendar';
+    const campErr=S.campErr||'';
+    const campErrShow=!!campErr;
+    const _campField=(k)=>(e)=>this.setState({campForm:{...(this.state.campForm||{}), [k]:e.target.value}, campErr:''});
+    const campForm={
+      name:_campDraft.name||'', onName:_campField('name'),
+      place:_campDraft.place||'', onPlace:_campField('place'),
+      start:_campDraft.start||'', onStart:_campField('start'),
+      end:_campDraft.end||'', onEnd:_campField('end'),
+      who:_campDraft.who||'', onWho:_campField('who'),
+      times:_campDraft.times||'', onTimes:_campField('times'),
+      cost:_campDraft.cost||'', onCost:_campField('cost'),
+      notes:_campDraft.notes||'', onNotes:_campField('notes'),
+    };
+    const onCampFormToggle=()=>this.setState({campFormOpen:!S.campFormOpen, campErr:'',
+      campForm: S.campFormOpen ? {} : (S.campForm||{})});
+    const onCampSave=()=>{
+      const d=this.state.campForm||{};
+      const name=String(d.name||'').trim();
+      if(!name) return this.setState({campErr:'Give the camp a name.'});
+      const start=this._toISODate(d.start);
+      if(!start) return this.setState({campErr:'Pick the first day of the camp.'});
+      const end=this._toISODate(d.end);
+      if(end && end<start) return this.setState({campErr:'The last day cannot be before the first day.'});
+      this.campSave({ id:d.id||('camp_'+Date.now()), name, place:String(d.place||'').trim(),
+        start, end:end||'', who:String(d.who||'').trim(), times:String(d.times||'').trim(),
+        cost:String(d.cost||'').trim(), notes:String(d.notes||'').trim() });
+      try{ this.audit('camp.save', name, {camp:name, start}); }catch(e){}
+      this.setState({campFormOpen:false, campForm:{}, campErr:''});
+      this._sayIfNotSaved('vx_camps', name);
+    };
 
     const meetsMsg = S.meetsMsg||'';
     const meetsMsgShow = !!meetsMsg;
@@ -18326,6 +19036,23 @@ class Component extends DCLogic {
       scmBg: meetEditDraft.course==='SCM'?'#0A0F1A':'#F8FAFC', scmFg: meetEditDraft.course==='SCM'?'#fff':'#3A4152',
       onLcm:()=>this.meetEditField('course','LCM'), onScm:()=>this.meetEditField('course','SCM'),
       onSave:()=>this.meetEditSave(), err:S.meetEditErr||'', errShow:!!S.meetEditErr,
+      // The day, venue and course of an imported meet belong to whoever ran it. Everything
+      // below is the club's own and is offered for every meet.
+      canEditCore: this._isCustomMeet(S.meetEditName),
+      endDate: meetEditDraft.endDate||'', onEndDate:(e)=>this.meetEditField('endDate', e.target.value),
+      deadline: meetEditDraft.deadline||'', onDeadline:(e)=>this.meetEditField('deadline', e.target.value),
+      warmup: meetEditDraft.warmup||'', onWarmup:(e)=>this.meetEditField('warmup', e.target.value),
+      start: meetEditDraft.start||'', onStart:(e)=>this.meetEditField('start', e.target.value),
+      sessions: meetEditDraft.sessions||'', onSessions:(e)=>this.meetEditField('sessions', e.target.value),
+      fee: meetEditDraft.fee||'', onFee:(e)=>this.meetEditField('fee', e.target.value),
+      host: meetEditDraft.host||'', onHost:(e)=>this.meetEditField('host', e.target.value),
+      notes: meetEditDraft.notes||'', onNotes:(e)=>this.meetEditField('notes', e.target.value),
+      hasFile: !!meetEditDraft.infoUrl,
+      fileLabel: S.meetEditUploading ? 'Uploading\u2026'
+        : (meetEditDraft.infoName || (meetEditDraft.infoUrl ? 'Meet information' : 'Attach the meet information sheet')),
+      onFilePick:(e)=>{ const f=e.target.files&&e.target.files[0]; if(f) this.meetInfoFilePick(f); },
+      onFileClear:()=>this.meetInfoFileClear(),
+      onFileView:()=>this.meetsViewPdf(meetEditDraft.infoUrl, S.meetEditName||''),
     };
 
     // -- staff admin --
@@ -19375,11 +20102,11 @@ class Component extends DCLogic {
       })(),
       famKidsChips:(S.familyUser?S.familyUser.swimmerIds:[]).map((uid,i)=>{ const h=this._famResolve(uid); const on=i===S.familyActiveIdx; return {label:h?h.sw.name.split(' ')[0]:'Not linked', onClick:()=>this.setState({familyActiveIdx:i}), bg:on?'#fff':'rgba(255,255,255,.08)', fg:on?'#0A0F1A':'#fff', border:on?'#fff':'rgba(255,255,255,.18)'}; }),
       famMultiKids: !!(S.familyUser && S.familyUser.swimmerIds.length>1),
-      ...(()=>{ const fu=S.familyUser; if(!fu) return {famSwName:'',famSwMeta:'',famSwInit:'',famGenIcon:'',famGenBg:'',famAccent:'#067EEA',famPbs:[],famResults:[],famMeetsUpcoming:[],famAttendPct:'—',famAttendHistory:[],famDocsRows:[],famAttMonthCells:[],famAttYearBars:[],famMeetChips:[],famMeetResultRows:[]};
+      ...(()=>{ const fu=S.familyUser; if(!fu) return {famSwName:'',famSwMeta:'',famSwInit:'',famGenIcon:'',famGenBg:'',famAccent:'#067EEA',famPbs:[],famResults:[],famMeetsUpcoming:[], famHasMeetsUpcoming:false, famNoMeetsUpcoming:true, famCamps:[], famHasCamps:false,famAttendPct:'—',famAttendHistory:[],famDocsRows:[],famAttMonthCells:[],famAttYearBars:[],famMeetChips:[],famMeetResultRows:[]};
         const uid=fu.swimmerIds[Math.min(S.familyActiveIdx, fu.swimmerIds.length-1)]||fu.swimmerIds[0];
         const _hit=this._famResolve(uid);
         // No match → show an unlinked state. NEVER substitute another swimmer.
-        if(!_hit) return {famSwName:'Not linked', famSwMeta:'Ask the club to link your child to this account', famSwInit:'—', famGenIcon:'', famGenBg:'#EEF1F5', famAccent:'#067EEA', famPbs:[], famResults:[], famMeetsUpcoming:[], famAttendPct:'—', famAttendHistory:[], famDocsRows:[], famAttMonthCells:[], famAttYearBars:[], famMeetChips:[], famMeetResultRows:[]};
+        if(!_hit) return {famSwName:'Not linked', famSwMeta:'Ask the club to link your child to this account', famSwInit:'—', famGenIcon:'', famGenBg:'#EEF1F5', famAccent:'#067EEA', famPbs:[], famResults:[], famMeetsUpcoming:[], famHasMeetsUpcoming:false, famNoMeetsUpcoming:true, famCamps:[], famHasCamps:false, famAttendPct:'—', famAttendHistory:[], famDocsRows:[], famAttMonthCells:[], famAttYearBars:[], famMeetChips:[], famMeetResultRows:[]};
         const sqid=_hit.sqid, sw=_hit.sw;
         const sq=this.squadById[sqid]||this.squads[0];
         const gm=this.genMeta(sw.gender);
@@ -19387,7 +20114,79 @@ class Component extends DCLogic {
         const today=this.todayISO();
         const famPbs=(sw.pbs||[]).slice(0,8).map(p=>({event:p.event, time:p.time, drop:p.drop}));
         const famResults=(sw.results||[]).slice().sort((a,b)=>String(this._resultISO(b)||'').localeCompare(String(this._resultISO(a)||''))).map((r,i)=>({event:r.event, meet:r.meet, date:this.shortDate(r.date), time:r.time, place:r.place||(i+1)}));
-        const upcoming=this.meetsMeta.slice(0,3).map(m=>({name:m.name, meta:(m.course||'LCM')+' · '+(m.date||'')}));
+        // What a family is actually shown about a meet.
+        //
+        // This used to be the first three of meetsMeta — the imported ones, which are by
+        // definition meets that have already been swum — with the date printed as "6/5/2026"
+        // under a heading that said "Upcoming meets". A parent reading that had no way to tell
+        // it was last season's, and nothing on the card answered the question they came with.
+        //
+        // So: the meets that are actually still ahead, in the order they happen, carrying
+        // everything the club has filled in — and the qualifying times measured against THIS
+        // child, which is the one thing the club could work out for them and never did.
+        const upcoming=this._meetsSplit().upcoming.slice(0,6).map(m=>{
+          const info=this._meetInfo(m.name);
+          const iso=this._toISODate(m.date), endIso=this._toISODate(info.endDate);
+          const dayLabel = iso ? (this._fmtDMY(iso, true)+((endIso && endIso!==iso)?(' – '+this._fmtDMY(endIso, true)):'')) : 'Date to be confirmed';
+          const d = iso ? new Date(iso+'T00:00:00') : null;
+          const deadlineIso=this._toISODate(info.deadline);
+          // "Entries close in 6 days" is the line that gets an entry in on time. Counted in
+          // whole days from today, and once it is past it says so rather than counting down
+          // into the negative.
+          let deadlineLine='';
+          if(deadlineIso){
+            const days=Math.round((new Date(deadlineIso+'T00:00:00') - new Date(today+'T00:00:00'))/86400000);
+            deadlineLine = days>1 ? ('Entries close in '+days+' days · '+this._fmtDMY(deadlineIso, true))
+              : days===1 ? ('Entries close tomorrow · '+this._fmtDMY(deadlineIso, true))
+              : days===0 ? ('Entries close today · '+this._fmtDMY(deadlineIso, true))
+              : ('Entries closed on '+this._fmtDMY(deadlineIso, true));
+          }
+          const detailRows=[
+            m.location ? {icon:'map-pin', label:'Venue', value:m.location} : null,
+            {icon:'waves', label:'Course', value:(m.course==='SCM')?'Short course (25m)':'Long course (50m)'},
+            info.warmup ? {icon:'timer', label:'Warm-up', value:info.warmup} : null,
+            info.start ? {icon:'flag', label:'First race', value:info.start} : null,
+            info.sessions ? {icon:'layers', label:'Sessions', value:info.sessions} : null,
+            info.fee ? {icon:'wallet', label:'Entry fee', value:info.fee} : null,
+            info.host ? {icon:'building-2', label:'Host', value:info.host} : null,
+          ].filter(Boolean);
+          const evs=this._meetEvents(m);
+          const qualRows=this._meetQualFor(sw, m.name).map(q=>({
+            event:q.event, cut:q.cut, pb:q.pb, gap:q.gap, hasGap:!!q.gap,
+            mark: q.qualified ? 'Qualified' : (q.gap ? (q.gap+' to go') : 'No time yet'),
+            markBg: q.qualified ? '#DCF5EA' : (q.gap ? '#FCEFD6' : '#EEF1F5'),
+            markFg: q.qualified ? '#0C7A4F' : (q.gap ? '#9A6206' : '#7A8296') }));
+          const qc=this._meetQualCount(sw, m.name);
+          const status=(this.meetStatus||{})[m.name]||'Upcoming';
+          const sc={'Upcoming':['#EEF1F5','#7A8296'],'Entries open':['#E5F0FE','#0959B4'],'In progress':['#FCEFD6','#9A6206'],'Completed':['#DCF5EA','#0C7A4F']}[status]||['#EEF1F5','#7A8296'];
+          return { name:m.name, dayLabel,
+            day: d?String(d.getDate()):'--', mon: d?VX_MONTHS[d.getMonth()].toUpperCase():'',
+            meta:(m.course==='SCM'?'SCM':'LCM')+(m.location?(' · '+m.location):''),
+            status, statusBg:sc[0], statusFg:sc[1],
+            deadlineLine, hasDeadline:!!deadlineLine,
+            detailRows, hasDetails:detailRows.length>0,
+            eventsLine: evs.length?evs.join(' · '):'', hasEvents: evs.length>0,
+            notes:info.notes||'', hasNotes:!!info.notes,
+            hasInfoFile: !!info.infoUrl, infoFileName: info.infoName||'Meet information sheet',
+            onViewInfoFile: ()=>this.meetsViewPdf(info.infoUrl, m.name),
+            qualRows, hasQual: qualRows.length>0,
+            qualSummary: qc.total ? (qc.qualified===qc.total
+              ? ('Qualified in all '+qc.total+' event'+(qc.total===1?'':'s'))
+              : qc.qualified===0
+                ? ('None of the '+qc.total+' standards met yet')
+                : (qc.qualified+' of '+qc.total+' standards already met'))
+              : '' };
+        });
+        // Camps, beside the meets and read the same way.
+        const famCamps=this._campsSplit().upcoming.map(c=>{
+          const sIso=this._toISODate(c.start)||'', eIso=this._toISODate(c.end)||'';
+          const d=sIso?new Date(sIso+'T00:00:00'):null;
+          return { name:c.name, when: sIso ? (this._fmtDMY(sIso, true)+((eIso&&eIso!==sIso)?(' – '+this._fmtDMY(eIso, true)):'')) : 'Dates to be confirmed',
+            day: d?String(d.getDate()):'--', mon: d?VX_MONTHS[d.getMonth()].toUpperCase():'',
+            place:c.place||'', hasPlace:!!c.place, who:c.who||'', hasWho:!!c.who,
+            times:c.times||'', hasTimes:!!c.times, cost:c.cost||'', hasCost:!!c.cost,
+            notes:c.notes||'', hasNotes:!!c.notes };
+        });
 
         // ==== real attendance for this swimmer: day / month / year (mirrors coach dashboard) ====
         const famAttView = S.famAttView||'month';
@@ -19465,7 +20264,9 @@ class Component extends DCLogic {
           dateLabel:this.shortDateISO(r.date),
           summary:[r.pushups!=null?(r.pushups+' push-ups'):null, r.plankSec!=null?(r.plankSec+'s plank'):null, r.vjump!=null?(r.vjump+'cm jump'):null, r.sitreach!=null?(r.sitreach+'cm reach'):null].filter(Boolean).join(' · ') }));
         const _fwl=this._wearLatest(sw.id);
-        return {famSwName:sw.name, famSwMeta:sq.name+' · Age '+sw.age+' · '+sq.coach, famSwInit:sw.initials, famGenIcon:gm.icon, famGenBg:gm.bg, famAccent:sq.accent, famPbs, famResults, famMeetsUpcoming:upcoming, famHasPbs:famPbs.length>0, famHasResults:famResults.length>0, famNoResults:famResults.length===0,
+        return {famSwName:sw.name, famSwMeta:sq.name+' · Age '+sw.age+' · '+sq.coach, famSwInit:sw.initials, famGenIcon:gm.icon, famGenBg:gm.bg, famAccent:sq.accent, famPbs, famResults, famMeetsUpcoming:upcoming, famHasMeetsUpcoming:upcoming.length>0, famNoMeetsUpcoming:upcoming.length===0,
+          famCamps, famHasCamps:famCamps.length>0,
+          famHasPbs:famPbs.length>0, famHasResults:famResults.length>0, famNoResults:famResults.length===0,
           famWearHasData:!!_fwl,
           famWearRecovery:_fwl&&_fwl.recovery!=null?String(_fwl.recovery):'—', famWearRecoveryPct:_fwl&&_fwl.recovery!=null?_fwl.recovery:0, famWearRecoveryColor:this._wearRecoveryColor(_fwl?_fwl.recovery:null),
           famWearRhr:_fwl&&_fwl.rhr!=null?String(_fwl.rhr):'—', famWearHrv:_fwl&&_fwl.hrv!=null?String(_fwl.hrv):'—', famWearSleep:_fwl&&_fwl.sleepH!=null?String(_fwl.sleepH):'—', famWearStrain:_fwl&&_fwl.strain!=null?String(_fwl.strain):'—',
@@ -19709,6 +20510,14 @@ class Component extends DCLogic {
         // and then said the one thing that was not true. A rejected write is one of three
         // different problems and they need three different people: a permission is the club's
         // to change, a rejected shape is the database's, and a bad connection fixes itself.
+        // A dropped connection needs none of the words below it. There is no server answer to
+        // quote — "network: Load failed" is the browser's phrasing of "it did not get there" —
+        // and "retrying automatically" on its own reads as an app in trouble. What a coach on a
+        // poolside needs to know is that the work is safe and that they need do nothing, which
+        // is now what it says.
+        : (S.saveFailLast && S.saveFailLast.status===0)
+          ? (S.saveFailLast.table+' · this device could not reach the database just now. Nothing is lost \u2014 '
+             +'it is kept here and goes up by itself as soon as the connection is back.')
         : (S.saveFailLast ? (S.saveFailLast.table+' · '+(S.saveFailLast.status===-1
               ? 'it never left this device \u2014 there was no database sign-in to send it with'
               : S.saveFailLast.status?('HTTP '+S.saveFailLast.status):'no connection')) : '')
@@ -20008,7 +20817,14 @@ class Component extends DCLogic {
       compErr:S.compErr, compErrShow:!!S.compErr, onCompCreate:()=>this.createCompetition(),
       meetImportText:S.meetImportText, onMeetImportText:(e)=>this.setState({meetImportText:e.target.value}),
       onMeetImportPreview:()=>this.meetImportPreview(), meetImportHasPreview, meetImportSummary, onMeetImportConfirm:()=>this.meetImportConfirm(),
-      meetRows,
+      meetEditImported: !!S.meetEditName && !this._isCustomMeet(S.meetEditName),
+      meetRowsUpcoming, meetRowsDone, meetsHasUpcoming, meetsHasDone,
+      meetsUpcomingLabel, meetsDoneLabel, meetsDoneOpen, onMeetsDoneToggle, meetsDoneChevron,
+      meetsNoneAtAll: !meetsHasUpcoming && !meetsHasDone,
+      campRowsUpcoming, campRowsDone, campsHasUpcoming, campsHasDone,
+      campsUpcomingLabel, campsDoneLabel, campsDoneOpen, onCampsDoneToggle, campsDoneChevron,
+      campForm, campFormOpen, onCampFormToggle, campFormChevron, campFormLabel, onCampSave,
+      campErr, campErrShow,
       staffRows, staffAllRows,
       staffAddOpen: S.staffAddOpen,
       staffForm: S.staffAddForm||{name:'',user:'',pass:'',email:'',pin:'',role:'Coach',phone:''},
@@ -20074,6 +20890,9 @@ class Component extends DCLogic {
       meetsPdfLabel: (S.meetsCalForm&&S.meetsCalForm.pdfName) ? S.meetsCalForm.pdfName : 'Attach info PDF (optional)',
       onMeetsAdd:()=>this.meetsCalAdd(),
       meetsCalEmpty: this.meetsCal.length===0,
+      // The club calendar's "nothing here yet" belongs only on a screen with nothing on it.
+      famNothingPosted: this.meetsCal.length===0 && this._meetsSplit().upcoming.length===0
+        && this._campsSplit().upcoming.length===0,
       meetsHasCal: this.meetsCal.length>0,
       meetsCalRows: this.meetsCal.map((m)=>{ const d=m.date? new Date(m.date+'T00:00:00'):null; const mon=d?['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][d.getMonth()]:''; return {id:m.id, name:m.name, place:m.place||'', day:d?String(d.getDate()):'', mon:mon, hasPdf:!!m.pdf, onViewPdf:()=>this.meetsViewPdf(m.pdf, m.name), onDelete:()=>this.meetsCalDelete(m.id)}; }),
       onApiKeyCheck:()=>this.settingsCheckKey(),
