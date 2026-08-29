@@ -2152,6 +2152,159 @@ describe("the app class defines each method once", () => {
     eq(KNOWN.every((k) => (SOURCE.match(new RegExp("^  " + k + "\\(", "gm")) || []).length === 2), true));
 });
 
+/* ----------------------------------------------------- the club had two meet calendars
+   "Add to Vortex Calendar" on the Meets screen made a real meet: a row in club_meets,
+   with an event program, entries, results and cut times hanging off its name. The
+   "Upcoming meets" box on the coach's home screen wrote vx_meets_cal instead — a name,
+   a day, a place and a PDF that nothing else in the app had ever heard of.
+
+   So a meet added on the home screen could not be entered, could not carry a qualifying
+   time, and never appeared on the Meets screen; a meet added on the Meets screen never
+   appeared on the home screen. Two lists, both called the calendar, each making the
+   other look broken. */
+describe("folding the second calendar into the first", () => {
+  const ctx = (cal, meets = []) => ({
+    meetsCal: cal, customMeets: meets, meetsMeta: [], meetInfo: {}, meetStatus: {},
+    state: {}, forceUpdate() {}, todayISO: () => "2026-08-29",
+    _saveJSON(k, v) { (this.saved ||= []).push(k); this[k === "vx_meet_info" ? "meetInfo" : "_x"] = v; },
+    _saveLocalOnly(k, v) { (this.savedLocal ||= []).push(k); },
+  });
+  const deps = ["_toISODate", "_mdyFromISO", "_sameMeetName", "_calAsMeet", "_calUnmigrated",
+                "allMeets", "_meetInfo", "MEET_INFO_BLANK"];
+
+  it("an entry becomes a meet in the shape everything else reads", () => {
+    const m = bind("_calAsMeet", ctx([]), deps)({ name: " Doha Open ", date: "2026-12-04", place: "HAC" });
+    eq(m.name, "Doha Open", "the name is what entries, results and cut times are filed under");
+    eq(m.date, "12/4/2026", "and the date in the shape every other meet stores one");
+    eq(m.location, "HAC");
+  });
+
+  // Until the fold has actually landed in the database, both lists have to be shown or a
+  // meet a parent was told about vanishes from the app.
+  it("an entry the meets do not have yet is still shown", () => {
+    const c = ctx([{ id: "mc_1", name: "Doha Open", date: "2026-12-04" }]);
+    eq(bind("_calUnmigrated", c, deps)().map((m) => m.name), ["Doha Open"]);
+  });
+  it("and stops being shown twice the moment it has", () => {
+    const c = ctx([{ id: "mc_1", name: "Doha Open", date: "2026-12-04" }],
+                  [{ name: "Doha Open", date: "12/4/2026" }]);
+    eq(bind("_calUnmigrated", c, deps)().length, 0, "one meet, drawn once");
+  });
+  // The two lists were typed by different people on different days.
+  it("the same meet under a different capitalisation is the same meet", () => {
+    const c = ctx([{ id: "mc_1", name: "doha open ", date: "2026-12-04" }],
+                  [{ name: "Doha Open", date: "12/4/2026" }]);
+    eq(bind("_calUnmigrated", c, deps)().length, 0);
+  });
+  it("an entry with no name is not a meet", () =>
+    eq(bind("_calUnmigrated", ctx([{ id: "mc_1", name: "  " }, null]), deps)().length, 0));
+
+  // The information sheet was the one thing the old box did that mattered to a parent.
+  it("its information sheet is readable before the fold has landed", () => {
+    const c = ctx([{ id: "mc_1", name: "Doha Open", date: "2026-12-04",
+                     pdf: "https://x/sheet.pdf", pdfName: "Entry form.pdf" }]);
+    const info = bind("_meetInfo", c, deps)("Doha Open");
+    eq(info.infoUrl, "https://x/sheet.pdf");
+    eq(info.infoName, "Entry form.pdf");
+  });
+  // And the real record wins once there is one, or editing the sheet would appear to do nothing.
+  it("but the meet's own sheet wins once it has one", () => {
+    const c = ctx([{ id: "mc_1", name: "Doha Open", pdf: "https://x/old.pdf" }]);
+    c.meetInfo = { "Doha Open": { infoUrl: "https://x/new.pdf", infoName: "New.pdf" } };
+    eq(bind("_meetInfo", c, deps)("Doha Open").infoUrl, "https://x/new.pdf");
+  });
+
+  // ---- the fold itself ----------------------------------------------------------------------
+  const migCtx = (cal, meets = []) => {
+    const store = {};
+    const c = {
+      meetsCal: cal, customMeets: meets, meetsMeta: [], meetInfo: {}, meetStatus: {},
+      state: {}, forceUpdate() {}, pushed: [],
+      _saveJSON(k, v) { if (k === "vx_meet_info") this.meetInfo = v; },
+      _saveLocalOnly(k, v) { if (k === "vx_custom_meets") this.customMeets = v; },
+      _meetsPush(name) { this.pushed.push(name); return Promise.resolve({ ok: this.pushOk !== false }); },
+      pushOk: true,
+    };
+    globalThis.localStorage = {
+      getItem: (k) => (k in store ? store[k] : null),
+      setItem: (k, v) => { store[k] = String(v); },
+      removeItem: (k) => { delete store[k]; },
+    };
+    c.__store = store;
+    return c;
+  };
+  const migDeps = [...deps, "_calMigrateOnce", "setMeetInfo"];
+
+  itAsync("an entry with no meet behind it becomes one", async () => {
+    const w = globalThis.window; globalThis.window = { __vxUpsert: () => Promise.resolve(true) };
+    const c = migCtx([{ id: "mc_1", name: "Doha Open", date: "2026-12-04", place: "HAC" }]);
+    await bind("_calMigrateOnce", c, migDeps)();
+    globalThis.window = w;
+    eq(c.pushed, ["Doha Open"], "the meet has to reach club_meets, not just this device");
+    eq(c.customMeets[0].date, "12/4/2026");
+  });
+
+  itAsync("its information sheet moves with it", async () => {
+    const w = globalThis.window; globalThis.window = { __vxUpsert: () => Promise.resolve(true) };
+    const c = migCtx([{ id: "mc_1", name: "Doha Open", date: "2026-12-04",
+                        pdf: "https://x/sheet.pdf", pdfName: "Entry form.pdf" }]);
+    await bind("_calMigrateOnce", c, migDeps)();
+    globalThis.window = w;
+    eq(c.meetInfo["Doha Open"].infoUrl, "https://x/sheet.pdf");
+  });
+
+  // A meet already on the Meets screen must not have its date rewritten by the old box's copy.
+  // That is the same quiet reversal one-row-per-meet was made to stop.
+  itAsync("an entry the meets already have is left alone", async () => {
+    const w = globalThis.window; globalThis.window = { __vxUpsert: () => Promise.resolve(true) };
+    const c = migCtx([{ id: "mc_1", name: "VIS", date: "2026-07-30", place: "Somewhere else" }],
+                     [{ name: "VIS", date: "12/4/2026", location: "Doha, HAC", course: "SCM" }]);
+    await bind("_calMigrateOnce", c, migDeps)();
+    globalThis.window = w;
+    eq(c.customMeets.length, 1, "no second VIS");
+    eq(c.customMeets[0].date, "12/4/2026", "the corrected date stands");
+    eq(c.pushed, [], "and nothing is written over it");
+  });
+
+  // With no session the write is refused, and the entry has to come back round next boot —
+  // marking it done would lose it, and it is still the only copy.
+  itAsync("an entry the database would not take is not marked done", async () => {
+    const w = globalThis.window; globalThis.window = { __vxUpsert: () => Promise.resolve(false) };
+    const c = migCtx([{ id: "mc_1", name: "Doha Open", date: "2026-12-04" }]);
+    c.pushOk = false;
+    await bind("_calMigrateOnce", c, migDeps)();
+    globalThis.window = w;
+    eq(c.__store.vx_cal_migrated, undefined, "it must be tried again, not written off");
+  });
+
+  // Without the tombstone the only test is "does a meet of that name exist", so a meet the club
+  // CANCELLED would be recreated from the old calendar on the next boot, every morning.
+  itAsync("an entry already folded in is not folded in twice", async () => {
+    const w = globalThis.window; globalThis.window = { __vxUpsert: () => Promise.resolve(true) };
+    const c = migCtx([{ id: "mc_1", name: "Doha Open", date: "2026-12-04" }]);
+    await bind("_calMigrateOnce", c, migDeps)();
+    eq(JSON.parse(c.__store.vx_cal_migrated || "{}").mc_1, 1, "the fold has to leave a mark");
+    c.customMeets = [];                                   // the club deletes the meet
+    c._calMigrating = false;
+    await c._calMigrateOnce();
+    globalThis.window = w;
+    eq(c.customMeets.length, 0, "a cancelled meet must not come back by itself");
+  });
+
+  // There is one place to add a meet now. The other one has to be gone, not just hidden.
+  it("the second way of creating a meet no longer exists", () => {
+    eq(/meetsCalAdd/.test(SOURCE), false, "the home screen could still write its own list");
+    // Reading it is the whole point — the fold has to see it. Writing it is what must be gone,
+    // so this asks the same question the key-accounting test asks: does any save path name it?
+    const writes = [...SOURCE.matchAll(
+      /(?:_saveJSON|_saveLocalOnly|__vxsetlocal|localStorage\.setItem)\(\s*['"](vx_[a-zA-Z0-9_]+)['"]/g)]
+      .map((m) => m[1]);
+    eq(writes.includes("vx_meets_cal"), false, "something still writes the old calendar");
+  });
+  it("and the home screen reads the meets themselves", () =>
+    eq(/homeMeetRows/.test(SOURCE), true));
+});
+
 /* ------------------------------------------ what a meet is, beyond a name and a date
    Eighteen meets in one list, newest import first, with next month's meet somewhere
    inside it — and each card carrying four things: name, day, venue, course. That is a
@@ -2207,7 +2360,8 @@ describe("splitting the meets in two", () => {
     todayISO: () => "2026-08-29",
   });
   const deps = ["_toISODate", "_meetLastISO", "_meetInfo", "MEET_INFO_BLANK", "allMeets",
-                "_meetIsDone", "todayISO"];
+                "_meetIsDone", "todayISO", "_calUnmigrated", "_calAsMeet", "_mdyFromISO",
+                "_sameMeetName"];
   const done = (m, status = {}, info = {}) => bind("_meetIsDone", ctx(status, info), deps)(m);
 
   it("a meet whose day has passed is done", () =>
@@ -5862,6 +6016,11 @@ describe("InBody sheet", () => {
       // meet_declarations and cached in vx_meet_entries, both accounted for already.
       vx_entries_unsent: "which of this device's entry writes have not reached the database yet",
       vx_meets_unsent: "which of this device's meet writes have not reached the database yet",
+      // Which entries of the old home-screen calendar THIS device has already folded into the
+      // meets proper. The meets themselves are in club_meets and every device reads them, so
+      // this is only a note to stop one device redoing work it has finished — and a device that
+      // loses it simply finds the meet already there and marks it done again.
+      vx_cal_migrated: "which of the old calendar's entries this device has already folded in",
       // The fourth of the same shape, and the one that decides whether a pull is allowed to
       // overwrite this device's roster edits. It is this device's conversation with the
       // vx_roster table — which of its rows the table has acknowledged — and it is precisely
@@ -5915,8 +6074,25 @@ describe("InBody sheet", () => {
     });
     // The other direction: a key listed as synced that nothing ever writes is a screen whose
     // save was quietly renamed, and the sync list still swearing it is covered.
+    // A key can legitimately be pulled and never written — but only while something is still
+    // reading it, and only until it is gone. Anything here is a promise that both are true.
+    const READ_ONLY = {
+      // The club's second meets calendar. Nothing writes it any more: there is one place to add
+      // a meet now, and it writes club_meets. It stays in the sync list because the migration
+      // that folds its entries into the meets has to be able to SEE them — including on a phone
+      // that has not been opened since before the change, and on a device installed fresh in
+      // between. It comes out of this list, and out of the sync list, once the club's own
+      // entries have all been folded in. See _calMigrateOnce.
+      vx_meets_cal: "read by _calMigrateOnce until the old calendar has been folded in",
+    };
     it("every synced key is one something actually writes", () =>
-      eq(SYNC.filter((k) => !written.has(k)).join(", "), "", "in the sync list but never written"));
+      eq(SYNC.filter((k) => !written.has(k) && !READ_ONLY[k]).join(", "), "",
+         "in the sync list but never written"));
+    // And a key excused above must actually still be read, or it is simply dead.
+    for (const key of Object.keys(READ_ONLY))
+      it(key + " is still read by something", () =>
+        eq(new RegExp("(_loadJSON|getItem)\\(\\s*['\"]" + key + "['\"]").test(SOURCE), true,
+           key + " is excused from being written, but nothing reads it either"));
 
     // A cache is only a cache if the table behind it is really being written. Naming one above
     // is a claim, and this is what checks it.
@@ -5931,8 +6107,15 @@ describe("InBody sheet", () => {
     // the move to one roster row per swimmer. The argument the limit asks for is that it is an
     // outbox rather than data: everything it describes lives in vx_roster and vx_roster_edits,
     // and sharing it would let one device judge another's unsent work stale.
+    //
+    // 14, for vx_cal_migrated, folding the old home-screen calendar into the meets. The argument
+    // is that it is a tombstone, and that the alternative is worse than an extra key: without it
+    // the only "have I done this one" test is whether a meet of that name exists, so an entry
+    // the club later DELETED from the meets would be recreated from the old calendar on the next
+    // boot — a meet the club has cancelled coming back by itself, every morning. It is also the
+    // shortest-lived key here: it goes when vx_meets_cal does.
     it("the device-only list stays small enough to read", () =>
-      eq(Object.keys(DEVICE_ONLY).length <= 13, true, "if this needs to grow, the reason needs an argument"));
+      eq(Object.keys(DEVICE_ONLY).length <= 14, true, "if this needs to grow, the reason needs an argument"));
   });
 
   // Before any of that: the file has to parse. A stray brace anywhere in 16,000 lines takes the
