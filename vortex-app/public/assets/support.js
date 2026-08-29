@@ -478,6 +478,16 @@
       return () => txt;
     }
     const parts = txt.split(/\{\{([\s\S]+?)\}\}/g);
+    // An interpolation is wrapped in an element so it can be keyed and marked while
+    // streaming. Inside an SVG <text> a <span> is not a text-content element, so it paints
+    // nothing: every chart label written as <text>{{ value }}</text> came out blank while
+    // the literal text around it still drew. <tspan> is the SVG equivalent and renders.
+    const wrap = (() => {
+      let p2 = node.parentNode;
+      while (p2 && /^sc-(if|for)$/i.test(p2.tagName || "")) p2 = p2.parentNode;
+      const t = ((p2 && p2.tagName) || "").toLowerCase();
+      return t === "text" || t === "tspan" || t === "textpath" ? "tspan" : "span";
+    })();
     return (vals, ctx, key) => h(
       getReact().Fragment,
       { key },
@@ -488,7 +498,7 @@
           if (!ctx?.__streamingNow) {
             if (document.body?.hasAttribute("data-dc-editor-on")) {
               return h(
-                "span",
+                wrap,
                 { key: i, className: "sc-interp sc-unresolved" },
                 "{{ " + p.trim() + " }}"
               );
@@ -500,7 +510,7 @@
             return null;
           }
           return h(
-            "span",
+            wrap,
             { key: i, className: "sc-interp sc-missing" },
             p.trim()
           );
@@ -509,7 +519,7 @@
           return h(getReact().Fragment, { key: i }, v);
         }
         if (v === null || typeof v === "boolean") return null;
-        return h("span", { key: i, className: "sc-interp" }, String(v));
+        return h(wrap, { key: i, className: "sc-interp" }, String(v));
       })
     );
   }

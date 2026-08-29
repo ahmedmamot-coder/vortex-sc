@@ -5761,6 +5761,7 @@ if ('serviceWorker' in navigator) {
                               <polyline points="{{ seasonAnActualLine }}" fill="none" stroke="#7C4DFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></polyline>
                               <sc-if value="{{ seasonAnHasPeak }}" hint-placeholder-val="{{ false }}">
                                 <circle cx="{{ seasonAnPeak.x }}" cy="{{ seasonAnPeak.y }}" r="4" fill="#7C4DFF" stroke="#fff" stroke-width="1.5"></circle>
+                                <text x="{{ seasonAnPeak.lx }}" y="{{ seasonAnPeak.ly }}" text-anchor="middle" style="font-family:var(--font-mono);font-weight:700;font-size:9.5px;fill:#0C1116">{{ seasonAnPeak.t }}</text>
                               </sc-if>
                               <sc-for list="{{ seasonAnBands }}" as="bd" hint-placeholder-count="5">
                                 <rect x="{{ bd.x }}" y="{{ bd.y }}" width="{{ bd.w }}" height="{{ bd.h }}" rx="3" fill="{{ bd.color }}" opacity="0.85"></rect>
@@ -15589,7 +15590,10 @@ class Component extends DCLogic {
     // Race weeks get a full-height rule: the whole point of the shape is where it lands.
     wk.forEach((w,i)=>{ if(w.isTarget) chart.races.push({ x:+fx(i).toFixed(1), y1:TOP, y2:BASE }); });
     if(hasActual){ const pi=actual.indexOf(peakM);
-      chart.hasPeak=true; chart.peakDot={ x:+fx(pi).toFixed(1), y:+fy(peakM).toFixed(1), week:wk[pi].n, km:(peakM/1000).toFixed(1) }; }
+      chart.hasPeak=true; chart.peakDot={ x:+fx(pi).toFixed(1), y:+fy(peakM).toFixed(1), week:wk[pi].n, km:(peakM/1000).toFixed(1),
+        // the label is pulled back inside the plot at either end so it is never half off the chart
+        lx:+Math.min(R-16, Math.max(L+16, fx(pi))).toFixed(1), ly:+Math.max(11, fy(peakM)-8).toFixed(1),
+        t:(peakM/1000).toFixed(1)+' km' }; }
     // Mesocycle bands run under the axis in phase colour, and are the same grouping the
     // volume table below uses — consecutive weeks that belong to one phase.
     const groups=[];
@@ -20093,7 +20097,7 @@ class Component extends DCLogic {
       seasonMacroTotalKm:seasonMacro.totalKm, seasonMacroSessions:seasonMacro.sessions, seasonMacroAvgKm:seasonMacro.avgWeekKm, seasonMacroHasData:seasonMacro.hasData, seasonProgBars,
       seasonAnHasWeeks:seasonAn.hasWeeks, seasonAnHasActual:seasonAn.hasActual, seasonAnNoActual:!seasonAn.hasActual, seasonAnHasZones:seasonAn.hasZones,
       seasonAnChart:seasonAn.chart, seasonAnGrid:seasonAn.chart.grid, seasonAnBands:seasonAn.chart.bands, seasonAnRaces:seasonAn.chart.races,
-      seasonAnHasPeak:seasonAn.chart.hasPeak, seasonAnPeak:seasonAn.chart.peakDot||{x:0,y:0,week:0,km:'0.0'},
+      seasonAnHasPeak:seasonAn.chart.hasPeak, seasonAnPeak:seasonAn.chart.peakDot||{x:0,y:0,week:0,km:'0.0',lx:0,ly:0,t:''},
       seasonAnIntendLine:seasonAn.chart.intendLine, seasonAnActualLine:seasonAn.chart.actualLine, seasonAnActualArea:seasonAn.chart.actualArea,
       seasonAnZones:seasonAn.zones, seasonAnPhaseRows:seasonAn.phaseRows,
       seasonAnCaption:seasonAn.caption, seasonAnPeakValue:seasonAn.peakValue, seasonAnPeakUnit:seasonAn.peakUnit, seasonAnPeakCap:seasonAn.peakCap, seasonAnCoverLabel:seasonAn.coverLabel,

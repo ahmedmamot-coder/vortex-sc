@@ -9161,12 +9161,16 @@ describe("season analysis", () => {
     eq(an.chart.peakDot.x >= 8 && an.chart.peakDot.x <= 312, true);
     eq(an.chart.actualLine.split(" ").includes(an.chart.peakDot.x.toFixed(1) + "," + an.chart.peakDot.y.toFixed(1)), true);
   });
-  // The design runtime builds anything inside sc-if / sc-for in the HTML namespace, so an
-  // <svg><text> it creates measures 0x0 and paints nothing — which is why the progression
-  // charts elsewhere show dots with no label. This chart must not depend on one.
-  it("the chart never relies on a label the runtime cannot paint", () => {
+  it("the peak week is labelled on the chart, not only in the header", () => {
     const card = sourceBetween("Season volume curve", "Where the metres went");
-    eq(/<text/.test(card), false, "an SVG <text> inside sc-if is invisible in the shipped app");
+    eq(/<text[^>]*>\{\{ seasonAnPeak\.t \}\}/.test(card), true);
+  });
+  it("the label is pulled inside the plot at either end", () => {
+    const wide = bind("seasonAnalysis", {}, ["planZoneMetres", "_zoneMeta"]);
+    const first = wide([wk(1, "P", "#12A0AE", 25, 9000, 2, "2026-08-31", "2026-09-06"),
+      wk(2, "P", "#12A0AE", 25, 1000, 1, "2026-09-07", "2026-09-13")], []);
+    eq(first.chart.peakDot.x, 8, "the peak really is at the left edge");
+    eq(first.chart.peakDot.lx, 24, "but its label is not half off the chart");
   });
   it("a target meet is marked on the season, not left to memory", () => eq(an.chart.races.length, 1));
   it("the season totals the weeks", () => eq(an.totalKm, "60.0"));
@@ -9197,6 +9201,35 @@ describe("season analysis", () => {
       [{ date: "2026-09-01", plan: { zone: "Recovery", sections: [{ sets: [{ dist: 1000, reps: 1 }] }] } }]);
     eq(one.zones.map((z) => z.label), ["Recovery"]);
     eq(one.zones[0].pctLabel, "100%");
+  });
+});
+
+/* ------------------------------------------------- chart labels the runtime can paint
+   Every {{ }} the design runtime renders is wrapped in an element so it can be keyed.
+   That wrapper was always a <span>, which inside an SVG <text> is not a text-content
+   element and paints nothing — so a label written as <text>{{ d.t }}</text> came out
+   blank while any literal text beside it still drew. The progression charts on every
+   swimmer profile have shown dots with no times for exactly that reason. The runtime
+   ships in this repo, so the fix and this guard live here too: if the runtime is ever
+   replaced wholesale, this fails rather than the labels quietly going blank again. */
+describe("interpolations inside an SVG text element", () => {
+  const RUNTIME = readFileSync(new URL("../public/assets/support.js", import.meta.url), "utf8");
+
+  it("the wrapper is chosen from the parent element, not hardcoded", () =>
+    eq(/const wrap = \(\(\) => \{/.test(RUNTIME), true));
+  it("an SVG text parent gets a tspan", () =>
+    eq(/return t === "text" \|\| t === "tspan" \|\| t === "textpath" \? "tspan" : "span";/.test(RUNTIME), true));
+  it("sc-if and sc-for between the text and its parent are seen through", () =>
+    eq(/while \(p2 && \/\^sc-\(if\|for\)\$\/i\.test\(p2\.tagName \|\| ""\)\) p2 = p2\.parentNode;/.test(RUNTIME), true));
+  it("no interpolation wrapper is left hardcoded to span", () => {
+    const fn = RUNTIME.slice(RUNTIME.indexOf("function walkText("), RUNTIME.indexOf("function walkFor("));
+    eq(/h\(\s*"span"/.test(fn), false, "a hardcoded span here is a label that cannot paint in a chart");
+    eq((fn.match(/h\(\s*wrap\b/g) || []).length, 3, "all three wrapper sites use the parent-aware tag");
+  });
+  // The charts that were blank, and the one added with them.
+  it("the charts still write their labels as text elements", () => {
+    eq(/<text x="\{\{ d\.x \}\}" y="\{\{ d\.labelY \}\}"/.test(SOURCE), true, "swimmer progression");
+    eq(/<text x="\{\{ seasonAnPeak\.lx \}\}"/.test(SOURCE), true, "season volume curve");
   });
 });
 
