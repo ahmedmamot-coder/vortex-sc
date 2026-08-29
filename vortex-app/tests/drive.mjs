@@ -2465,6 +2465,87 @@ scene("a swimmer moved is on the new squad's own roster, and a pull cannot undo 
 });
 
 // ---------------------------------------------------------------------------------------------
+// Two coaches, two swimmers, one minute — and one of the marks used to disappear.
+//
+// Sponsorship was a single document in club_state: mark a swimmer and the whole map went up.
+// A second device that had read the map before that sent ITS whole map a few seconds later,
+// with no idea the first mark existed, and the database kept the second one. The phone that
+// made the first mark went on showing the gold header — the guard that stops a stale pull
+// undoing a local edit was doing its job — so nothing said a word until the next reload, when
+// the badge was simply gone. "The mark as sponsor is not saving."
+//
+// Nothing in the unit tests can see this: it lives between two devices and a clock. So this
+// runs two real browsers against one database and reloads the first one.
+// ---------------------------------------------------------------------------------------------
+scene("two coaches marking two swimmers keep both marks", async (browser) => {
+  const clubState = new Map();          // one shared database for both devices
+  const sponsors = new Map();           // swimmer_sponsors, keyed by sw_id
+  const problems = [];
+
+  async function device() {
+    const page = await (await browser.newContext({ viewport: { width: 1280, height: 1000 } })).newPage();
+    page.on("pageerror", (e) => problems.push(String(e.message)));
+    await page.route("**/rest/v1/**", async (route) => {
+      const req = route.request(), m = req.method(), u = new URL(req.url());
+      const table = (u.pathname.split("/rest/v1/")[1] || "").split("?")[0];
+      if (m === "GET") {
+        let rows = [];
+        if (table === "club_state") {
+          const kf = u.searchParams.get("key") || "";
+          rows = [...clubState.values()];
+          if (kf.startsWith("eq.")) rows = rows.filter((r) => r.key === kf.slice(3));
+          else if (kf.startsWith("in.")) { const set = new Set(kf.slice(4, -1).split(",")); rows = rows.filter((r) => set.has(r.key)); }
+        } else if (table === "swimmer_sponsors") rows = [...sponsors.values()];
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(rows) });
+      }
+      if (m === "HEAD") return route.fulfill({ status: 200, headers: { "content-range": "0-0/0" }, body: "" });
+      let body = []; try { body = JSON.parse(req.postData() || "[]"); } catch { /* asserted on below */ }
+      for (const r of (Array.isArray(body) ? body : [body])) {
+        if (!r) continue;
+        if (table === "club_state" && r.key)
+          clubState.set(r.key, { key: r.key, value: r.value, updated_at: r.updated_at || new Date().toISOString() });
+        // The row store is what a table gives you and a document does not: two writers, two keys.
+        if (table === "swimmer_sponsors" && r.sw_id)
+          sponsors.set(r.sw_id, { sw_id: r.sw_id, sponsored: !!r.sponsored, set_by: r.set_by || "", ts: r.ts || 0 });
+      }
+      return route.fulfill({ status: 201, contentType: "application/json", body: "[]" });
+    });
+    await page.addInitScript(() => {
+      localStorage.setItem("vx_session", JSON.stringify({ type: "staff", id: "ahmed" }));
+      localStorage.setItem("vx_auth", JSON.stringify({ token: "drive-fake", refresh: "drive-fake", exp: Date.now() + 3600000 }));
+      localStorage.removeItem("vx_nav");
+    });
+    await page.goto("http://127.0.0.1:" + PORT + "/proto.html?drive=" + Date.now(), { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(2200);
+    return page;
+  }
+
+  const A = await device(), B = await device();
+  const mark = (page, id) => page.evaluate(`(() => { ${APP}.toggleSponsor(${JSON.stringify(id)}); })()`);
+  const badge = (page, id) => page.evaluate(`(() => ${APP}._swMeta(${JSON.stringify(id)}).sponsored)()`);
+
+  // The poolside phone marks one swimmer; the tablet, which has not pulled since, marks another.
+  await mark(A, "r173");
+  await A.waitForTimeout(600);
+  await mark(B, "r55");
+  await B.waitForTimeout(900);
+
+  eq([...sponsors.keys()].sort(), ["r173", "r55"],
+     "the two marks did not survive each other in the database: " + JSON.stringify([...sponsors.keys()]));
+
+  // And the phone that made the first one still has it after a reload, which is where the club
+  // used to find out.
+  await A.reload({ waitUntil: "domcontentloaded" });
+  await A.waitForTimeout(2600);
+  eq(await badge(A, "r173"), true, "the first coach's mark was gone from their own app after a reload");
+  eq(await badge(A, "r55"), true, "the second coach's mark never arrived on the first device");
+  eq(problems.length, 0, "the app threw: " + problems.slice(0, 2).join(" | "));
+
+  await A.close(); await B.close();
+  return "two devices, two rows, both marks still there";
+});
+
+// ---------------------------------------------------------------------------------------------
 const only = process.argv[2];
 await start();
 const browser = await chromium.launch({ executablePath: CHROME });

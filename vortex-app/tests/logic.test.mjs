@@ -5313,6 +5313,7 @@ describe("InBody sheet", () => {
     for (const [fn, latch, table] of [
       ["_squadsSeed", "_squadsSeeded", "vx_squads_t"],
       ["_videosSeed", "_videosSeeded", "vx_video_analyses"],
+      ["_sponsorsSeed", "_sponsorsSeeded", "swimmer_sponsors"],
     ]) {
       const body = methodSource(fn).body;
       it(fn + " gives up after one accepted fill", () => {
@@ -5387,6 +5388,10 @@ describe("InBody sheet", () => {
       // local copy as the photos above — the table is the truth, and losing the copy costs a
       // render, not a status.
       vx_sw_status: "swimmer_status",
+      // Sponsorship left club_state for the same reason, after the same complaint: two coaches
+      // marking two swimmers inside one pull window sent two whole documents, and the second
+      // had never heard of the first. See supabase/swimmer_sponsors.sql.
+      vx_sponsored: "swimmer_sponsors",
       // Meets left club_state for a table of their own, for the reason recorded in
       // supabase/club_meets.sql: the shared document is last-write-wins, so a device replaying
       // its queue of unsent writes put its whole stale calendar back over a corrected date.
@@ -9070,6 +9075,103 @@ describe("swimmer status: an empty read does not wipe the club", () => {
     eq(/notSent:true/.test(push), true,
        "__vxUpsert returns false both when it queues for a sign-in and when the database refuses; "
        + "without notSent every dead session reads as a refusal and the coach is sent to ask somebody else");
+  });
+});
+
+
+/* ------------------------------------ the mark that another device rubbed out
+   Sponsorship lived in vx_sponsored, one document in club_state holding every
+   sponsored swimmer at once, and club_state is last-write-wins. Two coaches
+   marking two swimmers inside one twenty-second pull window sent two whole
+   documents, and the second had never heard of the first — so the badge was
+   gold on the phone that made it and gone from the database, which is exactly
+   what "the mark as sponsor is not saving" looks like from the poolside.
+
+   It is one row per swimmer now. These are the parts of that which can be read
+   off the source: the toggle must not touch the blob, un-marking has to beat a
+   legacy flag, and an empty read must not invent a club with no sponsors. */
+describe("sponsorship: one row per swimmer, not one document for the club", () => {
+  const meta = (ctx) => bind("_swMeta", ctx, []);
+
+  it("a swimmer nobody has an opinion about is not sponsored", () => {
+    const ctx = { swimmerMeta: {}, sponsoredMap: {}, swimmerDocs: {} };
+    eq(meta(ctx)("r9").sponsored, false);
+  });
+
+  it("the map says who is sponsored", () => {
+    const ctx = { swimmerMeta: {}, sponsoredMap: { r9: true }, swimmerDocs: {} };
+    eq(meta(ctx)("r9").sponsored, true);
+  });
+
+  // The old vx_sw_meta blob still carries sponsored:true for swimmers marked before the move,
+  // so it has to keep showing the badge...
+  it("a flag left in the old blob still shows", () => {
+    const ctx = { swimmerMeta: { r9: { sponsored: true } }, sponsoredMap: {}, swimmerDocs: {} };
+    eq(meta(ctx)("r9").sponsored, true);
+  });
+
+  // ...but it must not be able to veto the club. This was `sponsoredMap[id] || base.sponsored`
+  // with un-marking expressed as a deleted key, so for those swimmers the button did nothing at
+  // all: tap it, and the OR put the badge straight back, for ever.
+  it("and un-marking that swimmer beats it, rather than being ignored", () => {
+    const ctx = { swimmerMeta: { r9: { sponsored: true } }, sponsoredMap: { r9: false }, swimmerDocs: {} };
+    eq(meta(ctx)("r9").sponsored, false,
+       "the old blob outvoted the coach, which is a button that cannot be pressed");
+  });
+
+  it("un-marking writes false rather than removing the swimmer", () => {
+    const body = methodSource("toggleSponsor").body;
+    eq(/m\[swId\]=on;/.test(body), true,
+       "a deleted key cannot override a legacy flag, and an empty table would then be "
+       + "indistinguishable from a club with no sponsors — which is what the seed reads");
+  });
+
+  it("the toggle no longer sends the whole document to club_state", () => {
+    const body = methodSource("toggleSponsor").body;
+    eq(/_saveJSON\(/.test(body), false,
+       "_saveJSON pushes the blob, and the blob is last-write-wins — this is the collision");
+    eq(/_saveLocalOnly\('vx_sponsored'/.test(body), true, "the local copy is still kept");
+    eq(/_sponsorPush\(swId, on\)/.test(body), true, "and the one row still has to be written");
+  });
+
+  it("vx_sponsored is off the shared document for good", () => {
+    const SYNC = JSON.parse(SOURCE.match(/var SYNC = (\[[^\]]*\])/)[1]);
+    eq(SYNC.includes("vx_sponsored"), false,
+       "left in the list, applyPull writes the stale document back over the table's answer");
+  });
+
+  const newCtx = () => ({ sponsoredMap: { r9: true }, swimmerMeta: {}, _saveLocalOnly() {},
+                          forceUpdate() {}, _sponsorsSeed: async () => {} });
+
+  itAsync("a table that answers with nothing changes nothing on the device", async () => {
+    globalThis.window = { __vxSelect: () => Promise.resolve([]) };
+    const ctx = newCtx();
+    await bind("_sponsorsFetch", ctx, [])();
+    eq(ctx.sponsoredMap, { r9: true }, "an empty read wiped the badges on this device");
+  });
+
+  itAsync("a read that failed outright changes nothing either", async () => {
+    globalThis.window = { __vxSelect: () => Promise.resolve(null) };
+    const ctx = newCtx();
+    await bind("_sponsorsFetch", ctx, [])();
+    eq(ctx.sponsoredMap, { r9: true }, "a failed read wiped the badges on this device");
+  });
+
+  itAsync("rows are authoritative, including the ones that say no", async () => {
+    globalThis.window = { __vxSelect: () => Promise.resolve([
+      { sw_id: "r131", sponsored: true }, { sw_id: "r9", sponsored: false },
+    ]) };
+    const ctx = newCtx();
+    await bind("_sponsorsFetch", ctx, [])();
+    eq(ctx.sponsoredMap, { r131: true, r9: false },
+       "a false row is how the club un-marks a swimmer the old document still says yes about");
+  });
+
+  it("a sponsorship write that never left says so, rather than blaming the database", () => {
+    const push = methodSource("_sponsorPush").body;
+    eq(/notSent:true/.test(push), true,
+       "__vxUpsert returns false both when it queues for a sign-in and when the database refuses; "
+       + "without notSent every dead session reads as a refusal");
   });
 });
 

@@ -107,7 +107,13 @@ if ('serviceWorker' in navigator) {
   // changing two swimmers flattened each other. Leaving the key here would undo that from the
   // other end: applyPull would keep writing the stale document into localStorage, and the next
   // boot would read it back over the top — a status set during a register, reverting on reload.
-  var SYNC = ["vx_squads","vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_entries","vx_meet_events","vx_meet_cuts","vx_seed_config","vx_meet_marks","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_memberships","vx_fee_plans","vx_billing","vx_race_splits","vx_bday_sent","vx_staff_pw_set"];
+  //
+  // vx_sponsored is gone for exactly the same reason, and it was the same complaint: a coach
+  // marks a swimmer as sponsored, the gold header appears, and by the next reload it is purple
+  // again. Two devices marking two swimmers inside one twenty-second pull window send two whole
+  // documents, and the second one has never heard of the first. Sponsorship is one row per
+  // swimmer now (swimmer_sponsors), see supabase/swimmer_sponsors.sql.
+  var SYNC = ["vx_squads","vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_entries","vx_meet_events","vx_meet_cuts","vx_seed_config","vx_meet_marks","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_memberships","vx_fee_plans","vx_billing","vx_race_splits","vx_bday_sent","vx_staff_pw_set"];
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
   // Auth-retry queue: if a write is rejected because we weren't signed in yet (401/403 under the
@@ -7649,7 +7655,10 @@ class Component extends DCLogic {
     this.swimmerDocs=this._loadJSON('vx_docs_cache', {});
     // Web Push public (VAPID) key — safe to embed; the private key lives only in the server env.
     this.VAPID_PUBLIC='BPnAfmRju94v7v00p3aq6W3hf3Y89au054VeOEn0LnQa9yLT_qqzwOHNkosYkOItc3S2WPEl676HR4S3vhpdUOE';
-    this.sponsoredMap=this._loadJSON('vx_sponsored', {});
+    // Sponsorship is a table now (swimmer_sponsors), not a key in the shared document. This is
+    // the local copy so the badge draws before the read comes back — _loadLocalOnly, never
+    // _loadJSON, because the pulled document is the stale copy the table exists to get away from.
+    this.sponsoredMap=this._loadLocalOnly('vx_sponsored', {});
     this.swimmerPhotos=this._sanitizePhotos(this._loadJSON('vx_photos_cache', {}));  // table-backed; refreshed by _docsFetch
     this.fitnessTests=this._loadJSON('vx_fitness_tests', {});
     this.aiSuggOverrides=this._loadJSON('vx_ai_sugg_ovr', {});
@@ -11286,10 +11295,17 @@ class Component extends DCLogic {
   }
   tpaceDelete(swId, idx){ const list=(this.tpaceTests[swId]||[]).slice(); list.splice(idx,1); this.tpaceTests={...this.tpaceTests, [swId]:list}; this._saveJSON('vx_tpace', this.tpaceTests); this.forceUpdate(); }
   _swMeta(swId){ const base=this.swimmerMeta[swId] || {sponsored:false, docs:{birth:false, id:false, medical:false}, inbody:[]};
-    // Sponsorship lives in its own tiny synced key (vx_sponsored) so it never rides on the
-    // heavy vx_sw_meta blob (which can carry base64 docs/InBody images and hit the storage
-    // quota). Merge the dedicated flag in — reading code keeps using meta.sponsored unchanged.
-    const sp=!!((this.sponsoredMap||{})[swId]) || !!base.sponsored;
+    // Sponsorship comes from the swimmer_sponsors table, cached in sponsoredMap. Reading code
+    // keeps using meta.sponsored unchanged.
+    //
+    // The map is allowed to say false, and that is the half that was missing. It used to be
+    // `sponsoredMap[swId] || base.sponsored`, with un-marking expressed by removing the key —
+    // so for any swimmer whose flag was still in the old vx_sw_meta blob, the OR put it
+    // straight back and the button did nothing at all, for ever. An explicit false is how the
+    // club says "no" about a swimmer the old document says "yes" about; the blob only speaks
+    // when the map has no opinion.
+    const own=(this.sponsoredMap||{})[swId];
+    const sp= own===undefined ? !!base.sponsored : !!own;
     // Documents come from the dedicated swimmer_docs table (overlaid on any legacy blob docs).
     const docsOvr=(this.swimmerDocs||{})[swId]||{};
     const docs={...(base.docs||{}), ...docsOvr};
@@ -11576,9 +11592,107 @@ class Component extends DCLogic {
     try{ this.audit('swimmer.status.dates', this._swName(swId)+' \u00b7 '+(which==='from'?'from ':'to ')+(val||'(cleared)'),
       {swimmer:swId, status:cur.reason||'break', from:cur.from||'', to:cur.to||''}); }catch(e){}
     try{ this._swStatusSaved(swId, which==='from'?'Start date':'End date'); }catch(e){} }
+  // ---- Sponsorship: one row per swimmer ------------------------------------------------------
+  //
+  // This used to live only in vx_sponsored, a single document inside club_state holding every
+  // sponsored swimmer at once. club_state is last-write-wins — pushKey sends the whole value and
+  // applyPull takes the remote copy when its timestamp is newer — and vx_roster_edits is the ONLY
+  // key in this app that merges instead of replacing. Sponsorship was not it.
+  //
+  // So: a coach marks Kareem from the poolside phone and the header turns gold. A second coach,
+  // on a tablet that read the document before that, marks somebody else and sends ITS whole
+  // document — the one with no Kareem in it. Kareem is not sponsored any more, nobody is told,
+  // and the first phone goes on showing gold until it is reloaded. That is "the mark as sponsor
+  // is not saving": the write saved, and was overwritten by a device that had never heard of it.
+  // Marking it again cannot fix it, and marking it again is what the app invited.
+  //
+  // Two coaches marking two swimmers now touch two rows. The local map stays as the thing the
+  // screens render from, so nothing above this line had to change; it is a cache of the table.
   toggleSponsor(swId){ const on=!this._swMeta(swId).sponsored; const m={...(this.sponsoredMap||{})};
-    if(on) m[swId]=true; else delete m[swId];
-    this.sponsoredMap=m; this._saveJSON('vx_sponsored', m); this.forceUpdate(); }
+    // false, not a deleted key: it is what overrides a legacy flag in the vx_sw_meta blob, and
+    // it is what makes an empty swimmer_sponsors table mean "not migrated yet" rather than "no
+    // sponsors", which is what lets _sponsorsSeed run without inventing a club.
+    m[swId]=on;
+    this.sponsoredMap=m;
+    // Local first so the screen is instant, then the one row. _saveLocalOnly, not _saveJSON:
+    // _saveJSON also pushes the whole blob to club_state, which is the collision this move
+    // exists to end.
+    try{ this._saveLocalOnly('vx_sponsored', m); }catch(e){}
+    this.forceUpdate();
+    // A refusal reaches the coach the way every other row write's does: __vxUpsert records it
+    // and the red banner names the table. There is no message line under this button to write to.
+    this._sponsorPush(swId, on);
+    try{ this.audit('swimmer.sponsor', this._swName(swId)+' · '+(on?'sponsored':'not sponsored'),
+      {swimmer:swId, sponsored:on}); }catch(e){}
+  }
+
+  /** Write one swimmer's sponsorship. Returns what the database said, so a caller can report it. */
+  async _sponsorPush(swId, on){
+    if(!window.__vxUpsert) return {ok:false, why:'this device cannot reach the database'};
+    const me=(()=>{ try{ return this._modMe().label; }catch(e){ return ''; } })();
+    let ok=false;
+    try{ ok=await window.__vxUpsert('swimmer_sponsors', [{ sw_id:swId, sponsored:!!on, set_by:me, ts:Date.now() }]); }catch(e){}
+    if(ok) return {ok:true};
+    // Refused, or never sent? Different problems with different answers — the same distinction
+    // _swStatusPush draws, for the same reason: a refusal is somebody else's to fix, a write
+    // still sitting on the phone is fixed by the person holding it, by signing in again.
+    const a=window.__VX_AUTH;
+    const live=!!(a && a.token && a.exp && Date.now() < a.exp);
+    if(!live) return {ok:false, notSent:true, why: window.__vxAuthDead
+      ? 'it never left this device — the database sign-in here has ended'
+      : 'it has not left this device yet — the sign-in has not landed'};
+    const said=(window.__vxLastWriteErr && window.__vxLastWriteErr.table==='swimmer_sponsors')
+      ? window.__vxLastWriteErr.said : '';
+    return {ok:false, why: said || 'the database refused it'};
+  }
+
+  async _sponsorsFetch(){
+    if(!window.__vxSelect) return;
+    const rows=await window.__vxSelect('swimmer_sponsors', 'select=*&limit=2000');
+    if(rows==null) return;                     // table missing / offline → keep what we have
+    // An empty answer is not the same as "nobody is sponsored". A row-level-security refusal on
+    // a SELECT is not an error — PostgREST answers 200 with [] — so a policy that ever goes
+    // wrong arrives here looking exactly like a club that has not been migrated yet. Un-marking
+    // writes sponsored:false rather than deleting the row, so a club that really has no sponsors
+    // still has rows; an empty table means the move has not happened here yet, and that is the
+    // one case worth seeding from the old document.
+    if(!rows.length){ try{ await this._sponsorsSeed(); }catch(e){} return; }
+    const m={};
+    rows.forEach(r=>{ if(r && r.sw_id) m[r.sw_id]=!!r.sponsored; });
+    this.sponsoredMap=m;
+    try{ this._saveLocalOnly('vx_sponsored', m); }catch(e){}
+    this.forceUpdate();
+  }
+
+  // Fill the table, once, from the copy the club already has: the old club_state document read
+  // straight from the database (so a device that never held it can still do this), plus this
+  // device's own map and any flag left in the legacy vx_sw_meta blob. Additive only — it writes
+  // the sponsors the club has, and never a false over somebody else's true.
+  async _sponsorsSeed(){
+    if(!window.__vxUpsert || !this._isFullAccess()) return;
+    // The empty read that sent us here may only mean the session has expired. See _dbAnon.
+    if(this._dbAnon()) return;
+    // Seed once per run of the app, and never again — including when the write is accepted. A
+    // write the database takes and a read that still comes back empty is what a table whose
+    // INSERT and SELECT policies disagree does, and this club has had exactly that: without the
+    // latch, _sponsorsFetch seeds, re-reads, seeds again, for as long as the tab is open.
+    if(this._sponsorsSeeded) return;
+    const ids={};
+    Object.keys(this.sponsoredMap||{}).forEach(id=>{ if((this.sponsoredMap||{})[id]) ids[id]=true; });
+    Object.keys(this.swimmerMeta||{}).forEach(id=>{ if((this.swimmerMeta[id]||{}).sponsored) ids[id]=true; });
+    try{
+      const r=await window.__vxSelectRaw('club_state', 'select=value&key=eq.vx_sponsored');
+      const row=(r&&r.rows&&r.rows[0])||null;
+      const doc=row ? ((typeof row.value==='string') ? JSON.parse(row.value) : row.value) : null;
+      if(doc && typeof doc==='object') Object.keys(doc).forEach(id=>{ if(doc[id]) ids[id]=true; });
+    }catch(e){}
+    const list=Object.keys(ids);
+    if(!list.length){ this._sponsorsSeeded=true; return; }   // nothing to move across
+    const me=(()=>{ try{ return this._modMe().label; }catch(e){ return ''; } })();
+    const ok=await window.__vxUpsert('swimmer_sponsors',
+      list.map(id=>({ sw_id:id, sponsored:true, set_by:me, ts:Date.now() })), {ignoreDuplicates:true});
+    if(ok){ this._sponsorsSeeded=true; return this._sponsorsFetch(); }
+  }
   toggleDoc(swId, key){ const m=this._swMeta(swId); this._saveSwMeta(swId, {...m, docs:{...m.docs, [key]:!m.docs[key]}}); }
   // Documents are uploaded to Supabase Storage and only their URL is kept in the synced meta.
   // Previously the whole base64 file was stuffed into the vx_sw_meta blob, which overflowed the
@@ -15334,7 +15448,7 @@ class Component extends DCLogic {
   // empty; this re-fetches them with the signed-in user's JWT so their data appears.
   _refetchAll(){
     try{ this._repullOnce(); }catch(e){}
-    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_swStatusFetch','_wearFetch','_wearStatusFetch','_hrSetsFetch','_wellnessFetch','_inbodyFetch','_invoicesFetch','_membershipsFetch','_entriesFetch','_meetsFetch','_planCustomFetch','_familyFetch']
+    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_swStatusFetch','_sponsorsFetch','_wearFetch','_wearStatusFetch','_hrSetsFetch','_wellnessFetch','_inbodyFetch','_invoicesFetch','_membershipsFetch','_entriesFetch','_meetsFetch','_planCustomFetch','_familyFetch']
       .forEach((f)=>{ try{ if(typeof this[f]==='function') this[f](); }catch(e){} });
     try{ this._attendFetchStaged(); }catch(e){}
   }
@@ -15351,7 +15465,7 @@ class Component extends DCLogic {
     // marks until one of them signed out. Both halves are fixed: the subscription above, and
     // this call.
     try{ this._attendFetchStaged(); }catch(e){}
-    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_swStatusFetch','_wellnessFetch','_inbodyFetch','_invoicesFetch','_membershipsFetch','_entriesFetch','_meetsFetch','_hrSetsFetch','_wearFetch','_planCustomFetch']
+    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_swStatusFetch','_sponsorsFetch','_wellnessFetch','_inbodyFetch','_invoicesFetch','_membershipsFetch','_entriesFetch','_meetsFetch','_hrSetsFetch','_wearFetch','_planCustomFetch']
       .forEach((f)=>{ try{ if(typeof this[f]==='function') this[f](); }catch(e){} });
   }
   // Stage B: give a signed-in staff member a real Supabase Auth session (JWT) in the background,
@@ -16222,6 +16336,8 @@ class Component extends DCLogic {
     // rest of the per-row data. _refetchAll lists it too, but that only runs once a signed-in
     // session lands — on boot this is the call that fills the register in.
     this._swStatusFetch();
+    // Sponsorship is a table now too, for the reason recorded in supabase/swimmer_sponsors.sql.
+    this._sponsorsFetch();
     this._planCustomFetch();
     // Also pull family accounts on open. This is what re-uploads ("self-heals") a
     // registration that never reached the table, so the admin can see that parent.
@@ -16336,7 +16452,10 @@ class Component extends DCLogic {
     // every mark (the attendance_marks realtime subscription), so the revert was near-instant.
     // Same treatment the photos got when they moved to a table, two lines below.
     try{ this._swStatusFetch(); }catch(e){}
-    this.sponsoredMap=g('vx_sponsored', this.sponsoredMap);
+    // Sponsorship comes from the swimmer_sponsors table now, not this blob — re-reading
+    // vx_sponsored here would put the stale document back over it on every data refresh, which
+    // is the same way a status set during a register used to revert a second later.
+    try{ this._sponsorsFetch(); }catch(e){}
     // (Swimmer photos come from the swimmer_docs table now, not this synced blob — don't overwrite them here.)
     this.staffOverrides=g('vx_staff_ovr', this.staffOverrides);
     this.meetEntries=g('vx_meet_entries', this.meetEntries);
