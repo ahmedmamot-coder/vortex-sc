@@ -2758,7 +2758,7 @@ describe("expired session", () => {
   // then said the one thing that does not help. The server's own words are what tell an
   // expired token apart from a permission this account has never had.
   it("a retry that keeps failing shows what the database actually said", () => {
-    const detail = sourceBetween("saveFailDetail: (S.authDead || S.sendingAnon)", "// Signed out, the Retry button is a lie");
+    const detail = sourceBetween("saveFailDetail: this._saveNeedsSignIn(S)", "// Signed out, the Retry button is a lie");
     eq(/retrying automatically'\s*\+\s*\(\(S\.saveFailLast && S\.saveFailLast\.said\)/.test(detail), true,
        "the reason is captured on every failure and must not be dropped on this one");
     eq(/the database said: /.test(detail), true);
@@ -7874,9 +7874,48 @@ describe("InBody sheet", () => {
     // automatically" — sending this club to check an allowlist that was right all along.
     it("the banner says the session expired rather than naming a table", () => {
       eq(/const anon = !!window\.__vxSendingAnon;/.test(SOURCE), true, "read every poll");
-      eq(/saveFailTitle: \(S\.authDead \|\| S\.sendingAnon\)/.test(SOURCE), true, "and it changes the title");
-      eq(/saveFailActionLabel: \(S\.authDead \|\| S\.sendingAnon\) \? 'Sign in' : 'Retry'/.test(SOURCE), true,
+      eq(/saveFailTitle: this\._saveNeedsSignIn\(S\)/.test(SOURCE), true, "and it changes the title");
+      eq(/saveFailActionLabel: this\._saveNeedsSignIn\(S\) \? 'Sign in' : 'Retry'/.test(SOURCE), true,
          "Retry cannot work signed out, so the button becomes the thing that can");
+    });
+
+    /* The other half of the same fault, and the half the app could not see coming.
+       sendingAnon is this device noticing its own token is stale. A 401 is the SERVER refusing a
+       token this device still believes in — a drifted clock, a session ended elsewhere — and it
+       comes back quoting row-level security, because a request the database will not
+       authenticate fails a `to authenticated` policy just as an anonymous one does. Read as a
+       permission fault it sends a club to check a staff list their address is already in. */
+    it("a token the server refuses is a sign-in, not a permission", () => {
+      const fn = methodSource("_saveNeedsSignIn").body;
+      eq(/s\.authDead \|\| s\.sendingAnon/.test(fn), true, "the two the app can see itself");
+      eq(/s\.saveFailLast && s\.saveFailLast\.status===401/.test(fn), true, "and the one only the server knows");
+      const needs = bind("_saveNeedsSignIn", {});
+      eq(needs({ saveFailLast: { status: 401 } }), true, "a refused token asks for a sign-in");
+      eq(needs({ sendingAnon: true }), true);
+      eq(needs({ authDead: true }), true);
+      eq(needs({ saveFailLast: { status: 403 } }), false,
+         "a 403 IS a permission — that one really is the club's to change, and must not be relabelled");
+      eq(needs({ saveFailLast: { status: 0 } }), false, "and a bad connection fixes itself");
+      eq(needs({}), false);
+      eq(needs(null), false, "called before the first render, it must not throw");
+    });
+    it("and it does not read as a permission the club has to change", () => {
+      const detail = sourceBetween("saveFailDetail: this._saveNeedsSignIn(S)", "// Signed out, the Retry button is a lie");
+      eq(/staff list and not a setting/.test(detail), true,
+         "the last time this happened, the message sent them to an allowlist that was right");
+      eq(/it is the session on this device/.test(detail), true, "it has to name what IS wrong, too");
+      eq(/Nothing is lost/.test(detail), true, "and the change really is still on the device");
+    });
+    // The button now says "Sign in" for a refused token, so it has to be able to get there —
+    // but only after the retry, because a 401 starts a refresh that usually lands, and this
+    // button must not throw away a session that has just mended itself.
+    it("the Sign in button reaches the sign-in, and only once the retry has failed", () => {
+      const fn = sourceBetween("onSaveFailRetry: async()=>{", "onSaveFailDismiss");
+      const retry = fn.indexOf("await window.__vxRetryFailed()");
+      const login = fn.lastIndexOf("screen:'login'");
+      eq(retry > -1 && retry < login, true, "the retry comes first, always");
+      eq(/\(this\.state\.saveFailLast\|\|\{\}\)\.status===401/.test(fn), true,
+         "and the state is re-read after it, never the snapshot it started from");
     });
     it("it is never written to disk", () => {
       for (const m of ["_policyHold(key){", "_policyHeld(key){"])
