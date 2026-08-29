@@ -5742,13 +5742,78 @@ if ('serviceWorker' in navigator) {
                           <div style="flex:1;background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:11px;text-align:center;box-shadow:0 1px 4px rgba(11,20,40,.04)"><span style="display:block;font-size:18px;font-weight:800;color:#0C1116">{{ seasonMacroSessions }}</span><span style="display:block;font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4;margin-top:2px">Sessions</span></div>
                           <div style="flex:1;background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:11px;text-align:center;box-shadow:0 1px 4px rgba(11,20,40,.04)"><span style="display:block;font-size:18px;font-weight:800;color:#0C1116">{{ seasonMacroAvgKm }}<span style="font-size:10px;color:#9AA2B4;font-weight:700">km</span></span><span style="display:block;font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4;margin-top:2px">Avg / week</span></div>
                         </div>
-                        <sc-if value="{{ seasonMacroHasData }}" hint-placeholder-val="{{ false }}">
-                          <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:13px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
-                            <p style="margin:0 0 9px;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4">Weekly load progression</p>
-                            <div class="vx-scroll" style="display:flex;align-items:flex-end;gap:3px;height:80px;overflow-x:auto;padding-bottom:2px">
-                              <sc-for list="{{ seasonProgBars }}" as="b" hint-placeholder-count="12">
-                                <button onclick="{{ b.onClick }}" style="flex:none;width:16px;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end;background:none;border:none;cursor:pointer;padding:0"><div style="width:100%;height:{{ b.h }}px;background:{{ b.fill }};border-radius:3px"></div><span style="font-size:7.5px;color:#9AA2B4">{{ b.n }}</span></button>
+                        <sc-if value="{{ seasonAnHasWeeks }}" hint-placeholder-val="{{ true }}">
+                          <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:11px">
+                              <span style="flex:1;min-width:0"><span style="display:block;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4">Season volume curve</span><span style="display:block;font-size:11px;color:#7A8296;margin-top:2px">{{ seasonAnCoverLabel }}</span></span>
+                              <span style="flex:none;text-align:right"><span style="display:block;font-family:var(--font-mono);font-size:15px;font-weight:800;color:#7C4DFF">{{ seasonAnPeakValue }}<span style="font-size:9.5px;color:#9AA2B4;font-weight:700">{{ seasonAnPeakUnit }}</span></span><span style="display:block;font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4">{{ seasonAnPeakCap }}</span></span>
+                            </div>
+                            <svg viewBox="0 0 320 112" style="width:100%;height:118px;overflow:visible">
+                              <sc-for list="{{ seasonAnGrid }}" as="g" hint-placeholder-count="2">
+                                <line x1="8" y1="{{ g.y }}" x2="312" y2="{{ g.y }}" stroke="#EEF1F5" stroke-width="1"></line>
                               </sc-for>
+                              <line x1="8" y1="96" x2="312" y2="96" stroke="#E5E9F0" stroke-width="1"></line>
+                              <sc-for list="{{ seasonAnRaces }}" as="r" hint-placeholder-count="0">
+                                <line x1="{{ r.x }}" y1="{{ r.y1 }}" x2="{{ r.x }}" y2="{{ r.y2 }}" stroke="#E5484D" stroke-width="1" stroke-dasharray="2 3" opacity="0.55"></line>
+                              </sc-for>
+                              <polyline points="{{ seasonAnActualArea }}" fill="rgba(124,77,255,.16)" stroke="none"></polyline>
+                              <polyline points="{{ seasonAnIntendLine }}" fill="none" stroke="#9AA2B4" stroke-width="1.5" stroke-dasharray="4 3" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"></polyline>
+                              <polyline points="{{ seasonAnActualLine }}" fill="none" stroke="#7C4DFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></polyline>
+                              <sc-if value="{{ seasonAnHasPeak }}" hint-placeholder-val="{{ false }}">
+                                <circle cx="{{ seasonAnPeak.x }}" cy="{{ seasonAnPeak.y }}" r="4" fill="#7C4DFF" stroke="#fff" stroke-width="1.5"></circle>
+                              </sc-if>
+                              <sc-for list="{{ seasonAnBands }}" as="bd" hint-placeholder-count="5">
+                                <rect x="{{ bd.x }}" y="{{ bd.y }}" width="{{ bd.w }}" height="{{ bd.h }}" rx="3" fill="{{ bd.color }}" opacity="0.85"></rect>
+                              </sc-for>
+                            </svg>
+                            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px">
+                              <span style="font-size:11px;color:#7A8296;flex:1;min-width:0">{{ seasonAnCaption }}</span>
+                              <span style="flex:none;display:flex;gap:9px;font-size:9.5px;font-weight:700;color:#7A8296">
+                                <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:2.5px;border-radius:2px;background:#7C4DFF"></span>Built</span>
+                                <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:2.5px;border-radius:2px;background:#9AA2B4"></span>Intended</span>
+                              </span>
+                            </div>
+
+                            <sc-if value="{{ seasonAnHasZones }}" hint-placeholder-val="{{ false }}">
+                              <div style="margin-top:14px;padding-top:12px;border-top:1px solid #EEF1F5">
+                                <p style="margin:0 0 8px;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4">Where the metres went · zone mix</p>
+                                <div style="display:flex;height:12px;border-radius:6px;overflow:hidden;background:#F4F6F8">
+                                  <sc-for list="{{ seasonAnZones }}" as="z" hint-placeholder-count="4">
+                                    <span style="width:{{ z.w }};background:{{ z.color }}"></span>
+                                  </sc-for>
+                                </div>
+                                <div style="display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:9px">
+                                  <sc-for list="{{ seasonAnZones }}" as="z" hint-placeholder-count="4">
+                                    <span style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:{{ z.color }};flex:none"></span><span style="font-size:11.5px;font-weight:700;color:#0C1116">{{ z.label }}</span><span style="font-family:var(--font-mono);font-size:11px;font-weight:700;color:#7A8296">{{ z.km }}km · {{ z.pctLabel }}</span></span>
+                                  </sc-for>
+                                </div>
+                              </div>
+                            </sc-if>
+
+                            <div style="margin-top:14px;padding-top:12px;border-top:1px solid #EEF1F5">
+                              <p style="margin:0 0 9px;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4">Mesocycle volume</p>
+                              <div style="display:flex;flex-direction:column;gap:9px">
+                                <sc-for list="{{ seasonAnPhaseRows }}" as="pr" hint-placeholder-count="5">
+                                  <div>
+                                    <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">
+                                      <span style="flex:1;min-width:0;font-size:12px;font-weight:700;color:#0C1116;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ pr.name }}</span>
+                                      <span style="flex:none;font-size:10px;color:#9AA2B4;font-weight:700">{{ pr.weeksLabel }} · {{ pr.sessions }} sessions</span>
+                                      <span style="flex:none;font-family:var(--font-mono);font-size:11.5px;font-weight:800;color:#0C1116">{{ pr.km }}<span style="font-size:9px;color:#9AA2B4">km</span></span>
+                                    </div>
+                                    <div style="height:7px;border-radius:4px;background:#F4F6F8;overflow:hidden"><span style="display:block;height:100%;width:{{ pr.pctW }};background:{{ pr.color }};border-radius:4px"></span></div>
+                                    <p style="margin:4px 0 0;font-size:10.5px;color:#9AA2B4">{{ pr.avgKm }} km per week</p>
+                                  </div>
+                                </sc-for>
+                              </div>
+                            </div>
+
+                            <div style="margin-top:14px;padding-top:12px;border-top:1px solid #EEF1F5">
+                              <p style="margin:0 0 8px;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4">Weekly load · tap a week</p>
+                              <div class="vx-scroll" style="display:flex;align-items:flex-end;gap:3px;height:80px;overflow-x:auto;padding-bottom:2px">
+                                <sc-for list="{{ seasonProgBars }}" as="b" hint-placeholder-count="12">
+                                  <button onclick="{{ b.onClick }}" style="flex:none;width:16px;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end;background:none;border:none;cursor:pointer;padding:0"><div style="width:100%;height:{{ b.h }}px;background:{{ b.fill }};border-radius:3px"></div><span style="font-size:7.5px;color:#9AA2B4">{{ b.n }}</span></button>
+                                </sc-for>
+                              </div>
                             </div>
                           </div>
                         </sc-if>
@@ -15481,6 +15546,90 @@ class Component extends DCLogic {
   seasonResetPhases(squadId){ if(!window.confirm('Reset phases to the default template?')) return; this.mutateSeason(squadId, s=>{ s.phases=this.makeDefaultSeason().phases; }); }
   seasonToggleTarget(squadId, meetName){ this.mutateSeason(squadId, s=>{ s.targets=s.targets||[]; const i=s.targets.indexOf(meetName); if(i>=0) s.targets.splice(i,1); else s.targets.push(meetName); }); }
   _seasonLoadMeta(load){ return {easy:{label:'Recovery',pct:25,color:'#1CB87A'}, medium:{label:'Moderate',pct:55,color:'#12A0AE'}, high:{label:'High',pct:82,color:'#F5A623'}, peak:{label:'Peak',pct:100,color:'#E5484D'}, taper:{label:'Taper',pct:38,color:'#7C4DFF'}}[load]||{label:'Moderate',pct:55,color:'#12A0AE'}; }
+  // Metres per training zone for one session. This is the same arithmetic planMetres() does
+  // — distance x reps x circuit, times the section's rounds — kept per set instead of summed,
+  // so a season's zone mix always adds back up to the season's total metres. A set with no
+  // zone of its own inherits the session's zone, which is what the plan editor shows.
+  planZoneMetres(plan){ const out={};
+    (plan&&plan.sections||[]).forEach(sec=>{ const r=Math.max(1,Number(sec.rounds)||1);
+      (sec.sets||[]).forEach(s=>{ const m=(Number(s.dist)||0)*(Number(s.reps)||1)*(Number(s.circuit)||1)*r; if(!m) return;
+        const z=String(s.zone||plan.zone||'').trim()||'—'; out[z]=(out[z]||0)+m; }); });
+    return out; }
+  _zoneMeta(code){ return {EN1:{label:'E-1',color:'#12A0AE'}, EN2:{label:'E-2',color:'#1BA5E6'}, EN3:{label:'E-3',color:'#067EEA'},
+    SP1:{label:'SP-1',color:'#2733D6'}, SP2:{label:'SP-2',color:'#5D22CF'}, SP3:{label:'SP-3',color:'#8A22D5'}}[code] || {label:code, color:'#9AA2B4'}; }
+  // The season read as a graph. A coach draws a shape in the phases — build, load, peak,
+  // taper — and then builds sessions week by week; until now nothing put the two next to
+  // each other, so a season that had drifted off its own plan looked exactly like one that
+  // had not. This returns the geometry for that chart plus the two breakdowns underneath it
+  // (where the metres went by zone, and by mesocycle), all from the sessions already saved.
+  seasonAnalysis(weeks, sessions){
+    const wk=Array.isArray(weeks)?weeks:[]; const n=wk.length;
+    const W=320, L=8, R=312, TOP=22, BASE=96, BAND_Y=103, BAND_H=6;
+    const empty={ hasWeeks:false, hasActual:false, hasZones:false, chart:{intendLine:'', actualLine:'', actualArea:'', grid:[], bands:[], races:[], peakDot:null, hasPeak:false},
+      zones:[], phaseRows:[], totalKm:'0.0', peakKm:'0.0', peakLabel:'', weeksPlanned:0, caption:'', coverLabel:'', coverPct:0 };
+    if(!n) return empty;
+    const actual=wk.map(w=>Math.max(0,Number(w.sessionM)||0));
+    const load=wk.map(w=>Math.max(0,Math.min(100,Number(w.loadPct)||0)));
+    const max=(a)=>a.reduce((x,y)=>y>x?y:x,0);
+    const peakM=max(actual), peakLoad=max(load)||1;
+    const hasActual=peakM>0;
+    // With sessions on the board the intended shape is scaled onto the same axis as the real
+    // metres, so the two lines can be read against each other. With none yet it is drawn on
+    // its own scale — an empty chart would say nothing about a season that is fully phased.
+    const intend=load.map(p=>p*(hasActual?(peakM/peakLoad):1));
+    const top=Math.max(peakM, max(intend))||1;
+    const fx=(i)=> n<2 ? (L+R)/2 : L+(i*(R-L))/(n-1);
+    const fy=(v)=> BASE-((v/top)*(BASE-TOP));
+    const pt=(i,v)=> fx(i).toFixed(1)+','+fy(v).toFixed(1);
+    const intendLine=intend.map((v,i)=>pt(i,v)).join(' ');
+    const actualPts=actual.map((v,i)=>pt(i,v)).join(' ');
+    const chart={ intendLine, actualLine:hasActual?actualPts:'',
+      actualArea: hasActual ? (fx(0).toFixed(1)+','+BASE+' '+actualPts+' '+fx(n-1).toFixed(1)+','+BASE) : '',
+      grid:[0.5,1].map(f=>({ y:+fy(top*f).toFixed(1) })), bands:[], races:[], peakDot:null, hasPeak:false, w:W };
+    // Race weeks get a full-height rule: the whole point of the shape is where it lands.
+    wk.forEach((w,i)=>{ if(w.isTarget) chart.races.push({ x:+fx(i).toFixed(1), y1:TOP, y2:BASE }); });
+    if(hasActual){ const pi=actual.indexOf(peakM);
+      chart.hasPeak=true; chart.peakDot={ x:+fx(pi).toFixed(1), y:+fy(peakM).toFixed(1), week:wk[pi].n, km:(peakM/1000).toFixed(1) }; }
+    // Mesocycle bands run under the axis in phase colour, and are the same grouping the
+    // volume table below uses — consecutive weeks that belong to one phase.
+    const groups=[];
+    wk.forEach((w,i)=>{ const last=groups[groups.length-1];
+      if(last && last.name===w.phase && last.color===w.phaseColor) last.i1=i;
+      else groups.push({name:w.phase||'Phase', color:w.phaseColor||'#9AA2B4', i0:i, i1:i}); });
+    const step=(R-L)/n;
+    const seasonM=actual.reduce((a,b)=>a+b,0);
+    const phaseRows=groups.map(g=>{ let m=0, s=0;
+      for(let i=g.i0;i<=g.i1;i++){ m+=actual[i]; s+=Math.max(0,Number(wk[i].sessionCount)||0); }
+      const nw=g.i1-g.i0+1;
+      chart.bands.push({ x:+(L+g.i0*step).toFixed(1), w:+(nw*step).toFixed(1), y:BAND_Y, h:BAND_H, color:g.color });
+      return { name:g.name, color:g.color, weeks:nw, weeksLabel:nw+' wk', sessions:s,
+        km:(m/1000).toFixed(1), avgKm:(m/1000/nw).toFixed(1),
+        pctW:((m&&seasonM)? Math.max(2, Math.round((m/seasonM)*100)) : 0)+'%', hasVolume:m>0 }; });
+    // Zone mix, from the sessions themselves rather than the session's headline zone — a
+    // session labelled E-2 that carries a sprint set is two zones, and reading only the
+    // label is how a squad's speed work disappears from its own season.
+    const startISO=wk[0].startISO||'', endISO=wk[n-1].endISO||'';
+    const zTot={};
+    (Array.isArray(sessions)?sessions:[]).forEach(sp=>{ const d=sp&&sp.date; if(!d||(startISO&&d<startISO)||(endISO&&d>endISO)) return;
+      const per=this.planZoneMetres(sp.plan||{});
+      Object.keys(per).forEach(z=>{ zTot[z]=(zTot[z]||0)+per[z]; }); });
+    const zSum=Object.keys(zTot).reduce((a,k)=>a+zTot[k],0);
+    const order=['EN1','EN2','EN3','SP1','SP2','SP3'];
+    const zones=Object.keys(zTot).sort((a,b)=>{ const ia=order.indexOf(a), ib=order.indexOf(b);
+      return (ia<0?99:ia)-(ib<0?99:ib) || a.localeCompare(b); })
+      .map(z=>{ const meta=this._zoneMeta(z); const pct=zSum?Math.round((zTot[z]/zSum)*100):0;
+        return { code:z, label:meta.label, color:meta.color, km:(zTot[z]/1000).toFixed(1),
+          pct, pctLabel:pct+'%', w:(zSum? Math.max(1,(zTot[z]/zSum)*100) : 0).toFixed(2)+'%' }; });
+    const weeksPlanned=actual.filter(v=>v>0).length;
+    const coverPct=Math.round((weeksPlanned/n)*100);
+    return { hasWeeks:true, hasActual, hasZones:zones.length>0, chart, zones, phaseRows,
+      totalKm:(seasonM/1000).toFixed(1), peakKm:(peakM/1000).toFixed(1),
+      peakValue: hasActual ? (peakM/1000).toFixed(1) : '', peakUnit: hasActual ? 'km' : '',
+      peakCap: hasActual ? ('Peak · week '+wk[actual.indexOf(peakM)].n) : 'No sessions yet',
+      weeksPlanned, coverPct, coverLabel: weeksPlanned+' of '+n+' weeks built',
+      caption: hasActual ? (weeksPlanned+' of '+n+' weeks have sessions · '+(seasonM/1000).toFixed(1)+' km planned')
+                         : ('The load shape across '+n+' weeks · build sessions to see the real line') };
+  }
   setSetField(id, secId, setId, field, val){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); const s=sec&&(sec.sets||[]).find(x=>x.id===setId); if(s) s[field]=val; }); }
   addPlanSet(id, secId){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); if(sec) sec.sets.push({id:this._uid('s'), reps:1, dist:100, txt:'New set', equip:[], types:[], strokes:[], rest:'', hr:''}); }); }
   stepSetField(id, secId, setId, field, delta, min, step){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); const s=sec&&(sec.sets||[]).find(x=>x.id===setId); if(!s)return; const cur=Number(s[field])|| (field==='reps'?1:0); s[field]=Math.max(min, cur+delta*step); }); }
@@ -17127,6 +17276,7 @@ class Component extends DCLogic {
     // any session is logged); a dot marks weeks that already have planned sessions.
     const seasonProgBars=seasonWeeks.map(w=>({ n:w.n, h:Math.max(5, Math.round((w.loadPct/100)*68)), fill:w.loadColor, km:w.weekKm, hasData:w.sessionM>0, onClick:()=>this.setState({seasonOpenWeek:w.n}) }));
     const seasonMacro={ totalKm:(seasonSessM/1000).toFixed(1), sessions:seasonSessN, avgWeekKm: weeksWithData? ((seasonSessM/weeksWithData)/1000).toFixed(1) : '0', hasData:seasonSessM>0 };
+    const seasonAn=this.seasonAnalysis(seasonWeeks, seasonSaved);
 
     // ---- Zone Engine (spec ruleset) ----
     const zoneAge = S.zoneAge!=null ? S.zoneAge : 14;
@@ -19941,6 +20091,12 @@ class Component extends DCLogic {
       seasonStartLabel:this._fmtDMY(season.start, true), seasonEndLabel:this._fmtDMY(seasonEndISO, true),
       seasonTotalWeeks, seasonPhaseCount:season.phases.length, seasonWeeks, seasonPhaseRows, seasonTargetChips, seasonHasTargets:(season.targets||[]).length>0,
       seasonMacroTotalKm:seasonMacro.totalKm, seasonMacroSessions:seasonMacro.sessions, seasonMacroAvgKm:seasonMacro.avgWeekKm, seasonMacroHasData:seasonMacro.hasData, seasonProgBars,
+      seasonAnHasWeeks:seasonAn.hasWeeks, seasonAnHasActual:seasonAn.hasActual, seasonAnNoActual:!seasonAn.hasActual, seasonAnHasZones:seasonAn.hasZones,
+      seasonAnChart:seasonAn.chart, seasonAnGrid:seasonAn.chart.grid, seasonAnBands:seasonAn.chart.bands, seasonAnRaces:seasonAn.chart.races,
+      seasonAnHasPeak:seasonAn.chart.hasPeak, seasonAnPeak:seasonAn.chart.peakDot||{x:0,y:0,week:0,km:'0.0'},
+      seasonAnIntendLine:seasonAn.chart.intendLine, seasonAnActualLine:seasonAn.chart.actualLine, seasonAnActualArea:seasonAn.chart.actualArea,
+      seasonAnZones:seasonAn.zones, seasonAnPhaseRows:seasonAn.phaseRows,
+      seasonAnCaption:seasonAn.caption, seasonAnPeakValue:seasonAn.peakValue, seasonAnPeakUnit:seasonAn.peakUnit, seasonAnPeakCap:seasonAn.peakCap, seasonAnCoverLabel:seasonAn.coverLabel,
       onSeasonAddPhase:()=>this.seasonAddPhase(S.squadId), onSeasonResetPhases:()=>this.seasonResetPhases(S.squadId),
       onOpenSeason:()=>this.openTool('season', false),
       sponsorsRows, sponsorsEmpty: sponsorsRows.length===0, sponsorsScopeLabel,
