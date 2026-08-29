@@ -9090,6 +9090,149 @@ const MCP_URL_ROUTE = await import("../src/app/api/mcp/s/[token]/route.ts");
 delete process.env.VX_MCP_TOKEN;
 const MCP_UNSET = await import("../src/lib/mcpServer.ts?probe=unconfigured");
 
+/* --------------------------------------------------------------- season analysis
+   The Season Plan drew phases and counted metres, but never put the two next to each
+   other: a season that had drifted off the shape its coach drew looked exactly like one
+   that had not. The chart and the two breakdowns under it are all read off the sessions
+   already saved, so the numbers must agree with the plan screen's own arithmetic. */
+describe("season analysis", () => {
+  const metres = bind("planMetres", {}, []);
+  const zoneMetres = bind("planZoneMetres", {}, []);
+
+  const plan = {
+    zone: "EN2",
+    sections: [
+      { title: "Warm-up", sets: [{ dist: 400, reps: 1 }] },
+      { title: "Main set", rounds: 2, sets: [{ dist: 100, reps: 8, zone: "EN3" }, { dist: 25, reps: 4, zone: "SP3" }] },
+    ],
+  };
+
+  it("a set with no zone of its own inherits the session's", () =>
+    eq(zoneMetres({ zone: "EN1", sections: [{ sets: [{ dist: 200, reps: 2 }] }] }), { EN1: 400 }));
+  it("a set's own zone wins over the session's", () =>
+    eq(zoneMetres({ zone: "EN1", sections: [{ sets: [{ dist: 200, reps: 2, zone: "SP1" }] }] }), { SP1: 400 }));
+  it("rounds multiply the zone the same way they multiply the total", () =>
+    eq(zoneMetres({ sections: [{ rounds: 3, sets: [{ dist: 100, reps: 8, zone: "EN2" }] }] }), { EN2: 2400 }));
+  it("a circuit counts", () =>
+    eq(zoneMetres({ sections: [{ sets: [{ dist: 50, reps: 4, circuit: 2, zone: "EN1" }] }] }), { EN1: 400 }));
+  it("the mix adds back up to the session the plan screen shows", () => {
+    const mix = zoneMetres(plan);
+    eq(Object.keys(mix).reduce((a, k) => a + mix[k], 0), metres(plan),
+      "a zone breakdown that does not total the session is a breakdown of a different session");
+  });
+
+  // The weeks the Season Plan builds, cut down to what the analysis reads.
+  const wk = (n, phase, color, loadPct, sessionM, sessionCount, startISO, endISO, isTarget) =>
+    ({ n, phase, phaseColor: color, loadPct, sessionM, sessionCount, startISO, endISO, isTarget: !!isTarget });
+  const weeks = [
+    wk(1, "Preparation", "#12A0AE", 25, 0, 0, "2026-08-31", "2026-09-06"),
+    wk(2, "Preparation", "#12A0AE", 25, 20000, 5, "2026-09-07", "2026-09-13"),
+    wk(3, "Build", "#0C6CE0", 82, 30000, 6, "2026-09-14", "2026-09-20"),
+    wk(4, "Taper", "#7C4DFF", 38, 10000, 3, "2026-09-21", "2026-09-27", true),
+  ];
+  const sessions = [
+    { date: "2026-09-10", plan },                 // inside the season
+    { date: "2026-06-01", plan },                 // before it starts
+    { date: "2027-01-01", plan },                 // after it ends
+  ];
+  const an = bind("seasonAnalysis", {}, ["planZoneMetres", "_zoneMeta"])(weeks, sessions);
+
+  it("an empty season is not a chart", () =>
+    eq(bind("seasonAnalysis", {}, ["planZoneMetres", "_zoneMeta"])([], []).hasWeeks, false));
+  it("the shape is drawn before a single session exists", () => {
+    const dry = bind("seasonAnalysis", {}, ["planZoneMetres", "_zoneMeta"])(
+      weeks.map((w) => ({ ...w, sessionM: 0, sessionCount: 0 })), []);
+    eq(dry.hasActual, false);
+    eq(dry.chart.actualLine, "", "there is no real line to draw yet");
+    eq(dry.chart.intendLine.split(" ").length, 4, "the intended shape is still four weeks wide");
+  });
+  it("the built line is drawn once there are sessions", () =>
+    eq(an.chart.actualLine.split(" ").length, 4));
+  it("the area closes onto the baseline so it can be filled", () => {
+    const pts = an.chart.actualArea.split(" ");
+    eq(pts[0].split(",")[1], "96");
+    eq(pts[pts.length - 1].split(",")[1], "96");
+  });
+  it("the peak is the biggest week, not the last one", () => {
+    eq(an.chart.peakDot.km, "30.0");
+    eq(an.chart.peakDot.week, 3);
+  });
+  it("the peak sits on the line rather than beside it", () => {
+    eq(an.chart.peakDot.x >= 8 && an.chart.peakDot.x <= 312, true);
+    eq(an.chart.actualLine.split(" ").includes(an.chart.peakDot.x.toFixed(1) + "," + an.chart.peakDot.y.toFixed(1)), true);
+  });
+  it("the peak week is labelled on the chart, not only in the header", () => {
+    const card = sourceBetween("Season volume curve", "Where the metres went");
+    eq(/<text[^>]*>\{\{ seasonAnPeak\.t \}\}/.test(card), true);
+  });
+  it("the label is pulled inside the plot at either end", () => {
+    const wide = bind("seasonAnalysis", {}, ["planZoneMetres", "_zoneMeta"]);
+    const first = wide([wk(1, "P", "#12A0AE", 25, 9000, 2, "2026-08-31", "2026-09-06"),
+      wk(2, "P", "#12A0AE", 25, 1000, 1, "2026-09-07", "2026-09-13")], []);
+    eq(first.chart.peakDot.x, 8, "the peak really is at the left edge");
+    eq(first.chart.peakDot.lx, 24, "but its label is not half off the chart");
+  });
+  it("a target meet is marked on the season, not left to memory", () => eq(an.chart.races.length, 1));
+  it("the season totals the weeks", () => eq(an.totalKm, "60.0"));
+  it("only the weeks with sessions count as built", () => eq(an.coverLabel, "3 of 4 weeks built"));
+
+  it("consecutive weeks of one phase are one band", () => eq(an.chart.bands.length, 3));
+  it("the bands span the whole axis", () => {
+    const last = an.chart.bands[an.chart.bands.length - 1];
+    eq(an.chart.bands[0].x, 8);
+    eq(Math.round(last.x + last.w), 312);
+  });
+  it("a mesocycle reports its own volume, not the season's", () => {
+    eq(an.phaseRows.map((p) => p.km), ["20.0", "30.0", "10.0"]);
+    eq(an.phaseRows.map((p) => p.sessions), [5, 6, 3]);
+  });
+  it("a two-week phase averages over both weeks", () => eq(an.phaseRows[0].avgKm, "10.0"));
+
+  it("the zone mix reads the sets, not the session's headline zone", () =>
+    eq(an.zones.map((z) => z.label), ["E-2", "E-3", "SP-3"]));
+  it("zones are ordered easy to fast", () => eq(an.zones[0].code, "EN2"));
+  it("a session outside the season is not counted in its mix", () => {
+    const total = an.zones.reduce((a, z) => a + Number(z.km) * 1000, 0);
+    eq(Math.round(total), metres(plan), "three saved sessions, one season — only the one inside it counts");
+  });
+  it("a custom zone still gets a slice rather than being dropped", () => {
+    const one = bind("seasonAnalysis", {}, ["planZoneMetres", "_zoneMeta"])(
+      [wk(1, "Prep", "#12A0AE", 25, 1000, 1, "2026-08-31", "2026-09-06")],
+      [{ date: "2026-09-01", plan: { zone: "Recovery", sections: [{ sets: [{ dist: 1000, reps: 1 }] }] } }]);
+    eq(one.zones.map((z) => z.label), ["Recovery"]);
+    eq(one.zones[0].pctLabel, "100%");
+  });
+});
+
+/* ------------------------------------------------- chart labels the runtime can paint
+   Every {{ }} the design runtime renders is wrapped in an element so it can be keyed.
+   That wrapper was always a <span>, which inside an SVG <text> is not a text-content
+   element and paints nothing — so a label written as <text>{{ d.t }}</text> came out
+   blank while any literal text beside it still drew. The progression charts on every
+   swimmer profile have shown dots with no times for exactly that reason. The runtime
+   ships in this repo, so the fix and this guard live here too: if the runtime is ever
+   replaced wholesale, this fails rather than the labels quietly going blank again. */
+describe("interpolations inside an SVG text element", () => {
+  const RUNTIME = readFileSync(new URL("../public/assets/support.js", import.meta.url), "utf8");
+
+  it("the wrapper is chosen from the parent element, not hardcoded", () =>
+    eq(/const wrap = \(\(\) => \{/.test(RUNTIME), true));
+  it("an SVG text parent gets a tspan", () =>
+    eq(/return t === "text" \|\| t === "tspan" \|\| t === "textpath" \? "tspan" : "span";/.test(RUNTIME), true));
+  it("sc-if and sc-for between the text and its parent are seen through", () =>
+    eq(/while \(p2 && \/\^sc-\(if\|for\)\$\/i\.test\(p2\.tagName \|\| ""\)\) p2 = p2\.parentNode;/.test(RUNTIME), true));
+  it("no interpolation wrapper is left hardcoded to span", () => {
+    const fn = RUNTIME.slice(RUNTIME.indexOf("function walkText("), RUNTIME.indexOf("function walkFor("));
+    eq(/h\(\s*"span"/.test(fn), false, "a hardcoded span here is a label that cannot paint in a chart");
+    eq((fn.match(/h\(\s*wrap\b/g) || []).length, 3, "all three wrapper sites use the parent-aware tag");
+  });
+  // The charts that were blank, and the one added with them.
+  it("the charts still write their labels as text elements", () => {
+    eq(/<text x="\{\{ d\.x \}\}" y="\{\{ d\.labelY \}\}"/.test(SOURCE), true, "swimmer progression");
+    eq(/<text x="\{\{ seasonAnPeak\.lx \}\}"/.test(SOURCE), true, "season volume curve");
+  });
+});
+
 describe("the club as a connector", () => {
   const post = (method, token) =>
     new Request("https://vortexswimmingclub.com/api/mcp", {
