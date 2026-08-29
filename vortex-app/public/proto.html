@@ -8800,6 +8800,22 @@ class Component extends DCLogic {
         staffPwDrafts:{...(this.state.staffPwDrafts||{}), [acct.id]:''}});
     }catch(e){ return say('Could not reach the server.', false); }
   }
+  // Is this a sign-in that needs renewing, rather than anything about the club's data?
+  //
+  // sendingAnon is this device noticing its OWN token has gone stale before it sends anything.
+  // A 401 is the other half, and the app cannot see it coming: the server refusing a token this
+  // device still believes in — a clock that drifted, a session ended somewhere else, a token
+  // revoked. The write leaves looking fine and comes back refused.
+  //
+  // Both arrive carrying "new row violates row-level security policy", because a request the
+  // database will not authenticate fails a `to authenticated` policy exactly as an anonymous one
+  // does. That message reads as a permission fault and it is not one — it sent this club to
+  // check a staff list their address was already in, while the thing that was actually wrong
+  // was a session, and the one action that fixes it went unsaid.
+  _saveNeedsSignIn(S){
+    const s=S||{};
+    return !!(s.authDead || s.sendingAnon || (s.saveFailLast && s.saveFailLast.status===401));
+  }
   _refreshFailState(){
     try{
       const n = window.__vxFailedCount ? window.__vxFailedCount() : 0;
@@ -20852,10 +20868,10 @@ class Component extends DCLogic {
       })(),
       onBlockedDismiss: ()=>{ try{ if(window.__vxClearBlocked) window.__vxClearBlocked(); }catch(e){} this.setState({saveBlocked:[], saveBlockedHidden:true}); },
       saveFailShow: S.screen==='app' && (S.saveFailCount>0 || S.authDead || S.sendingAnon) && !S.saveFailHidden,
-      saveFailTitle: (S.authDead || S.sendingAnon)
+      saveFailTitle: this._saveNeedsSignIn(S)
         ? (S.saveFailCount>0
-            ? ('Signed out — ' + (S.saveFailCount===1 ? '1 change is waiting' : S.saveFailCount+' changes are waiting'))
-            : 'Signed out — changes will not save')
+            ? ('Sign in again — ' + (S.saveFailCount===1 ? '1 change is waiting' : S.saveFailCount+' changes are waiting'))
+            : 'Sign in again — changes will not save')
         : (S.saveFailCount===1 ? '1 change has not been saved' : (S.saveFailCount+' changes have not been saved')),
       // The database session expiring is not the same as being thrown out, and the app could
       // tell the difference all along — _curTok sets a flag the moment it starts sending the
@@ -20863,10 +20879,19 @@ class Component extends DCLogic {
       // happened to be written first and said "retrying automatically", which is why four
       // separate tables each looked like their own fault and each got their own SQL run at
       // midnight. There is one fault and one action.
-      saveFailDetail: (S.authDead || S.sendingAnon)
-        ? (S.saveFailCount>0
-            ? 'Your database sign-in has expired, so these are reaching the database as an anonymous visitor and every one is refused — whatever table it names. Nothing is lost. Sign out and back in and they save themselves.'
-            : 'Your database sign-in has expired. Sign in again before you mark anything.')
+      saveFailDetail: this._saveNeedsSignIn(S)
+        ? ((S.authDead || S.sendingAnon)
+            ? (S.saveFailCount>0
+                ? 'Your database sign-in has expired, so these are reaching the database as an anonymous visitor and every one is refused — whatever table it names. Nothing is lost. Sign out and back in and they save themselves.'
+                : 'Your database sign-in has expired. Sign in again before you mark anything.')
+            // The server refused a token this device still thought was good, so nothing here
+            // saw it coming. It comes back quoting row-level security, which reads as a
+            // permission fault and is not one — naming that outright is the whole point, because
+            // the last time this happened it sent the club to check a staff list that was right.
+            : 'The database would not accept this device’s sign-in, so the change has not been taken — '
+              + 'whatever table it names, and whatever it says about permissions. This is not the club’s '
+              + 'staff list and not a setting: it is the session on this device. Nothing is lost — it is '
+              + 'still here. Sign out and back in and it saves itself.')
         // "family_accounts · HTTP 400 · retrying automatically" named the table and the number
         // and then said the one thing that was not true. A rejected write is one of three
         // different problems and they need three different people: a permission is the club's
@@ -20899,7 +20924,7 @@ class Component extends DCLogic {
       // Signed out, the Retry button is a lie — there is nothing it can do. It becomes the
       // one action that does work: go and sign in. The marks are already safe in the queue
       // and replay by themselves the moment the sign-in lands.
-      saveFailActionLabel: (S.authDead || S.sendingAnon) ? 'Sign in' : 'Retry',
+      saveFailActionLabel: this._saveNeedsSignIn(S) ? 'Sign in' : 'Retry',
       onSaveFailRetry: async()=>{
         // Read the live flag, not the rendered one. Sending someone back to the sign-in
         // screen is the one action here that undoes work, so it must never fire on a
@@ -20907,7 +20932,19 @@ class Component extends DCLogic {
         const dead = (typeof window!=='undefined') ? !!window.__vxAuthDead : !!S.authDead;
         if(!dead && S.authDead) this._refreshFailState();
         if(dead){ this.setState({screen:'login', loginStage:'accounts', loginErr:''}); return; }
-        if(window.__vxRetryFailed){ const r=await window.__vxRetryFailed(); this._refreshFailState(); if(r && r.fixed) this.setState({saveFailHidden:false}); }
+        if(window.__vxRetryFailed){
+          const r=await window.__vxRetryFailed(); this._refreshFailState();
+          if(r && r.fixed) this.setState({saveFailHidden:false});
+          // A token the server refused, sent again and refused again. The retry has had its go —
+          // including the refresh that a 401 starts by itself — so a real sign-in is the only
+          // thing left, and the button already says so.
+          //
+          // Asked AFTER the attempt and never before, for the same reason as the flag above:
+          // that refresh usually lands, and this button must not throw away a session that has
+          // just mended itself.
+          else if(!window.__vxAuthDead && (this.state.saveFailLast||{}).status===401)
+            this.setState({screen:'login', loginStage:'accounts', loginErr:''});
+        }
       },
       onSaveFailDismiss: ()=>this.setState({saveFailHidden:true}),
       // Only when nothing held can ever succeed. While a single write is still retryable,
