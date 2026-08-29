@@ -113,7 +113,14 @@ if ('serviceWorker' in navigator) {
   // again. Two devices marking two swimmers inside one twenty-second pull window send two whole
   // documents, and the second one has never heard of the first. Sponsorship is one row per
   // swimmer now (swimmer_sponsors), see supabase/swimmer_sponsors.sql.
-  var SYNC = ["vx_squads","vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_entries","vx_meet_events","vx_meet_cuts","vx_meet_info","vx_camps","vx_seed_config","vx_meet_marks","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_memberships","vx_fee_plans","vx_billing","vx_race_splits","vx_bday_sent","vx_staff_pw_set"];
+  //
+  // vx_roster_mode is the opposite kind of key and belongs here: it is one answer for the whole
+  // club — whether the roster is read as one document or as one row per swimmer — and every
+  // device has to agree about it or half of them write where the other half are not looking.
+  //
+  // vx_meet_info and vx_camps are club-wide in the same way: a meet's entry deadline and a
+  // camp's dates are the club telling everybody one thing, not a per-device preference.
+  var SYNC = ["vx_squads","vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_entries","vx_meet_events","vx_meet_cuts","vx_meet_info","vx_camps","vx_seed_config","vx_meet_marks","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_memberships","vx_fee_plans","vx_billing","vx_race_splits","vx_bday_sent","vx_staff_pw_set","vx_roster_mode"];
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
   // Auth-retry queue: if a write is rejected because we weren't signed in yet (401/403 under the
@@ -4434,7 +4441,7 @@ if ('serviceWorker' in navigator) {
                           </div>
                         </div>
                         <sc-if value="{{ meetDayMsgShow }}" hint-placeholder-val="{{ false }}">
-                          <p style="margin:0;background:#EEF4FF;border:1px solid #D4E2FB;border-radius:10px;padding:8px 10px;font-size:11.5px;color:#1B4CA1">{{ meetDayMsg }}</p>
+                          <p style="margin:0;background:{{ meetDayMsgBg }};border:1px solid {{ meetDayMsgBorder }};border-radius:10px;padding:8px 10px;font-size:11.5px;font-weight:600;line-height:1.5;color:{{ meetDayMsgFg }}">{{ meetDayMsg }}</p>
                         </sc-if>
                         <sc-if value="{{ meetDayHasHeats }}" hint-placeholder-val="{{ true }}">
                           <div style="display:flex;flex-direction:column;gap:10px">
@@ -7132,6 +7139,20 @@ if ('serviceWorker' in navigator) {
                           <p style="margin:9px 0 0;font-size:11.5px;font-weight:700;color:{{ rosterFixColor }};line-height:1.45">{{ rosterFixMsg }}</p>
                         </sc-if>
                       </div>
+                      <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:15px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                        <p style="margin:0 0 4px;font-size:13px;font-weight:700;color:#0C1116">How the roster is stored</p>
+                        <p style="margin:0 0 8px;font-size:11.5px;font-weight:700;color:{{ rosterModeColor }};line-height:1.45">{{ rosterModeLine }}</p>
+                        <p style="margin:0 0 10px;font-size:11.5px;color:#7A8296;line-height:1.5">One row per swimmer means two coaches editing two swimmers cannot overwrite each other. Nothing is written until the app has checked, swimmer by swimmer, that the rows say exactly what the roster says — and the single document goes on being saved behind them, so this can be undone and every recovery still works.</p>
+                        <div style="display:flex;gap:7px;flex-wrap:wrap">
+                          <button onclick="{{ onRosterRowsCheck }}" style="flex:1;min-width:120px;background:#fff;color:#2733D6;border:1px solid #D3E0FA;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Check both copies</button>
+                          <sc-if value="{{ rosterCanMove }}" hint-placeholder-val="{{ true }}">
+                            <button onclick="{{ onRosterMoveToRows }}" style="flex:1;min-width:150px;background:#0A0F1A;color:#fff;border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Move to one row per swimmer</button>
+                          </sc-if>
+                          <sc-if value="{{ rosterCanRevert }}" hint-placeholder-val="{{ false }}">
+                            <button onclick="{{ onRosterBackToDocument }}" style="flex:1;min-width:150px;background:#fff;color:#3A4152;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Back to the single document</button>
+                          </sc-if>
+                        </div>
+                      </div>
                       <!-- Putting the dates of birth back. The route behind this has existed and
                            worked for a while, and needed a terminal and a hand-built POST to
                            reach — which is not a thing to ask of somebody at the poolside whose
@@ -7889,11 +7910,18 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-29a';
-// The roster row migration, off. It lost data twice: a duplicate key took whole batches down,
-// and the repair for that read a document the migration had already disturbed. It goes back on
-// only after being run against a copy of the database, never again against the club itself.
-const VX_ROSTER_ROWS=false;
+const VX_BUILD='2026-08-29b';
+// Whether the roster is one document or one row per swimmer is NOT decided here any more.
+//
+// It was a constant in this file, which is the wrong place for it twice over: a build flag flips
+// for a device when that device happens to load a new copy of the app, so half the club would
+// have been reading rows while the other half was writing the document — and the two do not see
+// each other's work. And a constant cannot be undone by anybody at the poolside.
+//
+// It is a club setting now (`vx_roster_mode` in club_state, so it pulls like everything else),
+// written by one manager pressing one button, and only after the app has proved to itself that
+// the rows hold exactly the roster the document holds. Absent or unreadable means the document,
+// which is what every device has been running all along. See rosterMoveToRows.
 // Roles that carry the run of the club: Club Administration, adding and editing anywhere.
 // Coach, Assistant Coach and Fitness Coach are deliberately absent — a fitness coach works
 // across every squad without being able to rewrite the club.
@@ -8019,6 +8047,17 @@ class Component extends DCLogic {
     this.squads.forEach(sq=>{ _plans[sq.id]= _savedPlans[sq.id] || this.makeDefaultPlan(); });
 
     this.rosterEdits=this._loadJSON('vx_roster_edits', {edits:{}, deleted:{}, added:{}});
+    // One document, or one row per swimmer: the club's own answer, pulled like any other key.
+    this.rosterMode=this._loadJSON('vx_roster_mode', null);
+    // Which rows this device has already put in the table, kept across reloads.
+    //
+    // It is what tells a local change that has not been sent yet from one that has: after a
+    // reload the overlay on the device looks the same either way, and without it the app must
+    // either treat everything as unsent — a stale phone republishing itself over the club, which
+    // is the fault the rows exist to end — or treat everything as sent, which loses the edit that
+    // genuinely had not gone. Neither is true, and the difference between them is somebody's
+    // morning.
+    this._rosterSent=this._loadLocalOnly('vx_roster_sent', null);
     this.staffOverrides=this._loadJSON('vx_staff_ovr', {});
     this.tpaceTests=this._loadJSON('vx_tpace', {});
     this.swimmerStatus=this._loadJSON('vx_sw_status', {});
@@ -8182,7 +8221,7 @@ class Component extends DCLogic {
       promoQuery:'',
       brandDraft:null,
       entriesMeetIdx:0, entriesSwId:'', entriesSwSel:[], entriesEvent:'50 Free', entriesHeat:'', entriesLane:'', entriesQuery:'', printMode:'plan', entriesEventsSel:[],
-      meetDayDate:'', seedBandName:'', seedBandFrom:'', seedBandTo:'', seedMsg:'',
+      meetDayDate:'', meetDayMsg:'', meetDayMsgOk:true, seedBandName:'', seedBandFrom:'', seedBandTo:'', seedMsg:'',
       entryNewOpen:false, entryNewName:'', entryNewDob:'', entryNewSeed:'', entryNewErr:'',
       famReqEvent:'50 Free', famReqMeetIdx:0,
       famAttView:'month', famAttDateISO:null, famAttCalY:null, famAttCalM:null, famAttYearSel:null, famMeetSel:0,
@@ -9977,36 +10016,99 @@ class Component extends DCLogic {
     (rows||[]).forEach(r=>{ if(!r||!r.id||seen[r.id]) return; seen[r.id]=1; out.push(r); });
     return out;
   }
-  // ---- ROSTER ROW MIGRATION: OFF -------------------------------------------------------------
-  // Turned off after it lost data twice in one hour. The first shape produced one key twice for
-  // any swimmer who had moved, which made Postgres reject whole batches and cost 301 dates of
-  // birth. The rebuild meant to repair that read a document that the migration itself had
-  // already disturbed, and took the club from 317 swimmers to 272.
+  // ---- ROSTER ROWS ---------------------------------------------------------------------------
+  // The migration lost data twice in one hour, and both times for the same reason: it wrote
+  // first and looked afterwards. The first shape produced one key twice for any swimmer who had
+  // moved, which made Postgres reject whole batches and cost 301 dates of birth; the rebuild
+  // meant to repair that read a document the migration itself had already disturbed, and took
+  // the club from 317 swimmers to 272.
   //
-  // The single document is not good — the last device to write wins, which is its own kind of
-  // loss — but it is the behaviour the club had all day, and a known bad state is better than an
-  // unknown one. The migration needs doing against a copy of the database, not against the club.
-  //
-  // Leaving the code in place, unreachable, so what it did can be read rather than guessed at.
+  // What is different now is not the row shape. It is that nothing is written until the app has
+  // proved to itself, against this club's own roster, that the rows say exactly what the
+  // document says — swimmer for swimmer, date for date — and that the document goes on being
+  // written afterwards, so the thing every recovery path in this file reads is never behind.
+  // See rosterMoveToRows, which is the only way rows are ever created.
+  _rosterRowsOn(){ const m=this.rosterMode; return !!(m && typeof m==='object' && m.mode==='rows'); }
+  // What the club would SEE for a given overlay: every swimmer the screens would draw, with the
+  // facts a coach would notice missing. Built by the app's own rebuildRoster rather than by a
+  // second implementation of it, because a migration checked against a copy of the logic proves
+  // only that the copy agrees.
+  _rosterSnapshotOf(ed){
+    const keep=this.rosterEdits;
+    const out=[];
+    try{
+      this.rosterEdits=ed||{edits:{}, deleted:{}, added:{}};
+      this.rebuildRoster();
+      (this.squads||[]).forEach(sq=>((this.roster||{})[sq.id]||[]).forEach(sw=>{
+        if(!sw) return;
+        const swims=Array.isArray(sw.entries)?sw.entries:(Array.isArray(sw.results)?sw.results:(sw.pbs||[]));
+        out.push([sq.id, sw.id||'', (sw.name||'').trim(), sw.dob||'', sw.gender||'',
+                  sw.age==null?'':sw.age, swims.length, sw.topSec==null?'':sw.topSec].join('|'));
+      }));
+    }catch(e){ return null; }
+    finally{ this.rosterEdits=keep; try{ this.rebuildRoster(); }catch(e){} }
+    return out.sort();
+  }
+  // Does the row shape hold this roster without changing it? Run before anything is written, and
+  // again on what the database hands back afterwards.
+  _rosterRoundTrips(doc){
+    const before=this._rosterSnapshotOf(doc);
+    const after=this._rosterSnapshotOf(this._rosterEditsFrom(this._dedupeRows(this._rosterRowsFrom(doc))));
+    return this._rosterSame(before, after);
+  }
+  _rosterSame(before, after){
+    if(!before || !after) return {ok:false, lost:[], gained:[], before:-1, after:-1,
+      why:'the roster could not be read on this device'};
+    const a={}; after.forEach(x=>{ a[x]=1; });
+    const b={}; before.forEach(x=>{ b[x]=1; });
+    const lost=before.filter(x=>!a[x]), gained=after.filter(x=>!b[x]);
+    return {ok:!lost.length && !gained.length, lost, gained, before:before.length, after:after.length,
+      why: (lost.length||gained.length)
+        ? (lost.length+' swimmer'+(lost.length===1?'':'s')+' would not survive the move'
+           +(gained.length?(' and '+gained.length+' would appear that are not there now'):''))
+        : ''};
+  }
+  // The table is the roster; what this device has that the table has not heard about yet is put
+  // back on top of it. Anything else — taking the table whole, or letting this device's whole
+  // overlay win — is one of the two ways this has already gone wrong.
+  _rosterMergeRows(theirRows, mineEd, sentMap){
+    const mine=this._dedupeRows(this._rosterRowsFrom(mineEd||{edits:{}, deleted:{}, added:{}}));
+    const now=this._rowKeyMap(mine);
+    // No record of what this device sent is not the same as "none of it was sent". It means this
+    // device cannot tell, and the safe answer is the table — a write that genuinely never left is
+    // still in the retry queue and lands from there. Republishing an entire overlay on a guess is
+    // what put 317 swimmers back over 304.
+    const sent=sentMap||null;
+    const pending=sent ? mine.filter(r=>now[r.id]!==sent[r.id]) : [];
+    const by={};
+    (theirRows||[]).forEach(r=>{ if(r && r.id) by[r.id]=r; });
+    pending.forEach(r=>{ by[r.id]=r; });
+    return {rows:Object.keys(by).map(k=>by[k]), pending};
+  }
   async _rosterFetch(){
-    if(!VX_ROSTER_ROWS) return;
+    if(!this._rosterRowsOn()) return;
     if(!window.__vxSelect) return;
     const rows=await window.__vxSelect('vx_roster', 'select=*&limit=5000');
-    if(rows==null) return;                     // table missing: keep the single-document fallback
-    if(!rows.length){ try{ await this._rosterSeed(); }catch(e){} return; }
-    this.rosterRows=rows;
-    this._rosterSent=this._rowKeyMap(this._rosterRowsFrom(this._rosterEditsFrom(rows)));
-    this.rosterEdits=this._rosterEditsFrom(rows);
+    if(rows==null) return;                     // unreadable: keep what this device is holding
+    // An empty table while the club is in rows mode is a broken state, not an instruction. The
+    // old code seeded the table from whatever overlay this device happened to hold at that
+    // moment — which is how one phone's copy became the club's roster with nobody asking. The
+    // document is still there and still current; the app goes on reading it and says so.
+    if(!rows.length){
+      try{ console.warn('vx roster: the club is on rows and vx_roster is empty — keeping the document copy'); }catch(e){}
+      return;
+    }
+    const theirs=this._dedupeRows(rows);
+    const merged=this._rosterMergeRows(theirs, this.rosterEdits, this._rosterSent);
+    this.rosterRows=merged.rows;
+    // What this device knows the table holds — not what it is about to show, or the difference
+    // below could never be found again.
+    this._rosterSentSave(this._rowKeyMap(theirs));
+    this.rosterEdits=this._rosterEditsFrom(merged.rows);
     try{ this.rebuildRoster(); }catch(e){}
     this.forceUpdate();
-  }
-  async _rosterSeed(){
-    if(!window.__vxUpsert || !this._isFullAccess()) return;
-    const rows=this._rosterRowsFrom(this.rosterEdits);
-    if(!rows.length){ this.rosterRows=[]; return; }   // nothing to move across
-    const stamped=this._dedupeRows(rows).map(r=>({...r, updated_at:new Date().toISOString()}));
-    for(let i=0;i<stamped.length;i+=500){ await window.__vxUpsert('vx_roster', stamped.slice(i,i+500)); }
-    this._rosterFetch();
+    // This device had something the table did not. Send exactly that, and nothing else.
+    if(merged.pending.length){ try{ this._rosterPersistRows(); }catch(e){} }
   }
   // Recovery. The single document in club_state was never deleted — it still holds every date of
   // birth and every edit the club has made. This reads it, throws away the half-written rows, and
@@ -10043,6 +10145,164 @@ class Component extends DCLogic {
       try{ this.audit('roster.rebuild', 'from the saved document', {swimmers:n, rows:rows.length}); }catch(e){}
     }catch(e){ this.setState({rosterFixOk:false, rosterFixMsg:'Could not reach the database.'}); }
   }
+  // ---- Moving the club to one row per swimmer -------------------------------------------------
+  //
+  // The order here is the whole of it, and it is the opposite of the order that lost the data:
+  //
+  //   1. read the club's document from the database, and merge this device's copy into it, so
+  //      what is about to be migrated is everything anybody has done — including whatever this
+  //      phone has been holding and has not managed to send
+  //   2. save that document and WAIT for the database to say it took it. The document is the
+  //      copy every recovery path reads; if it cannot be written, nothing else happens
+  //   3. prove the row shape holds it, swimmer for swimmer, before a single row is written
+  //   4. write the rows, stopping on the first refusal
+  //   5. read the rows back OUT of the database and prove it again on what came back
+  //   6. only then tell the club to read rows
+  //
+  // Every step before the last leaves the club exactly as it was, on the document, with nothing
+  // to undo. That is what makes this safe to press.
+  async rosterMoveToRows(){
+    if(this._rosterMoving) return;
+    if(!this._isFullAccess())
+      return this.setState({rosterFixMsg:'Only a manager can move the roster.', rosterFixOk:false});
+    if(this._rosterRowsOn())
+      return this.setState({rosterFixMsg:'The club is already on one row per swimmer.', rosterFixOk:true});
+    if(!window.__vxSelectRaw || !window.__vxUpsert)
+      return this.setState({rosterFixMsg:'This device cannot reach the database.', rosterFixOk:false});
+    this._rosterMoving=true;
+    const stop=(m)=>{ this._rosterMoving=false; this.setState({rosterFixOk:false, rosterFixMsg:m}); return null; };
+    try{
+      this.setState({rosterFixMsg:'Reading the club’s roster…', rosterFixOk:true});
+      // 1. the club's copy, and this device's, merged the way a save already merges them.
+      const raw=await window.__vxSelectRaw('club_state', 'select=value&key=eq.vx_roster_edits');
+      if(!raw || raw.rows==null)
+        return stop('The club’s roster could not be read from the database ('+((raw&&raw.said)||'no answer')+'). Nothing has been changed.');
+      const row=(raw.rows||[])[0]||null;
+      const dbDoc=row ? ((typeof row.value==='string') ? JSON.parse(row.value) : row.value) : null;
+      const mine=this._loadJSON('vx_roster_edits', this.rosterEdits);
+      let doc=dbDoc||mine;
+      try{ if(dbDoc && mine && window.__vxMergeRoster) doc=window.__vxMergeRoster(mine, dbDoc); }catch(e){ doc=dbDoc||mine; }
+      if(!doc || typeof doc!=='object')
+        return stop('The roster could not be read on the database or on this device. Nothing has been changed.');
+      const n=this._rosterTotalFor(doc);
+      if(!(n>0))
+        return stop('The roster reads as empty here, and an empty roster is never what is migrated. Nothing has been changed.');
+      // 2. is the table even there? Asked before anything is written, so "run the SQL first" is
+      //    something a person reads instead of something they find out halfway through.
+      const probe=await window.__vxSelectRaw('vx_roster', 'select=id&limit=1');
+      if(!probe || probe.rows==null)
+        return stop('The vx_roster table is not ready: '+((probe&&probe.said)||'it could not be read')
+          +'. Run supabase/migrations/0010_vx_roster.sql, then try again. Nothing has been changed.');
+      // 3. does the row shape hold this roster, exactly?
+      const trip=this._rosterRoundTrips(doc);
+      if(!trip.ok)
+        return stop('Stopped before writing anything: '+trip.why+'. The roster is exactly as it was. '
+          +'This is the check the first migration did not have.');
+      if(!window.confirm('Move the roster to one row per swimmer?\n\n'
+        +n+' swimmers, '+this._dedupeRows(this._rosterRowsFrom(doc)).length+' rows.\n\n'
+        +'The single document stays and goes on being saved, so this can be undone.')) {
+        this._rosterMoving=false;
+        return this.setState({rosterFixMsg:'Left as it was — the club is still on the single document.', rosterFixOk:true});
+      }
+      // 4. the document first, and only if the database says it took it.
+      this.setState({rosterFixMsg:'Saving the roster document…', rosterFixOk:true});
+      this.rosterEdits=doc;
+      this._saveJSON('vx_roster_edits', doc);
+      try{ this.rebuildRoster(); this.forceUpdate(); }catch(e){}
+      const said=await this._pushSaid('vx_roster_edits');
+      if(!said.ok)
+        return stop('The roster document could not be saved ('+said.why+'), so nothing has moved. '
+          +'Everything is still here and still on the document.');
+      // 5. the rows. Cleared first: the half-written rows from the migration that was turned off
+      //    are still in this table, and a rebuild on top of those is where duplicates come from.
+      this.setState({rosterFixMsg:'Writing the rows…', rosterFixOk:true});
+      const rows=this._dedupeRows(this._rosterRowsFrom(doc)).map(r=>({...r, updated_at:new Date().toISOString()}));
+      if(window.__vxDelete) await window.__vxDelete('vx_roster', 'sw_id=neq.__none__');
+      for(let i=0;i<rows.length;i+=200){
+        const ok=await window.__vxUpsert('vx_roster', rows.slice(i,i+200));
+        if(!ok){ const e=window.__vxLastWriteErr||{};
+          return stop('Stopped at row '+(i+1)+' of '+rows.length+': '+(e.said||('HTTP '+(e.status||'?')))
+            +'. The club is still on the single document, which still holds all '+n+' swimmers.'); }
+      }
+      // 6. what the database now actually holds, read back out of it and checked again. A 201 on
+      //    every batch says the writes were taken, not that the table says what the roster says.
+      this.setState({rosterFixMsg:'Checking what the database now holds…', rosterFixOk:true});
+      const back=await window.__vxSelect('vx_roster', 'select=*&limit=5000');
+      if(back==null)
+        return stop('The rows were written but could not be read back, so the club has not been moved. '
+          +'Nothing is lost: it is still on the document. Try again.');
+      const check=this._rosterSame(this._rosterSnapshotOf(doc),
+                                   this._rosterSnapshotOf(this._rosterEditsFrom(this._dedupeRows(back))));
+      if(!check.ok)
+        return stop('The rows in the database do not match the roster ('+check.why+'), so the club has '
+          +'NOT been moved and is still reading the document — which is unchanged. The rows can be '
+          +'written again, or cleared, without affecting anybody.');
+      // 7. and now, the club.
+      this.rosterRows=this._dedupeRows(back);
+      this._rosterSentSave(this._rowKeyMap(this.rosterRows));
+      const mode={mode:'rows', at:new Date().toISOString(), swimmers:n, rows:rows.length,
+                  by:((window.__VX_AUTH&&window.__VX_AUTH.email)||'')};
+      this.rosterMode=mode;
+      this._saveJSON('vx_roster_mode', mode);
+      const modeSaid=await this._pushSaid('vx_roster_mode');
+      if(!modeSaid.ok){
+        this.rosterMode=null;
+        try{ this._saveJSON('vx_roster_mode', {mode:'document', at:new Date().toISOString()}); }catch(e){}
+        return stop('The rows are written and correct, but the club could not be told to read them ('
+          +modeSaid.why+'). Everything is still on the document. Try again when the connection is back.');
+      }
+      this._rosterMoving=false;
+      try{ this.audit('roster.rows.on', n+' swimmers', {swimmers:n, rows:rows.length}); }catch(e){}
+      return this.setState({rosterFixOk:true,
+        rosterFixMsg:'Moved — '+n+' swimmers in '+rows.length+' rows, checked against the document and identical. '
+          +'Two coaches can now edit two swimmers at once. The document is still saved behind it, so Rebuild from '
+          +'the saved roster and the nightly copies all still work.'});
+    }catch(e){
+      return stop('It stopped on an error and the club has not been moved: '+((e&&e.message)||'unknown')
+        +'. The roster is still on the document.');
+    }
+  }
+  // Back to one document. Nothing to copy: it has been written all along.
+  async rosterBackToDocument(){
+    if(!this._isFullAccess())
+      return this.setState({rosterFixMsg:'Only a manager can move the roster.', rosterFixOk:false});
+    if(!this._rosterRowsOn())
+      return this.setState({rosterFixMsg:'The club is already on the single document.', rosterFixOk:true});
+    // The document is written on a delay, so anything from the last few seconds may still be
+    // sitting on this device. Flush it and wait for it before the club is sent back to reading it.
+    try{ if(this._rosterDocT){ clearTimeout(this._rosterDocT); this._rosterDocT=null; } }catch(e){}
+    this.setState({rosterFixMsg:'Saving the document first…', rosterFixOk:true});
+    this._saveJSON('vx_roster_edits', this.rosterEdits);
+    const said=await this._pushSaid('vx_roster_edits');
+    if(!said.ok) return this.setState({rosterFixOk:false,
+      rosterFixMsg:'The document could not be saved ('+said.why+'), so the club has been left on rows. Nothing is lost.'});
+    const mode={mode:'document', at:new Date().toISOString(), by:((window.__VX_AUTH&&window.__VX_AUTH.email)||'')};
+    this.rosterMode=mode; this._saveJSON('vx_roster_mode', mode);
+    const modeSaid=await this._pushSaid('vx_roster_mode');
+    try{ this.audit('roster.rows.off', 'back to the document', {}); }catch(e){}
+    return this.setState({rosterFixOk:!!modeSaid.ok,
+      rosterFixMsg: modeSaid.ok
+        ? ('Back on the single document — '+this._rosterTotalFor(this.rosterEdits)+' swimmers. The rows are left where they are and are ignored.')
+        : ('The document is saved, but the club could not be told to read it ('+modeSaid.why+'). Try again.')});
+  }
+  // What the two copies say right now, without changing either.
+  async rosterRowsCheck(){
+    this.setState({rosterFixMsg:'Checking…', rosterFixOk:true});
+    const on=this._rosterRowsOn();
+    let rowTxt='could not be read';
+    try{
+      const r=await window.__vxSelectRaw('vx_roster', 'select=*&limit=5000');
+      if(r && r.rows!=null){
+        const rows=this._dedupeRows(r.rows);
+        rowTxt=rows.length? (this._rosterTotalFor(this._rosterEditsFrom(rows))+' swimmers in '+rows.length+' rows')
+                          : 'the table is there and empty';
+      } else rowTxt='not ready ('+((r&&r.said)||'no answer')+')';
+    }catch(e){}
+    const docN=this._rosterTotalFor(this._loadJSON('vx_roster_edits', this.rosterEdits));
+    this.setState({rosterFixOk:true, rosterFixMsg:
+      'The club is reading '+(on?'one row per swimmer':'the single document')+'. '
+      +'Rows: '+rowTxt+'. Document: '+docN+' swimmers. On screen: '+this._rosterTotalFor(this.rosterEdits)+'.'});
+  }
   _rowKeyMap(rows){ const m={}; (rows||[]).forEach(r=>{ try{ m[r.id]=JSON.stringify(r.patch)+'|'+(r.deleted?'d':'')+(r.added?'a':''); }catch(e){ m[r.id]='?'; } }); return m; }
   // Write only what actually changed. A coach marking one swimmer's date of birth sends one row,
   // not the club.
@@ -10052,7 +10312,7 @@ class Component extends DCLogic {
     const was=this._rosterSent||{};
     const changed=this._dedupeRows(rows.filter(r=>now[r.id]!==was[r.id])).map(r=>({...r, updated_at:new Date().toISOString()}));
     const gone=Object.keys(was).filter(k=>!(k in now));
-    this._rosterSent=now;
+    this._rosterSentSave(now);
     try{
       if(changed.length && window.__vxUpsert)
         for(let i=0;i<changed.length;i+=500) window.__vxUpsert('vx_roster', changed.slice(i,i+500));
@@ -10060,13 +10320,40 @@ class Component extends DCLogic {
         gone.forEach(k=>window.__vxDelete('vx_roster', 'id=eq.'+encodeURIComponent(k)));
     }catch(e){}
   }
+  // Kept on the device, not only in memory. See the constructor for why it has to survive a
+  // reload. Local-only: it describes this device's own conversation with the table.
+  _rosterSentSave(map){
+    this._rosterSent=map||{};
+    try{ this._saveLocalOnly('vx_roster_sent', this._rosterSent); }catch(e){}
+  }
+  // The document, kept current behind the rows.
+  //
+  // Every recovery path in this file reads it: the nightly backups, Rebuild from the saved
+  // roster, Use the database copy, the date-of-birth restore, and the fallback the app drops to
+  // whenever the table cannot be read. A migration that stops writing it does not merely leave
+  // an old copy lying about — it quietly disarms all of those, and nobody finds out until the
+  // day they are needed.
+  //
+  // Debounced, because writing it is the expensive thing rows were meant to end: a coach typing
+  // a heat of times sends eight small rows and one document, six seconds after the last one,
+  // rather than eight copies of the whole club.
+  _rosterDocBackup(){
+    try{ if(this._rosterDocT) clearTimeout(this._rosterDocT); }catch(e){}
+    this._rosterDocT=setTimeout(()=>{
+      this._rosterDocT=null;
+      try{ this._saveJSON('vx_roster_edits', this.rosterEdits); }catch(e){}
+    }, 6000);
+  }
   persistRosterEdits(){
-    // One row per change once the table exists. The stale-device guard below is only needed by
-    // the single-document fallback: rows cannot clobber each other, so there is nothing to guard.
-    if(VX_ROSTER_ROWS && Array.isArray(this.rosterRows)){
+    // One row per change, once the club has moved and this device has actually read the table.
+    // Rows cannot clobber each other, so the stale-device guard below is not needed here — but
+    // the document is still written, on a delay, because everything that recovers a lost roster
+    // reads it. See _rosterDocBackup.
+    if(this._rosterRowsOn() && Array.isArray(this.rosterRows)){
       this._rosterPersistRows();
+      this._rosterDocBackup();
       this.rebuildRoster(); this.forceUpdate();
-      return;
+      return true;
     }
     // The stale-device refusal that used to live here is gone.
     //
@@ -10699,11 +10986,53 @@ class Component extends DCLogic {
     });
     return best;
   }
+  // What the database did with the write an action on this screen just made, in words.
+  //
+  // Every save in this app is two questions and the screens have been answering the first one:
+  // localStorage took it, so the line says saved. Whether the CLUB has it is the second, and the
+  // roster document's own answer to it — _rosterSaved, which waits for the push and says NOT
+  // saved when it fails — is drawn on the Admin roster screen. Nobody is on that screen at a
+  // meet. So a coach typed a heat into a phone showing a red banner that said one change had
+  // not been saved, was told "29.45 saved ✓" for every lane, and had no way of knowing which of
+  // the two to believe. The one that was right was the banner.
+  _pushSaid(key){
+    const rec=(window.__vxLastPush||{})[key];
+    // No record at all means pushKey returned before it made one, which is what happens when
+    // the write is not sent. It has never meant success.
+    if(!rec) return Promise.resolve({ok:false, why:'it never left this device', notSent:true});
+    return Promise.resolve(rec).then(
+      r=>(r && r.ok===false) ? {ok:false, why:(r.why||'the database refused it'), notSent:!!r.notSent} : {ok:true},
+      ()=>({ok:false, why:'it could not be sent from this device'}));
+  }
+  // The verdict for one meet-day action, said where the action was made.
+  //
+  // Applied only if the coach has not done anything since: a verdict about the lane before last,
+  // arriving two seconds late over a poolside connection, must never land on top of the line
+  // about the lane being typed now.
+  _meetDaySay(keys, what, seq){
+    const list=Array.isArray(keys)?keys:[keys];
+    return Promise.all(list.map(k=>this._pushSaid(k))).then(rs=>{
+      const bad=rs.filter(r=>!r.ok)[0]||null;
+      if(this._mdSeq!==seq) return bad||{ok:true};
+      if(!bad) this.setState({meetDayMsg: what+' \u2713 saved', meetDayMsgOk:true});
+      else this.setState({meetDayMsgOk:false,
+        meetDayMsg: what+' \u2014 NOT saved: '+bad.why+'. It is on this device only'
+          +(bad.notSent ? ' \u2014 sign out and back in, and it saves itself.'
+                        : ', and goes in by itself when the connection is back. Do not close the app.')});
+      return bad||{ok:true};
+    });
+  }
+  // The line every meet-day action starts with: the change, and the fact that it is on its way.
+  _meetDaySaying(what){
+    const seq=(this._mdSeq=(this._mdSeq||0)+1);
+    this.setState({meetDayMsg: what+' \u2014 saving\u2026', meetDayMsgOk:true});
+    return seq;
+  }
   meetLiveSave(meetName, meetDate, courseLabel, swId, event, raw){
     const sec=this.parseTimeStr(raw);
-    if(sec==null || sec<=0) return this.setState({meetDayMsg:'Enter a time like 26.20 or 2:15.00'});
+    if(sec==null || sec<=0) return this.setState({meetDayMsg:'Enter a time like 26.20 or 2:15.00', meetDayMsgOk:false});
     const hit=this.allSwimmersFlat().find(s=>s.id===swId);
-    if(!hit) return this.setState({meetDayMsg:'That swimmer is no longer on the roster.'});
+    if(!hit) return this.setState({meetDayMsg:'That swimmer is no longer on the roster.', meetDayMsgOk:false});
     const before=this._bestBefore(hit, event, meetName);
     // Replace this meet's swim for the event rather than stacking a second one, so fixing a
     // mistyped time corrects the record instead of inventing an extra race.
@@ -10719,8 +11048,11 @@ class Component extends DCLogic {
     try{ this._pushSend({swimmerIds:[swId]}, title, body, '/'); }catch(e){}
     try{ this.meetMarkClear(meetName, swId, event, true); }catch(e){}
     const drafts={...(this.state.meetTimeDrafts||{})}; delete drafts[swId+'|'+event];
-    this.setState({meetTimeDrafts:drafts,
-      meetDayMsg: drop>0 ? (hit.name+' — PB by '+drop.toFixed(2)+'s ✓') : (hit.name+' — '+this.fmt(sec)+' saved ✓')});
+    this.setState({meetTimeDrafts:drafts});
+    // The time is in the swimmer's history on this device. Whether it is in the club's copy is
+    // what the coach is actually asking, and it is answered below rather than assumed here.
+    const what=drop>0 ? (hit.name+' — PB by '+drop.toFixed(2)+'s') : (hit.name+' — '+this.fmt(sec));
+    return this._meetDaySay('vx_roster_edits', what, this._meetDaySaying(what));
   }
   // ---- Did not swim it: DQ and no-show -------------------------------------------------------
   // Not every lane ends in a time. A swimmer is disqualified, or never comes to the blocks, and
@@ -10739,12 +11071,16 @@ class Component extends DCLogic {
     const hit=this.allSwimmersFlat().find(s=>s.id===swId);
     // A time already typed for this lane is the truth about the swim; the mark replaces it, so
     // the time comes back out of the swimmer's history rather than standing beside a DQ.
-    try{ this.meetLiveClear(meetName, swId, event, true); }catch(e){}
+    // Whether that removal was written matters as much as the mark, so it is reported too — but
+    // only when there was a time to remove, or the verdict would be read off an unrelated write.
+    let cleared=false;
+    try{ cleared=!!this.meetLiveClear(meetName, swId, event, true); }catch(e){}
     const marks={...this._meetMarks()};
     marks[this._markKey(meetName, swId, event)]={mark:code, at:new Date().toISOString()};
     this.meetMarks=marks; this._saveJSON('vx_meet_marks', marks);
     try{ this.audit('meet.mark', meetName, {meet:meetName, swimmer:swId, event, mark:code}); }catch(e){}
-    this.setState({meetDayMsg:((hit&&hit.name)||'That lane')+' — '+event+' marked '+(code==='DQ'?'DQ':'no-show')});
+    const what=((hit&&hit.name)||'That lane')+' — '+event+' marked '+(code==='DQ'?'DQ':'no-show');
+    return this._meetDaySay(cleared?['vx_meet_marks','vx_roster_edits']:'vx_meet_marks', what, this._meetDaySaying(what));
   }
   meetMarkClear(meetName, swId, event, quiet){
     const key=this._markKey(meetName, swId, event);
@@ -10752,8 +11088,9 @@ class Component extends DCLogic {
     if(!marks[key]) return;
     const next={...marks}; delete next[key];
     this.meetMarks=next; this._saveJSON('vx_meet_marks', next);
-    if(!quiet) this.setState({meetDayMsg:'Mark removed — the lane is open again'});
-    else this.forceUpdate();
+    if(!quiet){ const what='Mark removed — the lane is open again';
+      return this._meetDaySay('vx_meet_marks', what, this._meetDaySaying(what)); }
+    this.forceUpdate();
   }
   // Every mark in one meet, as { swId|event: 'DQ' | 'NS' }, for the screens that draw the sheet.
   _meetMarksFor(meetName){
@@ -10765,13 +11102,17 @@ class Component extends DCLogic {
   }
   // Struck a wrong swimmer's lane: take the swim back out rather than leaving a time that
   // never happened sitting in their history and their PB.
+  // Returns whether it actually wrote anything, so a caller that reports on the write knows
+  // whether there was one to report on.
   meetLiveClear(meetName, swId, event, quiet){
-    const hit=this.allSwimmersFlat().find(s=>s.id===swId); if(!hit) return;
+    const hit=this.allSwimmersFlat().find(s=>s.id===swId); if(!hit) return false;
     const before=(this._swEntries(hit)||[]);
     const entries=before.filter(p=>!(p.event===event && (p.meet||'')===meetName));
-    if(quiet && entries.length===before.length) return;   // nothing typed for this lane yet
+    if(quiet && entries.length===before.length) return false;   // nothing typed for this lane yet
     this.adminEditSwimmer(hit.squadId, swId, {pbs:entries});
-    if(!quiet) this.setState({meetDayMsg:'Removed '+hit.name+' — '+event});
+    if(!quiet){ const what='Removed '+hit.name+' — '+event;
+      this._meetDaySay('vx_roster_edits', what, this._meetDaySaying(what)); }
+    return true;
   }
   toggleCompEvent(ev){ const cur=this.state.compEvents.slice(); const i=cur.indexOf(ev); if(i>=0) cur.splice(i,1); else cur.push(ev); this.setState({compEvents:cur}); }
   createCompetition(){ const S=this.state;
@@ -13340,10 +13681,10 @@ class Component extends DCLogic {
         r.sw.gender==='Girls'?'F':'M', this._swAge(r.sw)||'', r.sw.squadName||'',
         r.time, r.sec==null?'':r.sec, r.mark ? (r.mark==='DQ'?'Disqualified':'Did not start') : r.note]);
     });
-    if(rows.length===1) return this.setState({meetDayMsg:'No times recorded yet — nothing to export.'});
+    if(rows.length===1) return this.setState({meetDayMsg:'No times recorded yet — nothing to export.', meetDayMsgOk:false});
     this.exportXlsx('vortex-results-'+meetName.replace(/[^a-z0-9]+/gi,'-').toLowerCase()+'.xlsx', 'Results', rows);
     try{ this.audit('meet.export', meetName, {meet:meetName, format:'xlsx', rows:rows.length-1}); }catch(e){}
-    this.setState({meetDayMsg:(rows.length-1)+' result'+(rows.length===2?'':'s')+' exported to Excel ✓'});
+    this.setState({meetDayMsg:(rows.length-1)+' result'+(rows.length===2?'':'s')+' exported to Excel ✓', meetDayMsgOk:true});
   }
   // A Hy-Tek results file (.hy3), in the same record layout this app reads the club's own Hy-Tek
   // files in: B1 the meet, D1 the athlete, E1 the event, E2 the swim. Times are total seconds,
@@ -13357,11 +13698,11 @@ class Component extends DCLogic {
   }
   exportResultsHy3(meetName){
     const txt=this._hy3Text(meetName);
-    if(!txt) return this.setState({meetDayMsg:'No times recorded yet — nothing to export.'});
+    if(!txt) return this.setState({meetDayMsg:'No times recorded yet — nothing to export.', meetDayMsgOk:false});
     this._downloadFile('vortex-results-'+meetName.replace(/[^a-z0-9]+/gi,'-').toLowerCase()+'.hy3', txt, 'text/plain;charset=utf-8');
     const n=(txt.match(/\nE2/g)||[]).length;
     try{ this.audit('meet.export', meetName, {meet:meetName, format:'hy3', swims:n}); }catch(e){}
-    this.setState({meetDayMsg:n+' swim'+(n===1?'':'s')+' exported as a Hy-Tek file ✓'});
+    this.setState({meetDayMsg:n+' swim'+(n===1?'':'s')+' exported as a Hy-Tek file ✓', meetDayMsgOk:true});
   }
   // The file itself, as text, so it can be read back through the same parser that reads the
   // club's Hy-Tek files — which is the only check that means anything here.
@@ -17072,7 +17413,13 @@ class Component extends DCLogic {
     this.fitnessPlans=g('vx_fitness_plans', this.fitnessPlans); this.fitnessMedia=g('vx_fitness_media', this.fitnessMedia); this.waTargets=g('vx_wa_targets', this.waTargets); this.promoStore=g('vx_promo', this.promoStore); this.aiSuggOverrides=g('vx_ai_sugg_ovr', this.aiSuggOverrides);
     this.relayOverrides=g('vx_relay_ovr', this.relayOverrides);
     this.planCustom=g('vx_plan_custom', this.planCustom); ['type','stroke','tools','zone','label'].forEach(k=>{ if(!Array.isArray((this.planCustom||{})[k])){ this.planCustom=this.planCustom||{}; this.planCustom[k]=[]; } });
-    this.rosterEdits=g('vx_roster_edits', this.rosterEdits); try{ this.rebuildRoster(); }catch(e){}
+    // The mode first: it decides what the line after it is allowed to do.
+    this.rosterMode=g('vx_roster_mode', this.rosterMode);
+    // In rows mode the table is the roster and this document is the copy kept behind it, so the
+    // pulled document must not be read back over the top of newer rows. Same treatment swimmer
+    // status and the meets got when they moved to tables of their own.
+    if(!this._rosterRowsOn()) this.rosterEdits=g('vx_roster_edits', this.rosterEdits);
+    try{ this.rebuildRoster(); }catch(e){}
     // Squads were missing from this list, so a squad renamed or recoloured on one device did not
     // reach any other until that device was reloaded — every other synced key is applied here.
     this.squadEdits=g('vx_squads', this.squadEdits); try{ this._rebuildSquads(); this.rebuildRoster(); }catch(e){}
@@ -20447,6 +20794,20 @@ class Component extends DCLogic {
       onRosterRebuild: ()=>this.rosterRebuildFromDocument(),
       rosterFixMsg: S.rosterFixMsg||'', rosterFixMsgShow: !!S.rosterFixMsg,
       rosterFixColor: S.rosterFixOk ? '#0C7A4F' : '#B42318',
+      // Which way round the club is, said before either button is pressed rather than found out
+      // by pressing one.
+      rosterModeLine: this._rosterRowsOn()
+        ? ('One row per swimmer'
+           + (this._fmtDMY(String((this.rosterMode||{}).at||'').slice(0,10), true)
+              ? (', since '+this._fmtDMY(String((this.rosterMode||{}).at||'').slice(0,10), true)) : '')
+           + '. The document is still saved behind it.')
+        : 'One shared document — the last device to save replaces every other device’s copy.',
+      rosterModeColor: this._rosterRowsOn() ? '#0C7A4F' : '#B4690E',
+      rosterCanMove: !this._rosterRowsOn() && this._isFullAccess(),
+      rosterCanRevert: this._rosterRowsOn() && this._isFullAccess(),
+      onRosterRowsCheck: ()=>this.rosterRowsCheck(),
+      onRosterMoveToRows: ()=>this.rosterMoveToRows(),
+      onRosterBackToDocument: ()=>this.rosterBackToDocument(),
       onForceUpdate: ()=>{ this.setState({settingsMsg:'Fetching the newest version\u2026'}); this._applyUpdate(); },
       // Not red, and not "unsaved": these rows are refused by the database itself, so there is
       // nothing to retry and nothing being lost from the app's own list. It says what happened
@@ -21095,8 +21456,8 @@ class Component extends DCLogic {
       entryRows, entryHasRows: entryRows.length>0, onExportEntries:()=>this.exportMeetEntries(entryMeetName),
       // ---- meet day ----
       meetDayOn, meetEntriesOn: !meetDayOn,
-      onMeetModeEntries:()=>this.setState({meetMode:'entries', meetDayMsg:''}),
-      onMeetModeDay:()=>this.setState({meetMode:'day', meetDayMsg:''}),
+      onMeetModeEntries:()=>this.setState({meetMode:'entries', meetDayMsg:'', meetDayMsgOk:true}),
+      onMeetModeDay:()=>this.setState({meetMode:'day', meetDayMsg:'', meetDayMsgOk:true}),
       meetModeEntriesBg: meetDayOn?'transparent':squad.accent, meetModeEntriesFg: meetDayOn?'#7A8296':'#fff',
       meetModeDayBg: meetDayOn?squad.accent:'transparent', meetModeDayFg: meetDayOn?'#fff':'#7A8296',
       meetDayHeats, meetDayBoards, meetDayHasHeats: meetDayHeats.length>0,
@@ -21106,6 +21467,11 @@ class Component extends DCLogic {
       meetDayPbLine: mdPbs+' personal best'+(mdPbs===1?'':'s')+' today',
       meetDayPct: mdTotal ? Math.round((mdDone/mdTotal)*100)+'%' : '0%',
       meetDayMsg:S.meetDayMsg||'', meetDayMsgShow:!!S.meetDayMsg,
+      // A line that says a time was not saved cannot be the same quiet blue as the one that says
+      // it was. This is the sentence a coach acts on at the end of a heat.
+      meetDayMsgBg: S.meetDayMsgOk===false ? '#FBE2E3' : '#EEF4FF',
+      meetDayMsgBorder: S.meetDayMsgOk===false ? '#F0C6C7' : '#D4E2FB',
+      meetDayMsgFg: S.meetDayMsgOk===false ? '#A52A2E' : '#1B4CA1',
       meetDayHasBoards: meetDayBoards.length>0,
       entryNewOpen:S.entryNewOpen, entryNewToggleLabel: S.entryNewOpen?'Cancel':'+ New swimmer',
       onEntryNewToggle:()=>this.setState({entryNewOpen:!S.entryNewOpen, entryNewErr:''}),
