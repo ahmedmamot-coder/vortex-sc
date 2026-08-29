@@ -5482,6 +5482,13 @@ describe("InBody sheet", () => {
       // meet_declarations and cached in vx_meet_entries, both accounted for already.
       vx_entries_unsent: "which of this device's entry writes have not reached the database yet",
       vx_meets_unsent: "which of this device's meet writes have not reached the database yet",
+      // The fourth of the same shape, and the one that decides whether a pull is allowed to
+      // overwrite this device's roster edits. It is this device's conversation with the
+      // vx_roster table — which of its rows the table has acknowledged — and it is precisely
+      // what must NOT be shared: telling the tablet which rows the laptop has sent would let
+      // the tablet decide the laptop's unsent work is stale. The roster itself is in vx_roster
+      // and in vx_roster_edits, both accounted for already.
+      vx_roster_sent: "which of this device's roster rows the database has taken",
     };
     // 2. A local copy of a database table, so the screen can draw before the read comes back.
     //    The table is the truth; losing the copy costs nothing.
@@ -5535,8 +5542,13 @@ describe("InBody sheet", () => {
            "nothing ever writes " + table + ", so " + key + " is not a cache — it is the only copy"));
 
     // Neither list may quietly grow to cover a real save.
+    //
+    // 13, from 12, for vx_roster_sent — the fourth "what has this device sent" key, added with
+    // the move to one roster row per swimmer. The argument the limit asks for is that it is an
+    // outbox rather than data: everything it describes lives in vx_roster and vx_roster_edits,
+    // and sharing it would let one device judge another's unsent work stale.
     it("the device-only list stays small enough to read", () =>
-      eq(Object.keys(DEVICE_ONLY).length <= 12, true, "if this needs to grow, the reason needs an argument"));
+      eq(Object.keys(DEVICE_ONLY).length <= 13, true, "if this needs to grow, the reason needs an argument"));
   });
 
   // Before any of that: the file has to parse. A stray brace anywhere in 16,000 lines takes the
@@ -7148,7 +7160,7 @@ describe("InBody sheet", () => {
       eq(/staffPwSet=set/.test(fn), true);
     });
     it("that record reaches the club's other phones rather than one device", () =>
-      eq(/"vx_bday_sent","vx_staff_pw_set"\]/.test(SOURCE), true));
+      eq(JSON.parse(SOURCE.match(/var SYNC = (\[[^\]]*\])/)[1]).includes("vx_staff_pw_set"), true));
     it("an account with no email is told it cannot sign in, not told to try again", () => {
       eq(/No email — cannot sign in/.test(SOURCE), true);
       eq(/has no email address, so there is nothing to sign in with/.test(fn), true);
@@ -7971,7 +7983,7 @@ describe("InBody sheet", () => {
       eq(out.length, 2);
       eq(/this\._dedupeRows\(/.test(SOURCE), true);
       eq((SOURCE.match(/this\._dedupeRows\(/g) || []).length >= 3, true,
-         "the seed, the incremental write and the rebuild all have to be guarded");
+         "the migration, the incremental write and the rebuild all have to be guarded");
     });
     it("the roster can be rebuilt from the document that still holds it", () => {
       const fn = sourceBetween("async rosterRebuildFromDocument(){", "\n  _rowKeyMap");
@@ -8015,35 +8027,229 @@ describe("InBody sheet", () => {
       eq(/gone=Object\.keys\(was\)\.filter\(k=>!\(k in now\)\)/.test(fn), true,
          "and an undone change has to remove its row, or it comes back");
     });
-    it("the migration is off, and cannot be reached by accident", () => {
-      eq(/const VX_ROSTER_ROWS=false;/.test(SOURCE), true,
-         "it lost data twice — it goes back on only after a rehearsal against a copy");
-      const fetchFn = sourceBetween("async _rosterFetch(){", "\n  async _rosterSeed");
-      eq(/if\(!VX_ROSTER_ROWS\) return;/.test(fetchFn), true, "no fetch means no rows means no row writes");
+    // Which way the club is stored is the club's own setting, not this file's.
+    //
+    // It was a build constant, which is wrong twice: a constant flips for a device whenever that
+    // device happens to load a new copy of the app, so half the club reads rows while the other
+    // half writes the document and neither sees the other's work — and nobody at a poolside can
+    // undo it.
+    it("the mode is a club setting that pulls like everything else, not a build flag", () => {
+      eq(/const VX_ROSTER_ROWS/.test(SOURCE), false, "a build flag cannot switch a club together");
+      eq(/"vx_staff_pw_set","vx_roster_mode"\]/.test(SOURCE), true, "so it has to be a synced key");
+      const on = sourceBetween("_rosterRowsOn(){", "\n  //");
+      eq(/m\.mode==='rows'/.test(on), true);
+      eq(/return !!\(m && typeof m==='object'/.test(on), true,
+         "anything else — absent, unreadable, half-written — has to mean the document");
+    });
+    it("the write path and the fetch are gated on the same answer", () => {
+      const fetchFn = sourceBetween("async _rosterFetch(){", "\n  // Recovery. The single document");
+      eq(/if\(!this\._rosterRowsOn\(\)\) return;/.test(fetchFn), true);
       const at = SOURCE.indexOf("  persistRosterEdits(){");
       const persist = SOURCE.slice(at, SOURCE.indexOf("\n  }", at));
-      eq(/if\(VX_ROSTER_ROWS && Array\.isArray\(this\.rosterRows\)\)/.test(persist), true,
-         "and the write path is gated on the same flag, not just the fetch");
+      eq(/if\(this\._rosterRowsOn\(\) && Array\.isArray\(this\.rosterRows\)\)/.test(persist), true,
+         "reading rows and writing rows must never disagree about which mode the club is in");
     });
-    it("the rows path still short-circuits before the document path", () => {
-      // The stale-device guard this used to be about is gone entirely — the merge replaced it.
-      // What still matters is the ordering: when the table exists, rows are written and the
-      // single-document write is not reached at all.
+    // The document is not left behind as an old copy: it is still written, on a delay. Every
+    // recovery in this file reads it — the nightly backups, Rebuild from the saved roster, Use
+    // the database copy, the date-of-birth restore — and a migration that stops writing it
+    // disarms all of them silently.
+    it("rows are written first, and the document is still kept behind them", () => {
       const at = SOURCE.indexOf("  persistRosterEdits(){");
       const fn = SOURCE.slice(at, SOURCE.indexOf("\n  }", at));
       const rowsAt = fn.indexOf("this._rosterPersistRows()");
-      const docAt = fn.indexOf("this._saveJSON('vx_roster_edits'");
-      eq(rowsAt > -1 && rowsAt < docAt, true,
-         "rows cannot clobber each other, and must be written instead of the document, not after it");
+      const docAt = fn.indexOf("this._rosterDocBackup()");
+      eq(rowsAt > -1 && rowsAt < docAt, true, "the small write goes first");
+      const backup = sourceBetween("_rosterDocBackup(){", "\n  }");
+      eq(/clearTimeout\(this\._rosterDocT\)/.test(backup), true,
+         "a heat of times must collapse to one document write, not eight");
+      eq(/_saveJSON\('vx_roster_edits', this\.rosterEdits\)/.test(backup), true);
     });
     it("a missing table keeps the old behaviour rather than losing the roster", () => {
-      const fn = sourceBetween("async _rosterFetch(){", "\n  async _rosterSeed");
+      const fn = sourceBetween("async _rosterFetch(){", "\n  // Recovery. The single document");
       eq(/if\(rows==null\) return;/.test(fn), true);
     });
-    it("only a manager moves the club across", () => {
-      const fn = sourceBetween("async _rosterSeed(){", "\n  _rowKeyMap");
-      eq(/this\._isFullAccess\(\)/.test(fn), true);
-      eq(/i\+=500/.test(fn), true, "317 swimmers will not go in one request");
+    // The original sin: the table came back empty, so the app published whatever overlay this
+    // device happened to be holding as the club's roster, with nobody asking.
+    it("an empty table is never seeded from whatever one device is holding", () => {
+      eq(/_rosterSeed/.test(SOURCE), false, "the seed is gone; a migration a person presses replaces it");
+      const fn = sourceBetween("async _rosterFetch(){", "\n  // Recovery. The single document");
+      eq(/if\(!rows\.length\)\{/.test(fn), true);
+      eq(/keeping the document copy/.test(fn), true, "it says so rather than acting on a guess");
+      eq(/__vxUpsert/.test(fn), false, "a read must never turn into a write of the whole roster");
+    });
+  });
+
+  /* Moving the club across.
+     The migration lost data twice in one hour, both times because it wrote first and looked
+     afterwards. What is different is not the row shape — it is the order, and that every step
+     before the last leaves the club exactly as it was. */
+  describe("moving the roster to one row per swimmer", () => {
+    const move = sourceBetween("async rosterMoveToRows(){", "\n  // Back to one document");
+
+    it("only a manager, and only once", () => {
+      eq(/if\(!this\._isFullAccess\(\)\)/.test(move), true);
+      eq(/if\(this\._rosterRowsOn\(\)\)/.test(move), true, "twice would clear a live table");
+      eq(/if\(this\._rosterMoving\) return;/.test(move), true, "and a double-press is a second clear");
+    });
+    it("it migrates the club's roster merged with this device's, not one or the other", () => {
+      eq(/key=eq\.vx_roster_edits/.test(move), true, "the club's copy, read now");
+      eq(/window\.__vxMergeRoster\(mine, dbDoc\)/.test(move), true,
+         "a write still sitting on this phone is part of the roster being moved");
+    });
+    it("an empty roster is never what gets migrated", () =>
+      eq(/if\(!\(n>0\)\)/.test(move), true));
+    it("it proves the row shape holds this roster before writing anything", () => {
+      const trip = move.indexOf("this._rosterRoundTrips(doc)");
+      const write = move.indexOf("__vxUpsert('vx_roster'");
+      eq(trip > -1 && trip < write, true, "this is the check the first migration did not have");
+      eq(/Stopped before writing anything/.test(move), true);
+    });
+    it("the document is saved, and confirmed, before a single row is written", () => {
+      const doc = move.indexOf("await this._pushSaid('vx_roster_edits')");
+      const write = move.indexOf("__vxUpsert('vx_roster'");
+      eq(doc > -1 && doc < write, true,
+         "the document is what every recovery reads — if it cannot be written, nothing else happens");
+      eq(/so nothing has moved/.test(move), true);
+    });
+    it("the table is cleared before it is written, and a refused batch stops", () => {
+      const clear = move.indexOf("__vxDelete('vx_roster'");
+      const write = move.indexOf("__vxUpsert('vx_roster'");
+      eq(clear > -1 && clear < write, true, "half-written rows plus a rebuild is where duplicates came from");
+      eq(/Stopped at row/.test(move), true);
+      eq(/still on the single document/.test(move), true, "and the club is told it lost nothing");
+    });
+    it("what the database actually holds is read back and checked again", () => {
+      const back = move.indexOf("__vxSelect('vx_roster'");
+      const flip = move.indexOf("_saveJSON('vx_roster_mode'");
+      eq(back > -1 && back < flip, true, "a 201 says the write was taken, not that the table is right");
+      eq(/do not match the roster/.test(move), true);
+    });
+    it("the club is only told to read rows once all of that has passed", () => {
+      const flip = move.indexOf("_saveJSON('vx_roster_mode'");
+      for (const before of ["_rosterRoundTrips(doc)", "await this._pushSaid('vx_roster_edits')",
+                            "__vxUpsert('vx_roster'", "__vxSelect('vx_roster'"]) {
+        eq(move.indexOf(before) > -1 && move.indexOf(before) < flip, true, before + " must come first");
+      }
+    });
+    it("a mode that cannot be saved leaves the club on the document", () => {
+      eq(/this\.rosterMode=null;/.test(move), true,
+         "a device reading rows while the club reads the document is the split this exists to prevent");
+    });
+    /* The guards, run rather than read.
+       Everything above checks the ORDER of the migration, which is what went wrong last time.
+       These check the thing that order exists to protect: that the app can actually tell when
+       the row shape would drop something, against a roster built by the app's own rebuild. */
+    const rosterCtx = () => {
+      const c = {
+        squads: [{ id: "junior", name: "Junior" }, { id: "seniora", name: "Senior A" }],
+        roster: {},
+        rosterEdits: { edits: {}, deleted: {}, added: {} },
+      };
+      for (const m of ["rebuildRoster", "_patchAnywhere", "_ageFromDob", "_dobParts", "_rosterRowsFrom",
+                       "_rosterEditsFrom", "_dedupeRows", "_rowKeyMap", "_rosterSnapshotOf",
+                       "_rosterRoundTrips", "_rosterSame", "_rosterMergeRows", "_rosterTotalFor"])
+        c[m] = bind(m, c);
+      return c;
+    };
+    const withBase = (base, fn) => {
+      const had = globalThis.window.VX_ROSTER;
+      globalThis.window.VX_ROSTER = base;
+      try { return fn(); } finally { globalThis.window.VX_ROSTER = had; }
+    };
+    const BASE = { junior: [{ id: "sw1", name: "Aria Baker", dob: "2013-04-05", gender: "Girls" },
+                            { id: "sw9", name: "Gone Swimmer", dob: "2012-01-01", gender: "Boys" }],
+                   seniora: [] };
+
+    it("a roster the rows can hold is reported as safe to move", () => withBase(BASE, () => {
+      const c = rosterCtx();
+      const trip = c._rosterRoundTrips({
+        edits: { junior: { sw1: { dob: "2013-04-06" } } },
+        deleted: { junior: { sw9: true } },
+        added: { seniora: [{ id: "new1", name: "New Swimmer", dob: "2011-02-03" }] },
+      });
+      eq(trip.ok, true, trip.why);
+      eq(trip.before, 2, "one base swimmer left, plus the added one");
+    }));
+
+    // The shape that actually loses a date of birth: a swimmer the club ADDED who also has an
+    // edit filed against them. _rosterRowsFrom keeps the added record and drops the patch, so a
+    // date typed after the swimmer was added is not in the rows — while the document still shows
+    // it, because rebuildRoster fills the added record from the patch. Exactly the class of loss
+    // this club has already paid for twice, and the migration must refuse rather than write it.
+    it("a roster the rows would quietly change is caught before anything is written", () => withBase(BASE, () => {
+      const c = rosterCtx();
+      const trip = c._rosterRoundTrips({
+        edits: { seniora: { new1: { dob: "2011-02-03" } } },
+        deleted: {},
+        added: { seniora: [{ id: "new1", name: "New Swimmer" }] },
+      });
+      eq(trip.ok, false, "the row shape drops the patch on an added swimmer, and it must say so");
+      eq(trip.lost.length > 0, true);
+      eq(/would not survive the move/.test(trip.why), true);
+    }));
+
+    it("the check compares what the club would SEE, not what the JSON looks like", () => {
+      const src = methodSource("_rosterSnapshotOf").body;
+      eq(/this\.rebuildRoster\(\)/.test(src), true,
+         "a migration checked against a second copy of the logic proves only that the copy agrees");
+      eq(/finally\{ this\.rosterEdits=keep;/.test(src), true, "and it must put the live roster back");
+      eq(/sw\.dob\|\|''/.test(src), true, "the date of birth is the fact this keeps losing");
+    });
+    it("putting the roster back is what the snapshot leaves behind", () => withBase(BASE, () => {
+      const c = rosterCtx();
+      c.rosterEdits = { edits: { junior: { sw1: { name: "Kept" } } }, deleted: {}, added: {} };
+      c.rebuildRoster();
+      const before = JSON.stringify(c.roster);
+      c._rosterSnapshotOf({ edits: {}, deleted: { junior: { sw1: true } }, added: {} });
+      eq(JSON.stringify(c.roster), before, "checking a roster must not become editing one");
+    }));
+
+    // Which copy wins on a pull, which is where both of the old failures lived: taking the table
+    // whole loses this device's unsent work, and letting the whole overlay win republishes a
+    // stale phone over the club.
+    it("the table wins for a swimmer this device has not touched", () => {
+      const c = rosterCtx();
+      const theirs = [{ id: "junior::sw1", squad_id: "junior", sw_id: "sw1", patch: { dob: "2013-04-06" } }];
+      const mine = { edits: { junior: { sw1: { dob: "1999-01-01" } } }, deleted: {}, added: {} };
+      const sent = c._rowKeyMap(c._rosterRowsFrom(mine));      // this device sent that, and it landed
+      const out = c._rosterMergeRows(theirs, mine, sent);
+      eq(out.pending.length, 0);
+      eq(c._rosterEditsFrom(out.rows).edits.junior.sw1.dob, "2013-04-06", "another coach's newer row wins");
+    });
+    it("a change this device has not sent yet survives the pull", () => {
+      const c = rosterCtx();
+      const theirs = [{ id: "junior::sw1", squad_id: "junior", sw_id: "sw1", patch: { dob: "2013-04-06" } }];
+      const sent = c._rowKeyMap(c._rosterRowsFrom({ edits: { junior: { sw1: { dob: "2013-04-06" } } }, deleted: {}, added: {} }));
+      const mine = { edits: { junior: { sw1: { dob: "2014-09-09" } } }, deleted: {}, added: {} };   // typed since
+      const out = c._rosterMergeRows(theirs, mine, sent);
+      eq(out.pending.length, 1, "it differs from what this device last sent, so it is still on its way");
+      eq(c._rosterEditsFrom(out.rows).edits.junior.sw1.dob, "2014-09-09");
+    });
+    it("a device with no record of what it sent defers to the table", () => {
+      const c = rosterCtx();
+      const theirs = [{ id: "junior::sw1", squad_id: "junior", sw_id: "sw1", patch: { dob: "2013-04-06" } }];
+      const mine = { edits: { junior: { sw1: { dob: "1999-01-01" } } }, deleted: {}, added: {} };
+      const out = c._rosterMergeRows(theirs, mine, null);
+      eq(out.pending.length, 0, "guessing everything is unsent is how 317 got back over 304");
+      eq(c._rosterEditsFrom(out.rows).edits.junior.sw1.dob, "2013-04-06");
+    });
+    it("rows the table has never heard of are kept, not dropped", () => {
+      const c = rosterCtx();
+      const mine = { edits: { seniora: { sw2: { age: 14 } } }, deleted: {}, added: {} };
+      const out = c._rosterMergeRows([], mine, {});      // sent nothing: every row is pending
+      eq(out.pending.length, 1);
+      eq(c._rosterEditsFrom(out.rows).edits.seniora.sw2.age, 14);
+    });
+
+    it("going back needs no copying, because the document was never abandoned", () => {
+      const back = sourceBetween("async rosterBackToDocument(){", "\n  // What the two copies say");
+      eq(/clearTimeout\(this\._rosterDocT\)/.test(back), true, "flush the delayed write first");
+      eq(/await this\._pushSaid\('vx_roster_edits'\)/.test(back), true, "and wait for it");
+      const doc = back.indexOf("await this._pushSaid('vx_roster_edits')");
+      const flip = back.indexOf("_saveJSON('vx_roster_mode'");
+      eq(doc > -1 && doc < flip, true, "or the club is sent back to a document missing the last minute");
+      eq(/been left on rows\. Nothing is lost/.test(back), true,
+         "a document that would not save leaves the club where it is, and says so");
     });
   });
 

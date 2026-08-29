@@ -279,6 +279,128 @@ scene("a date of birth typed in the admin list is sent to the database, not just
 });
 
 // ---------------------------------------------------------------------------------------------
+// Moving the club to one roster row per swimmer.
+//
+// The last two attempts at this lost data inside an hour, so the interesting question is not
+// "does it write rows" — it is what the club is left with when a step fails. Each of these runs
+// the real button against a database that answers the way it answered on the bad day, and checks
+// the two things that matter: the roster is still whole, and the club has not been told to read
+// rows it cannot trust.
+// ---------------------------------------------------------------------------------------------
+async function migrationScreen(browser, { refuseRows, tableMissing, badReadBack }) {
+  const doc = { edits: { junior: { r131: { dob: "2014-03-02" } } }, deleted: {}, added: {} };
+  const page = await (await browser.newContext({ viewport: { width: 1280, height: 1000 } })).newPage();
+  const problems = [], writes = [];
+  page.on("pageerror", (e) => problems.push(String(e.message)));
+  let rowsInDb = [];
+  await page.route("**/rest/v1/**", async (r) => {
+    const req = r.request(), m = req.method();
+    const table = (new URL(req.url()).pathname.split("/rest/v1/")[1] || "").split("?")[0];
+    const body = req.postData() || "";
+    if (m === "GET") {
+      if (table === "club_state" && /vx_roster_edits/.test(req.url()))
+        return r.fulfill({ status: 200, contentType: "application/json",
+                           body: JSON.stringify([{ key: "vx_roster_edits", value: doc, updated_at: new Date().toISOString() }]) });
+      if (table === "vx_roster") {
+        // The table has not been created at all — the state a club is in before the SQL is run.
+        if (tableMissing) return r.fulfill({ status: 404, contentType: "application/json",
+                                             body: JSON.stringify({ message: 'relation "public.vx_roster" does not exist' }) });
+        // Written, but the database does not hold what was sent. A 201 per batch cannot see this.
+        if (badReadBack) return r.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+        return r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(rowsInDb) });
+      }
+      return r.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+    }
+    if (m !== "HEAD") writes.push({ method: m, table, body });
+    if (table === "vx_roster" && m === "POST") {
+      if (refuseRows) return r.fulfill({ status: 403, contentType: "application/json",
+                                         body: JSON.stringify({ message: "new row violates row-level security policy" }) });
+      try { for (const row of JSON.parse(body || "[]")) rowsInDb.push(row); } catch { /* asserted below */ }
+    }
+    if (table === "vx_roster" && m === "DELETE") rowsInDb = [];
+    return r.fulfill({ status: m === "GET" ? 200 : 201, contentType: "application/json", body: "[]" });
+  });
+  await page.addInitScript((d) => {
+    localStorage.setItem("vx_session", JSON.stringify({ type: "staff", id: "ahmed" }));
+    localStorage.setItem("vx_auth", JSON.stringify({ token: "drive-fake", refresh: "drive-fake", exp: Date.now() + 3600000 }));
+    localStorage.removeItem("vx_nav");
+    localStorage.removeItem("vx_failed_writes");
+    localStorage.setItem("vx_roster_edits", JSON.stringify(d));
+  }, doc);
+  await page.goto("http://127.0.0.1:" + PORT + "/proto.html?drive=" + Date.now(), { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(2200);
+  // The confirm() the migration asks before it writes anything.
+  page.on("dialog", (dlg) => dlg.accept());
+  await tap(page, "Club Administration");
+  await tap(page, "Settings");
+  await page.waitForTimeout(900);
+  const pressed = await page.evaluate(() => {
+    const b = [...document.querySelectorAll("button")]
+      .find((e) => e.offsetParent && /move to one row per swimmer/i.test((e.innerText || "").trim()));
+    if (!b) return false;
+    b.click();
+    return true;
+  });
+  if (!pressed) throw new Error("Settings has no button that moves the roster to rows");
+  await page.waitForTimeout(3000);
+  const said = await page.evaluate(() => {
+    const t = (document.body.innerText || "").split("\n");
+    return t.find((l) => /Moved|Stopped|could not|not ready|already/i.test(l)) || "";
+  });
+  const mode = await page.evaluate(() => localStorage.getItem("vx_roster_mode"));
+  const kept = await page.evaluate(() => localStorage.getItem("vx_roster_edits"));
+  await page.close();
+  return { said, mode, kept, writes, rowsInDb, problems };
+}
+
+scene("the roster moves to one row per swimmer, and the document is kept", async (browser) => {
+  const out = await migrationScreen(browser, {});
+  eq(out.problems.length, 0, "the settings screen threw: " + out.problems.slice(0, 2).join(" | "));
+  eq(/Moved/.test(out.said), true, "it said: " + JSON.stringify(out.said));
+  eq(/"mode":"rows"/.test(out.mode || ""), true, "the club was never told to read rows: " + out.mode);
+  // The date of birth is in the rows, which is the whole point of checking rather than trusting.
+  eq(JSON.stringify(out.rowsInDb).includes("2014-03-02"), true,
+     "the rows went in without the date this club keeps losing: " + JSON.stringify(out.rowsInDb).slice(0, 200));
+  // And the document is still there, unchanged, because everything that recovers a roster reads it.
+  eq((out.kept || "").includes("2014-03-02"), true, "the document was abandoned");
+  const clearAt = out.writes.findIndex((w) => w.table === "vx_roster" && w.method === "DELETE");
+  const writeAt = out.writes.findIndex((w) => w.table === "vx_roster" && w.method === "POST");
+  eq(clearAt > -1 && clearAt < writeAt, true, "the half-written rows must go before the good ones arrive");
+  return "moved, rows carry the date, document kept";
+});
+
+scene("a database that refuses the rows leaves the club exactly as it was", async (browser) => {
+  const out = await migrationScreen(browser, { refuseRows: true });
+  eq(out.problems.length, 0, "it threw: " + out.problems.slice(0, 2).join(" | "));
+  eq(/Stopped at row/.test(out.said), true, "it said: " + JSON.stringify(out.said));
+  eq(/still on the single document/.test(out.said), true, "and the club has to be told it lost nothing");
+  eq(/"mode":"rows"/.test(out.mode || ""), false,
+     "the club was told to read rows that were refused: " + out.mode);
+  eq((out.kept || "").includes("2014-03-02"), true, "the roster document must be untouched");
+  return "refused, and the club is still on the document";
+});
+
+scene("rows that do not read back as the roster do not switch the club", async (browser) => {
+  const out = await migrationScreen(browser, { badReadBack: true });
+  eq(out.problems.length, 0, "it threw: " + out.problems.slice(0, 2).join(" | "));
+  eq(/do not match the roster/.test(out.said), true, "it said: " + JSON.stringify(out.said));
+  eq(/"mode":"rows"/.test(out.mode || ""), false,
+     "every batch was accepted and the table was still wrong — that is the case a 201 cannot see");
+  eq((out.kept || "").includes("2014-03-02"), true, "the roster document must be untouched");
+  return "written but not matching, so not switched";
+});
+
+scene("a table that has not been created yet is said out loud, not half-migrated", async (browser) => {
+  const out = await migrationScreen(browser, { tableMissing: true });
+  eq(out.problems.length, 0, "it threw: " + out.problems.slice(0, 2).join(" | "));
+  eq(/not ready/.test(out.said), true, "it said: " + JSON.stringify(out.said));
+  eq(/0010_vx_roster\.sql/.test(out.said), true, "and names the thing to run");
+  eq(out.writes.some((w) => w.table === "vx_roster"), false, "nothing may be written to a table that is not there");
+  eq(/"mode":"rows"/.test(out.mode || ""), false);
+  return "named the missing table before writing anything";
+});
+
+// ---------------------------------------------------------------------------------------------
 // Attendance is the most-pressed thing in the club — every coach, every squad, twice a day — and
 // it is the one write where two coaches are marking at the same time on different phones. It has
 // its own table for that reason. This checks a mark actually reaches it.
