@@ -2222,29 +2222,28 @@ if ('serviceWorker' in navigator) {
                       </sc-if>
                     </div>
 
+                    <!-- The club's meets, read from the meets themselves.
+                         This box used to write a private list of its own (vx_meets_cal): a name,
+                         a day, a place and a PDF that nothing else in the app had heard of. A
+                         meet added here could not be entered, could not carry a qualifying time,
+                         and never appeared on the Meets screen — while a meet added on the Meets
+                         screen never appeared here. Two lists, both called the calendar, each
+                         making the other look broken. This one reads; the Meets screen writes. -->
                     <div style="background:#fff;border:1px solid #E5E9F0;border-radius:18px;padding:15px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
-                      <div style="display:flex;align-items:center;gap:8px;margin-bottom:11px"><i data-lucide="calendar-days" style="width:17px;height:17px;color:#067EEA"></i><p style="margin:0;font-size:13px;font-weight:700;color:#0C1116">Upcoming meets</p></div>
-                      <sc-if value="{{ isAdminUser }}" hint-placeholder-val="{{ true }}">
-                        <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:11px">
-                          <input value="{{ meetsForm.name }}" oninput="{{ onMeetsName }}" placeholder="Meet name" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
-                          <div style="display:flex;gap:7px">
-                            <input value="{{ meetsForm.date }}" oninput="{{ onMeetsDate }}" type="date" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
-                            <input value="{{ meetsForm.place }}" oninput="{{ onMeetsPlace }}" placeholder="Place" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
-                          </div>
-                          <label style="display:flex;align-items:center;justify-content:center;gap:7px;background:#F8FAFC;border:1px dashed #CDD3E2;border-radius:9px;padding:9px;font-size:12px;font-weight:600;color:#3A4152;cursor:pointer"><i data-lucide="file-up" style="width:14px;height:14px"></i><span>{{ meetsPdfLabel }}</span><input type="file" accept="application/pdf" onchange="{{ onMeetsPdf }}" style="display:none"></label>
-                          <button onclick="{{ onMeetsAdd }}" style="background:var(--vx-blue);color:#fff;border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer">Add meet</button>
-                        </div>
-                      </sc-if>
+                      <div style="display:flex;align-items:center;gap:8px;margin-bottom:11px"><i data-lucide="calendar-days" style="width:17px;height:17px;color:#067EEA"></i><p style="margin:0;flex:1;font-size:13px;font-weight:700;color:#0C1116">Upcoming meets</p><sc-if value="{{ homeMeetsHas }}" hint-placeholder-val="{{ true }}"><span style="font-size:11px;color:#9AA2B4">{{ homeMeetsCount }}</span></sc-if></div>
                       <div style="display:flex;flex-direction:column;gap:7px">
-                        <sc-for list="{{ meetsCalRows }}" as="m" hint-placeholder-count="0">
+                        <sc-for list="{{ homeMeetRows }}" as="m" hint-placeholder-count="3">
                           <div style="display:flex;align-items:center;gap:10px;background:#F8FAFC;border-radius:10px;padding:9px 11px">
                             <span style="flex:none;width:38px;text-align:center"><span style="display:block;font-size:15px;font-weight:800;color:#067EEA;line-height:1">{{ m.day }}</span><span style="display:block;font-size:9px;font-weight:700;text-transform:uppercase;color:#9AA2B4">{{ m.mon }}</span></span>
-                            <span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;font-weight:700;color:#0C1116">{{ m.name }}</span><span style="display:block;font-size:11px;color:#7A8296">{{ m.place }}</span></span>
+                            <span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;font-weight:700;color:#0C1116">{{ m.name }}</span><span style="display:block;font-size:11px;color:#7A8296">{{ m.sub }}</span></span>
+                            <sc-if value="{{ m.hasDeadline }}" hint-placeholder-val="{{ false }}"><span style="flex:none;background:#FFF6E8;color:#7A5A0C;border-radius:7px;padding:4px 8px;font-size:10px;font-weight:700">{{ m.deadlineShort }}</span></sc-if>
                             <sc-if value="{{ m.hasPdf }}" hint-placeholder-val="{{ false }}"><button onclick="{{ m.onViewPdf }}" style="flex:none;display:flex;align-items:center;gap:5px;background:var(--vx-blue-tint);color:var(--vx-blue);border:none;border-radius:8px;padding:5px 9px;font-family:inherit;font-size:11px;font-weight:700;cursor:pointer"><i data-lucide="file-text" style="width:13px;height:13px"></i>Details</button></sc-if>
-                            <sc-if value="{{ isAdminUser }}" hint-placeholder-val="{{ true }}"><button onclick="{{ m.onDelete }}" style="flex:none;background:none;border:none;color:#C7CDDA;cursor:pointer"><i data-lucide="x" style="width:15px;height:15px"></i></button></sc-if>
                           </div>
                         </sc-for>
-                        <sc-if value="{{ meetsCalEmpty }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:11.5px;color:#9AA2B4">No meets scheduled yet.</p></sc-if>
+                        <sc-if value="{{ homeMeetsEmpty }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:11.5px;color:#9AA2B4">No meets coming up yet.</p></sc-if>
+                        <sc-if value="{{ isAdminUser }}" hint-placeholder-val="{{ true }}">
+                          <button onclick="{{ onHomeMeetsManage }}" style="display:flex;align-items:center;justify-content:center;gap:7px;background:#EAF1FF;color:var(--vx-blue-dark);border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer;margin-top:2px"><i data-lucide="calendar-plus" style="width:14px;height:14px"></i>Add or edit meets</button>
+                        </sc-if>
                       </div>
                     </div>
 
@@ -2856,20 +2855,10 @@ if ('serviceWorker' in navigator) {
                     </sc-if>
 
                     <sc-if value="{{ famShowMeets }}" hint-placeholder-val="{{ false }}">
-                      <sc-if value="{{ meetsHasCal }}" hint-placeholder-val="{{ false }}">
-                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:15px;box-shadow:0 2px 7px rgba(11,20,40,.05);margin-bottom:12px">
-                          <p style="margin:0 0 10px;font-size:13px;font-weight:700;color:#0C1116">Club calendar</p>
-                          <div style="display:flex;flex-direction:column;gap:8px">
-                            <sc-for list="{{ meetsCalRows }}" as="m" hint-placeholder-count="2">
-                              <div style="display:flex;align-items:center;gap:12px;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:12px;padding:10px 12px">
-                                <span style="flex:none;width:42px;height:42px;border-radius:11px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1"><span style="font-size:15px;font-weight:800">{{ m.day }}</span><span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px">{{ m.mon }}</span></span>
-                                <span style="flex:1"><span style="display:block;font-size:13px;font-weight:700;color:#0C1116">{{ m.name }}</span><span style="display:block;font-size:11.5px;color:#7A8296;margin-top:1px">{{ m.place }}</span></span>
-                                <sc-if value="{{ m.hasPdf }}" hint-placeholder-val="{{ false }}"><button onclick="{{ m.onViewPdf }}" style="flex:none;background:var(--vx-blue);color:#fff;border:none;border-radius:999px;padding:6px 13px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer">Details</button></sc-if>
-                              </div>
-                            </sc-for>
-                          </div>
-                        </div>
-                      </sc-if>
+                      <!-- The separate "Club calendar" block that used to sit here is gone. It
+                           listed the same meets a second time, from the second calendar, with
+                           less on each one — a parent scrolled past a bare name and a place to
+                           reach the card that actually answered them. One list now. -->
                       <!-- Only when there is genuinely nothing. The club calendar is a second,
                            older list; saying it is empty above a card for the meet in December
                            reads as the app contradicting itself. -->
@@ -7910,7 +7899,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-29b';
+const VX_BUILD='2026-08-29c';
 // Whether the roster is one document or one row per swimmer is NOT decided here any more.
 //
 // It was a constant in this file, which is the wrong place for it twice over: a build flag flips
@@ -8207,7 +8196,7 @@ class Component extends DCLogic {
       showVortexId:false,
       compBuildOpen:false, compName:'', compLocation:'', compDate:'', compCourse:'LCM', compEvents:[], compErr:'',
       printPreviewOpen:false, printPaperScale:1, printPaperZoom:1,
-      staffEditId:null, staffForm:{name:'',pin:''}, staffAddOpen:false, staffAddForm:{name:'',user:'',pass:'',email:'',pin:'',role:'Coach',phone:'',squadId:''}, staffAddMsg:'', staffAddOk:false, staffAddBusy:false, meetsCalForm:{name:'',date:'',place:''},
+      staffEditId:null, staffForm:{name:'',pin:''}, staffAddOpen:false, staffAddForm:{name:'',user:'',pass:'',email:'',pin:'',role:'Coach',phone:'',squadId:''}, staffAddMsg:'', staffAddOk:false, staffAddBusy:false,
       settingsMsg:'',
       pushOn:(function(){ try{ return localStorage.getItem('vx_push_on')==='1'; }catch(e){ return false; } })(),
       pushMsg:'', annMsg:'', annAudience:'all',
@@ -11215,7 +11204,83 @@ class Component extends DCLogic {
     const raw=((this.meetInfo||{})[name])||{};
     const out=this.MEET_INFO_BLANK();
     Object.keys(out).forEach(k=>{ const v=raw[k]; if(typeof v === 'string') out[k]=v; });
+    // The club had a second calendar, and its entries carried an information sheet of their
+    // own. Until an entry has been folded into the meets proper — which needs a database
+    // session, so it can be a moment or a whole shift away on a phone nobody has opened —
+    // the sheet is read straight off the old record. A parent must not lose sight of the
+    // entry form because the migration has not run yet.
+    if(!out.infoUrl){
+      const legacy=(this.meetsCal||[]).find(c=>c && this._sameMeetName(c.name, name));
+      if(legacy && legacy.pdf){ out.infoUrl=legacy.pdf; out.infoName=legacy.pdfName||'Meet information'; }
+    }
     return out;
+  }
+  // ---- The second calendar, and how it stops being one ----------------------------------------
+  //
+  // There were two places to add a meet, and they wrote to different records that never met.
+  //
+  // "Add to Vortex Calendar" on the Meets screen created a real meet: a row in club_meets, with
+  // an event program, entries, results and cut times hanging off its name. The "Upcoming meets"
+  // box on the coach's home screen wrote vx_meets_cal instead — a name, a day, a place and a
+  // PDF, and nothing else in the app has ever heard of it. A meet added there could not be
+  // entered, could not carry a qualifying time, and never appeared on the Meets screen; a meet
+  // added on the Meets screen never appeared in the box. Two lists, both called the calendar,
+  // each looking like the other one was broken.
+  //
+  // There is one now. Everything vx_meets_cal holds is folded into the meets proper, and the box
+  // on the home screen reads that same list rather than a private one.
+  _sameMeetName(a, b){
+    return String(a||'').trim().toLowerCase() === String(b||'').trim().toLowerCase();
+  }
+  /** A legacy calendar entry in the shape the rest of the app reads a meet in. */
+  _calAsMeet(c){
+    const iso=this._toISODate(c && c.date);
+    return { name:String((c&&c.name)||'').trim(), location:String((c&&c.place)||'').trim(),
+             date: iso ? this._mdyFromISO(iso) : '', course:'LCM', entries:0, events:[] };
+  }
+  /** Entries the meets proper do not have yet — shown alongside them so nothing disappears
+   *  while the migration below is still waiting for a database session. */
+  _calUnmigrated(){
+    const known=this.allMeets().map(m=>String((m&&m.name)||'').trim().toLowerCase());
+    return (this.meetsCal||[])
+      .filter(c=>c && String(c.name||'').trim() && known.indexOf(String(c.name).trim().toLowerCase())<0)
+      .map(c=>this._calAsMeet(c));
+  }
+  /** Fold the old calendar into the meets proper. Safe to run on every boot: an entry is only
+   *  marked done once the database has actually taken the meet, so a device with no session
+   *  tries again next time rather than dropping it. */
+  async _calMigrateOnce(){
+    if(this._calMigrating || !window.__vxUpsert) return; this._calMigrating=true;
+    try{
+      let done={}; try{ done=JSON.parse(localStorage.getItem('vx_cal_migrated')||'{}')||{}; }catch(e){}
+      const pending=(this.meetsCal||[]).filter(c=>c && String(c.name||'').trim() && !done[c.id||c.name]);
+      if(!pending.length) return;
+      for(const c of pending){
+        const key=c.id||c.name;
+        const name=String(c.name).trim();
+        // Already a meet under that name: the entry has nothing left to add, so it is simply
+        // marked done. Overwriting the real meet's date with the old box's copy is exactly the
+        // kind of quiet reversal the one-row-per-meet move was made to stop.
+        const exists=this.allMeets().some(m=>this._sameMeetName(m&&m.name, name));
+        if(!exists){
+          this.customMeets=[this._calAsMeet(c), ...this.customMeets];
+          try{ this._saveLocalOnly('vx_custom_meets', this.customMeets); }catch(e){}
+        }
+        const r=exists ? {ok:true} : await this._meetsPush(name);
+        if(!r || !r.ok) continue;                       // no session yet — try again next boot
+        // The information sheet moves with it, and only after the meet itself has landed.
+        //
+        // Read the meet's OWN record here, not _meetInfo — that one falls back to this very
+        // entry's sheet while the fold is pending, so asking it whether the sheet has moved
+        // yet always answered yes, and the sheet never actually moved.
+        const ownUrl=(((this.meetInfo||{})[name])||{}).infoUrl;
+        if(c.pdf && !ownUrl)
+          this.setMeetInfo(name, {infoUrl:c.pdf, infoName:c.pdfName||'Meet information'});
+        done[key]=1;
+        try{ localStorage.setItem('vx_cal_migrated', JSON.stringify(done)); }catch(e){}
+      }
+      this.forceUpdate();
+    } catch(e){} finally { this._calMigrating=false; }
   }
   /** Does this meet carry anything beyond its name, day, venue and course? */
   _meetHasInfo(name){
@@ -11264,7 +11329,7 @@ class Component extends DCLogic {
   /** The club's meets, split in two and each in the order it is read in: the next one first,
    *  the most recent one first. */
   _meetsSplit(){
-    const all=this.allMeets();
+    const all=[...this.allMeets(), ...this._calUnmigrated()];
     const upcoming=[], done=[];
     all.forEach(m=>{ (this._meetIsDone(m) ? done : upcoming).push(m); });
     const iso=m=>this._meetLastISO(m);
@@ -11751,8 +11816,6 @@ class Component extends DCLogic {
     // One row per account (id = account id) — upsert never clobbers other accounts.
     if(window.__vxUpsert){ window.__vxUpsert('staff_accounts', [this._staffRow(id, o, isCustom)]).then(ok=>{ if(ok) this._staffFetch(); }); }
   }
-  meetsCalAdd(){ const f=this.state.meetsCalForm||{}; const name=(f.name||'').trim(); const date=(f.date||'').trim(); if(!name||!date) return; this.meetsCal.push({id:'mc_'+Date.now(), name:name, date:date, place:(f.place||'').trim(), pdf:f.pdf||'', pdfName:f.pdfName||''}); this.meetsCal.sort(function(a,b){return (a.date||'').localeCompare(b.date||'');}); this._saveJSON('vx_meets_cal', this.meetsCal); this.setState({meetsCalForm:{name:'',date:'',place:'',pdf:'',pdfName:''}});
-    this._pushSend({all:true}, 'New meet: '+name, this.shortDateISO(date)+((f.place||'').trim()?(' · '+(f.place||'').trim()):''), '/'); }
   meetsViewPdf(pdf, title){ if(!pdf) return; this._openDataUrl(pdf); }
   _esc(s){ return (''+(s==null?'':s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   // Open generated HTML / a stored file reliably on every platform. Android Chrome does NOT
@@ -12152,7 +12215,6 @@ class Component extends DCLogic {
     body+='</tbody></table>';
     this._openPrintDoc('Results — '+sw.name, body);
   }
-  meetsCalDelete(id){ this.meetsCal=this.meetsCal.filter(function(m){return m.id!==id;}); this._saveJSON('vx_meets_cal', this.meetsCal); this.setState({}); }
   // The Settings screen used to take an Anthropic key and keep it on the device. Nothing ever
   // read it — no page in this app calls Anthropic, and none should: a key in a browser can be
   // read out of it by anyone holding the phone, and it bills the club. The reading happens on
@@ -13504,6 +13566,10 @@ class Component extends DCLogic {
     (this.customMeets||[]).forEach(m=>{ if(m&&m.name&&!have[m.name]) names.push(m.name); });
     Object.keys(this.meetStatus||{}).forEach(nm=>{ if(!have[nm] && names.indexOf(nm)<0) names.push(nm); });
     for(const nm of names){ try{ await this._meetsPush(nm); }catch(e){} }
+    // The old home-screen calendar folds in here too, for the same reason this runs here at
+    // all: a migration that has not read what it is writing over cannot know what it is
+    // writing over.
+    try{ await this._calMigrateOnce(); }catch(e){}
   }
   allMeets(){ return [...this.customMeets, ...this.meetsMeta]; }
   meetStatusCycle(name){ const order=['Upcoming','Entries open','In progress','Completed']; const cur=this.meetStatus[name]||'Upcoming'; const ni=(order.indexOf(cur)+1)%order.length; this.meetStatus={...this.meetStatus, [name]:order[ni]};
@@ -18317,9 +18383,14 @@ class Component extends DCLogic {
     const seasonPhaseColors=['#12A0AE','#0C6CE0','#7C4DFF','#E5484D','#F5A623','#1CB87A','#8A22D5','#2733D6'];
     const parseMeetDate=(d)=>{ if(!d) return null; const s=String(d); if(/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10); const t=Date.parse(s); if(!isNaN(t)){ const dt=new Date(t); return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0'); } return null; };
     const seasonMeets=[];
-    (this.meetsCal||[]).forEach(m=>{ const iso=parseMeetDate(m.date); if(iso) seasonMeets.push({name:m.name, iso}); });
-    (this.customMeets||[]).forEach(m=>{ const iso=parseMeetDate(m.date); if(iso) seasonMeets.push({name:m.name, iso}); });
-    (this.meetsMeta||[]).forEach(m=>{ const iso=parseMeetDate(m.date); if(iso) seasonMeets.push({name:m.name, iso}); });
+    // One list, and each meet once. This read the old home-screen calendar as well as the
+    // meets, so an entry that had been folded into the meets was drawn twice on the season —
+    // two rules on the same week, for one meet.
+    const seenMeet={};
+    [...this.allMeets(), ...this._calUnmigrated()].forEach(m=>{
+      const iso=parseMeetDate(m.date); if(!iso) return;
+      const k=String(m.name||'').trim().toLowerCase()+'|'+iso; if(seenMeet[k]) return; seenMeet[k]=1;
+      seasonMeets.push({name:m.name, iso}); });
     const seasonSaved=(this.savedPlans&&this.savedPlans[S.squadId])||[];
     const seasonTotalWeeks=season.phases.reduce((a,p)=>a+Math.max(1,parseInt(p.weeks,10)||1),0);
     let wISO=season.start, wn=1; const seasonWeeks=[];
@@ -19870,8 +19941,12 @@ class Component extends DCLogic {
         // next upcoming meet
         const _pm=(s)=>{ if(!s) return null; let m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); if(m) return new Date(+m[3],+m[1]-1,+m[2]); const mo={jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11}; m=s.match(/^(\d{1,2})\s+([A-Za-z]{3})[a-z]*\s+(\d{4})$/); if(m && mo[m[2].toLowerCase()]!=null) return new Date(+m[3],mo[m[2].toLowerCase()],+m[1]); return null; };
         const tnow=new Date(today+'T00:00:00');
-        const future=this.allMeets().map(mm=>({mm, d:_pm(mm.date)})).filter(x=>x.d && x.d>=tnow).sort((a,b)=>a.d-b.d);
-        const nextMeet=future[0]?future[0].mm:(this.allMeets()[0]||null);
+        // The same list the Upcoming meets box reads, so the two cannot disagree about which
+        // meet is next — this one used to read only allMeets(), which the old home-screen
+        // calendar's entries were never in.
+        const _allForNext=[...this.allMeets(), ...this._calUnmigrated()];
+        const future=_allForNext.map(mm=>({mm, d:_pm(mm.date)})).filter(x=>x.d && x.d>=tnow).sort((a,b)=>a.d-b.d);
+        const nextMeet=future[0]?future[0].mm:(_allForNext[0]||null);
         // unread: swimmers whose last family message awaits a coach reply
         let unread=0; const fm=this.famMessages||{}; scopeSw.forEach(sw=>{ const t=fm[sw.id]; if(t&&t.length&&t[t.length-1].sender==='family') unread++; });
         return {
@@ -19883,7 +19958,9 @@ class Component extends DCLogic {
           dashAttendPct:String(dashAttendPct)+'%', dashAttendSub:present+' of '+total+' present',
           dashRed:String(redCount), dashRedIsZero:redCount===0, dashRedSub: redCount? 'need lighter load' : 'all recovered',
           dashUnread:String(unread), dashUnreadIsZero:unread===0, dashUnreadSub: unread? 'awaiting reply' : 'all replied',
-          dashMeetName: nextMeet?nextMeet.name:'No meet scheduled', dashMeetSub: nextMeet?((nextMeet.course||'')+' · '+(nextMeet.date||'')):'—', dashHasMeet:!!nextMeet,
+          dashMeetName: nextMeet?nextMeet.name:'No meet scheduled', // "4 Dec 2026", not "12/4/2026". Half this club reads a date the other way round, and
+          // this card sat directly above a list that had already been changed to say so.
+          dashMeetSub: nextMeet?((nextMeet.course||'')+' · '+(this._fmtDMY(this._toISODate(nextMeet.date), true)||nextMeet.date||'')):'—', dashHasMeet:!!nextMeet,
           onDashAttend:()=>{ this.setState({attDayISO:this.todayISO()}); this.openTool('attday', true); },
           onDashRecovery:()=>this.setState({view:'tools', tool:'recovery', toolScopeClub:isAdm}),
           // One squad id, never the list — the same mistake that took the app down at sign-in.
@@ -21276,23 +21353,33 @@ class Component extends DCLogic {
         const scope = ids.length ? ids.map(id=>(this.squadById[id]||{}).name||id).join(' + ')+' only' : 'all squads';
         return {id:a.id, name:a.name, sub:(this._roleLabel(a)||'')+' · '+scope+(this._isFullAccess(a)?' · full access':'')+(a.phone?(' · '+a.phone):'')+(a.email?(' · '+a.email):''), initials:(a.name||'?').slice(0,2).toUpperCase(), onDelete:()=>this.staffAddDelete(a.id)}; }),
       isAdminUser: this._isFullAccess(this.accounts.find(a=>a.id===S.pickedId)),
-      meetsForm: S.meetsCalForm||{name:'',date:'',place:''},
-      onMeetsName:(e)=>this.setState({meetsCalForm:{...(this.state.meetsCalForm||{}), name:e.target.value}}),
-      onMeetsDate:(e)=>this.setState({meetsCalForm:{...(this.state.meetsCalForm||{}), date:e.target.value}}),
-      onMeetsPlace:(e)=>this.setState({meetsCalForm:{...(this.state.meetsCalForm||{}), place:e.target.value}}),
-      onMeetsPdf:async(e)=>{ const file=e.target.files&&e.target.files[0]; if(!file) return;
-        this.setState({meetsCalForm:{...(this.state.meetsCalForm||{}), pdfName:file.name}});
-        let url=null; try{ if(window.__vxUploadFile){ url=await window.__vxUploadFile('meets/'+Date.now()+'-'+(file.name||'meet.pdf').replace(/[^\w.\-]+/g,'_'), file); } }catch(err){}
-        if(url){ this.setState({meetsCalForm:{...(this.state.meetsCalForm||{}), pdf:url, pdfName:file.name}}); }
-        else { const r=new FileReader(); r.onload=()=>this.setState({meetsCalForm:{...(this.state.meetsCalForm||{}), pdf:r.result, pdfName:file.name}}); r.readAsDataURL(file); } },
-      meetsPdfLabel: (S.meetsCalForm&&S.meetsCalForm.pdfName) ? S.meetsCalForm.pdfName : 'Attach info PDF (optional)',
-      onMeetsAdd:()=>this.meetsCalAdd(),
-      meetsCalEmpty: this.meetsCal.length===0,
-      // The club calendar's "nothing here yet" belongs only on a screen with nothing on it.
-      famNothingPosted: this.meetsCal.length===0 && this._meetsSplit().upcoming.length===0
+      // The home screen's meets list, read from the meets themselves rather than from the
+      // private list this box used to keep. Adding one happens in Club Administration › Meets,
+      // which is now the only place it happens.
+      ...(()=>{
+        const upcoming=this._meetsSplit().upcoming;
+        const rows=upcoming.slice(0,4).map(m=>{
+          const info=this._meetInfo(m.name);
+          const iso=this._toISODate(m.date);
+          const d=iso?new Date(iso+'T00:00:00'):null;
+          const dIso=this._toISODate(info.deadline);
+          const days=dIso?Math.round((new Date(dIso+'T00:00:00')-new Date(this.todayISO()+'T00:00:00'))/86400000):null;
+          return { name:m.name,
+            sub:[(m.course==='SCM'?'SCM':'LCM'), m.location||''].filter(Boolean).join(' · '),
+            day:d?String(d.getDate()):'--', mon:d?VX_MONTHS[d.getMonth()].toUpperCase():'',
+            // Only while it is close enough to act on. "Entries close in 83 days" on a home
+            // screen is a number nobody does anything with.
+            hasDeadline: days!=null && days>=0 && days<=21,
+            deadlineShort: days===0?'Entries close today':(days===1?'1 day to enter':(days+' days to enter')),
+            hasPdf:!!info.infoUrl, onViewPdf:()=>this.meetsViewPdf(info.infoUrl, m.name) };
+        });
+        return { homeMeetRows:rows, homeMeetsEmpty:rows.length===0, homeMeetsHas:rows.length>0,
+                 homeMeetsCount:upcoming.length+' coming up',
+                 onHomeMeetsManage:()=>this.setState({adminSection:'meets'}) };
+      })(),
+      // The "nothing here yet" line belongs only on a screen with nothing on it.
+      famNothingPosted: this._meetsSplit().upcoming.length===0
         && this._campsSplit().upcoming.length===0,
-      meetsHasCal: this.meetsCal.length>0,
-      meetsCalRows: this.meetsCal.map((m)=>{ const d=m.date? new Date(m.date+'T00:00:00'):null; const mon=d?['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][d.getMonth()]:''; return {id:m.id, name:m.name, place:m.place||'', day:d?String(d.getDate()):'', mon:mon, hasPdf:!!m.pdf, onViewPdf:()=>this.meetsViewPdf(m.pdf, m.name), onDelete:()=>this.meetsCalDelete(m.id)}; }),
       onApiKeyCheck:()=>this.settingsCheckKey(),
       settingsMsg:S.settingsMsg, settingsMsgColor, settingsMsgShow:!!S.settingsMsg, swimmerTotal, meetTotal:this.allMeets().length, onSettingsReset:()=>this.settingsReset(),
       onForceSync:()=>this.forceSyncNow(), syncMsg:S.syncMsg||'', syncMsgShow:!!S.syncMsg, syncMsgColor:S.syncMsgColor||'#0C7A4F',
