@@ -9233,6 +9233,49 @@ describe("interpolations inside an SVG text element", () => {
   });
 });
 
+/* ------------------------------------------------- the worker between a fix and a coach
+   The service worker served everything under /assets/ cache-first and never revalidated it.
+   Our scripts carry no hash in their filename — /assets/support.js is the same URL in every
+   deploy — so a returning device read it once and never asked again. A runtime fix shipped
+   inside one therefore reached nobody: the navigation is network-first, so the device pulled
+   the NEW proto.html and the worker handed it the OLD runtime alongside it, which is a worse
+   state than either version on its own. Reproduced in a browser before this was changed. */
+describe("a script the app ships is never served from a stale cache", () => {
+  const SW = readFileSync(new URL("../public/sw.js", import.meta.url), "utf8");
+  const handler = SW.slice(SW.indexOf('addEventListener("fetch"') >= 0
+    ? SW.indexOf('addEventListener("fetch"') : SW.indexOf("addEventListener('fetch'"), SW.indexOf("// ---- Push"));
+
+  it("scripts are matched before the cache-first rule can claim them", () => {
+    const js = handler.indexOf("\\.m?js$");
+    const staticFirst = handler.indexOf("(assets|fonts|images)");
+    eq(js !== -1, true, "there is no rule for scripts at all");
+    eq(js < staticFirst, true, "the cache-first rule runs first and swallows every .js");
+  });
+  it("a script is fetched before the cache is consulted", () => {
+    const branch = handler.slice(handler.indexOf("\\.m?js$"), handler.indexOf("(assets|fonts|images)"));
+    eq(/event\.respondWith\(\s*fetch\(req\)/.test(branch), true, "network-first, or a fix cannot ship");
+    eq(/\.catch\(\(\) => caches\.match\(req\)\)/.test(branch), true, "still works offline");
+  });
+  it("the cache is still filled, so the app opens offline", () => {
+    const branch = handler.slice(handler.indexOf("\\.m?js$"), handler.indexOf("(assets|fonts|images)"));
+    eq(/caches\.open\(STATIC\)/.test(branch), true);
+    eq(/res && res\.ok/.test(branch), true, "a 404 or a 502 must never be stored as the app");
+  });
+  it("icons and fonts stay cache-first — they are hashed and need the speed", () => {
+    const branch = handler.slice(handler.indexOf("(assets|fonts|images)"));
+    eq(/caches\.match\(req\)\.then\(\(cached\) =>\s*cached \|\|/.test(branch), true);
+  });
+  // Bumping the version is what clears the caches already holding the stale runtime:
+  // activate() deletes every cache whose key is not the current one.
+  it("the cache version moved, so the devices already holding the old runtime drop it", () => {
+    const v = /const VERSION = '([^']+)'/.exec(SW);
+    eq(!!v, true);
+    eq(v[1] === "vortex-v2", false, "v2 is the version that cached the stale runtime");
+  });
+  it("activate still deletes every cache that is not the current one", () =>
+    eq(/keys\.filter\(\(k\) => k !== APP_SHELL && k !== STATIC\)\.map\(\(k\) => caches\.delete\(k\)\)/.test(SW), true));
+});
+
 describe("the club as a connector", () => {
   const post = (method, token) =>
     new Request("https://vortexswimmingclub.com/api/mcp", {
