@@ -564,6 +564,125 @@ scene("entering a swimmer in an event reaches the database", async (browser) => 
 // The unit test covers the ladder. This covers the thing the unit test cannot: that the app
 // actually boots, because the next unguarded lookup of that kind will be somewhere else.
 // ---------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------
+// "I change the timing and it's not saved."
+//
+// A screenshot of the app on a meet day: a green line reading "Kareem Ekramy — 29.45 saved ✓",
+// and directly under it the app's own red banner — "1 change has not been saved · club_state
+// (vx_roster_edits) · no connection". Both were drawn by this app, about the same write, at the
+// same moment. The banner was the one telling the truth.
+//
+// meetLiveSave said "saved ✓" as soon as localStorage had taken the time, which is the same
+// mistake the swimmer-status screen made and had already been fixed for: the roster's own
+// verdict — the one that waits for the push — is drawn on the Admin roster screen, and nobody at
+// a meet is looking at that. So this drives the meet-day screen with the database refusing the
+// write, which is the state the club was in, and reads the line the coach reads.
+// ---------------------------------------------------------------------------------------------
+async function meetDayTime(browser, { refuse }) {
+  const page = await (await browser.newContext({ viewport: { width: 1280, height: 1000 } })).newPage();
+  const problems = [];
+  page.on("pageerror", (e) => problems.push(String(e.message)));
+  await page.route("**/rest/v1/**", (r) => {
+    const req = r.request(), m = req.method();
+    const table = (new URL(req.url()).pathname.split("/rest/v1/")[1] || "").split("?")[0];
+    if (m === "GET") return r.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+    // The roster document is the one the time is written into. Refusing it is exactly what the
+    // club's phone was seeing; everything else still goes through, so the scene is about the
+    // one write the coach just made.
+    if (refuse && table === "club_state" && /vx_roster_edits/.test(req.postData() || ""))
+      return r.fulfill({ status: 403, contentType: "application/json",
+                         body: JSON.stringify({ message: "new row violates row-level security policy" }) });
+    return r.fulfill({ status: 201, contentType: "application/json", body: "[]" });
+  });
+  await page.addInitScript(() => {
+    localStorage.setItem("vx_session", JSON.stringify({ type: "staff", id: "ahmed" }));
+    localStorage.setItem("vx_auth", JSON.stringify({ token: "drive-fake", refresh: "drive-fake", exp: Date.now() + 3600000 }));
+    localStorage.removeItem("vx_nav");
+    localStorage.removeItem("vx_failed_writes");
+    // A meet of this scene's own, first in the list and with nothing swum in it yet. Every meet
+    // in the club's data already has results, and a lane that has a time in it shows the time
+    // and an undo — not the box this scene needs to type into.
+    localStorage.setItem("vx_custom_meets", JSON.stringify([{ name: "Drive Test Meet", location: "Doha",
+      date: "8/22/2026", course: "LCM", entries: 0, events: ["50 Free"] }]));
+  });
+  await page.goto("http://127.0.0.1:" + PORT + "/proto.html?drive=" + Date.now(), { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(2200);
+  await tap(page, "Tools & AI");
+  await tap(page, "Meet Entries");
+  const box = await page.$('input[placeholder="Search swimmer…"]');
+  if (!box) throw new Error("meet entries opened with no swimmer search");
+  await box.click();
+  await box.type("Alia", { delay: 25 });
+  await page.waitForTimeout(900);
+  await tap(page, "Alia Ezzat");
+  await tap(page, "50 Free");
+  const added = await page.evaluate(() => {
+    const b = [...document.querySelectorAll("button,[onclick]")]
+      .find((e) => e.offsetParent && /^add\b/i.test((e.innerText || "").replace(/\s+/g, " ").trim()));
+    if (!b) return false;
+    b.click();
+    return true;
+  });
+  if (!added) throw new Error("nothing on the screen would add the selected event");
+  await page.waitForTimeout(1200);
+  // The tab itself, not whatever ancestor of it happens to carry a handler: walking up from the
+  // label found a card that took the screen back to the tools hub.
+  const onDay = await page.evaluate(() => {
+    const b = [...document.querySelectorAll("button")]
+      .find((e) => e.offsetParent && (e.innerText || "").trim() === "Meet day");
+    if (!b) return false;
+    b.click();
+    return true;
+  });
+  if (!onDay) throw new Error("the meet screen has no Meet day tab");
+  await page.waitForTimeout(1200);
+  // The lane: the time box, and the tick beside it that saves what is typed in it.
+  const typed = await page.evaluate(() => {
+    const box = [...document.querySelectorAll("input")].find((i) => i.offsetParent && i.placeholder === "26.20");
+    if (!box) return false;
+    const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+    set.call(box, "29.45");
+    box.dispatchEvent(new Event("input", { bubbles: true }));
+    return true;
+  });
+  if (!typed) throw new Error("the meet-day sheet has no lane to type a time into");
+  await page.waitForTimeout(500);
+  const saved = await page.evaluate(() => {
+    const b = [...document.querySelectorAll("button")]
+      .find((e) => e.offsetParent && /save this time/i.test(e.getAttribute("aria-label") || ""));
+    if (!b) return false;
+    b.click();
+    return true;
+  });
+  if (!saved) throw new Error("the lane has no button that saves the time");
+  await page.waitForTimeout(2600);
+  const said = await page.evaluate(() => {
+    const t = (document.body.innerText || "").split("\n");
+    return t.find((l) => /saved|saving/i.test(l)) || "";
+  });
+  await page.close();
+  return { said, problems };
+}
+
+scene("a time typed at a meet is not called saved unless the database took it", async (browser) => {
+  const no = await meetDayTime(browser, { refuse: true });
+  eq(no.problems.length, 0, "the meet-day sheet threw: " + no.problems.slice(0, 2).join(" | "));
+  eq(/\u2713 saved/.test(no.said), false,
+     "the database refused the write and the screen said: " + JSON.stringify(no.said));
+  eq(/NOT saved/.test(no.said), true, "it said: " + JSON.stringify(no.said));
+  eq(/this device only/.test(no.said), true,
+     "a coach has to be told where the time actually is: " + JSON.stringify(no.said));
+  return "refused, and said so: " + JSON.stringify(no.said.slice(0, 60));
+});
+
+scene("a time the database took is called saved, and says so on the lane", async (browser) => {
+  const ok = await meetDayTime(browser, { refuse: false });
+  eq(ok.problems.length, 0, "the meet-day sheet threw: " + ok.problems.slice(0, 2).join(" | "));
+  eq(/\u2713 saved/.test(ok.said), true, "after a successful write the screen said: " + JSON.stringify(ok.said));
+  eq(/NOT saved/.test(ok.said), false, "a saved time must not read as lost: " + JSON.stringify(ok.said));
+  return "said " + JSON.stringify(ok.said.slice(0, 60));
+});
+
 scene("the app still opens after a squad is deleted", async (browser) => {
   const LADDER = ["preteam", "advb", "adva", "junior", "seniorb", "seniora", "vortexb", "vortexa", "legend"];
   const rows = (ids) => ids.map((id, i) => ({ id, name: id, ages: "", accent: "#2733D6",

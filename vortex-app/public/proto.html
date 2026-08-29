@@ -4316,7 +4316,7 @@ if ('serviceWorker' in navigator) {
                           </div>
                         </div>
                         <sc-if value="{{ meetDayMsgShow }}" hint-placeholder-val="{{ false }}">
-                          <p style="margin:0;background:#EEF4FF;border:1px solid #D4E2FB;border-radius:10px;padding:8px 10px;font-size:11.5px;color:#1B4CA1">{{ meetDayMsg }}</p>
+                          <p style="margin:0;background:{{ meetDayMsgBg }};border:1px solid {{ meetDayMsgBorder }};border-radius:10px;padding:8px 10px;font-size:11.5px;font-weight:600;line-height:1.5;color:{{ meetDayMsgFg }}">{{ meetDayMsg }}</p>
                         </sc-if>
                         <sc-if value="{{ meetDayHasHeats }}" hint-placeholder-val="{{ true }}">
                           <div style="display:flex;flex-direction:column;gap:10px">
@@ -7718,7 +7718,7 @@ class Component extends DCLogic {
       promoQuery:'',
       brandDraft:null,
       entriesMeetIdx:0, entriesSwId:'', entriesSwSel:[], entriesEvent:'50 Free', entriesHeat:'', entriesLane:'', entriesQuery:'', printMode:'plan', entriesEventsSel:[],
-      meetDayDate:'', seedBandName:'', seedBandFrom:'', seedBandTo:'', seedMsg:'',
+      meetDayDate:'', meetDayMsg:'', meetDayMsgOk:true, seedBandName:'', seedBandFrom:'', seedBandTo:'', seedMsg:'',
       entryNewOpen:false, entryNewName:'', entryNewDob:'', entryNewSeed:'', entryNewErr:'',
       famReqEvent:'50 Free', famReqMeetIdx:0,
       famAttView:'month', famAttDateISO:null, famAttCalY:null, famAttCalM:null, famAttYearSel:null, famMeetSel:0,
@@ -10235,11 +10235,53 @@ class Component extends DCLogic {
     });
     return best;
   }
+  // What the database did with the write an action on this screen just made, in words.
+  //
+  // Every save in this app is two questions and the screens have been answering the first one:
+  // localStorage took it, so the line says saved. Whether the CLUB has it is the second, and the
+  // roster document's own answer to it — _rosterSaved, which waits for the push and says NOT
+  // saved when it fails — is drawn on the Admin roster screen. Nobody is on that screen at a
+  // meet. So a coach typed a heat into a phone showing a red banner that said one change had
+  // not been saved, was told "29.45 saved ✓" for every lane, and had no way of knowing which of
+  // the two to believe. The one that was right was the banner.
+  _pushSaid(key){
+    const rec=(window.__vxLastPush||{})[key];
+    // No record at all means pushKey returned before it made one, which is what happens when
+    // the write is not sent. It has never meant success.
+    if(!rec) return Promise.resolve({ok:false, why:'it never left this device', notSent:true});
+    return Promise.resolve(rec).then(
+      r=>(r && r.ok===false) ? {ok:false, why:(r.why||'the database refused it'), notSent:!!r.notSent} : {ok:true},
+      ()=>({ok:false, why:'it could not be sent from this device'}));
+  }
+  // The verdict for one meet-day action, said where the action was made.
+  //
+  // Applied only if the coach has not done anything since: a verdict about the lane before last,
+  // arriving two seconds late over a poolside connection, must never land on top of the line
+  // about the lane being typed now.
+  _meetDaySay(keys, what, seq){
+    const list=Array.isArray(keys)?keys:[keys];
+    return Promise.all(list.map(k=>this._pushSaid(k))).then(rs=>{
+      const bad=rs.filter(r=>!r.ok)[0]||null;
+      if(this._mdSeq!==seq) return bad||{ok:true};
+      if(!bad) this.setState({meetDayMsg: what+' \u2713 saved', meetDayMsgOk:true});
+      else this.setState({meetDayMsgOk:false,
+        meetDayMsg: what+' \u2014 NOT saved: '+bad.why+'. It is on this device only'
+          +(bad.notSent ? ' \u2014 sign out and back in, and it saves itself.'
+                        : ', and goes in by itself when the connection is back. Do not close the app.')});
+      return bad||{ok:true};
+    });
+  }
+  // The line every meet-day action starts with: the change, and the fact that it is on its way.
+  _meetDaySaying(what){
+    const seq=(this._mdSeq=(this._mdSeq||0)+1);
+    this.setState({meetDayMsg: what+' \u2014 saving\u2026', meetDayMsgOk:true});
+    return seq;
+  }
   meetLiveSave(meetName, meetDate, courseLabel, swId, event, raw){
     const sec=this.parseTimeStr(raw);
-    if(sec==null || sec<=0) return this.setState({meetDayMsg:'Enter a time like 26.20 or 2:15.00'});
+    if(sec==null || sec<=0) return this.setState({meetDayMsg:'Enter a time like 26.20 or 2:15.00', meetDayMsgOk:false});
     const hit=this.allSwimmersFlat().find(s=>s.id===swId);
-    if(!hit) return this.setState({meetDayMsg:'That swimmer is no longer on the roster.'});
+    if(!hit) return this.setState({meetDayMsg:'That swimmer is no longer on the roster.', meetDayMsgOk:false});
     const before=this._bestBefore(hit, event, meetName);
     // Replace this meet's swim for the event rather than stacking a second one, so fixing a
     // mistyped time corrects the record instead of inventing an extra race.
@@ -10255,8 +10297,11 @@ class Component extends DCLogic {
     try{ this._pushSend({swimmerIds:[swId]}, title, body, '/'); }catch(e){}
     try{ this.meetMarkClear(meetName, swId, event, true); }catch(e){}
     const drafts={...(this.state.meetTimeDrafts||{})}; delete drafts[swId+'|'+event];
-    this.setState({meetTimeDrafts:drafts,
-      meetDayMsg: drop>0 ? (hit.name+' — PB by '+drop.toFixed(2)+'s ✓') : (hit.name+' — '+this.fmt(sec)+' saved ✓')});
+    this.setState({meetTimeDrafts:drafts});
+    // The time is in the swimmer's history on this device. Whether it is in the club's copy is
+    // what the coach is actually asking, and it is answered below rather than assumed here.
+    const what=drop>0 ? (hit.name+' — PB by '+drop.toFixed(2)+'s') : (hit.name+' — '+this.fmt(sec));
+    return this._meetDaySay('vx_roster_edits', what, this._meetDaySaying(what));
   }
   // ---- Did not swim it: DQ and no-show -------------------------------------------------------
   // Not every lane ends in a time. A swimmer is disqualified, or never comes to the blocks, and
@@ -10275,12 +10320,16 @@ class Component extends DCLogic {
     const hit=this.allSwimmersFlat().find(s=>s.id===swId);
     // A time already typed for this lane is the truth about the swim; the mark replaces it, so
     // the time comes back out of the swimmer's history rather than standing beside a DQ.
-    try{ this.meetLiveClear(meetName, swId, event, true); }catch(e){}
+    // Whether that removal was written matters as much as the mark, so it is reported too — but
+    // only when there was a time to remove, or the verdict would be read off an unrelated write.
+    let cleared=false;
+    try{ cleared=!!this.meetLiveClear(meetName, swId, event, true); }catch(e){}
     const marks={...this._meetMarks()};
     marks[this._markKey(meetName, swId, event)]={mark:code, at:new Date().toISOString()};
     this.meetMarks=marks; this._saveJSON('vx_meet_marks', marks);
     try{ this.audit('meet.mark', meetName, {meet:meetName, swimmer:swId, event, mark:code}); }catch(e){}
-    this.setState({meetDayMsg:((hit&&hit.name)||'That lane')+' — '+event+' marked '+(code==='DQ'?'DQ':'no-show')});
+    const what=((hit&&hit.name)||'That lane')+' — '+event+' marked '+(code==='DQ'?'DQ':'no-show');
+    return this._meetDaySay(cleared?['vx_meet_marks','vx_roster_edits']:'vx_meet_marks', what, this._meetDaySaying(what));
   }
   meetMarkClear(meetName, swId, event, quiet){
     const key=this._markKey(meetName, swId, event);
@@ -10288,8 +10337,9 @@ class Component extends DCLogic {
     if(!marks[key]) return;
     const next={...marks}; delete next[key];
     this.meetMarks=next; this._saveJSON('vx_meet_marks', next);
-    if(!quiet) this.setState({meetDayMsg:'Mark removed — the lane is open again'});
-    else this.forceUpdate();
+    if(!quiet){ const what='Mark removed — the lane is open again';
+      return this._meetDaySay('vx_meet_marks', what, this._meetDaySaying(what)); }
+    this.forceUpdate();
   }
   // Every mark in one meet, as { swId|event: 'DQ' | 'NS' }, for the screens that draw the sheet.
   _meetMarksFor(meetName){
@@ -10301,13 +10351,17 @@ class Component extends DCLogic {
   }
   // Struck a wrong swimmer's lane: take the swim back out rather than leaving a time that
   // never happened sitting in their history and their PB.
+  // Returns whether it actually wrote anything, so a caller that reports on the write knows
+  // whether there was one to report on.
   meetLiveClear(meetName, swId, event, quiet){
-    const hit=this.allSwimmersFlat().find(s=>s.id===swId); if(!hit) return;
+    const hit=this.allSwimmersFlat().find(s=>s.id===swId); if(!hit) return false;
     const before=(this._swEntries(hit)||[]);
     const entries=before.filter(p=>!(p.event===event && (p.meet||'')===meetName));
-    if(quiet && entries.length===before.length) return;   // nothing typed for this lane yet
+    if(quiet && entries.length===before.length) return false;   // nothing typed for this lane yet
     this.adminEditSwimmer(hit.squadId, swId, {pbs:entries});
-    if(!quiet) this.setState({meetDayMsg:'Removed '+hit.name+' — '+event});
+    if(!quiet){ const what='Removed '+hit.name+' — '+event;
+      this._meetDaySay('vx_roster_edits', what, this._meetDaySaying(what)); }
+    return true;
   }
   toggleCompEvent(ev){ const cur=this.state.compEvents.slice(); const i=cur.indexOf(ev); if(i>=0) cur.splice(i,1); else cur.push(ev); this.setState({compEvents:cur}); }
   createCompetition(){ const S=this.state;
@@ -12566,10 +12620,10 @@ class Component extends DCLogic {
         r.sw.gender==='Girls'?'F':'M', this._swAge(r.sw)||'', r.sw.squadName||'',
         r.time, r.sec==null?'':r.sec, r.mark ? (r.mark==='DQ'?'Disqualified':'Did not start') : r.note]);
     });
-    if(rows.length===1) return this.setState({meetDayMsg:'No times recorded yet — nothing to export.'});
+    if(rows.length===1) return this.setState({meetDayMsg:'No times recorded yet — nothing to export.', meetDayMsgOk:false});
     this.exportXlsx('vortex-results-'+meetName.replace(/[^a-z0-9]+/gi,'-').toLowerCase()+'.xlsx', 'Results', rows);
     try{ this.audit('meet.export', meetName, {meet:meetName, format:'xlsx', rows:rows.length-1}); }catch(e){}
-    this.setState({meetDayMsg:(rows.length-1)+' result'+(rows.length===2?'':'s')+' exported to Excel ✓'});
+    this.setState({meetDayMsg:(rows.length-1)+' result'+(rows.length===2?'':'s')+' exported to Excel ✓', meetDayMsgOk:true});
   }
   // A Hy-Tek results file (.hy3), in the same record layout this app reads the club's own Hy-Tek
   // files in: B1 the meet, D1 the athlete, E1 the event, E2 the swim. Times are total seconds,
@@ -12583,11 +12637,11 @@ class Component extends DCLogic {
   }
   exportResultsHy3(meetName){
     const txt=this._hy3Text(meetName);
-    if(!txt) return this.setState({meetDayMsg:'No times recorded yet — nothing to export.'});
+    if(!txt) return this.setState({meetDayMsg:'No times recorded yet — nothing to export.', meetDayMsgOk:false});
     this._downloadFile('vortex-results-'+meetName.replace(/[^a-z0-9]+/gi,'-').toLowerCase()+'.hy3', txt, 'text/plain;charset=utf-8');
     const n=(txt.match(/\nE2/g)||[]).length;
     try{ this.audit('meet.export', meetName, {meet:meetName, format:'hy3', swims:n}); }catch(e){}
-    this.setState({meetDayMsg:n+' swim'+(n===1?'':'s')+' exported as a Hy-Tek file ✓'});
+    this.setState({meetDayMsg:n+' swim'+(n===1?'':'s')+' exported as a Hy-Tek file ✓', meetDayMsgOk:true});
   }
   // The file itself, as text, so it can be read back through the same parser that reads the
   // club's Hy-Tek files — which is the only check that means anything here.
@@ -19997,8 +20051,8 @@ class Component extends DCLogic {
       entryRows, entryHasRows: entryRows.length>0, onExportEntries:()=>this.exportMeetEntries(entryMeetName),
       // ---- meet day ----
       meetDayOn, meetEntriesOn: !meetDayOn,
-      onMeetModeEntries:()=>this.setState({meetMode:'entries', meetDayMsg:''}),
-      onMeetModeDay:()=>this.setState({meetMode:'day', meetDayMsg:''}),
+      onMeetModeEntries:()=>this.setState({meetMode:'entries', meetDayMsg:'', meetDayMsgOk:true}),
+      onMeetModeDay:()=>this.setState({meetMode:'day', meetDayMsg:'', meetDayMsgOk:true}),
       meetModeEntriesBg: meetDayOn?'transparent':squad.accent, meetModeEntriesFg: meetDayOn?'#7A8296':'#fff',
       meetModeDayBg: meetDayOn?squad.accent:'transparent', meetModeDayFg: meetDayOn?'#fff':'#7A8296',
       meetDayHeats, meetDayBoards, meetDayHasHeats: meetDayHeats.length>0,
@@ -20008,6 +20062,11 @@ class Component extends DCLogic {
       meetDayPbLine: mdPbs+' personal best'+(mdPbs===1?'':'s')+' today',
       meetDayPct: mdTotal ? Math.round((mdDone/mdTotal)*100)+'%' : '0%',
       meetDayMsg:S.meetDayMsg||'', meetDayMsgShow:!!S.meetDayMsg,
+      // A line that says a time was not saved cannot be the same quiet blue as the one that says
+      // it was. This is the sentence a coach acts on at the end of a heat.
+      meetDayMsgBg: S.meetDayMsgOk===false ? '#FBE2E3' : '#EEF4FF',
+      meetDayMsgBorder: S.meetDayMsgOk===false ? '#F0C6C7' : '#D4E2FB',
+      meetDayMsgFg: S.meetDayMsgOk===false ? '#A52A2E' : '#1B4CA1',
       meetDayHasBoards: meetDayBoards.length>0,
       entryNewOpen:S.entryNewOpen, entryNewToggleLabel: S.entryNewOpen?'Cancel':'+ New swimmer',
       onEntryNewToggle:()=>this.setState({entryNewOpen:!S.entryNewOpen, entryNewErr:''}),

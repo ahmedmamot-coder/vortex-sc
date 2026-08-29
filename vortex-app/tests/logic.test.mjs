@@ -1584,7 +1584,8 @@ describe("meet day", () => {
     ctx.allSwimmersFlat = () => [{ ...ctx.roster.junior[0], squadId: "junior" }];
     let saved = null;
     ctx.adminEditSwimmer = (sqId, id, patch) => { saved = { sqId, id, patch }; };
-    const save = bind("meetLiveSave", ctx, ["parseTimeStr", "_bestBefore", "_swEntries", "_resultISO", "_toISODate", "fmt"]);
+    const save = bind("meetLiveSave", ctx, ["parseTimeStr", "_bestBefore", "_swEntries", "_resultISO", "_toISODate", "fmt",
+      "_meetDaySay", "_meetDaySaying", "_pushSaid"]);
 
     save("Doha Open", "2026-08-08", "LCM", "s1", "50 Free", "30.10");
     it("saves against the swimmer's own squad", () => eq(saved.sqId, "junior"));
@@ -1620,11 +1621,97 @@ describe("meet day", () => {
     ctx.allSwimmersFlat = () => [{ ...ctx.roster.junior[0], squadId: "junior" }];
     let saved = null;
     ctx.adminEditSwimmer = (sqId, id, patch) => { saved = patch; };
-    const clear = bind("meetLiveClear", ctx, ["_swEntries", "_resultISO", "_meetDateISO", "_toISODate"]);
+    const clear = bind("meetLiveClear", ctx, ["_swEntries", "_resultISO", "_meetDateISO", "_toISODate",
+      "_meetDaySay", "_meetDaySaying", "_pushSaid"]);
     clear("Doha Open", "s1", "50 Free");
     it("undo takes the swim back out of the record", () =>
       eq(saved.pbs.some((p) => p.event === "50 Free" && p.meet === "Doha Open"), false));
     it("and leaves every other race in place", () => eq(saved.pbs.length, 2));
+    it("an undo the coach asked for is a write, and says so", () =>
+      eq(clear("Doha Open", "s1", "100 Free"), true));
+    it("a lane with no time on it is not a write, so nothing reports on one", () =>
+      eq(clear("Doha Open", "s1", "200 Fly", true), false));
+  }
+
+  /* What the coach is TOLD about the save.
+     A coach recorded a heat on a phone that was showing the app's own red banner —
+     "1 change has not been saved · club_state (vx_roster_edits) · no connection" —
+     and was answered "29.45 saved ✓" on every lane, because the tick meant
+     localStorage had taken the time, not the club. Meet day is the one screen in
+     the app where nobody can afford to find out at the end of the day. */
+  describeSaidSaved();
+  function describeSaidSaved() {
+    const saveCtx = (push) => {
+      const ctx = baseCtx();
+      ctx.allSwimmersFlat = () => [{ ...ctx.roster.junior[0], squadId: "junior" }];
+      ctx.adminEditSwimmer = () => {};
+      globalThis.window.__vxLastPush = push;
+      return ctx;
+    };
+    const saveWith = (ctx) => bind("meetLiveSave", ctx,
+      ["parseTimeStr", "_bestBefore", "_swEntries", "_resultISO", "_toISODate", "fmt",
+       "_meetDaySay", "_meetDaySaying", "_pushSaid"]);
+
+    const pending = saveCtx({ vx_roster_edits: new Promise(() => {}) });
+    saveWith(pending)("Doha Open", "2026-08-08", "LCM", "s1", "50 Free", "30.10");
+    it("nothing is called saved while the write is still in the air", () =>
+      eq(/saving/.test(pending.state.meetDayMsg) && !/\u2713/.test(pending.state.meetDayMsg), true));
+    it("and the time is still named, so the coach can see it was taken down", () =>
+      eq(/Hannah Millen/.test(pending.state.meetDayMsg), true));
+
+    itAsync("a write the database took is the only thing called saved", async () => {
+      const ctx = saveCtx({ vx_roster_edits: Promise.resolve({ ok: true }) });
+      await saveWith(ctx)("Doha Open", "2026-08-08", "LCM", "s1", "50 Free", "30.10");
+      eq(/\u2713 saved/.test(ctx.state.meetDayMsg), true);
+      eq(ctx.state.meetDayMsgOk, true);
+    });
+
+    itAsync("a time that could not be sent is reported as not saved, with what went wrong", async () => {
+      const ctx = saveCtx({ vx_roster_edits: Promise.resolve({ ok: false, why: "it could not be sent from this device" }) });
+      await saveWith(ctx)("Doha Open", "2026-08-08", "LCM", "s1", "50 Free", "30.10");
+      eq(/NOT saved/.test(ctx.state.meetDayMsg), true);
+      eq(/could not be sent/.test(ctx.state.meetDayMsg), true);
+      eq(ctx.state.meetDayMsgOk, false);
+    });
+
+    itAsync("a time still on the device is not called lost — it goes in by itself", async () => {
+      const ctx = saveCtx({ vx_roster_edits: Promise.resolve({ ok: false, why: "no connection" }) });
+      await saveWith(ctx)("Doha Open", "2026-08-08", "LCM", "s1", "50 Free", "30.10");
+      eq(/goes in by itself/.test(ctx.state.meetDayMsg), true);
+    });
+
+    itAsync("a write with no session behind it says which action fixes it", async () => {
+      const ctx = saveCtx({ vx_roster_edits: Promise.resolve({ ok: false, notSent: true, why: "it has not left this device yet" }) });
+      await saveWith(ctx)("Doha Open", "2026-08-08", "LCM", "s1", "50 Free", "30.10");
+      eq(/sign out and back in/.test(ctx.state.meetDayMsg), true);
+    });
+
+    itAsync("a push that was never recorded has never meant success", async () => {
+      const ctx = saveCtx({});
+      await saveWith(ctx)("Doha Open", "2026-08-08", "LCM", "s1", "50 Free", "30.10");
+      eq(/NOT saved/.test(ctx.state.meetDayMsg), true);
+      eq(/never left this device/.test(ctx.state.meetDayMsg), true);
+    });
+
+    itAsync("a rejected write that throws is not read as a save", async () => {
+      const ctx = saveCtx({ vx_roster_edits: Promise.reject(new Error("gone")) });
+      await saveWith(ctx)("Doha Open", "2026-08-08", "LCM", "s1", "50 Free", "30.10");
+      eq(/NOT saved/.test(ctx.state.meetDayMsg), true);
+    });
+
+    itAsync("a late verdict about the last lane never lands on the line about this one", async () => {
+      let settle;
+      const slow = new Promise((r) => { settle = r; });
+      const ctx = saveCtx({ vx_roster_edits: slow });
+      const first = saveWith(ctx)("Doha Open", "2026-08-08", "LCM", "s1", "50 Free", "30.10");
+      globalThis.window.__vxLastPush = { vx_roster_edits: Promise.resolve({ ok: true }) };
+      await saveWith(ctx)("Doha Open", "2026-08-08", "LCM", "s1", "100 Free", "68.00");
+      const now = ctx.state.meetDayMsg;
+      settle({ ok: false, why: "no connection" });
+      await first;
+      eq(ctx.state.meetDayMsg, now);
+      eq(ctx.state.meetDayMsgOk, true);
+    });
   }
 });
 
@@ -1781,7 +1868,8 @@ describe("DQ and no-show", () => {
     adminEditSwimmer: function (sq, id, patch) { this.patched = patch; },
     audit: () => {},
   });
-  const deps = ["_markKey", "_meetMarks", "meetLiveClear", "_swEntries", "_resultISO", "_meetDateISO", "_toISODate"];
+  const deps = ["_markKey", "_meetMarks", "meetLiveClear", "_swEntries", "_resultISO", "_meetDateISO", "_toISODate",
+    "_meetDaySay", "_meetDaySaying", "_pushSaid"];
 
   describeMark();
   function describeMark() {
@@ -1809,11 +1897,41 @@ describe("DQ and no-show", () => {
     });
   }
 
+  /* A DQ is two writes: the mark, and taking the time it replaces out of the swimmer's
+     history. Reporting only the first would call the lane dealt with while the time the
+     swimmer did not swim was still in the club's copy of their record. */
+  describeMarkSaid();
+  function describeMarkSaid() {
+    const withPush = (push) => { globalThis.window.__vxLastPush = push; return ctx(); };
+
+    itAsync("a mark the database took is called saved", async () => {
+      const c = withPush({ vx_meet_marks: { ok: true }, vx_roster_edits: { ok: true } });
+      await bind("meetMarkSet", c, deps)("Test", "s1", "50 Free", "DQ");
+      eq(/\u2713 saved/.test(c.state.meetDayMsg), true);
+      eq(c.state.meetDayMsgOk, true);
+    });
+
+    itAsync("a DQ whose time could not be taken back out is not called saved", async () => {
+      const c = withPush({ vx_meet_marks: { ok: true },
+                           vx_roster_edits: { ok: false, why: "it could not be sent from this device" } });
+      await bind("meetMarkSet", c, deps)("Test", "s1", "50 Free", "DQ");
+      eq(/NOT saved/.test(c.state.meetDayMsg), true);
+      eq(c.state.meetDayMsgOk, false);
+    });
+
+    itAsync("a mark on an empty lane is judged on the mark alone", async () => {
+      const c = withPush({ vx_meet_marks: { ok: true },
+                           vx_roster_edits: { ok: false, why: "an older write, nothing to do with this lane" } });
+      await bind("meetMarkSet", c, deps)("Test", "s1", "200 Fly", "NS");
+      eq(/\u2713 saved/.test(c.state.meetDayMsg), true);
+    });
+  }
+
   describeUnmark();
   function describeUnmark() {
     const c = ctx();
     bind("meetMarkSet", c, deps)("Test", "s1", "50 Free", "DQ");
-    bind("meetMarkClear", c, ["_markKey", "_meetMarks"])("Test", "s1", "50 Free");
+    bind("meetMarkClear", c, ["_markKey", "_meetMarks", "_meetDaySay", "_meetDaySaying", "_pushSaid"])("Test", "s1", "50 Free");
     it("a mark set by mistake comes off again", () =>
       eq(bind("meetMarkOf", c, ["_markKey", "_meetMarks"])("Test", "s1", "50 Free"), ""));
   }
