@@ -3,10 +3,11 @@
  *  - Make the app installable (Add to Home Screen / Google Play TWA).
  *  - NEVER serve a stale app: navigations are network-first, cache is only an
  *    offline fallback. This preserves the "every deploy shows immediately" rule.
+ *  - Scripts are the app too: network-first, so a fix inside one is never withheld.
  *  - Cache static assets (icons, fonts, images) cache-first for speed/offline.
  *  - Never touch Supabase API calls — those must always hit the network.
  */
-const VERSION = 'vortex-v2';
+const VERSION = 'vortex-v3';
 const APP_SHELL = 'vortex-shell-' + VERSION;
 const STATIC = 'vortex-static-' + VERSION;
 const OFFLINE_URL = '/';
@@ -52,7 +53,29 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Static assets: cache-first, then network (and cache the result).
+  // Scripts are the app itself, and ours carry no hash in their filename — /assets/support.js
+  // is the same URL in every deploy. Served cache-first below they were read once and never
+  // asked about again, so a runtime fix shipped inside one reached nobody: the navigation
+  // fetched the new proto.html and the service worker handed it the old runtime alongside it.
+  // Network-first keeps the "never serve a stale app" rule for code, and the cache is still
+  // there to fall back on when the network is not.
+  if (/\.m?js$/.test(url.pathname)) {
+    event.respondWith(
+      fetch(req)
+        .then((res) => {
+          if (res && res.ok && res.type !== 'opaque') {
+            const copy = res.clone();
+            caches.open(STATIC).then((c) => c.put(req, copy)).catch(() => {});
+          }
+          return res;
+        })
+        .catch(() => caches.match(req))
+    );
+    return;
+  }
+
+  // Everything else static — icons, photos, fonts — is content-addressed or never changes,
+  // so cache-first, then network (and cache the result).
   if (/\/(assets|fonts|images)\//.test(url.pathname) || /\.(png|jpg|jpeg|webp|svg|woff2?|ttf)$/.test(url.pathname)) {
     event.respondWith(
       caches.match(req).then((cached) =>

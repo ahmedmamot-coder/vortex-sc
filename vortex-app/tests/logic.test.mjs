@@ -5431,6 +5431,7 @@ describe("InBody sheet", () => {
     for (const [fn, latch, table] of [
       ["_squadsSeed", "_squadsSeeded", "vx_squads_t"],
       ["_videosSeed", "_videosSeeded", "vx_video_analyses"],
+      ["_sponsorsSeed", "_sponsorsSeeded", "swimmer_sponsors"],
     ]) {
       const body = methodSource(fn).body;
       it(fn + " gives up after one accepted fill", () => {
@@ -5512,6 +5513,10 @@ describe("InBody sheet", () => {
       // local copy as the photos above — the table is the truth, and losing the copy costs a
       // render, not a status.
       vx_sw_status: "swimmer_status",
+      // Sponsorship left club_state for the same reason, after the same complaint: two coaches
+      // marking two swimmers inside one pull window sent two whole documents, and the second
+      // had never heard of the first. See supabase/swimmer_sponsors.sql.
+      vx_sponsored: "swimmer_sponsors",
       // Meets left club_state for a table of their own, for the reason recorded in
       // supabase/club_meets.sql: the shared document is last-write-wins, so a device replaying
       // its queue of unsent writes put its whole stale calendar back over a corrected date.
@@ -9398,6 +9403,103 @@ describe("swimmer status: an empty read does not wipe the club", () => {
 });
 
 
+/* ------------------------------------ the mark that another device rubbed out
+   Sponsorship lived in vx_sponsored, one document in club_state holding every
+   sponsored swimmer at once, and club_state is last-write-wins. Two coaches
+   marking two swimmers inside one twenty-second pull window sent two whole
+   documents, and the second had never heard of the first — so the badge was
+   gold on the phone that made it and gone from the database, which is exactly
+   what "the mark as sponsor is not saving" looks like from the poolside.
+
+   It is one row per swimmer now. These are the parts of that which can be read
+   off the source: the toggle must not touch the blob, un-marking has to beat a
+   legacy flag, and an empty read must not invent a club with no sponsors. */
+describe("sponsorship: one row per swimmer, not one document for the club", () => {
+  const meta = (ctx) => bind("_swMeta", ctx, []);
+
+  it("a swimmer nobody has an opinion about is not sponsored", () => {
+    const ctx = { swimmerMeta: {}, sponsoredMap: {}, swimmerDocs: {} };
+    eq(meta(ctx)("r9").sponsored, false);
+  });
+
+  it("the map says who is sponsored", () => {
+    const ctx = { swimmerMeta: {}, sponsoredMap: { r9: true }, swimmerDocs: {} };
+    eq(meta(ctx)("r9").sponsored, true);
+  });
+
+  // The old vx_sw_meta blob still carries sponsored:true for swimmers marked before the move,
+  // so it has to keep showing the badge...
+  it("a flag left in the old blob still shows", () => {
+    const ctx = { swimmerMeta: { r9: { sponsored: true } }, sponsoredMap: {}, swimmerDocs: {} };
+    eq(meta(ctx)("r9").sponsored, true);
+  });
+
+  // ...but it must not be able to veto the club. This was `sponsoredMap[id] || base.sponsored`
+  // with un-marking expressed as a deleted key, so for those swimmers the button did nothing at
+  // all: tap it, and the OR put the badge straight back, for ever.
+  it("and un-marking that swimmer beats it, rather than being ignored", () => {
+    const ctx = { swimmerMeta: { r9: { sponsored: true } }, sponsoredMap: { r9: false }, swimmerDocs: {} };
+    eq(meta(ctx)("r9").sponsored, false,
+       "the old blob outvoted the coach, which is a button that cannot be pressed");
+  });
+
+  it("un-marking writes false rather than removing the swimmer", () => {
+    const body = methodSource("toggleSponsor").body;
+    eq(/m\[swId\]=on;/.test(body), true,
+       "a deleted key cannot override a legacy flag, and an empty table would then be "
+       + "indistinguishable from a club with no sponsors — which is what the seed reads");
+  });
+
+  it("the toggle no longer sends the whole document to club_state", () => {
+    const body = methodSource("toggleSponsor").body;
+    eq(/_saveJSON\(/.test(body), false,
+       "_saveJSON pushes the blob, and the blob is last-write-wins — this is the collision");
+    eq(/_saveLocalOnly\('vx_sponsored'/.test(body), true, "the local copy is still kept");
+    eq(/_sponsorPush\(swId, on\)/.test(body), true, "and the one row still has to be written");
+  });
+
+  it("vx_sponsored is off the shared document for good", () => {
+    const SYNC = JSON.parse(SOURCE.match(/var SYNC = (\[[^\]]*\])/)[1]);
+    eq(SYNC.includes("vx_sponsored"), false,
+       "left in the list, applyPull writes the stale document back over the table's answer");
+  });
+
+  const newCtx = () => ({ sponsoredMap: { r9: true }, swimmerMeta: {}, _saveLocalOnly() {},
+                          forceUpdate() {}, _sponsorsSeed: async () => {} });
+
+  itAsync("a table that answers with nothing changes nothing on the device", async () => {
+    globalThis.window = { __vxSelect: () => Promise.resolve([]) };
+    const ctx = newCtx();
+    await bind("_sponsorsFetch", ctx, [])();
+    eq(ctx.sponsoredMap, { r9: true }, "an empty read wiped the badges on this device");
+  });
+
+  itAsync("a read that failed outright changes nothing either", async () => {
+    globalThis.window = { __vxSelect: () => Promise.resolve(null) };
+    const ctx = newCtx();
+    await bind("_sponsorsFetch", ctx, [])();
+    eq(ctx.sponsoredMap, { r9: true }, "a failed read wiped the badges on this device");
+  });
+
+  itAsync("rows are authoritative, including the ones that say no", async () => {
+    globalThis.window = { __vxSelect: () => Promise.resolve([
+      { sw_id: "r131", sponsored: true }, { sw_id: "r9", sponsored: false },
+    ]) };
+    const ctx = newCtx();
+    await bind("_sponsorsFetch", ctx, [])();
+    eq(ctx.sponsoredMap, { r131: true, r9: false },
+       "a false row is how the club un-marks a swimmer the old document still says yes about");
+  });
+
+  it("a sponsorship write that never left says so, rather than blaming the database", () => {
+    const push = methodSource("_sponsorPush").body;
+    eq(/notSent:true/.test(push), true,
+       "__vxUpsert returns false both when it queues for a sign-in and when the database refuses; "
+       + "without notSent every dead session reads as a refusal");
+  });
+});
+
+
 /* ------------------------------------------------------------------- connector
    The club as an MCP connector, so it can be asked about from claude.ai.
 
@@ -9413,6 +9515,192 @@ const MCP = await import("../src/lib/mcpServer.ts?probe=configured");
 const MCP_URL_ROUTE = await import("../src/app/api/mcp/s/[token]/route.ts");
 delete process.env.VX_MCP_TOKEN;
 const MCP_UNSET = await import("../src/lib/mcpServer.ts?probe=unconfigured");
+
+/* --------------------------------------------------------------- season analysis
+   The Season Plan drew phases and counted metres, but never put the two next to each
+   other: a season that had drifted off the shape its coach drew looked exactly like one
+   that had not. The chart and the two breakdowns under it are all read off the sessions
+   already saved, so the numbers must agree with the plan screen's own arithmetic. */
+describe("season analysis", () => {
+  const metres = bind("planMetres", {}, []);
+  const zoneMetres = bind("planZoneMetres", {}, []);
+
+  const plan = {
+    zone: "EN2",
+    sections: [
+      { title: "Warm-up", sets: [{ dist: 400, reps: 1 }] },
+      { title: "Main set", rounds: 2, sets: [{ dist: 100, reps: 8, zone: "EN3" }, { dist: 25, reps: 4, zone: "SP3" }] },
+    ],
+  };
+
+  it("a set with no zone of its own inherits the session's", () =>
+    eq(zoneMetres({ zone: "EN1", sections: [{ sets: [{ dist: 200, reps: 2 }] }] }), { EN1: 400 }));
+  it("a set's own zone wins over the session's", () =>
+    eq(zoneMetres({ zone: "EN1", sections: [{ sets: [{ dist: 200, reps: 2, zone: "SP1" }] }] }), { SP1: 400 }));
+  it("rounds multiply the zone the same way they multiply the total", () =>
+    eq(zoneMetres({ sections: [{ rounds: 3, sets: [{ dist: 100, reps: 8, zone: "EN2" }] }] }), { EN2: 2400 }));
+  it("a circuit counts", () =>
+    eq(zoneMetres({ sections: [{ sets: [{ dist: 50, reps: 4, circuit: 2, zone: "EN1" }] }] }), { EN1: 400 }));
+  it("the mix adds back up to the session the plan screen shows", () => {
+    const mix = zoneMetres(plan);
+    eq(Object.keys(mix).reduce((a, k) => a + mix[k], 0), metres(plan),
+      "a zone breakdown that does not total the session is a breakdown of a different session");
+  });
+
+  // The weeks the Season Plan builds, cut down to what the analysis reads.
+  const wk = (n, phase, color, loadPct, sessionM, sessionCount, startISO, endISO, isTarget) =>
+    ({ n, phase, phaseColor: color, loadPct, sessionM, sessionCount, startISO, endISO, isTarget: !!isTarget });
+  const weeks = [
+    wk(1, "Preparation", "#12A0AE", 25, 0, 0, "2026-08-31", "2026-09-06"),
+    wk(2, "Preparation", "#12A0AE", 25, 20000, 5, "2026-09-07", "2026-09-13"),
+    wk(3, "Build", "#0C6CE0", 82, 30000, 6, "2026-09-14", "2026-09-20"),
+    wk(4, "Taper", "#7C4DFF", 38, 10000, 3, "2026-09-21", "2026-09-27", true),
+  ];
+  const sessions = [
+    { date: "2026-09-10", plan },                 // inside the season
+    { date: "2026-06-01", plan },                 // before it starts
+    { date: "2027-01-01", plan },                 // after it ends
+  ];
+  const an = bind("seasonAnalysis", {}, ["planZoneMetres", "_zoneMeta"])(weeks, sessions);
+
+  it("an empty season is not a chart", () =>
+    eq(bind("seasonAnalysis", {}, ["planZoneMetres", "_zoneMeta"])([], []).hasWeeks, false));
+  it("the shape is drawn before a single session exists", () => {
+    const dry = bind("seasonAnalysis", {}, ["planZoneMetres", "_zoneMeta"])(
+      weeks.map((w) => ({ ...w, sessionM: 0, sessionCount: 0 })), []);
+    eq(dry.hasActual, false);
+    eq(dry.chart.actualLine, "", "there is no real line to draw yet");
+    eq(dry.chart.intendLine.split(" ").length, 4, "the intended shape is still four weeks wide");
+  });
+  it("the built line is drawn once there are sessions", () =>
+    eq(an.chart.actualLine.split(" ").length, 4));
+  it("the area closes onto the baseline so it can be filled", () => {
+    const pts = an.chart.actualArea.split(" ");
+    eq(pts[0].split(",")[1], "96");
+    eq(pts[pts.length - 1].split(",")[1], "96");
+  });
+  it("the peak is the biggest week, not the last one", () => {
+    eq(an.chart.peakDot.km, "30.0");
+    eq(an.chart.peakDot.week, 3);
+  });
+  it("the peak sits on the line rather than beside it", () => {
+    eq(an.chart.peakDot.x >= 8 && an.chart.peakDot.x <= 312, true);
+    eq(an.chart.actualLine.split(" ").includes(an.chart.peakDot.x.toFixed(1) + "," + an.chart.peakDot.y.toFixed(1)), true);
+  });
+  it("the peak week is labelled on the chart, not only in the header", () => {
+    const card = sourceBetween("Season volume curve", "Where the metres went");
+    eq(/<text[^>]*>\{\{ seasonAnPeak\.t \}\}/.test(card), true);
+  });
+  it("the label is pulled inside the plot at either end", () => {
+    const wide = bind("seasonAnalysis", {}, ["planZoneMetres", "_zoneMeta"]);
+    const first = wide([wk(1, "P", "#12A0AE", 25, 9000, 2, "2026-08-31", "2026-09-06"),
+      wk(2, "P", "#12A0AE", 25, 1000, 1, "2026-09-07", "2026-09-13")], []);
+    eq(first.chart.peakDot.x, 8, "the peak really is at the left edge");
+    eq(first.chart.peakDot.lx, 24, "but its label is not half off the chart");
+  });
+  it("a target meet is marked on the season, not left to memory", () => eq(an.chart.races.length, 1));
+  it("the season totals the weeks", () => eq(an.totalKm, "60.0"));
+  it("only the weeks with sessions count as built", () => eq(an.coverLabel, "3 of 4 weeks built"));
+
+  it("consecutive weeks of one phase are one band", () => eq(an.chart.bands.length, 3));
+  it("the bands span the whole axis", () => {
+    const last = an.chart.bands[an.chart.bands.length - 1];
+    eq(an.chart.bands[0].x, 8);
+    eq(Math.round(last.x + last.w), 312);
+  });
+  it("a mesocycle reports its own volume, not the season's", () => {
+    eq(an.phaseRows.map((p) => p.km), ["20.0", "30.0", "10.0"]);
+    eq(an.phaseRows.map((p) => p.sessions), [5, 6, 3]);
+  });
+  it("a two-week phase averages over both weeks", () => eq(an.phaseRows[0].avgKm, "10.0"));
+
+  it("the zone mix reads the sets, not the session's headline zone", () =>
+    eq(an.zones.map((z) => z.label), ["E-2", "E-3", "SP-3"]));
+  it("zones are ordered easy to fast", () => eq(an.zones[0].code, "EN2"));
+  it("a session outside the season is not counted in its mix", () => {
+    const total = an.zones.reduce((a, z) => a + Number(z.km) * 1000, 0);
+    eq(Math.round(total), metres(plan), "three saved sessions, one season — only the one inside it counts");
+  });
+  it("a custom zone still gets a slice rather than being dropped", () => {
+    const one = bind("seasonAnalysis", {}, ["planZoneMetres", "_zoneMeta"])(
+      [wk(1, "Prep", "#12A0AE", 25, 1000, 1, "2026-08-31", "2026-09-06")],
+      [{ date: "2026-09-01", plan: { zone: "Recovery", sections: [{ sets: [{ dist: 1000, reps: 1 }] }] } }]);
+    eq(one.zones.map((z) => z.label), ["Recovery"]);
+    eq(one.zones[0].pctLabel, "100%");
+  });
+});
+
+/* ------------------------------------------------- chart labels the runtime can paint
+   Every {{ }} the design runtime renders is wrapped in an element so it can be keyed.
+   That wrapper was always a <span>, which inside an SVG <text> is not a text-content
+   element and paints nothing — so a label written as <text>{{ d.t }}</text> came out
+   blank while any literal text beside it still drew. The progression charts on every
+   swimmer profile have shown dots with no times for exactly that reason. The runtime
+   ships in this repo, so the fix and this guard live here too: if the runtime is ever
+   replaced wholesale, this fails rather than the labels quietly going blank again. */
+describe("interpolations inside an SVG text element", () => {
+  const RUNTIME = readFileSync(new URL("../public/assets/support.js", import.meta.url), "utf8");
+
+  it("the wrapper is chosen from the parent element, not hardcoded", () =>
+    eq(/const wrap = \(\(\) => \{/.test(RUNTIME), true));
+  it("an SVG text parent gets a tspan", () =>
+    eq(/return t === "text" \|\| t === "tspan" \|\| t === "textpath" \? "tspan" : "span";/.test(RUNTIME), true));
+  it("sc-if and sc-for between the text and its parent are seen through", () =>
+    eq(/while \(p2 && \/\^sc-\(if\|for\)\$\/i\.test\(p2\.tagName \|\| ""\)\) p2 = p2\.parentNode;/.test(RUNTIME), true));
+  it("no interpolation wrapper is left hardcoded to span", () => {
+    const fn = RUNTIME.slice(RUNTIME.indexOf("function walkText("), RUNTIME.indexOf("function walkFor("));
+    eq(/h\(\s*"span"/.test(fn), false, "a hardcoded span here is a label that cannot paint in a chart");
+    eq((fn.match(/h\(\s*wrap\b/g) || []).length, 3, "all three wrapper sites use the parent-aware tag");
+  });
+  // The charts that were blank, and the one added with them.
+  it("the charts still write their labels as text elements", () => {
+    eq(/<text x="\{\{ d\.x \}\}" y="\{\{ d\.labelY \}\}"/.test(SOURCE), true, "swimmer progression");
+    eq(/<text x="\{\{ seasonAnPeak\.lx \}\}"/.test(SOURCE), true, "season volume curve");
+  });
+});
+
+/* ------------------------------------------------- the worker between a fix and a coach
+   The service worker served everything under /assets/ cache-first and never revalidated it.
+   Our scripts carry no hash in their filename — /assets/support.js is the same URL in every
+   deploy — so a returning device read it once and never asked again. A runtime fix shipped
+   inside one therefore reached nobody: the navigation is network-first, so the device pulled
+   the NEW proto.html and the worker handed it the OLD runtime alongside it, which is a worse
+   state than either version on its own. Reproduced in a browser before this was changed. */
+describe("a script the app ships is never served from a stale cache", () => {
+  const SW = readFileSync(new URL("../public/sw.js", import.meta.url), "utf8");
+  const handler = SW.slice(SW.indexOf('addEventListener("fetch"') >= 0
+    ? SW.indexOf('addEventListener("fetch"') : SW.indexOf("addEventListener('fetch'"), SW.indexOf("// ---- Push"));
+
+  it("scripts are matched before the cache-first rule can claim them", () => {
+    const js = handler.indexOf("\\.m?js$");
+    const staticFirst = handler.indexOf("(assets|fonts|images)");
+    eq(js !== -1, true, "there is no rule for scripts at all");
+    eq(js < staticFirst, true, "the cache-first rule runs first and swallows every .js");
+  });
+  it("a script is fetched before the cache is consulted", () => {
+    const branch = handler.slice(handler.indexOf("\\.m?js$"), handler.indexOf("(assets|fonts|images)"));
+    eq(/event\.respondWith\(\s*fetch\(req\)/.test(branch), true, "network-first, or a fix cannot ship");
+    eq(/\.catch\(\(\) => caches\.match\(req\)\)/.test(branch), true, "still works offline");
+  });
+  it("the cache is still filled, so the app opens offline", () => {
+    const branch = handler.slice(handler.indexOf("\\.m?js$"), handler.indexOf("(assets|fonts|images)"));
+    eq(/caches\.open\(STATIC\)/.test(branch), true);
+    eq(/res && res\.ok/.test(branch), true, "a 404 or a 502 must never be stored as the app");
+  });
+  it("icons and fonts stay cache-first — they are hashed and need the speed", () => {
+    const branch = handler.slice(handler.indexOf("(assets|fonts|images)"));
+    eq(/caches\.match\(req\)\.then\(\(cached\) =>\s*cached \|\|/.test(branch), true);
+  });
+  // Bumping the version is what clears the caches already holding the stale runtime:
+  // activate() deletes every cache whose key is not the current one.
+  it("the cache version moved, so the devices already holding the old runtime drop it", () => {
+    const v = /const VERSION = '([^']+)'/.exec(SW);
+    eq(!!v, true);
+    eq(v[1] === "vortex-v2", false, "v2 is the version that cached the stale runtime");
+  });
+  it("activate still deletes every cache that is not the current one", () =>
+    eq(/keys\.filter\(\(k\) => k !== APP_SHELL && k !== STATIC\)\.map\(\(k\) => caches\.delete\(k\)\)/.test(SW), true));
+});
 
 describe("the club as a connector", () => {
   const post = (method, token) =>

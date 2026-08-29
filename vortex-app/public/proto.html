@@ -107,7 +107,17 @@ if ('serviceWorker' in navigator) {
   // changing two swimmers flattened each other. Leaving the key here would undo that from the
   // other end: applyPull would keep writing the stale document into localStorage, and the next
   // boot would read it back over the top — a status set during a register, reverting on reload.
-  var SYNC = ["vx_squads","vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_sponsored","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_entries","vx_meet_events","vx_meet_cuts","vx_seed_config","vx_meet_marks","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_memberships","vx_fee_plans","vx_billing","vx_race_splits","vx_bday_sent","vx_staff_pw_set","vx_roster_mode"];
+  //
+  // vx_sponsored is gone for exactly the same reason, and it was the same complaint: a coach
+  // marks a swimmer as sponsored, the gold header appears, and by the next reload it is purple
+  // again. Two devices marking two swimmers inside one twenty-second pull window send two whole
+  // documents, and the second one has never heard of the first. Sponsorship is one row per
+  // swimmer now (swimmer_sponsors), see supabase/swimmer_sponsors.sql.
+  //
+  // vx_roster_mode is the opposite kind of key and belongs here: it is one answer for the whole
+  // club — whether the roster is read as one document or as one row per swimmer — and every
+  // device has to agree about it or half of them write where the other half are not looking.
+  var SYNC = ["vx_squads","vx_relay_ovr","vx_roster_edits","vx_staff_ovr","vx_meets_cal","vx_swimmer_goals","vx_squad_goals","vx_sw_meta","vx_tpace","vx_fitness_tests","vx_ai_sugg_ovr","vx_promo","vx_brand","vx_meet_entries","vx_meet_events","vx_meet_cuts","vx_seed_config","vx_meet_marks","vx_event_requests","vx_plan_submissions","vx_notifications","vx_academy_trials","vx_academy_fees","vx_invoices","vx_fitness_media","vx_wa_targets","vx_videos","vx_memberships","vx_fee_plans","vx_billing","vx_race_splits","vx_bday_sent","vx_staff_pw_set","vx_roster_mode"];
   window.__VX_SYNC = SYNC;
   window.__vxSyncOk = null; // null=unknown, true=last write ok, false=last write failed
   // Auth-retry queue: if a write is rejected because we weren't signed in yet (401/403 under the
@@ -5742,13 +5752,79 @@ if ('serviceWorker' in navigator) {
                           <div style="flex:1;background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:11px;text-align:center;box-shadow:0 1px 4px rgba(11,20,40,.04)"><span style="display:block;font-size:18px;font-weight:800;color:#0C1116">{{ seasonMacroSessions }}</span><span style="display:block;font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4;margin-top:2px">Sessions</span></div>
                           <div style="flex:1;background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:11px;text-align:center;box-shadow:0 1px 4px rgba(11,20,40,.04)"><span style="display:block;font-size:18px;font-weight:800;color:#0C1116">{{ seasonMacroAvgKm }}<span style="font-size:10px;color:#9AA2B4;font-weight:700">km</span></span><span style="display:block;font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4;margin-top:2px">Avg / week</span></div>
                         </div>
-                        <sc-if value="{{ seasonMacroHasData }}" hint-placeholder-val="{{ false }}">
-                          <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:13px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
-                            <p style="margin:0 0 9px;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4">Weekly load progression</p>
-                            <div class="vx-scroll" style="display:flex;align-items:flex-end;gap:3px;height:80px;overflow-x:auto;padding-bottom:2px">
-                              <sc-for list="{{ seasonProgBars }}" as="b" hint-placeholder-count="12">
-                                <button onclick="{{ b.onClick }}" style="flex:none;width:16px;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end;background:none;border:none;cursor:pointer;padding:0"><div style="width:100%;height:{{ b.h }}px;background:{{ b.fill }};border-radius:3px"></div><span style="font-size:7.5px;color:#9AA2B4">{{ b.n }}</span></button>
+                        <sc-if value="{{ seasonAnHasWeeks }}" hint-placeholder-val="{{ true }}">
+                          <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:11px">
+                              <span style="flex:1;min-width:0"><span style="display:block;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4">Season volume curve</span><span style="display:block;font-size:11px;color:#7A8296;margin-top:2px">{{ seasonAnCoverLabel }}</span></span>
+                              <span style="flex:none;text-align:right"><span style="display:block;font-family:var(--font-mono);font-size:15px;font-weight:800;color:#7C4DFF">{{ seasonAnPeakValue }}<span style="font-size:9.5px;color:#9AA2B4;font-weight:700">{{ seasonAnPeakUnit }}</span></span><span style="display:block;font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4">{{ seasonAnPeakCap }}</span></span>
+                            </div>
+                            <svg viewBox="0 0 320 112" style="width:100%;height:118px;overflow:visible">
+                              <sc-for list="{{ seasonAnGrid }}" as="g" hint-placeholder-count="2">
+                                <line x1="8" y1="{{ g.y }}" x2="312" y2="{{ g.y }}" stroke="#EEF1F5" stroke-width="1"></line>
                               </sc-for>
+                              <line x1="8" y1="96" x2="312" y2="96" stroke="#E5E9F0" stroke-width="1"></line>
+                              <sc-for list="{{ seasonAnRaces }}" as="r" hint-placeholder-count="0">
+                                <line x1="{{ r.x }}" y1="{{ r.y1 }}" x2="{{ r.x }}" y2="{{ r.y2 }}" stroke="#E5484D" stroke-width="1" stroke-dasharray="2 3" opacity="0.55"></line>
+                              </sc-for>
+                              <polyline points="{{ seasonAnActualArea }}" fill="rgba(124,77,255,.16)" stroke="none"></polyline>
+                              <polyline points="{{ seasonAnIntendLine }}" fill="none" stroke="#9AA2B4" stroke-width="1.5" stroke-dasharray="4 3" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"></polyline>
+                              <polyline points="{{ seasonAnActualLine }}" fill="none" stroke="#7C4DFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></polyline>
+                              <sc-if value="{{ seasonAnHasPeak }}" hint-placeholder-val="{{ false }}">
+                                <circle cx="{{ seasonAnPeak.x }}" cy="{{ seasonAnPeak.y }}" r="4" fill="#7C4DFF" stroke="#fff" stroke-width="1.5"></circle>
+                                <text x="{{ seasonAnPeak.lx }}" y="{{ seasonAnPeak.ly }}" text-anchor="middle" style="font-family:var(--font-mono);font-weight:700;font-size:9.5px;fill:#0C1116">{{ seasonAnPeak.t }}</text>
+                              </sc-if>
+                              <sc-for list="{{ seasonAnBands }}" as="bd" hint-placeholder-count="5">
+                                <rect x="{{ bd.x }}" y="{{ bd.y }}" width="{{ bd.w }}" height="{{ bd.h }}" rx="3" fill="{{ bd.color }}" opacity="0.85"></rect>
+                              </sc-for>
+                            </svg>
+                            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px">
+                              <span style="font-size:11px;color:#7A8296;flex:1;min-width:0">{{ seasonAnCaption }}</span>
+                              <span style="flex:none;display:flex;gap:9px;font-size:9.5px;font-weight:700;color:#7A8296">
+                                <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:2.5px;border-radius:2px;background:#7C4DFF"></span>Built</span>
+                                <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:2.5px;border-radius:2px;background:#9AA2B4"></span>Intended</span>
+                              </span>
+                            </div>
+
+                            <sc-if value="{{ seasonAnHasZones }}" hint-placeholder-val="{{ false }}">
+                              <div style="margin-top:14px;padding-top:12px;border-top:1px solid #EEF1F5">
+                                <p style="margin:0 0 8px;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4">Where the metres went · zone mix</p>
+                                <div style="display:flex;height:12px;border-radius:6px;overflow:hidden;background:#F4F6F8">
+                                  <sc-for list="{{ seasonAnZones }}" as="z" hint-placeholder-count="4">
+                                    <span style="width:{{ z.w }};background:{{ z.color }}"></span>
+                                  </sc-for>
+                                </div>
+                                <div style="display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:9px">
+                                  <sc-for list="{{ seasonAnZones }}" as="z" hint-placeholder-count="4">
+                                    <span style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:{{ z.color }};flex:none"></span><span style="font-size:11.5px;font-weight:700;color:#0C1116">{{ z.label }}</span><span style="font-family:var(--font-mono);font-size:11px;font-weight:700;color:#7A8296">{{ z.km }}km · {{ z.pctLabel }}</span></span>
+                                  </sc-for>
+                                </div>
+                              </div>
+                            </sc-if>
+
+                            <div style="margin-top:14px;padding-top:12px;border-top:1px solid #EEF1F5">
+                              <p style="margin:0 0 9px;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4">Mesocycle volume</p>
+                              <div style="display:flex;flex-direction:column;gap:9px">
+                                <sc-for list="{{ seasonAnPhaseRows }}" as="pr" hint-placeholder-count="5">
+                                  <div>
+                                    <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">
+                                      <span style="flex:1;min-width:0;font-size:12px;font-weight:700;color:#0C1116;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ pr.name }}</span>
+                                      <span style="flex:none;font-size:10px;color:#9AA2B4;font-weight:700">{{ pr.weeksLabel }} · {{ pr.sessions }} sessions</span>
+                                      <span style="flex:none;font-family:var(--font-mono);font-size:11.5px;font-weight:800;color:#0C1116">{{ pr.km }}<span style="font-size:9px;color:#9AA2B4">km</span></span>
+                                    </div>
+                                    <div style="height:7px;border-radius:4px;background:#F4F6F8;overflow:hidden"><span style="display:block;height:100%;width:{{ pr.pctW }};background:{{ pr.color }};border-radius:4px"></span></div>
+                                    <p style="margin:4px 0 0;font-size:10.5px;color:#9AA2B4">{{ pr.avgKm }} km per week</p>
+                                  </div>
+                                </sc-for>
+                              </div>
+                            </div>
+
+                            <div style="margin-top:14px;padding-top:12px;border-top:1px solid #EEF1F5">
+                              <p style="margin:0 0 8px;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#9AA2B4">Weekly load · tap a week</p>
+                              <div class="vx-scroll" style="display:flex;align-items:flex-end;gap:3px;height:80px;overflow-x:auto;padding-bottom:2px">
+                                <sc-for list="{{ seasonProgBars }}" as="b" hint-placeholder-count="12">
+                                  <button onclick="{{ b.onClick }}" style="flex:none;width:16px;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end;background:none;border:none;cursor:pointer;padding:0"><div style="width:100%;height:{{ b.h }}px;background:{{ b.fill }};border-radius:3px"></div><span style="font-size:7.5px;color:#9AA2B4">{{ b.n }}</span></button>
+                                </sc-for>
+                              </div>
                             </div>
                           </div>
                         </sc-if>
@@ -7615,7 +7691,10 @@ class Component extends DCLogic {
     this.swimmerDocs=this._loadJSON('vx_docs_cache', {});
     // Web Push public (VAPID) key — safe to embed; the private key lives only in the server env.
     this.VAPID_PUBLIC='BPnAfmRju94v7v00p3aq6W3hf3Y89au054VeOEn0LnQa9yLT_qqzwOHNkosYkOItc3S2WPEl676HR4S3vhpdUOE';
-    this.sponsoredMap=this._loadJSON('vx_sponsored', {});
+    // Sponsorship is a table now (swimmer_sponsors), not a key in the shared document. This is
+    // the local copy so the badge draws before the read comes back — _loadLocalOnly, never
+    // _loadJSON, because the pulled document is the stale copy the table exists to get away from.
+    this.sponsoredMap=this._loadLocalOnly('vx_sponsored', {});
     this.swimmerPhotos=this._sanitizePhotos(this._loadJSON('vx_photos_cache', {}));  // table-backed; refreshed by _docsFetch
     this.fitnessTests=this._loadJSON('vx_fitness_tests', {});
     this.aiSuggOverrides=this._loadJSON('vx_ai_sugg_ovr', {});
@@ -11554,10 +11633,17 @@ class Component extends DCLogic {
   }
   tpaceDelete(swId, idx){ const list=(this.tpaceTests[swId]||[]).slice(); list.splice(idx,1); this.tpaceTests={...this.tpaceTests, [swId]:list}; this._saveJSON('vx_tpace', this.tpaceTests); this.forceUpdate(); }
   _swMeta(swId){ const base=this.swimmerMeta[swId] || {sponsored:false, docs:{birth:false, id:false, medical:false}, inbody:[]};
-    // Sponsorship lives in its own tiny synced key (vx_sponsored) so it never rides on the
-    // heavy vx_sw_meta blob (which can carry base64 docs/InBody images and hit the storage
-    // quota). Merge the dedicated flag in — reading code keeps using meta.sponsored unchanged.
-    const sp=!!((this.sponsoredMap||{})[swId]) || !!base.sponsored;
+    // Sponsorship comes from the swimmer_sponsors table, cached in sponsoredMap. Reading code
+    // keeps using meta.sponsored unchanged.
+    //
+    // The map is allowed to say false, and that is the half that was missing. It used to be
+    // `sponsoredMap[swId] || base.sponsored`, with un-marking expressed by removing the key —
+    // so for any swimmer whose flag was still in the old vx_sw_meta blob, the OR put it
+    // straight back and the button did nothing at all, for ever. An explicit false is how the
+    // club says "no" about a swimmer the old document says "yes" about; the blob only speaks
+    // when the map has no opinion.
+    const own=(this.sponsoredMap||{})[swId];
+    const sp= own===undefined ? !!base.sponsored : !!own;
     // Documents come from the dedicated swimmer_docs table (overlaid on any legacy blob docs).
     const docsOvr=(this.swimmerDocs||{})[swId]||{};
     const docs={...(base.docs||{}), ...docsOvr};
@@ -11844,9 +11930,107 @@ class Component extends DCLogic {
     try{ this.audit('swimmer.status.dates', this._swName(swId)+' \u00b7 '+(which==='from'?'from ':'to ')+(val||'(cleared)'),
       {swimmer:swId, status:cur.reason||'break', from:cur.from||'', to:cur.to||''}); }catch(e){}
     try{ this._swStatusSaved(swId, which==='from'?'Start date':'End date'); }catch(e){} }
+  // ---- Sponsorship: one row per swimmer ------------------------------------------------------
+  //
+  // This used to live only in vx_sponsored, a single document inside club_state holding every
+  // sponsored swimmer at once. club_state is last-write-wins — pushKey sends the whole value and
+  // applyPull takes the remote copy when its timestamp is newer — and vx_roster_edits is the ONLY
+  // key in this app that merges instead of replacing. Sponsorship was not it.
+  //
+  // So: a coach marks Kareem from the poolside phone and the header turns gold. A second coach,
+  // on a tablet that read the document before that, marks somebody else and sends ITS whole
+  // document — the one with no Kareem in it. Kareem is not sponsored any more, nobody is told,
+  // and the first phone goes on showing gold until it is reloaded. That is "the mark as sponsor
+  // is not saving": the write saved, and was overwritten by a device that had never heard of it.
+  // Marking it again cannot fix it, and marking it again is what the app invited.
+  //
+  // Two coaches marking two swimmers now touch two rows. The local map stays as the thing the
+  // screens render from, so nothing above this line had to change; it is a cache of the table.
   toggleSponsor(swId){ const on=!this._swMeta(swId).sponsored; const m={...(this.sponsoredMap||{})};
-    if(on) m[swId]=true; else delete m[swId];
-    this.sponsoredMap=m; this._saveJSON('vx_sponsored', m); this.forceUpdate(); }
+    // false, not a deleted key: it is what overrides a legacy flag in the vx_sw_meta blob, and
+    // it is what makes an empty swimmer_sponsors table mean "not migrated yet" rather than "no
+    // sponsors", which is what lets _sponsorsSeed run without inventing a club.
+    m[swId]=on;
+    this.sponsoredMap=m;
+    // Local first so the screen is instant, then the one row. _saveLocalOnly, not _saveJSON:
+    // _saveJSON also pushes the whole blob to club_state, which is the collision this move
+    // exists to end.
+    try{ this._saveLocalOnly('vx_sponsored', m); }catch(e){}
+    this.forceUpdate();
+    // A refusal reaches the coach the way every other row write's does: __vxUpsert records it
+    // and the red banner names the table. There is no message line under this button to write to.
+    this._sponsorPush(swId, on);
+    try{ this.audit('swimmer.sponsor', this._swName(swId)+' · '+(on?'sponsored':'not sponsored'),
+      {swimmer:swId, sponsored:on}); }catch(e){}
+  }
+
+  /** Write one swimmer's sponsorship. Returns what the database said, so a caller can report it. */
+  async _sponsorPush(swId, on){
+    if(!window.__vxUpsert) return {ok:false, why:'this device cannot reach the database'};
+    const me=(()=>{ try{ return this._modMe().label; }catch(e){ return ''; } })();
+    let ok=false;
+    try{ ok=await window.__vxUpsert('swimmer_sponsors', [{ sw_id:swId, sponsored:!!on, set_by:me, ts:Date.now() }]); }catch(e){}
+    if(ok) return {ok:true};
+    // Refused, or never sent? Different problems with different answers — the same distinction
+    // _swStatusPush draws, for the same reason: a refusal is somebody else's to fix, a write
+    // still sitting on the phone is fixed by the person holding it, by signing in again.
+    const a=window.__VX_AUTH;
+    const live=!!(a && a.token && a.exp && Date.now() < a.exp);
+    if(!live) return {ok:false, notSent:true, why: window.__vxAuthDead
+      ? 'it never left this device — the database sign-in here has ended'
+      : 'it has not left this device yet — the sign-in has not landed'};
+    const said=(window.__vxLastWriteErr && window.__vxLastWriteErr.table==='swimmer_sponsors')
+      ? window.__vxLastWriteErr.said : '';
+    return {ok:false, why: said || 'the database refused it'};
+  }
+
+  async _sponsorsFetch(){
+    if(!window.__vxSelect) return;
+    const rows=await window.__vxSelect('swimmer_sponsors', 'select=*&limit=2000');
+    if(rows==null) return;                     // table missing / offline → keep what we have
+    // An empty answer is not the same as "nobody is sponsored". A row-level-security refusal on
+    // a SELECT is not an error — PostgREST answers 200 with [] — so a policy that ever goes
+    // wrong arrives here looking exactly like a club that has not been migrated yet. Un-marking
+    // writes sponsored:false rather than deleting the row, so a club that really has no sponsors
+    // still has rows; an empty table means the move has not happened here yet, and that is the
+    // one case worth seeding from the old document.
+    if(!rows.length){ try{ await this._sponsorsSeed(); }catch(e){} return; }
+    const m={};
+    rows.forEach(r=>{ if(r && r.sw_id) m[r.sw_id]=!!r.sponsored; });
+    this.sponsoredMap=m;
+    try{ this._saveLocalOnly('vx_sponsored', m); }catch(e){}
+    this.forceUpdate();
+  }
+
+  // Fill the table, once, from the copy the club already has: the old club_state document read
+  // straight from the database (so a device that never held it can still do this), plus this
+  // device's own map and any flag left in the legacy vx_sw_meta blob. Additive only — it writes
+  // the sponsors the club has, and never a false over somebody else's true.
+  async _sponsorsSeed(){
+    if(!window.__vxUpsert || !this._isFullAccess()) return;
+    // The empty read that sent us here may only mean the session has expired. See _dbAnon.
+    if(this._dbAnon()) return;
+    // Seed once per run of the app, and never again — including when the write is accepted. A
+    // write the database takes and a read that still comes back empty is what a table whose
+    // INSERT and SELECT policies disagree does, and this club has had exactly that: without the
+    // latch, _sponsorsFetch seeds, re-reads, seeds again, for as long as the tab is open.
+    if(this._sponsorsSeeded) return;
+    const ids={};
+    Object.keys(this.sponsoredMap||{}).forEach(id=>{ if((this.sponsoredMap||{})[id]) ids[id]=true; });
+    Object.keys(this.swimmerMeta||{}).forEach(id=>{ if((this.swimmerMeta[id]||{}).sponsored) ids[id]=true; });
+    try{
+      const r=await window.__vxSelectRaw('club_state', 'select=value&key=eq.vx_sponsored');
+      const row=(r&&r.rows&&r.rows[0])||null;
+      const doc=row ? ((typeof row.value==='string') ? JSON.parse(row.value) : row.value) : null;
+      if(doc && typeof doc==='object') Object.keys(doc).forEach(id=>{ if(doc[id]) ids[id]=true; });
+    }catch(e){}
+    const list=Object.keys(ids);
+    if(!list.length){ this._sponsorsSeeded=true; return; }   // nothing to move across
+    const me=(()=>{ try{ return this._modMe().label; }catch(e){ return ''; } })();
+    const ok=await window.__vxUpsert('swimmer_sponsors',
+      list.map(id=>({ sw_id:id, sponsored:true, set_by:me, ts:Date.now() })), {ignoreDuplicates:true});
+    if(ok){ this._sponsorsSeeded=true; return this._sponsorsFetch(); }
+  }
   toggleDoc(swId, key){ const m=this._swMeta(swId); this._saveSwMeta(swId, {...m, docs:{...m.docs, [key]:!m.docs[key]}}); }
   // Documents are uploaded to Supabase Storage and only their URL is kept in the synced meta.
   // Previously the whole base64 file was stuffed into the vx_sw_meta blob, which overflowed the
@@ -15602,7 +15786,7 @@ class Component extends DCLogic {
   // empty; this re-fetches them with the signed-in user's JWT so their data appears.
   _refetchAll(){
     try{ this._repullOnce(); }catch(e){}
-    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_swStatusFetch','_wearFetch','_wearStatusFetch','_hrSetsFetch','_wellnessFetch','_inbodyFetch','_invoicesFetch','_membershipsFetch','_entriesFetch','_meetsFetch','_planCustomFetch','_familyFetch']
+    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_swStatusFetch','_sponsorsFetch','_wearFetch','_wearStatusFetch','_hrSetsFetch','_wellnessFetch','_inbodyFetch','_invoicesFetch','_membershipsFetch','_entriesFetch','_meetsFetch','_planCustomFetch','_familyFetch']
       .forEach((f)=>{ try{ if(typeof this[f]==='function') this[f](); }catch(e){} });
     try{ this._attendFetchStaged(); }catch(e){}
   }
@@ -15619,7 +15803,7 @@ class Component extends DCLogic {
     // marks until one of them signed out. Both halves are fixed: the subscription above, and
     // this call.
     try{ this._attendFetchStaged(); }catch(e){}
-    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_swStatusFetch','_wellnessFetch','_inbodyFetch','_invoicesFetch','_membershipsFetch','_entriesFetch','_meetsFetch','_hrSetsFetch','_wearFetch','_planCustomFetch']
+    ['_plansFetch','_squadPlansFetch','_seasonFetch','_fitSessFetch','_fitPlansFetch','_famMsgFetch','_alertsFetch','_annFetch','_docsFetch','_swStatusFetch','_sponsorsFetch','_wellnessFetch','_inbodyFetch','_invoicesFetch','_membershipsFetch','_entriesFetch','_meetsFetch','_hrSetsFetch','_wearFetch','_planCustomFetch']
       .forEach((f)=>{ try{ if(typeof this[f]==='function') this[f](); }catch(e){} });
   }
   // Stage B: give a signed-in staff member a real Supabase Auth session (JWT) in the background,
@@ -15815,6 +15999,93 @@ class Component extends DCLogic {
   seasonResetPhases(squadId){ if(!window.confirm('Reset phases to the default template?')) return; this.mutateSeason(squadId, s=>{ s.phases=this.makeDefaultSeason().phases; }); }
   seasonToggleTarget(squadId, meetName){ this.mutateSeason(squadId, s=>{ s.targets=s.targets||[]; const i=s.targets.indexOf(meetName); if(i>=0) s.targets.splice(i,1); else s.targets.push(meetName); }); }
   _seasonLoadMeta(load){ return {easy:{label:'Recovery',pct:25,color:'#1CB87A'}, medium:{label:'Moderate',pct:55,color:'#12A0AE'}, high:{label:'High',pct:82,color:'#F5A623'}, peak:{label:'Peak',pct:100,color:'#E5484D'}, taper:{label:'Taper',pct:38,color:'#7C4DFF'}}[load]||{label:'Moderate',pct:55,color:'#12A0AE'}; }
+  // Metres per training zone for one session. This is the same arithmetic planMetres() does
+  // — distance x reps x circuit, times the section's rounds — kept per set instead of summed,
+  // so a season's zone mix always adds back up to the season's total metres. A set with no
+  // zone of its own inherits the session's zone, which is what the plan editor shows.
+  planZoneMetres(plan){ const out={};
+    (plan&&plan.sections||[]).forEach(sec=>{ const r=Math.max(1,Number(sec.rounds)||1);
+      (sec.sets||[]).forEach(s=>{ const m=(Number(s.dist)||0)*(Number(s.reps)||1)*(Number(s.circuit)||1)*r; if(!m) return;
+        const z=String(s.zone||plan.zone||'').trim()||'—'; out[z]=(out[z]||0)+m; }); });
+    return out; }
+  _zoneMeta(code){ return {EN1:{label:'E-1',color:'#12A0AE'}, EN2:{label:'E-2',color:'#1BA5E6'}, EN3:{label:'E-3',color:'#067EEA'},
+    SP1:{label:'SP-1',color:'#2733D6'}, SP2:{label:'SP-2',color:'#5D22CF'}, SP3:{label:'SP-3',color:'#8A22D5'}}[code] || {label:code, color:'#9AA2B4'}; }
+  // The season read as a graph. A coach draws a shape in the phases — build, load, peak,
+  // taper — and then builds sessions week by week; until now nothing put the two next to
+  // each other, so a season that had drifted off its own plan looked exactly like one that
+  // had not. This returns the geometry for that chart plus the two breakdowns underneath it
+  // (where the metres went by zone, and by mesocycle), all from the sessions already saved.
+  seasonAnalysis(weeks, sessions){
+    const wk=Array.isArray(weeks)?weeks:[]; const n=wk.length;
+    const W=320, L=8, R=312, TOP=22, BASE=96, BAND_Y=103, BAND_H=6;
+    const empty={ hasWeeks:false, hasActual:false, hasZones:false, chart:{intendLine:'', actualLine:'', actualArea:'', grid:[], bands:[], races:[], peakDot:null, hasPeak:false},
+      zones:[], phaseRows:[], totalKm:'0.0', peakKm:'0.0', peakLabel:'', weeksPlanned:0, caption:'', coverLabel:'', coverPct:0 };
+    if(!n) return empty;
+    const actual=wk.map(w=>Math.max(0,Number(w.sessionM)||0));
+    const load=wk.map(w=>Math.max(0,Math.min(100,Number(w.loadPct)||0)));
+    const max=(a)=>a.reduce((x,y)=>y>x?y:x,0);
+    const peakM=max(actual), peakLoad=max(load)||1;
+    const hasActual=peakM>0;
+    // With sessions on the board the intended shape is scaled onto the same axis as the real
+    // metres, so the two lines can be read against each other. With none yet it is drawn on
+    // its own scale — an empty chart would say nothing about a season that is fully phased.
+    const intend=load.map(p=>p*(hasActual?(peakM/peakLoad):1));
+    const top=Math.max(peakM, max(intend))||1;
+    const fx=(i)=> n<2 ? (L+R)/2 : L+(i*(R-L))/(n-1);
+    const fy=(v)=> BASE-((v/top)*(BASE-TOP));
+    const pt=(i,v)=> fx(i).toFixed(1)+','+fy(v).toFixed(1);
+    const intendLine=intend.map((v,i)=>pt(i,v)).join(' ');
+    const actualPts=actual.map((v,i)=>pt(i,v)).join(' ');
+    const chart={ intendLine, actualLine:hasActual?actualPts:'',
+      actualArea: hasActual ? (fx(0).toFixed(1)+','+BASE+' '+actualPts+' '+fx(n-1).toFixed(1)+','+BASE) : '',
+      grid:[0.5,1].map(f=>({ y:+fy(top*f).toFixed(1) })), bands:[], races:[], peakDot:null, hasPeak:false, w:W };
+    // Race weeks get a full-height rule: the whole point of the shape is where it lands.
+    wk.forEach((w,i)=>{ if(w.isTarget) chart.races.push({ x:+fx(i).toFixed(1), y1:TOP, y2:BASE }); });
+    if(hasActual){ const pi=actual.indexOf(peakM);
+      chart.hasPeak=true; chart.peakDot={ x:+fx(pi).toFixed(1), y:+fy(peakM).toFixed(1), week:wk[pi].n, km:(peakM/1000).toFixed(1),
+        // the label is pulled back inside the plot at either end so it is never half off the chart
+        lx:+Math.min(R-16, Math.max(L+16, fx(pi))).toFixed(1), ly:+Math.max(11, fy(peakM)-8).toFixed(1),
+        t:(peakM/1000).toFixed(1)+' km' }; }
+    // Mesocycle bands run under the axis in phase colour, and are the same grouping the
+    // volume table below uses — consecutive weeks that belong to one phase.
+    const groups=[];
+    wk.forEach((w,i)=>{ const last=groups[groups.length-1];
+      if(last && last.name===w.phase && last.color===w.phaseColor) last.i1=i;
+      else groups.push({name:w.phase||'Phase', color:w.phaseColor||'#9AA2B4', i0:i, i1:i}); });
+    const step=(R-L)/n;
+    const seasonM=actual.reduce((a,b)=>a+b,0);
+    const phaseRows=groups.map(g=>{ let m=0, s=0;
+      for(let i=g.i0;i<=g.i1;i++){ m+=actual[i]; s+=Math.max(0,Number(wk[i].sessionCount)||0); }
+      const nw=g.i1-g.i0+1;
+      chart.bands.push({ x:+(L+g.i0*step).toFixed(1), w:+(nw*step).toFixed(1), y:BAND_Y, h:BAND_H, color:g.color });
+      return { name:g.name, color:g.color, weeks:nw, weeksLabel:nw+' wk', sessions:s,
+        km:(m/1000).toFixed(1), avgKm:(m/1000/nw).toFixed(1),
+        pctW:((m&&seasonM)? Math.max(2, Math.round((m/seasonM)*100)) : 0)+'%', hasVolume:m>0 }; });
+    // Zone mix, from the sessions themselves rather than the session's headline zone — a
+    // session labelled E-2 that carries a sprint set is two zones, and reading only the
+    // label is how a squad's speed work disappears from its own season.
+    const startISO=wk[0].startISO||'', endISO=wk[n-1].endISO||'';
+    const zTot={};
+    (Array.isArray(sessions)?sessions:[]).forEach(sp=>{ const d=sp&&sp.date; if(!d||(startISO&&d<startISO)||(endISO&&d>endISO)) return;
+      const per=this.planZoneMetres(sp.plan||{});
+      Object.keys(per).forEach(z=>{ zTot[z]=(zTot[z]||0)+per[z]; }); });
+    const zSum=Object.keys(zTot).reduce((a,k)=>a+zTot[k],0);
+    const order=['EN1','EN2','EN3','SP1','SP2','SP3'];
+    const zones=Object.keys(zTot).sort((a,b)=>{ const ia=order.indexOf(a), ib=order.indexOf(b);
+      return (ia<0?99:ia)-(ib<0?99:ib) || a.localeCompare(b); })
+      .map(z=>{ const meta=this._zoneMeta(z); const pct=zSum?Math.round((zTot[z]/zSum)*100):0;
+        return { code:z, label:meta.label, color:meta.color, km:(zTot[z]/1000).toFixed(1),
+          pct, pctLabel:pct+'%', w:(zSum? Math.max(1,(zTot[z]/zSum)*100) : 0).toFixed(2)+'%' }; });
+    const weeksPlanned=actual.filter(v=>v>0).length;
+    const coverPct=Math.round((weeksPlanned/n)*100);
+    return { hasWeeks:true, hasActual, hasZones:zones.length>0, chart, zones, phaseRows,
+      totalKm:(seasonM/1000).toFixed(1), peakKm:(peakM/1000).toFixed(1),
+      peakValue: hasActual ? (peakM/1000).toFixed(1) : '', peakUnit: hasActual ? 'km' : '',
+      peakCap: hasActual ? ('Peak · week '+wk[actual.indexOf(peakM)].n) : 'No sessions yet',
+      weeksPlanned, coverPct, coverLabel: weeksPlanned+' of '+n+' weeks built',
+      caption: hasActual ? (weeksPlanned+' of '+n+' weeks have sessions · '+(seasonM/1000).toFixed(1)+' km planned')
+                         : ('The load shape across '+n+' weeks · build sessions to see the real line') };
+  }
   setSetField(id, secId, setId, field, val){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); const s=sec&&(sec.sets||[]).find(x=>x.id===setId); if(s) s[field]=val; }); }
   addPlanSet(id, secId){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); if(sec) sec.sets.push({id:this._uid('s'), reps:1, dist:100, txt:'New set', equip:[], types:[], strokes:[], rest:'', hr:''}); }); }
   stepSetField(id, secId, setId, field, delta, min, step){ this.mutatePlan(id, p=>{ const sec=(p.sections||[]).find(x=>x.id===secId); const s=sec&&(sec.sets||[]).find(x=>x.id===setId); if(!s)return; const cur=Number(s[field])|| (field==='reps'?1:0); s[field]=Math.max(min, cur+delta*step); }); }
@@ -16403,6 +16674,8 @@ class Component extends DCLogic {
     // rest of the per-row data. _refetchAll lists it too, but that only runs once a signed-in
     // session lands — on boot this is the call that fills the register in.
     this._swStatusFetch();
+    // Sponsorship is a table now too, for the reason recorded in supabase/swimmer_sponsors.sql.
+    this._sponsorsFetch();
     this._planCustomFetch();
     // Also pull family accounts on open. This is what re-uploads ("self-heals") a
     // registration that never reached the table, so the admin can see that parent.
@@ -16517,7 +16790,10 @@ class Component extends DCLogic {
     // every mark (the attendance_marks realtime subscription), so the revert was near-instant.
     // Same treatment the photos got when they moved to a table, two lines below.
     try{ this._swStatusFetch(); }catch(e){}
-    this.sponsoredMap=g('vx_sponsored', this.sponsoredMap);
+    // Sponsorship comes from the swimmer_sponsors table now, not this blob — re-reading
+    // vx_sponsored here would put the stale document back over it on every data refresh, which
+    // is the same way a status set during a register used to revert a second later.
+    try{ this._sponsorsFetch(); }catch(e){}
     // (Swimmer photos come from the swimmer_docs table now, not this synced blob — don't overwrite them here.)
     this.staffOverrides=g('vx_staff_ovr', this.staffOverrides);
     this.meetEntries=g('vx_meet_entries', this.meetEntries);
@@ -17467,6 +17743,7 @@ class Component extends DCLogic {
     // any session is logged); a dot marks weeks that already have planned sessions.
     const seasonProgBars=seasonWeeks.map(w=>({ n:w.n, h:Math.max(5, Math.round((w.loadPct/100)*68)), fill:w.loadColor, km:w.weekKm, hasData:w.sessionM>0, onClick:()=>this.setState({seasonOpenWeek:w.n}) }));
     const seasonMacro={ totalKm:(seasonSessM/1000).toFixed(1), sessions:seasonSessN, avgWeekKm: weeksWithData? ((seasonSessM/weeksWithData)/1000).toFixed(1) : '0', hasData:seasonSessM>0 };
+    const seasonAn=this.seasonAnalysis(seasonWeeks, seasonSaved);
 
     // ---- Zone Engine (spec ruleset) ----
     const zoneAge = S.zoneAge!=null ? S.zoneAge : 14;
@@ -20295,6 +20572,12 @@ class Component extends DCLogic {
       seasonStartLabel:this._fmtDMY(season.start, true), seasonEndLabel:this._fmtDMY(seasonEndISO, true),
       seasonTotalWeeks, seasonPhaseCount:season.phases.length, seasonWeeks, seasonPhaseRows, seasonTargetChips, seasonHasTargets:(season.targets||[]).length>0,
       seasonMacroTotalKm:seasonMacro.totalKm, seasonMacroSessions:seasonMacro.sessions, seasonMacroAvgKm:seasonMacro.avgWeekKm, seasonMacroHasData:seasonMacro.hasData, seasonProgBars,
+      seasonAnHasWeeks:seasonAn.hasWeeks, seasonAnHasActual:seasonAn.hasActual, seasonAnNoActual:!seasonAn.hasActual, seasonAnHasZones:seasonAn.hasZones,
+      seasonAnChart:seasonAn.chart, seasonAnGrid:seasonAn.chart.grid, seasonAnBands:seasonAn.chart.bands, seasonAnRaces:seasonAn.chart.races,
+      seasonAnHasPeak:seasonAn.chart.hasPeak, seasonAnPeak:seasonAn.chart.peakDot||{x:0,y:0,week:0,km:'0.0',lx:0,ly:0,t:''},
+      seasonAnIntendLine:seasonAn.chart.intendLine, seasonAnActualLine:seasonAn.chart.actualLine, seasonAnActualArea:seasonAn.chart.actualArea,
+      seasonAnZones:seasonAn.zones, seasonAnPhaseRows:seasonAn.phaseRows,
+      seasonAnCaption:seasonAn.caption, seasonAnPeakValue:seasonAn.peakValue, seasonAnPeakUnit:seasonAn.peakUnit, seasonAnPeakCap:seasonAn.peakCap, seasonAnCoverLabel:seasonAn.coverLabel,
       onSeasonAddPhase:()=>this.seasonAddPhase(S.squadId), onSeasonResetPhases:()=>this.seasonResetPhases(S.squadId),
       onOpenSeason:()=>this.openTool('season', false),
       sponsorsRows, sponsorsEmpty: sponsorsRows.length===0, sponsorsScopeLabel,
