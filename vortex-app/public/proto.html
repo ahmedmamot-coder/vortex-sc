@@ -6555,10 +6555,17 @@ if ('serviceWorker' in navigator) {
                         </sc-if>
 
                         <sc-if value="{{ meetsHasDone }}" hint-placeholder-val="{{ true }}">
-                          <button onclick="{{ onMeetsDoneToggle }}" style="display:flex;align-items:center;gap:9px;background:none;border:none;padding:10px 2px 2px;cursor:pointer;font-family:inherit;text-align:left;width:100%">
-                            <span style="width:22px;height:22px;flex:none;border-radius:7px;background:#DCF5EA;color:#0C7A4F;display:flex;align-items:center;justify-content:center"><i data-lucide="check" style="width:13px;height:13px"></i></span>
-                            <span style="flex:1;min-width:0"><span style="display:block;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#0C1116">Already swum</span><span style="display:block;font-size:11px;color:#9AA2B4;margin-top:1px">{{ meetsDoneLabel }}</span></span>
-                            <i data-vx-icon="{{ meetsDoneChevron }}" style="width:16px;height:16px;color:#AEB6C7"></i>
+                          <!-- A card, like every other thing on this screen that opens when you
+                               tap it. It was a bare button styled like the COMING UP label
+                               directly above it — same small uppercase text, no background, a
+                               22px icon where the real cards use a 38px tile — so it read as a
+                               heading rather than a control, and the club could not find the
+                               meets they had already swum. It is also called what the app calls
+                               them everywhere else: the status on each one says Completed. -->
+                          <button onclick="{{ onMeetsDoneToggle }}" style="display:flex;align-items:center;gap:11px;width:100%;background:#fff;border:1px solid #E5E9F0;border-radius:15px;padding:14px;cursor:pointer;font-family:inherit;text-align:left;box-shadow:0 2px 7px rgba(11,20,40,.05);margin-top:4px">
+                            <span style="width:38px;height:38px;flex:none;border-radius:11px;background:#DCF5EA;color:#0C7A4F;display:flex;align-items:center;justify-content:center"><i data-lucide="check-check" style="width:18px;height:18px"></i></span>
+                            <span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:13.5px;color:#0C1116">Completed meets</span><span style="display:block;font-size:11.5px;color:#7A8296;margin-top:1px">{{ meetsDoneLabel }}</span></span>
+                            <i data-vx-icon="{{ meetsDoneChevron }}" style="width:18px;height:18px;color:#AEB6C7"></i>
                           </button>
                           <sc-if value="{{ meetsDoneOpen }}" hint-placeholder-val="{{ false }}">
                             <sc-for list="{{ meetRowsDone }}" as="dm" hint-placeholder-count="3">
@@ -6724,8 +6731,9 @@ if ('serviceWorker' in navigator) {
                         </div>
                       </sc-if>
                       <sc-if value="{{ campsHasDone }}" hint-placeholder-val="{{ false }}">
-                        <button onclick="{{ onCampsDoneToggle }}" style="display:flex;align-items:center;gap:9px;background:none;border:none;padding:8px 2px 2px;cursor:pointer;font-family:inherit;text-align:left;width:100%">
-                          <span style="flex:1;min-width:0;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#7A8296">{{ campsDoneLabel }}</span>
+                        <!-- Same fix as the completed meets above: a control has to look like one. -->
+                        <button onclick="{{ onCampsDoneToggle }}" style="display:flex;align-items:center;gap:9px;width:100%;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:11px;padding:10px 12px;cursor:pointer;font-family:inherit;text-align:left;margin-top:4px">
+                          <span style="flex:1;min-width:0;font-size:12px;font-weight:700;color:#3A4152">{{ campsDoneLabel }}</span>
                           <i data-vx-icon="{{ campsDoneChevron }}" style="width:16px;height:16px;color:#AEB6C7"></i>
                         </button>
                         <sc-if value="{{ campsDoneOpen }}" hint-placeholder-val="{{ false }}">
@@ -7899,7 +7907,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-29c';
+const VX_BUILD='2026-08-29d';
 // Whether the roster is one document or one row per swimmer is NOT decided here any more.
 //
 // It was a constant in this file, which is the wrong place for it twice over: a build flag flips
@@ -11317,15 +11325,24 @@ class Component extends DCLogic {
     const info=this._meetInfo(m.name);
     return this._toISODate(info.endDate) || this._toISODate(m.date) || '';
   }
-  _meetIsDone(m){
-    if(!m) return false;
-    const status=(this.meetStatus||{})[m.name];
-    if(status==='Completed') return true;
-    if(status && status!=='Upcoming') return false;   // Entries open / In progress are live
+  // What a meet's status actually is — what a coach set, or, when nobody has said anything,
+  // what its own date already says.
+  //
+  // The status map only ever holds what somebody asserted, so an imported meet has no entry and
+  // read as "Upcoming" for ever. That put an Upcoming pill on every card inside the Completed
+  // meets list: the club's own screen contradicting itself, on meets it had already swum.
+  //
+  // "Upcoming" stored explicitly counts as nothing said, because it is the value everything
+  // starts at — the same reading _meetIsDone has always had, now in one place so the pill, the
+  // list it is filed under and the button that cycles it cannot disagree.
+  _meetStatusOf(m){
+    if(!m) return 'Upcoming';
+    const set=(this.meetStatus||{})[m.name];
+    if(set && set!=='Upcoming') return set;
     const iso=this._meetLastISO(m);
-    if(!iso) return false;
-    return iso < this.todayISO();
+    return (iso && iso < this.todayISO()) ? 'Completed' : 'Upcoming';
   }
+  _meetIsDone(m){ return this._meetStatusOf(m)==='Completed'; }
   /** The club's meets, split in two and each in the order it is read in: the next one first,
    *  the most recent one first. */
   _meetsSplit(){
@@ -13572,7 +13589,11 @@ class Component extends DCLogic {
     try{ await this._calMigrateOnce(); }catch(e){}
   }
   allMeets(){ return [...this.customMeets, ...this.meetsMeta]; }
-  meetStatusCycle(name){ const order=['Upcoming','Entries open','In progress','Completed']; const cur=this.meetStatus[name]||'Upcoming'; const ni=(order.indexOf(cur)+1)%order.length; this.meetStatus={...this.meetStatus, [name]:order[ni]};
+  meetStatusCycle(name){ const order=['Upcoming','Entries open','In progress','Completed'];
+    // From what the card is SHOWING, not from what the map happens to hold. A meet reading
+    // Completed because its day has passed used to jump to "Entries open" on the first tap,
+    // because the map behind it still said nothing.
+    const cur=this._meetStatusOf(this.allMeets().find(x=>x&&x.name===name)||{name}); const ni=(order.indexOf(cur)+1)%order.length; this.meetStatus={...this.meetStatus, [name]:order[ni]};
     try{ this._saveLocalOnly('vx_meet_status', this.meetStatus); }catch(e){}
     this.forceUpdate();
     this._meetsPush(name).then(r=>this._sayMeetSaved(r, name+' \u2014 '+order[ni])); }
@@ -19318,7 +19339,7 @@ class Component extends DCLogic {
     // of them — expanding the first upcoming meet would have opened the first completed one.
     const buildMeetRow=(m)=>{
       const expanded=S.meetExpanded===m.name;
-      const status=this.meetStatus[m.name]||'Upcoming';
+      const status=this._meetStatusOf(m);
       const statusColors={'Upcoming':['#EEF1F5','#7A8296'],'Entries open':['#E5F0FE','#0959B4'],'In progress':['#FCEFD6','#9A6206'],'Completed':['#DCF5EA','#0C7A4F']};
       const [sBg,sFg]=statusColors[status]||statusColors['Upcoming'];
       let top=[];
@@ -20597,7 +20618,7 @@ class Component extends DCLogic {
             markBg: q.qualified ? '#DCF5EA' : (q.gap ? '#FCEFD6' : '#EEF1F5'),
             markFg: q.qualified ? '#0C7A4F' : (q.gap ? '#9A6206' : '#7A8296') }));
           const qc=this._meetQualCount(sw, m.name);
-          const status=(this.meetStatus||{})[m.name]||'Upcoming';
+          const status=this._meetStatusOf(m);
           const sc={'Upcoming':['#EEF1F5','#7A8296'],'Entries open':['#E5F0FE','#0959B4'],'In progress':['#FCEFD6','#9A6206'],'Completed':['#DCF5EA','#0C7A4F']}[status]||['#EEF1F5','#7A8296'];
           return { name:m.name, dayLabel,
             day: d?String(d.getDate()):'--', mon: d?VX_MONTHS[d.getMonth()].toUpperCase():'',
