@@ -20,6 +20,15 @@
 -- row keeps everything it has.
 --
 -- Safe to run twice: every step checks the shape before it changes it, and no row is deleted.
+--
+-- The column types are the ONLY difference. Row-level security, the grants, and both policies are
+-- already identical on the two tables --
+--
+--   fitness_plans   rls on   vx_s4_read [r] vx_is_staff()   vx_s4_write [*] vx_is_staff()
+--   squad_plans     rls on   vx_s4_read [r] vx_is_staff()   vx_s4_write [*] vx_is_staff()
+--
+-- -- so nothing else is standing between a coach and a saved plan, and this does not trade a 400
+-- for a 403. Checked against the live database, not assumed.
 
 do $$
 begin
