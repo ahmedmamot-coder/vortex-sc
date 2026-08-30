@@ -6420,6 +6420,58 @@ describe("InBody sheet", () => {
     });
   });
 
+  // The demo video reached Storage every time and never reached the record. The club's own
+  // vx_fitness_media holds entries for exercises whose video files are sitting in the bucket —
+  // every one of them with an empty video field.
+  //
+  // _hydrateShared replaces whole shared documents from the pulled copy, and it runs on EVERY
+  // data refresh. An upload takes seconds; a pull landing in that window carries the copy from
+  // before it, so the entry is replaced by the one without the video, on screen and on disk, and
+  // the next write pushes that back up.
+  describe("a pull cannot take back what this device just uploaded", () => {
+    const keep = bind("_keepMine", {});
+    const PULLED = { ex1: { video: "" }, ex2: { photo: "p.jpg", video: "" } };
+
+    it("the entry this device wrote survives the pull", () => {
+      const mine = { ex1: { video: "just-uploaded.mp4" }, ex2: { photo: "p.jpg", video: "" } };
+      const out = keep(PULLED, mine, { ex1: true });
+      eq(out.ex1.video, "just-uploaded.mp4", "the upload is what the pull was about to erase");
+    });
+    it("everything this device has not touched still comes from the pull", () => {
+      const mine = { ex1: { video: "mine.mp4" } };
+      const out = keep({ ex1: { video: "" }, ex3: { photo: "theirs.jpg" } }, mine, { ex1: true });
+      eq(out.ex3.photo, "theirs.jpg", "another coach's entry must still arrive");
+    });
+    it("clearing a video is a write like any other, so it is not undone either", () => {
+      const out = keep({ ex2: { photo: "p.jpg", video: "old.mp4" } },
+                       { ex2: { photo: "p.jpg", video: "" } }, { ex2: true });
+      eq(out.ex2.video, "", "a clear that the pull put back would be just as wrong");
+    });
+    it("nothing edited means the pulled copy is taken whole", () =>
+      eq(JSON.stringify(keep(PULLED, { ex1: { video: "x" } }, {})), JSON.stringify(PULLED)));
+    it("an empty or missing pull does not invent entries", () => {
+      eq(JSON.stringify(keep(null, null, null)), "{}");
+      eq(keep(null, { ex1: { video: "m.mp4" } }, { ex1: true }).ex1.video, "m.mp4");
+    });
+
+    // Both fitness documents go through it, with the guard each already keeps.
+    it("the refresh puts this device's own fitness writes back on top", () => {
+      const line = (SOURCE.match(/this\.fitnessPlans=.*this\.fitnessMedia=[^\n]*/) || [""])[0];
+      eq(/_keepMine\(g\('vx_fitness_media'[^)]*\), this\.fitnessMedia, this\._editedFitMedia\)/.test(line), true,
+         "the media map is still replaced wholesale: " + line);
+      eq(/_keepMine\(g\('vx_fitness_plans'[^)]*\), this\.fitnessPlans, this\._editedFitSquads\)/.test(line), true,
+         "the plan document is still replaced wholesale: " + line);
+    });
+    it("every write to the media map says which exercise it touched", () => {
+      const src = sourceBetween("_saveFitMedia(map, exId){", "async _uploadMedia(");
+      for (const fn of ["fitSetVideo", "fitClearVideo", "fitClearPhoto"])
+        eq(new RegExp(fn + "[\\s\\S]*?_saveFitMedia\\(m, exId\\)").test(src), true,
+           fn + " saves without naming the exercise, so the guard cannot protect it");
+      eq(/video:u\}; this\._saveFitMedia\(m, exId\)/.test(SOURCE), true, "the video upload itself");
+      eq(/photo:val\}; this\._saveFitMedia\(m, exId\)/.test(SOURCE), true, "and the photo upload");
+    });
+  });
+
   // A build that throws while drawing the screen takes the whole interface with it — including
   // the Update bar, which is the only thing that could fetch the build that fixes it. The advice
   // left was "close the tab and hope".

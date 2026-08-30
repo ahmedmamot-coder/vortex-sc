@@ -15323,10 +15323,15 @@ class Component extends DCLogic {
   // ---- Fitness exercise media (demo photo + video link), kept in its own synced key so the
   // photos never bloat the plan document itself. Photos are downscaled before storing.
   getFitMedia(exId){ return (this.fitnessMedia||{})[exId] || {photo:'', video:''}; }
-  _saveFitMedia(map){ this.fitnessMedia=map; this._saveJSON('vx_fitness_media', map); this.forceUpdate(); }
-  fitSetVideo(exId, url){ const m={...(this.fitnessMedia||{})}; m[exId]={...(m[exId]||{}), video:(url||'').trim()}; this._saveFitMedia(m); }
-  fitClearVideo(exId){ const m={...(this.fitnessMedia||{})}; if(m[exId]) m[exId]={...m[exId], video:''}; this._saveFitMedia(m); }
-  fitClearPhoto(exId){ const m={...(this.fitnessMedia||{})}; if(m[exId]) m[exId]={...m[exId], photo:''}; this._saveFitMedia(m); }
+  // Which exercises this device has written media for, so a pull cannot take them away again.
+  // See _keepMine: _hydrateShared replaces this whole map from the pulled copy on every refresh,
+  // and an upload takes seconds — long enough for a pull carrying the copy from before it.
+  _saveFitMedia(map, exId){ this.fitnessMedia=map;
+    if(exId){ this._editedFitMedia=this._editedFitMedia||{}; this._editedFitMedia[exId]=true; }
+    this._saveJSON('vx_fitness_media', map); this.forceUpdate(); }
+  fitSetVideo(exId, url){ const m={...(this.fitnessMedia||{})}; m[exId]={...(m[exId]||{}), video:(url||'').trim()}; this._saveFitMedia(m, exId); }
+  fitClearVideo(exId){ const m={...(this.fitnessMedia||{})}; if(m[exId]) m[exId]={...m[exId], video:''}; this._saveFitMedia(m, exId); }
+  fitClearPhoto(exId){ const m={...(this.fitnessMedia||{})}; if(m[exId]) m[exId]={...m[exId], photo:''}; this._saveFitMedia(m, exId); }
   async _uploadMedia(file, kind, exId, forceExt){ const up=window.__vxUploadFile; if(!up) return null;
     let ext=forceExt || ((file.name||'').split('.').pop()||'').toLowerCase().replace(/[^a-z0-9]/g,'') || 'bin';
     const path=kind+'/'+exId+'_'+Date.now()+'.'+ext;
@@ -15346,13 +15351,13 @@ class Component extends DCLogic {
       // outcome; quietly wedging the club's sync is not.
     }catch(err){ /* reported below */ }
     this.setState({fitBusy:null});
-    if(!val) return this.setState({fitMediaMsg:'The photo could not be uploaded \u2014 the vx-media storage bucket is not set up, and a photo cannot be kept inside the plan.'}); const m={...(this.fitnessMedia||{})}; m[exId]={...(m[exId]||{}), photo:val}; this._saveFitMedia(m); }
+    if(!val) return this.setState({fitMediaMsg:'The photo could not be uploaded \u2014 the vx-media storage bucket is not set up, and a photo cannot be kept inside the plan.'}); const m={...(this.fitnessMedia||{})}; m[exId]={...(m[exId]||{}), photo:val}; this._saveFitMedia(m, exId); }
   async fitUploadVideo(e, exId){ const f=e.target.files && e.target.files[0]; e.target.value=''; if(!f) return;
     if(!window.__vxUploadFile){ this.setState({fitMediaMsg:'Video upload needs the vx-media storage bucket - set it up first.'}); return; }
     this.setState({fitBusy:'video:'+exId, fitMediaMsg:''});
     const u=await this._uploadMedia(f, 'fitvideo', exId);
     this.setState({fitBusy:null});
-    if(u){ const m={...(this.fitnessMedia||{})}; m[exId]={...(m[exId]||{}), video:u}; this._saveFitMedia(m); }
+    if(u){ const m={...(this.fitnessMedia||{})}; m[exId]={...(m[exId]||{}), video:u}; this._saveFitMedia(m, exId); }
     else { this.setState({fitMediaMsg:'Upload failed - check the file size (max 50MB) and that the vx-media bucket exists.'}); } }
   _resizeImageBlob(file, maxDim, quality){ return new Promise((resolve)=>{ const fr=new FileReader();
     fr.onload=()=>{ const img=new Image(); img.onload=()=>{ let w=img.width,h=img.height; const scale=Math.min(1, maxDim/Math.max(w,h)); const cw=Math.max(1,Math.round(w*scale)), ch=Math.max(1,Math.round(h*scale));
@@ -17547,6 +17552,26 @@ class Component extends DCLogic {
     try{ if(this.state.tool==='fitness') this._fitPlansFetch(); }catch(e){}
     try{ if(this.state.tool==='season'){ this._seasonFetch(); this._plansFetch(); } }catch(e){}
   }
+  // What this device has written, put back on top of what the pull brought down.
+  //
+  // _hydrateShared replaces whole shared documents from the pulled copy, and it runs on EVERY
+  // data refresh. For a document one device owns that is right. For a map of independent
+  // per-exercise entries it is not: a video upload takes seconds, and a pull landing in that
+  // window carries the copy from before it, so the entry is replaced by the one without the
+  // video — on screen, on disk, and then pushed back up by the next write. The club's record
+  // holds entries for exercises whose video files are sitting in Storage, every one of them with
+  // an empty video field. That is this.
+  //
+  // The same guard _fitPlansFetch and _seasonFetch already use, and the same reason
+  // swimmer_status and swimmer_sponsors stopped being re-read here at all. It means another
+  // device's later change to an entry THIS device has touched does not show until a reload,
+  // which is the trade already accepted for plans and seasons, and far cheaper than losing the
+  // upload every time.
+  _keepMine(pulled, mine, edited){
+    const out={...(pulled||{})};
+    Object.keys(edited||{}).forEach(k=>{ if(mine && mine[k]!=null) out[k]=mine[k]; });
+    return out;
+  }
   _hydrateShared(){
     // Re-read shared stores from localStorage (freshly pulled) and re-render. We intentionally do
     // NOT touch the plan currently open in the editor (this.state.plans) to avoid clobbering an edit.
@@ -17591,7 +17616,7 @@ class Component extends DCLogic {
     this.bdaySent=g('vx_bday_sent', this.bdaySent); this.staffPwSet=g('vx_staff_pw_set', this.staffPwSet);
     this.brandConfig=g('vx_brand', this.brandConfig); this.notifications=g('vx_notifications', this.notifications);
     this.tpaceTests=g('vx_tpace', this.tpaceTests); this.fitnessTests=g('vx_fitness_tests', this.fitnessTests);
-    this.fitnessPlans=g('vx_fitness_plans', this.fitnessPlans); this.fitnessMedia=g('vx_fitness_media', this.fitnessMedia); this.waTargets=g('vx_wa_targets', this.waTargets); this.promoStore=g('vx_promo', this.promoStore); this.aiSuggOverrides=g('vx_ai_sugg_ovr', this.aiSuggOverrides);
+    this.fitnessPlans=this._keepMine(g('vx_fitness_plans', this.fitnessPlans), this.fitnessPlans, this._editedFitSquads); this.fitnessMedia=this._keepMine(g('vx_fitness_media', this.fitnessMedia), this.fitnessMedia, this._editedFitMedia); this.waTargets=g('vx_wa_targets', this.waTargets); this.promoStore=g('vx_promo', this.promoStore); this.aiSuggOverrides=g('vx_ai_sugg_ovr', this.aiSuggOverrides);
     this.relayOverrides=g('vx_relay_ovr', this.relayOverrides);
     this.planCustom=g('vx_plan_custom', this.planCustom); ['type','stroke','tools','zone','label'].forEach(k=>{ if(!Array.isArray((this.planCustom||{})[k])){ this.planCustom=this.planCustom||{}; this.planCustom[k]=[]; } });
     // The mode first: it decides what the line after it is allowed to do.
