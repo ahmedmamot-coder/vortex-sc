@@ -4934,15 +4934,27 @@ describe("InBody sheet", () => {
     });
     it("opening a document never waits on a request first", () => {
       // A window opened after an await is a blocked pop-up and the document simply never
-      // appears. _mediaSrc returns what it has and signs in the background, so the window is
-      // opened in the same tick as the tap.
+      // appears. The window is opened in the same tick as the tap, and sent somewhere after.
       const fn = sourceBetween("_openUrl(url){", "_openDoc(doc){");
       eq(/await/.test(fn), false, "awaiting here is what gets the pop-up blocked");
       eq(/const ready=this\._mediaSrc\(url\);/.test(fn), true);
     });
+    // The tab gets one chance to be sent somewhere. It used to be sent to whatever _mediaSrc had
+    // to hand, which on the first tap for a file is the stored URL — the public one, from when
+    // vx-media was a public bucket. Against a private bucket that answers {"error":"Bucket not
+    // found"}, which is what the InBody Report button showed while the same file drew perfectly
+    // well on the page behind it.
+    it("a tab is not sent to the public URL of a bucket that is not public", () => {
+      const fn = sourceBetween("_openUrl(url){", "_openDoc(doc){");
+      eq(/window\.open\(''\s*,\s*'_blank'\)/.test(fn), true,
+         "the window has to be opened empty and pointed at the signed link when it arrives");
+      eq(/this\._signMedia\(path\)\.then\(/.test(fn), true, "and something has to wait for that link");
+      eq(/\/object\\\/sign\\\//.test(fn), true, "a link already signed goes straight there, with nothing to wait for");
+    });
     it("one signing request per file, not one per render", () => {
       const fn = sourceBetween("_signMedia(path){", "_sbUrl(){");
-      eq(/if\(this\._signing\[path\]\) return;/.test(fn), true);
+      eq(/if\(this\._signing\[path\]\) return this\._signing\[path\];/.test(fn), true,
+         "and the one request is handed back, so a caller that must navigate can wait for it");
       eq(/exp:Date\.now\(\)\+life\*800/.test(fn), true, "re-signed at 80% of its life, so it cannot expire mid-view");
     });
   });
@@ -6334,6 +6346,77 @@ describe("InBody sheet", () => {
       const sql = readFileSync(new URL("../supabase/plan_tables_repair.sql", import.meta.url), "utf8");
       eq(/add column if not exists/.test(sql), true, "safe to run twice, and on a database already correct");
       eq(/notify pgrst/.test(sql), true, "PostgREST caches the schema; without this the 400 continues");
+    });
+
+    // Adding the columns fixed the READ. Nothing had fixed the write: fitness_plans.id is still
+    // the uuid from the first migration, and every squad in this app is a slug, so a coach's save
+    // came back "invalid input syntax for type uuid: seniora" and the row never landed — while
+    // squad_plans, season_plans and fitness_sessions all take the same slugs as text.
+    it("ships the repair for the id column no squad slug can satisfy", () => {
+      const sql = readFileSync(new URL("../supabase/fitness_plans_text_id.sql", import.meta.url), "utf8");
+      eq(/alter column id type text/.test(sql), true, "a squad id is a slug, not a uuid");
+      eq(/alter column squad_id drop not null/.test(sql), true,
+         "NOT NULL on a column the app never sends fails every insert one step after the id does");
+      eq(/drop constraint fitness_plans_squad_id_fkey/.test(sql), true,
+         "and the app's squad ids can never satisfy a key into squads(id)");
+      eq(/notify pgrst/.test(sql), true, "PostgREST caches the schema; without this the 400 continues");
+      eq(/information_schema\.columns/.test(sql), true, "each step checks the shape first, so it is safe to run twice");
+      eq(/drop\s+table|delete\s+from|truncate/i.test(sql), false, "a repair must not remove anybody's plan");
+    });
+    // The three tables the app writes with a squad slug as the primary key. fitness_plans was the
+    // one left behind, and this is the assertion that says so out loud.
+    it("every plan table is written with the squad's own id", () => {
+      for (const t of ["fitness_plans", "squad_plans", "season_plans"])
+        eq(new RegExp("__vxUpsert\\('" + t + "',\\s*\\[\\{id:String\\(id\\)").test(SOURCE), true,
+           t + " is written with something other than the squad id");
+    });
+  });
+
+  // A demo photo and a demo video are filed under an exercise's id, and the default plan is handed
+  // out from render(). With ids minted fresh each time, a squad still on the untouched template
+  // got a whole new set of them every time the screen drew: upload a video, the screen redraws,
+  // and the id it was filed under no longer exists. The file is in Storage, the record is in
+  // vx_fitness_media, and nothing on screen can find either.
+  describe("an exercise keeps its id, so its video is still there after the screen redraws", () => {
+    const TEMPLATE = { title: "Dryland", sections: [
+      { title: "Warm-up", exs: [{ name: "Band pull-apart", sets: 3, reps: "10", rest: ":30" },
+                                { name: "Dead bug", sets: 3, reps: "8", rest: ":30" }] },
+      { title: "Core", exs: [{ name: "Plank", sets: 3, reps: "40", rest: ":20" }] }] };
+    const ctx = () => ({ fitnessTemplate: TEMPLATE, fitnessPlans: {},
+                         _uid: (p) => p + "_" + Math.random().toString(36).slice(2, 8) });
+
+    it("the same squad gets the same ids twice running", () => {
+      const c = ctx();
+      const get = bind("getFitPlan", c, ["makeDefaultFitnessPlan"]);
+      const a = get("seniora"), b = get("seniora");
+      eq(a.sections[0].exs[0].id, b.sections[0].exs[0].id,
+         "a new id per render is a video filed against an exercise that no longer exists");
+      eq(a.sections[1].exs[0].id, b.sections[1].exs[0].id);
+    });
+    it("no id is minted at random", () => {
+      const c = ctx();
+      c._uid = () => { throw new Error("_uid must not be called for the default plan"); };
+      const plan = bind("getFitPlan", c, ["makeDefaultFitnessPlan"])("vortexld");
+      eq(plan.sections[0].exs[0].id, "fe_vortexld_0_0");
+      eq(plan.sections[1].exs[0].id, "fe_vortexld_1_0");
+      eq(plan.sections[0].id, "fs_vortexld_0");
+    });
+    it("two squads do not share one photograph", () => {
+      const c = ctx();
+      const get = bind("getFitPlan", c, ["makeDefaultFitnessPlan"]);
+      eq(get("seniora").sections[0].exs[0].id === get("vortexld").sections[0].exs[0].id, false,
+         "the media map is keyed by exercise id alone, so a shared id is a shared photo");
+    });
+    it("a squad whose plan is saved keeps the ids it was saved with", () => {
+      const c = ctx();
+      c.fitnessPlans = { seniora: { title: "Theirs", sections: [{ id: "old_s", title: "Block", exs: [{ id: "old_e", name: "Squat" }] }] } };
+      const plan = bind("getFitPlan", c, ["makeDefaultFitnessPlan"])("seniora");
+      eq(plan.sections[0].exs[0].id, "old_e", "an existing plan must not be renumbered under a coach");
+    });
+    it("an id survives a character a squad slug should not have", () => {
+      const c = ctx();
+      const plan = bind("getFitPlan", c, ["makeDefaultFitnessPlan"])("pre team/2");
+      eq(/^fe_[A-Za-z0-9]+_0_0$/.test(plan.sections[0].exs[0].id), true, plan.sections[0].exs[0].id);
     });
   });
 

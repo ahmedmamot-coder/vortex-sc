@@ -12783,35 +12783,54 @@ class Component extends DCLogic {
     this._signMedia(path);
     return (c && c.url) || url || '';
   }
+  // Hands back the request itself, not just a promise to have started one. A picture can be
+  // rendered again when the link arrives; a tab that has already been sent somewhere cannot, so
+  // whoever has to navigate needs something to wait on.
   _signMedia(path){
     this._signing=this._signing||{};
-    if(this._signing[path]) return;                 // one request per file, not one per render
+    if(this._signing[path]) return this._signing[path]; // one request per file, not one per render
     const tok=(window.__VX_AUTH && window.__VX_AUTH.token)||'';
-    if(!tok) return;                                // signed out: nothing to sign with
-    this._signing[path]=true;
+    if(!tok) return Promise.resolve(null);          // signed out: nothing to sign with
     const life=3600;
-    fetch(this._sbUrl()+'/storage/v1/object/sign/vx-media/'+path.split('/').map(encodeURIComponent).join('/'), {
+    const req=fetch(this._sbUrl()+'/storage/v1/object/sign/vx-media/'+path.split('/').map(encodeURIComponent).join('/'), {
       method:'POST',
       headers:{'apikey':this._sbAnon(), 'Authorization':'Bearer '+tok, 'Content-Type':'application/json'},
       body:JSON.stringify({expiresIn:life})
     }).then(r=>r.ok?r.json():null).then(j=>{
       const rel=j && (j.signedURL||j.signedUrl);
-      if(rel){
-        this._signCache=this._signCache||{};
-        // Re-sign at 80% of the life, so a link never expires while somebody is looking at it.
-        this._signCache[path]={url:this._sbUrl()+'/storage/v1'+rel, exp:Date.now()+life*800};
-        this.forceUpdate();
-      }
-    }).catch(()=>{}).then(()=>{ delete this._signing[path]; });
+      if(!rel) return null;
+      this._signCache=this._signCache||{};
+      // Re-sign at 80% of the life, so a link never expires while somebody is looking at it.
+      const signed=this._sbUrl()+'/storage/v1'+rel;
+      this._signCache[path]={url:signed, exp:Date.now()+life*800};
+      this.forceUpdate();
+      return signed;
+    }).catch(()=>null).then(v=>{ delete this._signing[path]; return v; });
+    this._signing[path]=req;
+    return req;
   }
   _sbUrl(){ try{ return (window.__VX_SB && window.__VX_SB.url) || ''; }catch(e){ return ''; } }
   _openUrl(url){ if(!url) return;
-    // Signing is a request, and a pop-up opened after one is blocked — so open the window first
-    // and point it at the signed link when it arrives.
+    // Signing is a request, and a pop-up opened after one is blocked — so the window is opened in
+    // the same tick as the tap and pointed at the signed link when it arrives.
+    //
+    // It used to be sent to whatever _mediaSrc had to hand, which on the first tap for a file is
+    // the stored URL — and the stored URL is the public one, from when vx-media was a public
+    // bucket. It is not one any more, so following it lands on {"error":"Bucket not found"}
+    // rather than the document. A picture lives through that: it is rendered again with the
+    // signed link a moment later. A tab that has already navigated does not, which is why the
+    // InBody report opened onto an error while the same file drew fine on the page behind it.
     const path=this._mediaPath(url);
     if(!path){ try{ const w=window.open(url,'_blank'); if(!w) location.href=url; }catch(e){ try{ location.href=url; }catch(x){} } return; }
     const ready=this._mediaSrc(url);
-    try{ const w=window.open(ready,'_blank'); if(!w) location.href=ready; }catch(e){ try{ location.href=ready; }catch(x){} }
+    const go=(href, w)=>{ if(w && !w.closed){ try{ w.location.href=href; return; }catch(e){} } try{ location.href=href; }catch(e){} };
+    // Already signed — nothing to wait for.
+    if(/\/object\/sign\//.test(ready)){
+      try{ const w=window.open(ready,'_blank'); if(!w) location.href=ready; }catch(e){ try{ location.href=ready; }catch(x){} }
+      return;
+    }
+    let win=null; try{ win=window.open('','_blank'); }catch(e){ win=null; }
+    this._signMedia(path).then((signed)=>{ go(signed||ready, win); });
   }
   _openDoc(doc){ if(!doc) return; if(doc.url) this._openUrl(doc.url); else if(doc.dataUrl) this._openDataUrl(doc.dataUrl); }
   removeDoc(swId, key){
@@ -15255,9 +15274,26 @@ class Component extends DCLogic {
   }
 
   // ---- Fitness Plan ----
-  makeDefaultFitnessPlan(){ const t=this.fitnessTemplate; return { title:t.title, sections:t.sections.map(s=>({id:this._uid('fs'), title:s.title, exs:s.exs.map(e=>({id:this._uid('fe'), name:e.name, sets:e.sets, reps:e.reps, rest:e.rest})) })) }; }
-  getFitPlan(id){ return this.fitnessPlans[id] || this.makeDefaultFitnessPlan(); }
-  mutateFitPlan(id, fn){ const plans={...this.fitnessPlans}; const cur=plans[id]?JSON.parse(JSON.stringify(plans[id])):this.makeDefaultFitnessPlan(); fn(cur); plans[id]=cur; this.fitnessPlans=plans; this._saveJSON('vx_fitness_plans', plans);
+  // The ids here are worked out from the squad and the exercise's place in the template, not
+  // minted fresh, and that is the whole point of them.
+  //
+  // A demo photo and a demo video are filed under the exercise's id. These ids used to come from
+  // _uid(), which returns something new every time — and the default plan is handed out from
+  // render(), so a squad still on the untouched template was given a completely new set of ids
+  // every time the screen drew. Upload a video, the screen redraws, and the id it was filed
+  // under no longer exists: the video is still in Storage, still in the record, attached to an
+  // exercise that is gone. That is what "the video does not save after uploading" was. It only
+  // ever stuck on a squad whose plan had already been edited, because editing writes the plan
+  // out and fixes its ids.
+  //
+  // Derived from the squad as well as the position, or every squad's first warm-up exercise
+  // would share one photograph.
+  makeDefaultFitnessPlan(squadId){ const t=this.fitnessTemplate;
+    const k=String(squadId==null?'x':squadId).replace(/[^A-Za-z0-9]/g,'') || 'x';
+    return { title:t.title, sections:t.sections.map((s,si)=>({id:'fs_'+k+'_'+si, title:s.title,
+      exs:s.exs.map((e,ei)=>({id:'fe_'+k+'_'+si+'_'+ei, name:e.name, sets:e.sets, reps:e.reps, rest:e.rest})) })) }; }
+  getFitPlan(id){ return this.fitnessPlans[id] || this.makeDefaultFitnessPlan(id); }
+  mutateFitPlan(id, fn){ const plans={...this.fitnessPlans}; const cur=plans[id]?JSON.parse(JSON.stringify(plans[id])):this.makeDefaultFitnessPlan(id); fn(cur); plans[id]=cur; this.fitnessPlans=plans; this._saveJSON('vx_fitness_plans', plans);
     this._editedFitSquads=this._editedFitSquads||{}; this._editedFitSquads[id]=true; this._fitPlanPush(id); this.forceUpdate(); }
   // Each squad's fitness plan is its own row in fitness_plans (like squad_plans), so it always
   // saves to the database and syncs to every account without the sync-blob overwriting it.
@@ -15282,7 +15318,7 @@ class Component extends DCLogic {
   fitAddSection(id){ this.mutateFitPlan(id, p=>{ p.sections.push({id:this._uid('fs'), title:'New block', exs:[]}); }); }
   fitRemoveSection(id, secId){ this.mutateFitPlan(id, p=>{ p.sections=p.sections.filter(s=>s.id!==secId); }); }
   fitRenameSection(id, secId, title){ this.mutateFitPlan(id, p=>{ const sec=p.sections.find(s=>s.id===secId); if(sec) sec.title=title; }); }
-  fitResetPlan(id){ this.fitnessPlans={...this.fitnessPlans, [id]:this.makeDefaultFitnessPlan()}; this._saveJSON('vx_fitness_plans', this.fitnessPlans);
+  fitResetPlan(id){ this.fitnessPlans={...this.fitnessPlans, [id]:this.makeDefaultFitnessPlan(id)}; this._saveJSON('vx_fitness_plans', this.fitnessPlans);
     this._editedFitSquads=this._editedFitSquads||{}; this._editedFitSquads[id]=true; this._fitPlanPush(id); this.forceUpdate(); }
   // ---- Fitness exercise media (demo photo + video link), kept in its own synced key so the
   // photos never bloat the plan document itself. Photos are downscaled before storing.
