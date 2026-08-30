@@ -32,6 +32,12 @@ const CLUB_KEYS = [
   "vx_meets_cal",    // the meet calendar
   "vx_meet_events",
   "vx_meet_cuts",
+  // A meet's own details — entry deadline, warm-up, sessions, fee, the club's note and the link
+  // to its information sheet — and the camps beside it. Both are the same for every family and
+  // name nobody: they are the club telling its members what is happening, which is the whole
+  // reason a family opens this screen.
+  "vx_meet_info",
+  "vx_camps",
   "vx_season",
 ];
 

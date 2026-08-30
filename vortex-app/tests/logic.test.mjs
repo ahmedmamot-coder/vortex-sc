@@ -69,6 +69,419 @@ describe("session clock", () => {
   it("formats an evening start", () => eq(clock(18 * 3600), "6:00 PM"));
 });
 
+/* ------------------------------------------------------ writing a set, and putting it in order
+   Two things a coach asked for after using the plan editor for a season: notes that can run to
+   more than one line (a main set is "1- 25 kick / 25 swim", then "2- 25 drill / 25 swim", not
+   one long sentence), and a way to make the set that is third be the first without deleting it
+   and typing it again. */
+describe("a set can be written over lines and moved in the order", () => {
+  const planWith = (ids) => ({ sections: [{ id: "sec1", sets: ids.map((id) => ({ id })) }] });
+  /** Run the shipped movePlanSet against a plan and report the order it leaves. */
+  function moved(ids, setId, dir) {
+    let out = null;
+    const ctx = { mutatePlan: (id, fn) => { const p = planWith(ids); fn(p); out = p.sections[0].sets.map((s) => s.id); } };
+    bind("movePlanSet", ctx)("squad", "sec1", setId, dir);
+    return out;
+  }
+
+  it("a set moves up past the one above it", () => eq(moved(["a", "b", "c"], "b", -1).join(), "b,a,c"));
+  it("and down past the one below", () => eq(moved(["a", "b", "c"], "b", 1).join(), "a,c,b"));
+  it("the third can be made the first, one step at a time", () => {
+    eq(moved(["a", "b", "c"], "c", -1).join(), "a,c,b");
+    eq(moved(["a", "c", "b"], "c", -1).join(), "c,a,b");
+  });
+  it("the first will not move off the top", () => eq(moved(["a", "b", "c"], "a", -1).join(), "a,b,c"));
+  it("the last will not move off the bottom", () => eq(moved(["a", "b", "c"], "c", 1).join(), "a,b,c"));
+  it("a set that is not there changes nothing", () => eq(moved(["a", "b"], "zz", -1).join(), "a,b"));
+  it("a section that is not there changes nothing", () => {
+    let out = "untouched";
+    const ctx = { mutatePlan: (id, fn) => { const p = planWith(["a", "b"]); fn(p); out = p.sections[0].sets.map((s) => s.id).join(); } };
+    bind("movePlanSet", ctx)("squad", "nope", "a", 1);
+    eq(out, "a,b");
+  });
+
+  // The notes field is a textarea now, so Enter starts a line instead of doing nothing, and the
+  // box is as tall as what has been written.
+  it("the notes field takes more than one line", () => {
+    eq(/<textarea value="\{\{ st\.txt \}\}"[^>]*rows="\{\{ st\.txtRows \}\}"/.test(SOURCE), true,
+      "still a single-line input");
+  });
+  it("and the sheet that prints keeps the line breaks", () => {
+    const kept = SOURCE.match(/<span style="white-space:pre-line">\{\{ p[v]?set\.txt \}\}<\/span>/g) || [];
+    eq(kept.length, 2, `expected the set text wrapped in both copies of the sheet, found ${kept.length}`);
+  });
+  // Scoped to the coach's own words, and to nothing else. Put on the cell, pre-line turns the
+  // template's own indentation into blank printed lines: the sheet grew until the fit hit its
+  // 0.35 floor and a session that had been comfortable was suddenly the smallest type allowed.
+  it("but not around the markup's own whitespace", () => {
+    const cells = SOURCE.match(/<td style="padding:7px 0;color:#0C1116;font-size:22px[^"]*"/g) || [];
+    eq(cells.length, 2);
+    eq(cells.some((c) => /white-space:pre-line/.test(c)), false,
+      "every newline in the template would print as a blank line");
+  });
+});
+
+/* ---------------------------------------------- what a device is allowed to say about a squad
+   The club's squad names have been replaced twice in one day by a device that knew less than
+   the database did. The seed was the first way in and is shut (see below). This is the second:
+   any write that carries a whole row carries this device's copy of the name with it. */
+describe("a reorder writes the order and nothing else", () => {
+  function movedRows(rows, id, dir) {
+    let sent = null;
+    globalThis.window = globalThis.window || {};
+    // Put the global back afterwards: these run before the rest of the file, and a test further
+    // down takes "there is no __vxUpsert here" as its signal to stop.
+    const had = Object.prototype.hasOwnProperty.call(window, "__vxUpsert");
+    const prev = window.__vxUpsert;
+    window.__vxUpsert = (table, payload) => { sent = payload; return true; };
+    const ctx = {
+      squads: rows.map((r) => ({ id: r.id })),
+      squadRows: rows,
+      _rebuildSquads() {}, forceUpdate() {}, _currentSquadEdits: () => ({}), _saveSquads() {},
+    };
+    try { bind("squadMove", ctx)(id, dir); }
+    finally { if (had) window.__vxUpsert = prev; else delete window.__vxUpsert; }
+    return sent;
+  }
+  const rows = () => [
+    { id: "vortexa", name: "Vortex SD", ages: "16", accent: "#8A22D5", sort: 0 },
+    { id: "vortexb", name: "Vortex LD", ages: "15", accent: "#5D22CF", sort: 1 },
+  ];
+
+  it("the move is sent", () => eq(movedRows(rows(), "vortexb", -1).length > 0, true));
+  it("it carries the id and the new place", () => {
+    const sent = movedRows(rows(), "vortexb", -1);
+    eq(sent.every((r) => r.id && typeof r.sort === "number"), true);
+  });
+  it("and no name, so it cannot put an old one back", () => {
+    const sent = movedRows(rows(), "vortexb", -1);
+    eq(sent.some((r) => "name" in r), false, "a reorder would rename a squad it never touched");
+  });
+  it("nor ages or colour", () => {
+    const sent = movedRows(rows(), "vortexb", -1);
+    eq(sent.some((r) => "ages" in r || "accent" in r), false);
+  });
+});
+
+/* --------------------------------------------------------- an edit that leaves a trace
+   Ten dates of birth were entered and were not in the database the next day. Nothing in the
+   audit log said whether they had been refused at the time or lost afterwards, because
+   editing a swimmer was the one change that wrote no audit line at all. */
+describe("editing a swimmer is recorded", () => {
+  it("the edit writes an audit line naming the fields", () => {
+    const src = methodSource("adminEditSwimmer").body;
+    eq(/this\.audit\('swimmer\.edit'/.test(src), true, "still silent");
+    eq(/changed:Object\.keys\(patch\|\|\{\}\)\.join\(','\)/.test(src), true,
+      "it has to say which fields, or it answers nothing");
+  });
+  it("and the line carries no name or date of its own", () => {
+    const src = methodSource("adminEditSwimmer").body;
+    const line = (src.match(/this\.audit\('swimmer\.edit'[^;]*;/) || [""])[0];
+    eq(/patch\.name|patch\.dob/.test(line), false,
+      "an audit log is not the place for a child's name and date of birth");
+  });
+});
+
+/* --------------------------------------------------- the squads table, and a seed that overwrote
+   The club's squads moved from one document into a row each. The app fills that table the
+   first time it finds it empty — and an empty answer is what a row-level-security refusal
+   looks like too, because PostgREST answers one with 200 and []. So a device the policies
+   did not accept read "no squads", seeded the nine defaults, and every rename the club had
+   made was replaced. The audit log kept the only trace: five squad.edit lines at 12:54, and
+   nine default rows written at 13:51. */
+describe("the squads table is filled, never overwritten", () => {
+  const squadsOf = (n) => Array.from({ length: n }, (_, i) => ({ id: "sq" + i, name: "Squad " + i }));
+
+  /** The app around _squadsFetch: what it holds, and what it would do next. */
+  function ctxFor({ read, held = null, staff = true, stubSeed = true }) {
+    const seen = { seeded: 0, upsert: null, rebuilt: 0 };
+    globalThis.window = globalThis.window || {};
+    window.__vxSelect = async () => read;
+    window.__vxRpc = async () => staff;
+    window.__vxUpsert = async (table, rows, opts) => { seen.upsert = { table, rows, opts }; return true; };
+    const ctx = {
+      squadRows: held,
+      squads: squadsOf(9),
+      _rebuildSquads() { seen.rebuilt++; },
+      rebuildRoster() {},
+      forceUpdate() {},
+      _isFullAccess: () => true,
+      _dbAnon: () => false,
+      _policyHeld: () => false,
+      _policyHold() {},
+      _policyRefused: () => false,
+      seen,
+    };
+    // Each case runs one real method and stubs the other, or bind() would hand back the stub.
+    if (stubSeed) ctx._squadsSeed = async function () { seen.seeded++; };
+    else ctx._squadsFetch = async function () {};
+    return ctx;
+  }
+
+  // A refusal read as an empty table is the whole fault. It must not seed, and it must not
+  // drop what this device already has.
+  itAsync("an empty read never replaces the squads this device holds", async () => {
+    const ctx = ctxFor({ read: [], held: [{ id: "vortexa", name: "Vortex A" }] });
+    await bind("_squadsFetch", ctx)();
+    eq(ctx.seen.seeded, 0, "it seeded over a table it could not read");
+    eq(ctx.squadRows.length, 1, "it dropped the rows this device had");
+  });
+
+  itAsync("a table that really is empty is still seeded", async () => {
+    const ctx = ctxFor({ read: [], held: null });
+    await bind("_squadsFetch", ctx)();
+    eq(ctx.seen.seeded, 1);
+  });
+
+  itAsync("rows that come back are what the app shows", async () => {
+    const ctx = ctxFor({ read: [{ id: "vortexa", name: "Vortex Elite" }], held: null });
+    await bind("_squadsFetch", ctx)();
+    eq(ctx.squadRows[0].name, "Vortex Elite");
+  });
+
+  itAsync("a table the app cannot read at all leaves everything alone", async () => {
+    const ctx = ctxFor({ read: null, held: [{ id: "vortexa", name: "Vortex A" }] });
+    await bind("_squadsFetch", ctx)();
+    eq(ctx.seen.seeded, 0);
+    eq(ctx.squadRows.length, 1);
+  });
+
+  // And the seed itself: it fills, and it asks the database who it is first.
+  itAsync("the seed can only fill a gap, never replace a row", async () => {
+    const ctx = ctxFor({ read: [], held: null, stubSeed: false });
+    await bind("_squadsSeed", ctx, ["_dbSaysStaff", "_squadRow"])();
+    eq(ctx.seen.upsert !== null && ctx.seen.upsert.opts && ctx.seen.upsert.opts.ignoreDuplicates, true,
+      "a seed that overwrites is how nine default squads replaced a club's own");
+  });
+
+  itAsync("it asks the database whether this device is staff, and believes the answer", async () => {
+    const ctx = ctxFor({ read: [], held: null, staff: false, stubSeed: false });
+    await bind("_squadsSeed", ctx, ["_dbSaysStaff", "_squadRow"])();
+    eq(ctx.seen.upsert, null, "it seeded on a session the database does not accept");
+  });
+
+  itAsync("the nine rows it writes are the club's own squads", async () => {
+    const ctx = ctxFor({ read: [], held: null, stubSeed: false });
+    await bind("_squadsSeed", ctx, ["_dbSaysStaff", "_squadRow"])();
+    eq(ctx.seen.upsert.rows.length, 9);
+    eq(ctx.seen.upsert.rows[0].id, "sq0");
+  });
+
+  // The write helper has to carry the distinction, or none of the above means anything.
+  it("the upsert helper sends ignore-duplicates when it is asked to", () => {
+    const src = sourceBetween("window.__vxUpsert = function", "// Supabase Realtime");
+    eq(/ignoreDuplicates\)\?"resolution=ignore-duplicates":"resolution=merge-duplicates"/.test(src), true,
+      "the option is accepted but not sent");
+  });
+  it("and a queued retry keeps it", () => {
+    const src = sourceBetween("window.__vxUpsert = function", "// Supabase Realtime");
+    eq(/_vxQueue\(function\(\)\{ window\.__vxUpsert\(table, rows, opts\); \}\)/.test(src), true,
+      "the retry would go back to overwriting");
+  });
+});
+
+/* ------------------------------------------------------- the printed session
+   A coach prints the session and tapes it to the wall or the lane rope; a swimmer
+   reads it from the water, wet, at arm's length and further. Two things decide
+   whether that works: how big the words are, and whether the whole session is on
+   the one sheet in front of them rather than a second page nobody carries to the
+   pool deck. _fitPrintSheet() is what settles both — it sizes the sheet to the
+   page, shrinking a long session to fit and growing a short one until the paper
+   is full. */
+describe("session printed on one page", () => {
+  const MM = 96 / 25.4, MAX_W = 186 * MM, MAX_H = 273 * MM;   // A4 less the 12mm @page margin
+  // The fit works to less than the whole page on purpose: Safari prints headers and footers
+  // by default and takes the room out of the page, and every printer keeps an unprintable
+  // edge. Sizing to the full 273mm is how a sheet that measured as fitting came out on two.
+  const BUDGET = MAX_H * 0.94;
+
+  /** A stand-in for the sheet's CSSStyleDeclaration: enough of it to be measured and set. */
+  function fakeStyle() {
+    const props = Object.create(null);
+    return {
+      display: "", position: "", left: "", top: "", visibility: "", transformOrigin: "",
+      setProperty(name, value) { props[name] = String(value); },
+      removeProperty(name) { delete props[name]; if (typeof this[name] === "string") this[name] = ""; },
+      get(name) { return props[name]; },
+      has(name) { return name in props; },
+    };
+  }
+
+  /**
+   * A sheet whose height answers to the width it is laid out at, the way the real one does:
+   * `rows` set rows of `rowH` each, whose text needs `textPx` and wraps when the sheet is
+   * narrower than that. The app resets zoom before every measurement, so this reports plain
+   * layout pixels — exactly what a browser hands back at zoom 1.
+   */
+  function fakeSheet({ rows = 30, rowH = 34, textPx = 400 } = {}) {
+    const style = fakeStyle();
+    return {
+      style,
+      get scrollHeight() {
+        const w = parseFloat(style.get("width") || "0");
+        return w ? rows * rowH * Math.ceil(textPx / w) : 0;
+      },
+    };
+  }
+
+  const zoomOf = (sheet) => parseFloat(sheet.style.get("zoom") || "1");
+  /** What the browser would actually print: the sheet as the fit left it, scaled by its zoom. */
+  const printedHeight = (sheet) => sheet.scrollHeight * zoomOf(sheet);
+
+  // Growing needs the browser to support `zoom`; the shrink path has always assumed it.
+  const withZoomSupport = (ok) => { globalThis.CSS = { supports: () => ok }; };
+  const fit = (sheet, zoomOk = true) => {
+    withZoomSupport(zoomOk);
+    bind("_fitPrintSheet", {}, ["_pageFitZoom"])(sheet);
+    return sheet;
+  };
+
+  // A session twice as long as the page. It has to come down to fit.
+  const long = fit(fakeSheet({ rows: 40, rowH: (2 * MAX_H) / 40 }));
+  it("a long session is shrunk", () => eq(zoomOf(long) < 1, true, `zoom was ${zoomOf(long)}`));
+  it("a long session lands on one page", () =>
+    eq(printedHeight(long) <= BUDGET, true, `printed ${printedHeight(long)} > ${BUDGET}`));
+  it("and is not shrunk further than it has to be", () =>
+    eq(zoomOf(long) > 0.45, true, `zoom was ${zoomOf(long)} — half the page would have done`));
+
+  // A short session used to print small in the middle of an empty page. It should fill it.
+  const short = fit(fakeSheet({ rows: 8, rowH: (0.4 * MAX_H) / 8 }));
+  it("a short session is grown, not left adrift on a mostly empty page", () =>
+    eq(zoomOf(short) > 1.5, true, `zoom was ${zoomOf(short)}`));
+  it("growing still stops at one page", () =>
+    eq(printedHeight(short) <= BUDGET, true, `printed ${printedHeight(short)} > ${BUDGET}`));
+  it("growth is capped, so a two-set session is not a poster", () =>
+    eq(zoomOf(short) <= 1.9, true, `zoom was ${zoomOf(short)}`));
+
+  // Nearly a full page: there is a little room left and the words should take it.
+  const nearly = fit(fakeSheet({ rows: 24, rowH: (0.9 * MAX_H) / 24 }));
+  it("a nearly-full session takes the last of the page", () =>
+    eq(zoomOf(nearly) > 1.03 && zoomOf(nearly) <= 1.12, true, `zoom was ${zoomOf(nearly)}`));
+  it("and does not spill over doing it", () =>
+    eq(printedHeight(nearly) <= BUDGET, true, `printed ${printedHeight(nearly)} > ${BUDGET}`));
+
+  // Whatever the zoom, the sheet still has to print the full width of the paper.
+  it("the printed sheet still fills the width", () => {
+    const w = parseFloat(short.style.get("width")), k = zoomOf(short);
+    eq(Math.abs(w * k - MAX_W) < 1, true, `${w} × ${k} = ${w * k}, not ${MAX_W}`);
+  });
+
+  // A session no page can hold at a readable size stops at the floor rather than
+  // printing something nobody can read from the water.
+  const huge = fit(fakeSheet({ rows: 60, rowH: (6 * MAX_H) / 60 }));
+  it("never shrinks past legible", () => eq(zoomOf(huge) >= 0.35, true, `zoom was ${zoomOf(huge)}`));
+
+  // Firefox before 126 ignores `zoom`. Growing there would lay the sheet out narrow and
+  // then not scale it up — half a page of paper, wasted.
+  const noZoom = fit(fakeSheet({ rows: 8, rowH: (0.4 * MAX_H) / 8 }), false);
+  it("a browser without zoom is left alone rather than printed narrow", () =>
+    eq(noZoom.style.has("zoom") || noZoom.style.has("width"), false));
+
+  // Whatever the fit measured, the sheet is then pinned to exactly one page. This is the
+  // backstop for the part no measurement can see: the browser's own print chrome.
+  it("the sheet is pinned to one page, so nothing can flow onto a second", () => {
+    const h = parseFloat(short.style.get("height")), k = zoomOf(short);
+    eq(Math.abs(h * k - BUDGET) < 1, true, `${h} × ${k} = ${h * k}, not ${BUDGET}`);
+  });
+  it("and what does not fit is clipped rather than paginated", () =>
+    eq(short.style.get("overflow"), "hidden"));
+
+  // The preview draws the paper with this same number. If it ever measured separately, the
+  // two could drift and the coach would again be checking a layout that is not what prints.
+  it("the preview is fitted by the same measurement as the print sheet", () => {
+    const preview = methodSource("_measurePrintPaper").body;
+    eq(/this\._pageFitZoom\(sheet\)/.test(preview), true, "the preview measures its own way");
+    eq(/getElementById\('vx-print-sheet'\)/.test(preview), true, "and not off the sheet that prints");
+  });
+
+  // The same element is on screen the rest of the time. Nothing from the fit may survive.
+  it("the fit is stripped off the sheet afterwards", () => {
+    const sheet = fit(fakeSheet({ rows: 8, rowH: (0.4 * MAX_H) / 8 }));
+    globalThis.document = { getElementById: () => sheet };
+    bind("_printRestore", { _printAnchor: null })();
+    eq(sheet.style.has("zoom") || sheet.style.has("width") || sheet.style.display !== "", false);
+  });
+});
+
+/* --------------------------------------------------- one line, not four stacked
+   Type / Tools / Stroke / Rest used to be four stacked lines under every set, so a
+   sixteen-set session ran to five lines a set and off the bottom of the page. They
+   run along the set's own line now and wrap only when they must — which is what
+   buys the size back. */
+describe("a set is one line, not five", () => {
+  const blocks = SOURCE.split('<sc-if value="{{ printIsPlan }}" hint-placeholder-val="{{ true }}">')
+    .slice(1)
+    .map((s) => s.slice(0, s.indexOf('<sc-if value="{{ printIsProgram }}"')));
+
+  for (const [i, block] of blocks.entries()) {
+    const which = i === 0 ? "preview" : "print sheet";
+
+    it(`${which}: the detail chips run along the line`, () => {
+      const chips = block.match(/display:inline-block;font-size:\d+px/g) || [];
+      eq(chips.length >= 6, true, `only ${chips.length} chips are inline`);
+    });
+    it(`${which}: none of them is a stacked block any more`, () =>
+      eq(/<div style="font-size:1[0-9.]+px;color:[^"]+;font-weight:700;margin-top/.test(block), false));
+    it(`${which}: they share one line box under the set`, () =>
+      eq(/<div style="display:inline;line-height:1\.4/.test(block), true));
+
+    // The left column already prints "@ 1:40" and the zone code under the distance. The
+    // chips repeated both off the same two fields, costing a line a set for nothing.
+    it(`${which}: the send-off is printed once, not twice`, () => {
+      eq(/Send-off: \{\{/.test(block), false, "still repeating the left column");
+      eq(/\{\{ p[v]?set\.distSend \}\}/.test(block), true, "and the left column still has it");
+    });
+    it(`${which}: the zone is printed once, not twice`, () => {
+      eq(/>Zone: \{\{/.test(block), false, "still repeating the left column");
+      eq(/\{\{ p[v]?set\.zoneCode \}\}/.test(block), true, "and the left column still has it");
+    });
+  }
+});
+
+/* ---------------------------------------------------- print sheet, in the water
+   Everything above only decides the scale. The sizes it scales are in the sheet's
+   own markup, in both copies of it — the print preview a coach checks, and the
+   hidden #vx-print-sheet the printer is actually given. Small grey type was the
+   whole complaint: a swimmer in the water cannot read 11px, and neither can a
+   coach on the deck. */
+describe("printed plan is readable from the water", () => {
+  // Both copies of the plan block: the preview (pvsec/pvset) and the print sheet (psec/pset).
+  const blocks = SOURCE.split('<sc-if value="{{ printIsPlan }}" hint-placeholder-val="{{ true }}">')
+    .slice(1)
+    .map((s) => s.slice(0, s.indexOf('<sc-if value="{{ printIsProgram }}"')));
+  it("both the preview and the printed sheet are checked", () => eq(blocks.length, 2));
+
+  // Only the sets and section headings — the club name and the date above them are
+  // identification, not the workout, and nobody reads those from the lane.
+  const setRows = blocks.map((b) => {
+    const a = b.indexOf('<sc-for list="{{ printSheet.sections }}"');
+    return b.slice(a);
+  });
+
+  for (const [i, rows] of setRows.entries()) {
+    const which = i === 0 ? "preview" : "print sheet";
+    const sizes = [...rows.matchAll(/font-size:([\d.]+)px/g)].map((m) => Number(m[1]));
+
+    it(`${which}: every printed size is set`, () => eq(sizes.length > 10, true, `only ${sizes.length}`));
+    it(`${which}: nothing on the sheet is under 12px`, () => {
+      const small = sizes.filter((s) => s < 12);
+      eq(small.length, 0, `still printing at ${small.join(", ")}px`);
+    });
+    it(`${which}: the set itself is 18px or bigger`, () => {
+      const setText = /<td style="[^"]*font-size:(\d+)px;font-weight:700;line-height:1\.32;vertical-align:top[^"]*">/.exec(rows);
+      eq(setText !== null && Number(setText[1]) >= 22, true, "the line the swimmer reads is the one that matters");
+    });
+    it(`${which}: the distance is 22px or bigger`, () => {
+      const dist = /<td style="[^"]*font-weight:800;font-size:(\d+)px;line-height:1\.2;color:\{\{ printSheet\.accent \}\}/.exec(rows);
+      eq(dist !== null && Number(dist[1]) >= 22, true);
+    });
+    it(`${which}: the set text is black, not grey`, () =>
+      eq(/color:#3A4152;font-size/.test(rows), false, "#3A4152 on a wet page is not readable"));
+    it(`${which}: the set text is bold`, () =>
+      eq(/font-size:22px;font-weight:700/.test(rows), true));
+  }
+});
+
 /* --------------------------------------------------------------- membership
    Package pricing and renewal windows the club bills against. */
 describe("academy membership", () => {
@@ -267,6 +680,200 @@ describe("shipped source", () => {
     });
   });
 
+  /* ---------------------------------------------------------------- moving a swimmer
+     A swimmer moved between squads appeared in BOTH of them, and was back where they
+     started after a reload. Reported from poolside with a screenshot: one search for
+     "mele" listing Melek Riabi twice, age 17, once in Vortex B and once in Legend.
+
+     The roster is a base list with `deleted` and `added` laid over it, and `deleted` is
+     applied to the BASE list only. A swimmer who lives in `added` — everyone the club has
+     added, and everyone already moved once — was appended to the new squad with their old
+     entry left in place, so both squads showed them. */
+  describe("moving a swimmer between squads", () => {
+    const squads = [{ id: "vortexb", name: "Vortex B" }, { id: "legend", name: "Legend" },
+                    { id: "junior", name: "Junior" }];
+    const BASE = { vortexb: [{ id: "base1", name: "Base Swimmer" }], legend: [], junior: [] };
+    const melek = { id: "sw_melek", name: "Melek Riabi", age: 17 };
+
+    // The real methods, over a stub club: three squads, one base swimmer, and Melek added.
+    const app = (rosterEdits) => {
+      const ctx = {
+        squads,
+        squadById: { vortexb: squads[0], legend: squads[1], junior: squads[2] },
+        rosterEdits,
+        roster: {},
+        saved: 0,
+        persistRosterEdits() { this.saved++; this.rebuildRoster(); return true; },
+        setState() {},
+        forceUpdate() {},
+        _promoMeta: () => ({}),
+        _savePromo() {},
+        audit() {},
+      };
+      const realWin = globalThis.window;
+      globalThis.window = { ...(realWin || {}), VX_ROSTER: BASE };
+      const fns = ["rebuildRoster", "_rosterMoveEntry", "promoteSwimmer", "_rosterTotalFor"];
+      for (const f of fns) bind(f, ctx, ["_patchAnywhere", "_ageFromDob", "_dobParts"]);
+      ctx.rebuildRoster();
+      ctx.restore = () => { globalThis.window = realWin; };
+      return ctx;
+    };
+
+    const squadsOf = (ctx, id) =>
+      squads.filter((sq) => (ctx.roster[sq.id] || []).some((sw) => sw.id === id)).map((sq) => sq.id);
+
+    it("a swimmer the club added is in exactly one squad after a move", () => {
+      const ctx = app({ edits: {}, deleted: {}, added: { vortexb: [melek] } });
+      try {
+        ctx.promoteSwimmer("sw_melek", "vortexb", "legend");
+        eq(squadsOf(ctx, "sw_melek").join(","), "legend",
+           "the swimmer was appended to the new squad and left in the old one");
+      } finally { ctx.restore(); }
+    });
+
+    it("and after a second move, not three copies", () => {
+      const ctx = app({ edits: {}, deleted: {}, added: { vortexb: [melek] } });
+      try {
+        ctx.promoteSwimmer("sw_melek", "vortexb", "legend");
+        ctx.promoteSwimmer("sw_melek", "legend", "junior");
+        eq(squadsOf(ctx, "sw_melek").join(","), "junior", "every move left another copy behind");
+      } finally { ctx.restore(); }
+    });
+
+    it("a swimmer from the base list still moves", () => {
+      const ctx = app({ edits: {}, deleted: {}, added: {} });
+      try {
+        ctx.promoteSwimmer("base1", "vortexb", "legend");
+        eq(squadsOf(ctx, "base1").join(","), "legend");
+      } finally { ctx.restore(); }
+    });
+
+    // The move that used to be impossible to undo: back to the squad they started in, which
+    // is also the squad they are marked deleted from.
+    it("a swimmer can be moved back to the squad they came from", () => {
+      const ctx = app({ edits: {}, deleted: {}, added: {} });
+      try {
+        ctx.promoteSwimmer("base1", "vortexb", "legend");
+        ctx.promoteSwimmer("base1", "legend", "vortexb");
+        eq(squadsOf(ctx, "base1").join(","), "vortexb", "moving a swimmer home lost them entirely");
+      } finally { ctx.restore(); }
+    });
+
+    // Overlays holding the same swimmer under two squads are already saved, in the database
+    // and on phones. They must show once without waiting for anyone to move anybody again.
+    it("an overlay that already holds the duplicate shows the swimmer once", () => {
+      const ctx = app({ edits: {}, deleted: { vortexb: { sw_melek: true } },
+                        added: { vortexb: [melek], legend: [{ ...melek, movedAt: 1000 }] } });
+      try {
+        eq(squadsOf(ctx, "sw_melek").join(","), "legend",
+           "the copy the old move left behind is still on the roster");
+      } finally { ctx.restore(); }
+    });
+
+    // The club's own case, with the club's own ids. The connector says there is exactly one
+    // Melek Riabi — r240, base squad Vortex A — and the screen was showing two of him, in
+    // Vortex B and in Legend. That is one swimmer moved twice: Vortex A → Vortex B → Legend,
+    // with the entry copied at each step instead of moved. Legend is where he was last put, and
+    // Legend is the only squad he has not been moved OUT of, which is what decides it.
+    it("Melek Riabi, r240, is in Legend and nowhere else", () => {
+      const melekSquads = [{ id: "vortexa", name: "Vortex A" }, { id: "vortexb", name: "Vortex B" },
+                           { id: "legend", name: "Legend" }];
+      const ctx = {
+        squads: melekSquads,
+        squadById: { vortexa: melekSquads[0], vortexb: melekSquads[1], legend: melekSquads[2] },
+        rosterEdits: {
+          edits: {},
+          deleted: { vortexa: { r240: true }, vortexb: { r240: true } },
+          added: { vortexb: [{ id: "r240", name: "Melek Riabi", age: 17 }],
+                   legend: [{ id: "r240", name: "Melek Riabi", age: 17 }] },
+        },
+        roster: {},
+      };
+      const realWin = globalThis.window;
+      globalThis.window = { ...(realWin || {}), VX_ROSTER: { vortexa: [{ id: "r240", name: "Melek Riabi", age: 16 }], vortexb: [], legend: [] } };
+      try {
+        bind("rebuildRoster", ctx, ["_patchAnywhere", "_ageFromDob", "_dobParts"]);
+        ctx.rebuildRoster();
+        const where = melekSquads.filter((sq) => (ctx.roster[sq.id] || []).some((sw) => sw.id === "r240"));
+        eq(where.length, 1, "Melek Riabi is still listed in " + where.length + " squads: "
+           + where.map((s) => s.name).join(" and "));
+        eq(where[0].id, "legend", "he was resolved to " + where[0].name + ", not the squad he was last moved to");
+      } finally { globalThis.window = realWin; }
+    });
+
+    // The move that was undone in front of a coach, ten seconds after he made it.
+    //
+    // He moved Melek Riabi into Vortex B; the Move swimmers screen agreed; he opened Vortex B
+    // and the swimmer was not on the roster. The database was still holding the copy from
+    // before any of this, in which the swimmer sits under Legend with no deletion recorded
+    // against Legend — so "not moved out of Legend" outranked "moved into Vortex B ten seconds
+    // ago". The stamp has to win, or a move survives only until the next pull.
+    it("a move is not outranked by a squad the database has no deletion for", () => {
+      const sq = [{ id: "vortexa", name: "Vortex A" }, { id: "vortexb", name: "Vortex B" },
+                  { id: "legend", name: "Legend" }];
+      const ctx = {
+        squads: sq,
+        squadById: { vortexa: sq[0], vortexb: sq[1], legend: sq[2] },
+        // What a pull hands back after the merge: the move into Vortex B, alongside the copy
+        // the database still holds under Legend, which nothing has been moved out of.
+        rosterEdits: {
+          edits: {},
+          deleted: { vortexa: { r240: true }, vortexb: { r240: true } },
+          added: { vortexb: [{ id: "r240", name: "Melek Riabi", age: 17, movedAt: 1787491000000 }],
+                   legend: [{ id: "r240", name: "Melek Riabi", age: 17 }] },
+        },
+        roster: {},
+      };
+      const realWin = globalThis.window;
+      globalThis.window = { ...(realWin || {}),
+        VX_ROSTER: { vortexa: [{ id: "r240", name: "Melek Riabi", age: 16 }], vortexb: [], legend: [] } };
+      try {
+        bind("rebuildRoster", ctx, ["_patchAnywhere", "_ageFromDob", "_dobParts"]);
+        ctx.rebuildRoster();
+        const where = sq.filter((s) => (ctx.roster[s.id] || []).some((x) => x.id === "r240"));
+        eq(where.length, 1, "listed in " + where.length + " squads");
+        eq(where[0].id, "vortexb",
+           "the move was undone by a copy of the roster written before it — he is in "
+           + where[0].name + ", and the Vortex B roster does not have him");
+      } finally { globalThis.window = realWin; }
+    });
+
+    it("the saved-roster count counts a duplicated swimmer once", () => {
+      const ctx = app({ edits: {}, deleted: {}, added: {} });
+      try {
+        const dup = { edits: {}, deleted: { vortexb: { sw_melek: true } },
+                      added: { vortexb: [melek], legend: [{ ...melek, movedAt: 1000 }] } };
+        eq(ctx._rosterTotalFor(dup), 2,
+           "the check that decides whether a save held counted the duplicate, and read a good save as lost");
+      } finally { ctx.restore(); }
+    });
+
+    // The half that survived a reload. The database still has the swimmer where they were,
+    // because no other device has heard about the move yet.
+    describe("against a database that has not heard about the move", () => {
+      const src = sourceBetween("function _rosterShaped(o){", "\n  window.__vxMergeRoster");
+      const merge = new Function(src + "\nreturn _mergeRoster;")();
+
+      const theirs = { edits: {}, deleted: {}, added: { vortexb: [melek] } };
+      const mine = { edits: {}, deleted: { vortexb: { sw_melek: true } },
+                     added: { legend: [{ ...melek, movedAt: 1700000000000 }] } };
+
+      it("the move is not undone by the copy the database holds", () => {
+        const out = merge(mine, theirs);
+        eq((out.added.vortexb || []).length, 0,
+           "the merge put the swimmer back in the squad they had just been moved out of");
+        eq((out.added.legend || []).length, 1);
+      });
+
+      it("a swimmer nobody has moved is still kept", () => {
+        const other = { id: "n1", name: "New" };
+        const out = merge({ edits: {}, deleted: {}, added: {} },
+                          { edits: {}, deleted: {}, added: { junior: [other] } });
+        eq((out.added.junior || []).length, 1, "a swimmer added on another device was dropped");
+      });
+    });
+  });
+
   describe("a roster this device cannot read", () => {
     const FULL = { edits: { r1: { dob: "2012-01-01" }, r2: { dob: "2013-02-02" } }, deleted: { r9: 1 }, added: {} };
     const EMPTY = { edits: {}, deleted: {}, added: {} };
@@ -305,6 +912,8 @@ describe("shipped source", () => {
   });
 
   describe("a pull never shows an older copy than the one on disk", () => {
+    const REAL_MERGE = new Function(
+      sourceBetween("function _rosterShaped(o){", "\n  window.__vxMergeRoster") + "\nreturn _mergeRoster;")();
     const applyPull = (rows, disk, ts) => {
       const store = { ...disk };
       Object.keys(ts).forEach((k) => { store["__vxts_" + k] = String(ts[k]); });
@@ -316,7 +925,10 @@ describe("shipped source", () => {
           get length() { return Object.keys(store).length; },
           key: (i) => Object.keys(store)[i],
         },
-        window: { __VX_PULLED: {} },
+        // The real _mergeRoster, taken whole from the shipped source. applyPull merges the
+        // roster on the way down rather than replacing it, and a sandbox without this would
+        // silently take the branch that does not — testing the fallback and calling it the fix.
+        window: { __VX_PULLED: {}, __vxMergeRoster: REAL_MERGE },
         origSet: (k, v) => { store[k] = v; },
         pushKey: (k, v) => pushed.push([k, v]),
         // The real scope has this; the sandbox has to as well. It is not decoration — applyPull's
@@ -341,6 +953,36 @@ describe("shipped source", () => {
       eq(JSON.parse(out.disk.vx_sw_meta).s1.inbody.length, 1, "and disk must keep it too");
       eq(out.pushed.length, 1, "the newer copy is pushed up so the server catches up");
     });
+    // A move must survive a pull carrying a copy written before it — this is the one that
+    // undid a coach's move in front of him.
+    //
+    // Taking the database's copy whole is right for a record one device owns. The roster is one
+    // document every phone in the club writes, so the copy arriving is only ever the newest
+    // copy OF A MERGE; replacing rather than merging threw away whatever this device had done
+    // that the writer of that copy had not heard about. Here that is the move itself — and,
+    // worse, the stamp that says when it happened, so nothing downstream could even tell which
+    // answer was newer afterwards.
+    it("a move on this device survives a pull carrying the copy from before it", () => {
+      const MINE = { edits: {},
+        deleted: { vortexa: { r240: true }, vortexb: { r240: true }, legend: { r240: true } },
+        added: { vortexb: [{ id: "r240", name: "Melek Riabi", movedAt: 1787491000000 }], legend: [] } };
+      // What the database was still holding: the swimmer under Legend, unstamped, with no
+      // deletion recorded against Legend.
+      const THEIRS = { edits: {},
+        deleted: { vortexa: { r240: true }, vortexb: { r240: true } },
+        added: { vortexb: [], legend: [{ id: "r240", name: "Melek Riabi" }] } };
+      const out = applyPull(
+        [{ key: "vx_roster_edits", value: THEIRS, updated_at: "2026-08-23T16:36:00Z" }],
+        { vx_roster_edits: JSON.stringify(MINE) },
+        {});
+      const got = out.mirror.vx_roster_edits;
+      eq((got.added.vortexb || []).some((s) => s && s.id === "r240"), true,
+         "the pull put the swimmer back where he came from — the move was undone seconds after it was made");
+      eq((got.added.legend || []).some((s) => s && s.id === "r240"), false,
+         "and left a second copy of him under the old squad");
+      eq((got.deleted.vortexa || {}).r240, true, "a deletion the database knows about was dropped");
+    });
+
     it("a genuinely newer server copy is still taken", () => {
       const out = applyPull(
         [{ key: "vx_sw_meta", value: SHEET, updated_at: "2026-08-09T14:00:00Z" }],
@@ -942,7 +1584,8 @@ describe("meet day", () => {
     ctx.allSwimmersFlat = () => [{ ...ctx.roster.junior[0], squadId: "junior" }];
     let saved = null;
     ctx.adminEditSwimmer = (sqId, id, patch) => { saved = { sqId, id, patch }; };
-    const save = bind("meetLiveSave", ctx, ["parseTimeStr", "_bestBefore", "_swEntries", "_resultISO", "_toISODate", "fmt"]);
+    const save = bind("meetLiveSave", ctx, ["parseTimeStr", "_bestBefore", "_swEntries", "_resultISO", "_toISODate", "fmt",
+      "_meetDaySay", "_meetDaySaying", "_pushSaid"]);
 
     save("Doha Open", "2026-08-08", "LCM", "s1", "50 Free", "30.10");
     it("saves against the swimmer's own squad", () => eq(saved.sqId, "junior"));
@@ -978,11 +1621,97 @@ describe("meet day", () => {
     ctx.allSwimmersFlat = () => [{ ...ctx.roster.junior[0], squadId: "junior" }];
     let saved = null;
     ctx.adminEditSwimmer = (sqId, id, patch) => { saved = patch; };
-    const clear = bind("meetLiveClear", ctx, ["_swEntries", "_resultISO", "_meetDateISO", "_toISODate"]);
+    const clear = bind("meetLiveClear", ctx, ["_swEntries", "_resultISO", "_meetDateISO", "_toISODate",
+      "_meetDaySay", "_meetDaySaying", "_pushSaid"]);
     clear("Doha Open", "s1", "50 Free");
     it("undo takes the swim back out of the record", () =>
       eq(saved.pbs.some((p) => p.event === "50 Free" && p.meet === "Doha Open"), false));
     it("and leaves every other race in place", () => eq(saved.pbs.length, 2));
+    it("an undo the coach asked for is a write, and says so", () =>
+      eq(clear("Doha Open", "s1", "100 Free"), true));
+    it("a lane with no time on it is not a write, so nothing reports on one", () =>
+      eq(clear("Doha Open", "s1", "200 Fly", true), false));
+  }
+
+  /* What the coach is TOLD about the save.
+     A coach recorded a heat on a phone that was showing the app's own red banner —
+     "1 change has not been saved · club_state (vx_roster_edits) · no connection" —
+     and was answered "29.45 saved ✓" on every lane, because the tick meant
+     localStorage had taken the time, not the club. Meet day is the one screen in
+     the app where nobody can afford to find out at the end of the day. */
+  describeSaidSaved();
+  function describeSaidSaved() {
+    const saveCtx = (push) => {
+      const ctx = baseCtx();
+      ctx.allSwimmersFlat = () => [{ ...ctx.roster.junior[0], squadId: "junior" }];
+      ctx.adminEditSwimmer = () => {};
+      globalThis.window.__vxLastPush = push;
+      return ctx;
+    };
+    const saveWith = (ctx) => bind("meetLiveSave", ctx,
+      ["parseTimeStr", "_bestBefore", "_swEntries", "_resultISO", "_toISODate", "fmt",
+       "_meetDaySay", "_meetDaySaying", "_pushSaid"]);
+
+    const pending = saveCtx({ vx_roster_edits: new Promise(() => {}) });
+    saveWith(pending)("Doha Open", "2026-08-08", "LCM", "s1", "50 Free", "30.10");
+    it("nothing is called saved while the write is still in the air", () =>
+      eq(/saving/.test(pending.state.meetDayMsg) && !/\u2713/.test(pending.state.meetDayMsg), true));
+    it("and the time is still named, so the coach can see it was taken down", () =>
+      eq(/Hannah Millen/.test(pending.state.meetDayMsg), true));
+
+    itAsync("a write the database took is the only thing called saved", async () => {
+      const ctx = saveCtx({ vx_roster_edits: Promise.resolve({ ok: true }) });
+      await saveWith(ctx)("Doha Open", "2026-08-08", "LCM", "s1", "50 Free", "30.10");
+      eq(/\u2713 saved/.test(ctx.state.meetDayMsg), true);
+      eq(ctx.state.meetDayMsgOk, true);
+    });
+
+    itAsync("a time that could not be sent is reported as not saved, with what went wrong", async () => {
+      const ctx = saveCtx({ vx_roster_edits: Promise.resolve({ ok: false, why: "it could not be sent from this device" }) });
+      await saveWith(ctx)("Doha Open", "2026-08-08", "LCM", "s1", "50 Free", "30.10");
+      eq(/NOT saved/.test(ctx.state.meetDayMsg), true);
+      eq(/could not be sent/.test(ctx.state.meetDayMsg), true);
+      eq(ctx.state.meetDayMsgOk, false);
+    });
+
+    itAsync("a time still on the device is not called lost — it goes in by itself", async () => {
+      const ctx = saveCtx({ vx_roster_edits: Promise.resolve({ ok: false, why: "no connection" }) });
+      await saveWith(ctx)("Doha Open", "2026-08-08", "LCM", "s1", "50 Free", "30.10");
+      eq(/goes in by itself/.test(ctx.state.meetDayMsg), true);
+    });
+
+    itAsync("a write with no session behind it says which action fixes it", async () => {
+      const ctx = saveCtx({ vx_roster_edits: Promise.resolve({ ok: false, notSent: true, why: "it has not left this device yet" }) });
+      await saveWith(ctx)("Doha Open", "2026-08-08", "LCM", "s1", "50 Free", "30.10");
+      eq(/sign out and back in/.test(ctx.state.meetDayMsg), true);
+    });
+
+    itAsync("a push that was never recorded has never meant success", async () => {
+      const ctx = saveCtx({});
+      await saveWith(ctx)("Doha Open", "2026-08-08", "LCM", "s1", "50 Free", "30.10");
+      eq(/NOT saved/.test(ctx.state.meetDayMsg), true);
+      eq(/never left this device/.test(ctx.state.meetDayMsg), true);
+    });
+
+    itAsync("a rejected write that throws is not read as a save", async () => {
+      const ctx = saveCtx({ vx_roster_edits: Promise.reject(new Error("gone")) });
+      await saveWith(ctx)("Doha Open", "2026-08-08", "LCM", "s1", "50 Free", "30.10");
+      eq(/NOT saved/.test(ctx.state.meetDayMsg), true);
+    });
+
+    itAsync("a late verdict about the last lane never lands on the line about this one", async () => {
+      let settle;
+      const slow = new Promise((r) => { settle = r; });
+      const ctx = saveCtx({ vx_roster_edits: slow });
+      const first = saveWith(ctx)("Doha Open", "2026-08-08", "LCM", "s1", "50 Free", "30.10");
+      globalThis.window.__vxLastPush = { vx_roster_edits: Promise.resolve({ ok: true }) };
+      await saveWith(ctx)("Doha Open", "2026-08-08", "LCM", "s1", "100 Free", "68.00");
+      const now = ctx.state.meetDayMsg;
+      settle({ ok: false, why: "no connection" });
+      await first;
+      eq(ctx.state.meetDayMsg, now);
+      eq(ctx.state.meetDayMsgOk, true);
+    });
   }
 });
 
@@ -1139,7 +1868,8 @@ describe("DQ and no-show", () => {
     adminEditSwimmer: function (sq, id, patch) { this.patched = patch; },
     audit: () => {},
   });
-  const deps = ["_markKey", "_meetMarks", "meetLiveClear", "_swEntries", "_resultISO", "_meetDateISO", "_toISODate"];
+  const deps = ["_markKey", "_meetMarks", "meetLiveClear", "_swEntries", "_resultISO", "_meetDateISO", "_toISODate",
+    "_meetDaySay", "_meetDaySaying", "_pushSaid"];
 
   describeMark();
   function describeMark() {
@@ -1167,11 +1897,41 @@ describe("DQ and no-show", () => {
     });
   }
 
+  /* A DQ is two writes: the mark, and taking the time it replaces out of the swimmer's
+     history. Reporting only the first would call the lane dealt with while the time the
+     swimmer did not swim was still in the club's copy of their record. */
+  describeMarkSaid();
+  function describeMarkSaid() {
+    const withPush = (push) => { globalThis.window.__vxLastPush = push; return ctx(); };
+
+    itAsync("a mark the database took is called saved", async () => {
+      const c = withPush({ vx_meet_marks: { ok: true }, vx_roster_edits: { ok: true } });
+      await bind("meetMarkSet", c, deps)("Test", "s1", "50 Free", "DQ");
+      eq(/\u2713 saved/.test(c.state.meetDayMsg), true);
+      eq(c.state.meetDayMsgOk, true);
+    });
+
+    itAsync("a DQ whose time could not be taken back out is not called saved", async () => {
+      const c = withPush({ vx_meet_marks: { ok: true },
+                           vx_roster_edits: { ok: false, why: "it could not be sent from this device" } });
+      await bind("meetMarkSet", c, deps)("Test", "s1", "50 Free", "DQ");
+      eq(/NOT saved/.test(c.state.meetDayMsg), true);
+      eq(c.state.meetDayMsgOk, false);
+    });
+
+    itAsync("a mark on an empty lane is judged on the mark alone", async () => {
+      const c = withPush({ vx_meet_marks: { ok: true },
+                           vx_roster_edits: { ok: false, why: "an older write, nothing to do with this lane" } });
+      await bind("meetMarkSet", c, deps)("Test", "s1", "200 Fly", "NS");
+      eq(/\u2713 saved/.test(c.state.meetDayMsg), true);
+    });
+  }
+
   describeUnmark();
   function describeUnmark() {
     const c = ctx();
     bind("meetMarkSet", c, deps)("Test", "s1", "50 Free", "DQ");
-    bind("meetMarkClear", c, ["_markKey", "_meetMarks"])("Test", "s1", "50 Free");
+    bind("meetMarkClear", c, ["_markKey", "_meetMarks", "_meetDaySay", "_meetDaySaying", "_pushSaid"])("Test", "s1", "50 Free");
     it("a mark set by mistake comes off again", () =>
       eq(bind("meetMarkOf", c, ["_markKey", "_meetMarks"])("Test", "s1", "50 Free"), ""));
   }
@@ -1260,10 +2020,12 @@ describe("editing a meet the club built", () => {
     meetsMeta: [{ name: "Nautilus Invitational Swim Meet 2026", date: "1/30/2026", course: "LCM" }],
     state: {}, forceUpdate() {}, _saveJSON(k, v) { this.saved = { k, v }; }, audit() {},
     meetStatus: {}, _saveLocalOnly(k, v) { this.saved = { k, v }; }, _meetUnsent: {},
+    meetInfo: {},
     setState: function (p) { Object.assign(this.state, p); },
   });
   const deps = ["_toISODate", "_mdyFromISO", "_fmtDMY", "_sayMeetSaved", "_meetsPush",
-                "_meetLanded", "_meetsUnsent"];
+                "_meetLanded", "_meetsUnsent", "_isCustomMeet", "setMeetInfo", "_meetInfo",
+                "MEET_INFO_BLANK", "allMeets", "_sayIfNotSaved", "_clubStateLanded"];
 
   it("the club's own meet can be edited", () =>
     eq(bind("_isCustomMeet", ctx(), [])("Test"), true));
@@ -1272,7 +2034,7 @@ describe("editing a meet the club built", () => {
 
   it("opening the editor starts from the date the meet already has", () => {
     const c = ctx();
-    bind("meetEditOpen", c, ["_toISODate"])("Test");
+    bind("meetEditOpen", c, ["_toISODate", "_meetInfo", "MEET_INFO_BLANK", "allMeets"])("Test");
     eq(c.state.meetEditDraft.date, "2026-07-30");
   });
 
@@ -1353,6 +2115,528 @@ describe("editing a meet the club built", () => {
   });
 });
 
+/* --------------------------------------------------- one name, one method
+   The app is one class of about six hundred methods in a single file, and a second
+   definition of a name that already exists does not fail anywhere: it silently
+   replaces the first for the entire class.
+
+   It happened while this very screen was being built. A helper for "the last day of
+   this meet" was called _meetISO — which already existed, meaning a meet's day for
+   filing a swim under, with a deliberate fallback to today. Every caller of the old
+   one — the meet-day screen, the entries sheet, the results header — quietly started
+   using the new one, and an undated meet would have stopped reading as today.
+
+   Nothing in a linter catches this, so this does. */
+describe("the app class defines each method once", () => {
+  // Three of these were already here when the rule was written. Each is a real shadowing:
+  // the first definition is dead code and the second is the one that runs. They are listed
+  // rather than fixed so that this test can start failing on the NEXT one, which is what it
+  // is for — untangling three unrelated ones belongs in their own change.
+  const KNOWN = ["setLang", "_applyLang", "_fmtDMY"];
+  it("has no method defined twice", () => {
+    const cls = SOURCE.slice(SOURCE.indexOf("class Component extends DCLogic"));
+    // A Map, not an object: `seen["constructor"]` is truthy on a bare {} whatever the class
+    // holds, which is its own version of the mistake this test is about.
+    const seen = new Map(), dupes = [];
+    // Method definitions sit at exactly two spaces of indent in this class; anything
+    // deeper is a nested object or a function body.
+    for (const m of cls.matchAll(/^  (?:async )?([A-Za-z_$][\w$]*)\s*\(/gm)) {
+      const name = m[1];
+      if (seen.get(name)) { if (!dupes.includes(name)) dupes.push(name); } else seen.set(name, 1);
+    }
+    eq(dupes.filter((d) => !KNOWN.includes(d)), [],
+       "a second definition silently replaces the first for the whole class");
+  });
+  // And the three that are known stay known: fix one and it comes off this list.
+  it("still has exactly the shadowed methods it is known to have", () =>
+    eq(KNOWN.every((k) => (SOURCE.match(new RegExp("^  " + k + "\\(", "gm")) || []).length === 2), true));
+});
+
+/* ------------------------------------------- a screen that contradicted itself, twice
+   The club opened the Meets screen and asked where the completed meets were. They were
+   there — behind a row that said "ALREADY SWUM · 17 meets swum" with a chevron on it.
+   But it was styled like the "COMING UP" label directly above it, which is not a
+   control: same tiny uppercase text, no background, a 22px icon where every real card
+   on that screen uses a 38px tile. It read as a heading, so nobody tapped it.
+
+   And the cards inside it said "Upcoming". */
+describe("the completed meets, and finding them", () => {
+  const ctx = (status = {}, meets = []) => ({
+    meetStatus: status, customMeets: meets, meetsMeta: [], meetInfo: {},
+    todayISO: () => "2026-08-29",
+  });
+  const deps = ["_meetStatusOf", "_meetLastISO", "_meetInfo", "MEET_INFO_BLANK", "_toISODate",
+                "todayISO", "_meetIsDone", "allMeets"];
+  const statusOf = (m, status = {}) => bind("_meetStatusOf", ctx(status), deps)(m);
+
+  // The status map only holds what somebody asserted. An imported meet has no entry in it,
+  // so every one of them read "Upcoming" — inside a list headed Completed meets.
+  it("a meet whose day has passed reads as completed, not upcoming", () =>
+    eq(statusOf({ name: "Spring Cup", date: "6/5/2026" }), "Completed"));
+  it("a meet still ahead reads as upcoming", () =>
+    eq(statusOf({ name: "VIS", date: "12/4/2026" }), "Upcoming"));
+  // What a coach actually asserted still wins, in both directions.
+  it("a status a coach set wins over the date", () => {
+    eq(statusOf({ name: "Spring Cup", date: "6/5/2026" }, { "Spring Cup": "Entries open" }), "Entries open");
+    eq(statusOf({ name: "VIS", date: "12/4/2026" }, { VIS: "Completed" }), "Completed");
+  });
+  // "Upcoming" is the value everything starts at, so storing it is not an assertion.
+  it("but a stored Upcoming is not an assertion", () =>
+    eq(statusOf({ name: "Spring Cup", date: "6/5/2026" }, { "Spring Cup": "Upcoming" }), "Completed"));
+  it("and a meet with no readable date stays upcoming", () =>
+    eq(statusOf({ name: "Unknown", date: "" }), "Upcoming"));
+
+  // The pill, the list a meet is filed under, and the button that cycles it all read the
+  // same helper now, so the screen cannot disagree with itself.
+  it("the pill and the list it sits in cannot disagree", () => {
+    const c = ctx();
+    const done = bind("_meetIsDone", c, deps);
+    for (const m of [{ name: "A", date: "6/5/2026" }, { name: "B", date: "12/4/2026" }])
+      eq(done(m), c._meetStatusOf(m) === "Completed", m.name + " is filed against what its pill says");
+  });
+  it("the status shown is what the status button cycles from", () =>
+    eq(/const cur=this\._meetStatusOf\(/.test(SOURCE), true,
+       "a meet reading Completed by its date jumped to Entries open on the first tap"));
+
+  // The affordance itself. It has to look like the other things on that screen that open.
+  it("the completed-meets row is a card, not a bare label", () => {
+    const btn = sourceBetween('<button onclick="{{ onMeetsDoneToggle }}"', "</button>");
+    eq(/background:#fff/.test(btn), true, "it read as a heading, so nobody tapped it");
+    eq(/border-radius:15px/.test(btn), true);
+    eq(/background:none/.test(btn), false, "a control has to look like one");
+    eq(/width:38px/.test(btn), true, "every real card on that screen uses a 38px icon tile");
+  });
+  // And named what the app calls them everywhere else — the pill on each one says Completed.
+  it("and is called what the status on every card calls it", () => {
+    const btn = sourceBetween('<button onclick="{{ onMeetsDoneToggle }}"', "</button>");
+    eq(/Completed meets/.test(btn), true, "the club went looking for 'completed', not 'already swum'");
+  });
+  it("the finished-camps row got the same treatment", () => {
+    const btn = sourceBetween('<button onclick="{{ onCampsDoneToggle }}"', "</button>");
+    eq(/background:none/.test(btn), false);
+  });
+});
+
+/* ----------------------------------------------------- the club had two meet calendars
+   "Add to Vortex Calendar" on the Meets screen made a real meet: a row in club_meets,
+   with an event program, entries, results and cut times hanging off its name. The
+   "Upcoming meets" box on the coach's home screen wrote vx_meets_cal instead — a name,
+   a day, a place and a PDF that nothing else in the app had ever heard of.
+
+   So a meet added on the home screen could not be entered, could not carry a qualifying
+   time, and never appeared on the Meets screen; a meet added on the Meets screen never
+   appeared on the home screen. Two lists, both called the calendar, each making the
+   other look broken. */
+describe("folding the second calendar into the first", () => {
+  const ctx = (cal, meets = []) => ({
+    meetsCal: cal, customMeets: meets, meetsMeta: [], meetInfo: {}, meetStatus: {},
+    state: {}, forceUpdate() {}, todayISO: () => "2026-08-29",
+    _saveJSON(k, v) { (this.saved ||= []).push(k); this[k === "vx_meet_info" ? "meetInfo" : "_x"] = v; },
+    _saveLocalOnly(k, v) { (this.savedLocal ||= []).push(k); },
+  });
+  const deps = ["_toISODate", "_mdyFromISO", "_sameMeetName", "_calAsMeet", "_calUnmigrated",
+                "allMeets", "_meetInfo", "MEET_INFO_BLANK"];
+
+  it("an entry becomes a meet in the shape everything else reads", () => {
+    const m = bind("_calAsMeet", ctx([]), deps)({ name: " Doha Open ", date: "2026-12-04", place: "HAC" });
+    eq(m.name, "Doha Open", "the name is what entries, results and cut times are filed under");
+    eq(m.date, "12/4/2026", "and the date in the shape every other meet stores one");
+    eq(m.location, "HAC");
+  });
+
+  // Until the fold has actually landed in the database, both lists have to be shown or a
+  // meet a parent was told about vanishes from the app.
+  it("an entry the meets do not have yet is still shown", () => {
+    const c = ctx([{ id: "mc_1", name: "Doha Open", date: "2026-12-04" }]);
+    eq(bind("_calUnmigrated", c, deps)().map((m) => m.name), ["Doha Open"]);
+  });
+  it("and stops being shown twice the moment it has", () => {
+    const c = ctx([{ id: "mc_1", name: "Doha Open", date: "2026-12-04" }],
+                  [{ name: "Doha Open", date: "12/4/2026" }]);
+    eq(bind("_calUnmigrated", c, deps)().length, 0, "one meet, drawn once");
+  });
+  // The two lists were typed by different people on different days.
+  it("the same meet under a different capitalisation is the same meet", () => {
+    const c = ctx([{ id: "mc_1", name: "doha open ", date: "2026-12-04" }],
+                  [{ name: "Doha Open", date: "12/4/2026" }]);
+    eq(bind("_calUnmigrated", c, deps)().length, 0);
+  });
+  it("an entry with no name is not a meet", () =>
+    eq(bind("_calUnmigrated", ctx([{ id: "mc_1", name: "  " }, null]), deps)().length, 0));
+
+  // The information sheet was the one thing the old box did that mattered to a parent.
+  it("its information sheet is readable before the fold has landed", () => {
+    const c = ctx([{ id: "mc_1", name: "Doha Open", date: "2026-12-04",
+                     pdf: "https://x/sheet.pdf", pdfName: "Entry form.pdf" }]);
+    const info = bind("_meetInfo", c, deps)("Doha Open");
+    eq(info.infoUrl, "https://x/sheet.pdf");
+    eq(info.infoName, "Entry form.pdf");
+  });
+  // And the real record wins once there is one, or editing the sheet would appear to do nothing.
+  it("but the meet's own sheet wins once it has one", () => {
+    const c = ctx([{ id: "mc_1", name: "Doha Open", pdf: "https://x/old.pdf" }]);
+    c.meetInfo = { "Doha Open": { infoUrl: "https://x/new.pdf", infoName: "New.pdf" } };
+    eq(bind("_meetInfo", c, deps)("Doha Open").infoUrl, "https://x/new.pdf");
+  });
+
+  // ---- the fold itself ----------------------------------------------------------------------
+  const migCtx = (cal, meets = []) => {
+    const store = {};
+    const c = {
+      meetsCal: cal, customMeets: meets, meetsMeta: [], meetInfo: {}, meetStatus: {},
+      state: {}, forceUpdate() {}, pushed: [],
+      _saveJSON(k, v) { if (k === "vx_meet_info") this.meetInfo = v; },
+      _saveLocalOnly(k, v) { if (k === "vx_custom_meets") this.customMeets = v; },
+      _meetsPush(name) { this.pushed.push(name); return Promise.resolve({ ok: this.pushOk !== false }); },
+      pushOk: true,
+    };
+    globalThis.localStorage = {
+      getItem: (k) => (k in store ? store[k] : null),
+      setItem: (k, v) => { store[k] = String(v); },
+      removeItem: (k) => { delete store[k]; },
+    };
+    c.__store = store;
+    return c;
+  };
+  const migDeps = [...deps, "_calMigrateOnce", "setMeetInfo"];
+
+  itAsync("an entry with no meet behind it becomes one", async () => {
+    const w = globalThis.window; globalThis.window = { __vxUpsert: () => Promise.resolve(true) };
+    const c = migCtx([{ id: "mc_1", name: "Doha Open", date: "2026-12-04", place: "HAC" }]);
+    await bind("_calMigrateOnce", c, migDeps)();
+    globalThis.window = w;
+    eq(c.pushed, ["Doha Open"], "the meet has to reach club_meets, not just this device");
+    eq(c.customMeets[0].date, "12/4/2026");
+  });
+
+  itAsync("its information sheet moves with it", async () => {
+    const w = globalThis.window; globalThis.window = { __vxUpsert: () => Promise.resolve(true) };
+    const c = migCtx([{ id: "mc_1", name: "Doha Open", date: "2026-12-04",
+                        pdf: "https://x/sheet.pdf", pdfName: "Entry form.pdf" }]);
+    await bind("_calMigrateOnce", c, migDeps)();
+    globalThis.window = w;
+    eq(c.meetInfo["Doha Open"].infoUrl, "https://x/sheet.pdf");
+  });
+
+  // A meet already on the Meets screen must not have its date rewritten by the old box's copy.
+  // That is the same quiet reversal one-row-per-meet was made to stop.
+  itAsync("an entry the meets already have is left alone", async () => {
+    const w = globalThis.window; globalThis.window = { __vxUpsert: () => Promise.resolve(true) };
+    const c = migCtx([{ id: "mc_1", name: "VIS", date: "2026-07-30", place: "Somewhere else" }],
+                     [{ name: "VIS", date: "12/4/2026", location: "Doha, HAC", course: "SCM" }]);
+    await bind("_calMigrateOnce", c, migDeps)();
+    globalThis.window = w;
+    eq(c.customMeets.length, 1, "no second VIS");
+    eq(c.customMeets[0].date, "12/4/2026", "the corrected date stands");
+    eq(c.pushed, [], "and nothing is written over it");
+  });
+
+  // With no session the write is refused, and the entry has to come back round next boot —
+  // marking it done would lose it, and it is still the only copy.
+  itAsync("an entry the database would not take is not marked done", async () => {
+    const w = globalThis.window; globalThis.window = { __vxUpsert: () => Promise.resolve(false) };
+    const c = migCtx([{ id: "mc_1", name: "Doha Open", date: "2026-12-04" }]);
+    c.pushOk = false;
+    await bind("_calMigrateOnce", c, migDeps)();
+    globalThis.window = w;
+    eq(c.__store.vx_cal_migrated, undefined, "it must be tried again, not written off");
+  });
+
+  // Without the tombstone the only test is "does a meet of that name exist", so a meet the club
+  // CANCELLED would be recreated from the old calendar on the next boot, every morning.
+  itAsync("an entry already folded in is not folded in twice", async () => {
+    const w = globalThis.window; globalThis.window = { __vxUpsert: () => Promise.resolve(true) };
+    const c = migCtx([{ id: "mc_1", name: "Doha Open", date: "2026-12-04" }]);
+    await bind("_calMigrateOnce", c, migDeps)();
+    eq(JSON.parse(c.__store.vx_cal_migrated || "{}").mc_1, 1, "the fold has to leave a mark");
+    c.customMeets = [];                                   // the club deletes the meet
+    c._calMigrating = false;
+    await c._calMigrateOnce();
+    globalThis.window = w;
+    eq(c.customMeets.length, 0, "a cancelled meet must not come back by itself");
+  });
+
+  // There is one place to add a meet now. The other one has to be gone, not just hidden.
+  it("the second way of creating a meet no longer exists", () => {
+    eq(/meetsCalAdd/.test(SOURCE), false, "the home screen could still write its own list");
+    // Reading it is the whole point — the fold has to see it. Writing it is what must be gone,
+    // so this asks the same question the key-accounting test asks: does any save path name it?
+    const writes = [...SOURCE.matchAll(
+      /(?:_saveJSON|_saveLocalOnly|__vxsetlocal|localStorage\.setItem)\(\s*['"](vx_[a-zA-Z0-9_]+)['"]/g)]
+      .map((m) => m[1]);
+    eq(writes.includes("vx_meets_cal"), false, "something still writes the old calendar");
+  });
+  it("and the home screen reads the meets themselves", () =>
+    eq(/homeMeetRows/.test(SOURCE), true));
+});
+
+/* ------------------------------------------ what a meet is, beyond a name and a date
+   Eighteen meets in one list, newest import first, with next month's meet somewhere
+   inside it — and each card carrying four things: name, day, venue, course. That is a
+   fixture list, not a meet, and every question a parent actually had (when do entries
+   close, what time is warm-up, can my child make the standard) was answered on
+   WhatsApp, once per family, every week. */
+describe("a meet's own details", () => {
+  const ctx = (info = {}) => ({
+    meetInfo: info, state: {}, forceUpdate() {},
+    _saveJSON(k, v) { this.saved = { k, v }; },
+  });
+  const deps = ["MEET_INFO_BLANK", "_meetInfo"];
+
+  it("a meet nobody has filled in reads as blank, not as undefined", () => {
+    const info = bind("_meetInfo", ctx(), deps)("VIS");
+    eq(info.deadline, "");
+    eq(info.warmup, "");
+    eq(info.infoUrl, "");
+  });
+  it("what the club typed comes back", () => {
+    const info = bind("_meetInfo", ctx({ VIS: { warmup: "07:00", fee: "50 QAR" } }), deps)("VIS");
+    eq(info.warmup, "07:00");
+    eq(info.fee, "50 QAR");
+    eq(info.notes, "", "and the rest is still blank rather than missing");
+  });
+  // The document is synced and last-write-wins, so a device that read a half-written copy
+  // must not be able to put a number or an object where the screen expects a string.
+  it("anything that is not text is ignored", () => {
+    const info = bind("_meetInfo", ctx({ VIS: { warmup: { at: 7 }, fee: 50 } }), deps)("VIS");
+    eq(info.warmup, "");
+    eq(info.fee, "");
+  });
+  it("a record emptied back out is dropped rather than kept as blanks", () => {
+    const c = ctx({ VIS: { warmup: "07:00" } });
+    bind("setMeetInfo", c, [...deps, "setMeetInfo"])("VIS", { warmup: "" });
+    eq(Object.keys(c.meetInfo).length, 0, "one entry per meet on file is not a record of anything");
+    eq(c.saved.k, "vx_meet_info");
+  });
+  it("and a record with something in it is kept", () => {
+    const c = ctx();
+    bind("setMeetInfo", c, [...deps, "setMeetInfo"])("VIS", { deadline: "2026-11-20" });
+    eq(c.meetInfo.VIS.deadline, "2026-11-20");
+  });
+});
+
+/* --------------------------------------------------- coming up, and already swum
+   Two lists, because they are read for opposite reasons. What decides which is not
+   the date alone: a status a coach has set is the only part a person has actually
+   asserted, and it has to win. */
+describe("splitting the meets in two", () => {
+  const ctx = (status = {}, info = {}) => ({
+    customMeets: [], meetsMeta: [], meetStatus: status, meetInfo: info,
+    todayISO: () => "2026-08-29",
+  });
+  const deps = ["_toISODate", "_meetLastISO", "_meetInfo", "MEET_INFO_BLANK", "allMeets",
+                "_meetIsDone", "_meetStatusOf", "todayISO", "_calUnmigrated", "_calAsMeet",
+                "_mdyFromISO", "_sameMeetName"];
+  const done = (m, status = {}, info = {}) => bind("_meetIsDone", ctx(status, info), deps)(m);
+
+  it("a meet whose day has passed is done", () =>
+    eq(done({ name: "Spring Cup", date: "6/5/2026" }), true));
+  it("a meet still ahead is not", () =>
+    eq(done({ name: "VIS", date: "12/4/2026" }), false));
+  // Today's meet is today's problem, not last month's record.
+  it("a meet being swum today is not done", () =>
+    eq(done({ name: "Today", date: "8/29/2026" }), false));
+  it("Completed wins even before the day arrives", () =>
+    eq(done({ name: "VIS", date: "12/4/2026" }, { VIS: "Completed" }), true));
+  // A meet still marked "Entries open" the morning after is what the club is working on,
+  // and dropping it into the history is how the entries get forgotten.
+  it("a live status wins even after the day has passed", () => {
+    eq(done({ name: "Spring Cup", date: "6/5/2026" }, { "Spring Cup": "Entries open" }), false);
+    eq(done({ name: "Spring Cup", date: "6/5/2026" }, { "Spring Cup": "In progress" }), false);
+  });
+  // Three days of racing: the meet is not over on the first morning.
+  it("a meet that runs several days is judged on its last one", () =>
+    eq(done({ name: "VIS", date: "8/27/2026" }, {}, { VIS: { endDate: "2026-08-31" } }), false));
+  // Better to see a meet you have finished with than to lose one you have not.
+  it("a meet with no readable date is treated as still ahead", () =>
+    eq(done({ name: "Unknown", date: "" }), false));
+
+  it("each list is in the order it is read in", () => {
+    const c = ctx();
+    c.customMeets = [
+      { name: "Late", date: "12/4/2026" },
+      { name: "Old", date: "2/1/2026" },
+      { name: "Soon", date: "9/10/2026" },
+      { name: "Recent", date: "6/5/2026" },
+    ];
+    const split = bind("_meetsSplit", c, [...deps, "_meetsSplit"])();
+    eq(split.upcoming.map((m) => m.name), ["Soon", "Late"], "the next one first");
+    eq(split.done.map((m) => m.name), ["Recent", "Old"], "the most recent one first");
+  });
+});
+
+/* ------------------------------------------------- can my child swim this meet
+   The cut times were in the app for a year and could only be read one event at a
+   time, on a coach's seed screen. The question a parent asks is the other way
+   round — for THIS meet, which events can my child enter — and the club already
+   holds both halves of the answer. */
+describe("qualifying times for one swimmer", () => {
+  const ctx = (cuts) => ({ meetCuts: cuts });
+  const deps = ["parseTimeStr", "EVENT_CATALOG", "fmt", "_meetQualFor"];
+  const sw = { pbs: [
+    { event: "50 Free", sec: 29.1 },
+    { event: "100 Free", sec: 66.4 },
+    { event: "200 IM", sec: 160.0 },
+  ] };
+  const rows = (cuts) => bind("_meetQualFor", ctx(cuts), deps)(sw, "VIS");
+
+  it("a personal best inside the cut is qualified", () => {
+    const r = rows({ VIS: { "50 Free": "29.50" } });
+    eq(r[0].qualified, true);
+    eq(r[0].gap, "", "there is nothing left to go");
+  });
+  // Exactly on the standard is in, not out. This is the one that gets argued about.
+  it("dead on the cut qualifies", () =>
+    eq(rows({ VIS: { "50 Free": "29.10" } })[0].qualified, true));
+  it("outside it says how far, to the hundredth", () => {
+    const r = rows({ VIS: { "100 Free": "1:05.00" } });
+    eq(r[0].qualified, false);
+    eq(r[0].gap, "+1.40", "a hundredth is the unit the sport is timed in");
+  });
+  it("no time on file is said plainly rather than counted as a miss", () => {
+    const r = rows({ VIS: { "100 Back": "1:14.20" } });
+    eq(r[0].pb, "No time yet");
+    eq(r[0].qualified, false);
+    eq(r[0].gap, "");
+  });
+  it("an event with no standard set is not listed", () => {
+    const r = rows({ VIS: { "50 Free": "29.50", "100 Fly": "" } });
+    eq(r.map((x) => x.event), ["50 Free"]);
+  });
+  it("nor is one whose standard cannot be read as a time", () =>
+    eq(rows({ VIS: { "50 Free": "TBC" } }).length, 0));
+  it("a meet with no standards at all has nothing to show", () =>
+    eq(rows({}).length, 0));
+  it("they come out in the order a program is written in", () =>
+    eq(rows({ VIS: { "200 IM": "2:40.00", "50 Free": "29.50", "100 Free": "1:05.00" } })
+        .map((x) => x.event), ["50 Free", "100 Free", "200 IM"]));
+
+  it("the summary counts what is already met", () => {
+    const c = ctx({ VIS: { "50 Free": "29.50", "100 Free": "1:05.00" } });
+    eq(bind("_meetQualCount", c, [...deps, "_meetQualCount"])(sw, "VIS"), { qualified: 1, total: 2 });
+  });
+});
+
+/* ------------------------------------------------------------------------ camps
+   Not meets, and deliberately not filed as them: a camp has no event program, no
+   entry, no result and no cut time. Putting one in customMeets would place it in
+   the entries sheet, the results screen and every "18 meets on record" count. */
+describe("camps", () => {
+  const ctx = (camps) => ({ camps, state: {}, forceUpdate() {}, todayISO: () => "2026-08-29",
+                            _saveJSON(k, v) { this.saved = { k, v }; } });
+  const deps = ["_campsShaped", "_toISODate", "_campsSorted", "_campIsDone", "_campsSplit", "todayISO"];
+
+  it("a document that is not a list is not a list of camps", () => {
+    eq(bind("_campsShaped", ctx(null), deps)(null), []);
+    eq(bind("_campsShaped", ctx({}), deps)({ a: 1 }), []);
+  });
+  it("and an entry with no name is not a camp", () =>
+    eq(bind("_campsShaped", ctx([]), deps)([{ id: "c1" }, null, { id: "c2", name: "Winter" }]).length, 1));
+
+  it("a camp is over the day after its last day", () => {
+    const isDone = bind("_campIsDone", ctx([]), deps);
+    eq(isDone({ start: "2026-08-25", end: "2026-09-02" }), false, "it is running now");
+    eq(isDone({ start: "2026-08-01", end: "2026-08-28" }), true);
+    eq(isDone({ start: "2026-08-29", end: "" }), false, "a one-day camp today has not happened yet");
+  });
+  it("upcoming camps come out soonest first", () => {
+    const c = ctx([{ id: "b", name: "Late", start: "2026-12-20" },
+                   { id: "a", name: "Soon", start: "2026-09-05" },
+                   { id: "z", name: "Old", start: "2026-02-01" }]);
+    const split = bind("_campsSplit", c, deps)();
+    eq(split.upcoming.map((x) => x.name), ["Soon", "Late"]);
+    eq(split.done.map((x) => x.name), ["Old"]);
+  });
+  it("saving an existing camp edits it rather than adding a second", () => {
+    const c = ctx([{ id: "c1", name: "Winter", place: "Aspire" }]);
+    bind("campSave", c, [...deps, "campSave"])({ id: "c1", name: "Winter", place: "Hamad" });
+    eq(c.camps.length, 1);
+    eq(c.camps[0].place, "Hamad");
+    eq(c.saved.k, "vx_camps");
+  });
+  it("a camp with no name is never stored", () => {
+    const c = ctx([]);
+    bind("campSave", c, [...deps, "campSave"])({ id: "c1", name: "   " });
+    eq(c.camps.length, 0);
+  });
+  it("and one can be removed", () => {
+    const c = ctx([{ id: "c1", name: "Winter" }, { id: "c2", name: "Summer" }]);
+    bind("campDelete", c, [...deps, "campDelete"])("c1");
+    eq(c.camps.map((x) => x.name), ["Summer"]);
+  });
+});
+
+/* ------------------------------------ the details of a meet the club did not build
+   The day, venue and course of an imported meet belong to whoever ran it. The entry
+   deadline, the warm-up time and the club's own note about it do not — and until now
+   an imported meet had nowhere at all to put them. */
+describe("meet details on an imported meet", () => {
+  const ctx = () => ({
+    customMeets: [{ name: "Test", date: "7/30/2026", location: "Hamad", course: "LCM" }],
+    meetsMeta: [{ name: "Nautilus Invitational Swim Meet 2026", date: "1/30/2026", course: "LCM" }],
+    meetInfo: {}, meetStatus: {}, state: {}, forceUpdate() {}, audit() {},
+    _saveJSON(k, v) { this.savedDoc = { k, v }; }, _saveLocalOnly(k, v) { this.savedLocal = { k, v }; },
+    _meetUnsent: {}, setState: function (p) { Object.assign(this.state, p); },
+  });
+  const deps = ["_toISODate", "_mdyFromISO", "_fmtDMY", "_sayMeetSaved", "_meetsPush",
+                "_meetLanded", "_meetsUnsent", "_isCustomMeet", "setMeetInfo", "_meetInfo",
+                "MEET_INFO_BLANK", "allMeets", "_sayIfNotSaved", "_clubStateLanded"];
+
+  it("its editor opens, where before it could not be opened at all", () => {
+    const c = ctx();
+    bind("meetEditOpen", c, ["_toISODate", "_meetInfo", "MEET_INFO_BLANK", "allMeets"])("Nautilus Invitational Swim Meet 2026");
+    eq(c.state.meetEditName, "Nautilus Invitational Swim Meet 2026");
+  });
+  it("the details are saved and the host's own record is left alone", () => {
+    const c = ctx();
+    c.state.meetEditName = "Nautilus Invitational Swim Meet 2026";
+    c.state.meetEditDraft = { date: "2026-01-30", location: "Somewhere else", course: "SCM",
+                              deadline: "2026-01-10", warmup: "06:30" };
+    bind("meetEditSave", c, deps)();
+    eq(c.meetInfo["Nautilus Invitational Swim Meet 2026"].warmup, "06:30");
+    eq(c.savedLocal, undefined, "the imported meet's own row must not be rewritten");
+    eq(c.meetsMeta[0].date, "1/30/2026");
+  });
+  // A three-day meet entered the wrong way round reads as finished the moment it is
+  // saved, and drops straight out of the list the club is working from.
+  it("a last day before the first day is refused", () => {
+    const c = ctx();
+    c.state.meetEditName = "Test";
+    c.state.meetEditDraft = { date: "2026-12-04", endDate: "2026-12-01", course: "LCM" };
+    bind("meetEditSave", c, deps)();
+    eq(/last day cannot be before/.test(c.state.meetEditErr), true);
+    eq(Object.keys(c.meetInfo).length, 0, "and nothing is written from a refused save");
+  });
+  it("the club's own meet still saves its day and its details together", () => {
+    const c = ctx();
+    c.state.meetEditName = "Test";
+    c.state.meetEditDraft = { date: "2026-12-04", endDate: "2026-12-06", location: "Doha, HAC",
+                              course: "SCM", deadline: "2026-11-20", fee: "50 QAR per event" };
+    bind("meetEditSave", c, deps)();
+    eq(c.customMeets[0].date, "12/4/2026");
+    eq(c.customMeets[0].course, "SCM");
+    eq(c.meetInfo.Test.endDate, "2026-12-06");
+    eq(c.meetInfo.Test.fee, "50 QAR per event");
+  });
+});
+
+/* ------------------------------------------------- the meet's information sheet
+   The club calendar's attachment falls back to a base64 data URL when the upload
+   fails. club_state is one document per key, so a 900 KB entry sheet stored that
+   way is the "photo inside a record" that has twice filled every phone in the club
+   and stopped every other save on it. */
+describe("attaching a meet information sheet", () => {
+  const src = methodSource("meetInfoFilePick").body;
+  it("goes to Storage and keeps only the link", () =>
+    eq(/__vxUploadFile/.test(src), true));
+  it("never falls back to putting the file inside the record", () => {
+    eq(/FileReader/.test(src), false, "a data URL here is a megabyte inside a synced document");
+    eq(/readAsDataURL/.test(src), false);
+  });
+  it("and says so rather than attaching nothing quietly", () =>
+    eq(/could not be uploaded/.test(src), true));
+});
+
 /* ------------------------------------------------- meets, one row each
    The date and status lived in two club_state documents holding every meet at
    once, and club_state is last-write-wins on the whole document. A device coming
@@ -1363,7 +2647,8 @@ describe("the club's meets are rows, not one document", () => {
   const row = (name, extra = {}) => ({ name, meet_date: "", location: "", course: "LCM",
     events: [], status: "Upcoming", club_built: true, ...extra });
   const ctxWith = (patch = {}) => ({
-    customMeets: [], meetStatus: {}, state: {}, forceUpdate() {}, _saveLocalOnly() {},
+    customMeets: [], meetsMeta: [], meetStatus: {}, meetInfo: {}, state: {}, forceUpdate() {},
+    _saveLocalOnly() {}, todayISO: () => "2026-08-29",
     _meetUnsent: {}, _meetsMigrated: true, setState(p) { Object.assign(this.state, p); }, ...patch });
   const fetchDeps = ["_meetRowToMeet", "_meetHeldHere", "_meetsUnsent", "_meetsMigrateOnce"];
 
@@ -1440,7 +2725,9 @@ describe("the club's meets are rows, not one document", () => {
                           meetStatus: { Test: "In progress" } });
       const restore = globalThis.window;
       globalThis.window = { __vxUpsert: (t, rows) => { sent.push([t, rows]); return Promise.resolve(true); } };
-      bind("meetStatusCycle", c, ["_meetsPush", "_meetLanded", "_meetsUnsent", "_sayMeetSaved"])("Test");
+      bind("meetStatusCycle", c, ["_meetsPush", "_meetLanded", "_meetsUnsent", "_sayMeetSaved",
+                                  "_meetStatusOf", "_meetLastISO", "_meetInfo", "MEET_INFO_BLANK",
+                                  "_toISODate", "allMeets", "todayISO"])("Test");
       await new Promise((r) => setTimeout(r, 5));
       globalThis.window = restore;
       eq(sent.length, 1);
@@ -1998,10 +3285,20 @@ describe("expired session", () => {
   // then said the one thing that does not help. The server's own words are what tell an
   // expired token apart from a permission this account has never had.
   it("a retry that keeps failing shows what the database actually said", () => {
-    const detail = sourceBetween("saveFailDetail: (S.authDead || S.sendingAnon)", "// Signed out, the Retry button is a lie");
+    const detail = sourceBetween("saveFailDetail: this._saveNeedsSignIn(S)", "// Signed out, the Retry button is a lie");
     eq(/retrying automatically'\s*\+\s*\(\(S\.saveFailLast && S\.saveFailLast\.said\)/.test(detail), true,
        "the reason is captured on every failure and must not be dropped on this one");
     eq(/the database said: /.test(detail), true);
+  });
+  // "no connection · retrying automatically" reads as an app in trouble, and it was shown to a
+  // coach whose work was perfectly safe. There is no server answer to quote for a dropped
+  // connection — "network: Load failed" is the browser's phrasing of "it did not arrive" — so
+  // the line says the two things that are true and useful instead.
+  it("says a dropped connection is not work the club has lost", () => {
+    const detail = sourceBetween("saveFailDetail: this._saveNeedsSignIn(S)", "// Signed out, the Retry button is a lie");
+    eq(/S\.saveFailLast\.status===0/.test(detail), true, "a dropped connection needs its own words");
+    eq(/Nothing is lost/.test(detail), true);
+    eq(/as soon as the connection is back/.test(detail), true);
   });
 
   // The state a coach was actually stuck in: the app still signed in, the database session
@@ -2435,6 +3732,46 @@ describe("expired session", () => {
       await t.win.__vxpush("vx_billing", JSON.stringify({ b: 2 }));
       await flush();
       eq(t.win.__vxBlocked().length, 0, "one document, so one answer clears the lot");
+    });
+
+    // The banner this club actually sent in: "club_state (vx_roster_edits) · no connection ·
+    // retrying automatically", on a phone that had full signal a moment either side of it.
+    //
+    // Ten sweeps is seven and a half minutes, and a phone in a pool hall is out of signal for
+    // longer than that most mornings. Every one of those failures used to count, so the tenth
+    // moved the club's roster save off the retry queue for good — and nothing replays a
+    // set-aside write. The edit stayed on that one phone, and the banner cleared itself the
+    // next time any other key saved, so nobody was ever told.
+    itAsync("a dropped connection never sets a save aside, however long it lasts", async () => {
+      const t = boot({ auth: LIVE,
+        reply: (url) => (url.includes("/club_state")
+          ? Promise.reject(new TypeError("Load failed")) : GOOD_TOKEN) });
+      const doc = JSON.stringify({ edits: { r3: { dob: "2013-04-01" } }, deleted: {}, added: {} });
+      for (let i = 0; i < 14; i++) { await t.win.__vxpush("vx_roster_edits", doc); await flush(); }
+      eq(t.win.__vxBlocked().length, 0, "the club's roster edit must stay on the retry path");
+      eq(t.win.__vxFailed().length, 1, "and be held as one change, not fourteen");
+    });
+    // Which is the point of the distinction: the moment the request gets through, it saves.
+    itAsync("and it goes up by itself when the connection comes back", async () => {
+      let offline = true;
+      const t = boot({ auth: LIVE,
+        reply: (url) => (url.includes("/club_state")
+          ? (offline ? Promise.reject(new TypeError("Load failed")) : res(200, [])) : GOOD_TOKEN) });
+      const doc = JSON.stringify({ edits: { r3: { dob: "2013-04-01" } }, deleted: {}, added: {} });
+      t.store.vx_roster_edits = doc;
+      for (let i = 0; i < 12; i++) { await t.win.__vxpush("vx_roster_edits", doc); await flush(); }
+      offline = false;
+      await t.win.__vxRetryFailed();
+      await flush();
+      eq(t.win.__vxFailed().length, 0, "twelve dropped connections must not cost the edit");
+    });
+    // The other half of the rule, unchanged: an answer repeated is still an answer.
+    itAsync("but a refusal the database keeps repeating is still set aside", async () => {
+      const t = boot({ auth: LIVE,
+        reply: (url) => (url.includes("/club_state")
+          ? res(400, { message: "column club_state.nope does not exist" }) : GOOD_TOKEN) });
+      for (let i = 0; i < 10; i++) { await t.win.__vxpush("vx_squads", JSON.stringify({ a: i })); await flush(); }
+      eq(t.win.__vxBlocked().length, 1, "ten identical refusals cannot become an eleventh answer");
     });
 
     // The club's own 401: signed in, but the database does not recognise the account as staff,
@@ -3117,6 +4454,21 @@ describe("InBody sheet", () => {
            "vx_roster_edits is in " + whole + ", which would return the whole club's roster");
       }
       eq(/requireUser/.test(SRC), true, "the family slice does not authenticate its caller");
+      // The meet details and the camps are the club telling its members what is happening.
+      // They are the same for every family and name nobody, so they belong in CLUB_KEYS —
+      // and a family screen that cannot read them shows a meet with no entry deadline on it,
+      // which is the one thing a parent came to the screen for.
+      const club = (SRC.match(/const CLUB_KEYS = \[([\s\S]*?)\]/) || [])[1] || "";
+      for (const k of ["vx_meet_info", "vx_camps"])
+        eq(new RegExp('"' + k + '"').test(club), true, k + " never reaches a family");
+      // And they are club-wide, not a slice: appearing in one of the per-swimmer lists as
+      // well would mean each was being cut down to one family's children, which for a meet's
+      // entry deadline would return an empty object and show a card with nothing on it.
+      for (const other of ["PER_SWIMMER_KEYS", "ARRAY_BY_SWID_KEYS", "PERIOD_THEN_SWIMMER_KEYS"]) {
+        const list = (SRC.match(new RegExp("const " + other + " = \\[([\\s\\S]*?)\\]")) || [])[1] || "";
+        for (const k of ["vx_meet_info", "vx_camps"])
+          eq(new RegExp(k).test(list), false, k + " is in " + other + " as well as CLUB_KEYS");
+      }
     });
 
     it("keeps the minors rules in the chat prompt too", () => {
@@ -3272,6 +4624,47 @@ describe("InBody sheet", () => {
       eq(!!heavy.badWeight, false, "a masters swimmer is not a misread");
       eq(!!check({ weight: 18.5, height: 110 }).badWeight, false, "a five-year-old in the learn-to-swim squad");
     });
+
+    // The bounds only ever caught the swap because this swimmer happened to be 167 cm tall.
+    // Most of the club is not. On a 138 cm ten-year-old the identical misreading produces
+    // "138 kg", which is under every limit, is not equal to a height the sheet did not give
+    // up, and goes onto the record as a measurement.
+    describe("the sheet outvotes the Weight box", () => {
+      const w = bind("_weightImplausible", {});
+      // A real 138 cm swimmer: 34.5 kg, 18% fat, so 6.2 kg of fat and 28.3 kg of fat free mass.
+      const child = { bodyFatMass: 6.2, pbf: 18, ffm: 28.3, bmi: 18.1, height: 138 };
+      it("a height under 150 read into the Weight box is caught by the sheet's own arithmetic", () => {
+        const why = w(138, null, child);
+        eq(!!why, true, "138 kg passes every bound there is");
+        eq(/34\.[45] kg/.test(why), true, "and the sheet says what the weight actually was: " + why);
+      });
+      it("the real weight from that same sheet is not refused", () =>
+        eq(w(34.5, 138, child), "", "the swap check must not fire on the number it exists to protect"));
+      it("one figure disagreeing is that figure's problem, not the weight's", () =>
+        eq(w(55.8, null, { bodyFatMass: 6.3, pbf: 35, ffm: 49.5 }), "",
+           "pbf alone contradicts; _inbodySanity drops pbf and keeps the weight"));
+      it("a sheet with nothing to cross-check against is left alone", () =>
+        eq(w(55.8, null, { smm: 27.4 }), ""));
+      it("the club's own sheet still reads clean", () =>
+        eq(w(55.8, 167, { bodyFatMass: 6.3, pbf: 11.4, ffm: 49.5, bmi: 20, height: 167 }), ""));
+
+      // A stored reading is not shaped like a sheet: the table lifted weight/fat/muscle out into
+      // columns and left the rest under their own names. Handed over as-is, percent body fat is
+      // missing from every record the club already has and the check has nothing to work with.
+      it("a reading as the table stores it is checked too", () => {
+        const asSheet = bind("_ibAsSheet", {});
+        const stored = { date: "2026-07-14", weight: 138, fat: 18, muscle: 15.2,
+                         bodyFatMass: 6.2, ffm: 28.3, bmi: 18.1, height: 138 };
+        eq(asSheet(stored).pbf, 18, "the fat column IS the sheet's percent body fat");
+        eq(asSheet(stored).smm, 15.2, "and the muscle column its skeletal muscle mass");
+        eq(!!w(stored.weight, null, asSheet(stored)), true, "a stored swap must not read as a measurement");
+      });
+      it("what the screen and the analysis check is that same shape", () => {
+        eq(/_weightImplausible\(r\.weight, r\.height, this\._ibAsSheet\(r\)\)/g.test(SOURCE), true);
+        eq((SOURCE.match(/_weightImplausible\(r\.weight, r\.height, this\._ibAsSheet\(r\)\)/g) || []).length, 2,
+           "the swimmer's record and the nutrition analysis both have to look");
+      });
+    });
   }
 
   // The reconciliation above runs only on what this device's own OCR guessed at. The 167 came
@@ -3293,7 +4686,10 @@ describe("InBody sheet", () => {
   });
   it("the same mix-up typed by hand is refused before it is saved", () => {
     const add = (SOURCE.match(/  addInbody\(swId\)\{[\s\S]*?\n    const m=this\._swMeta/) || [""])[0];
-    eq(/const wWhy=this\._weightImplausible\(w, isNaN\(typedH\)\?null:typedH\);/.test(add), true);
+    eq(/const wWhy=this\._weightImplausible\(w, isNaN\(typedH\)\?null:typedH, typedSheet\);/.test(add), true);
+    // Bounds alone cannot see a swap on a swimmer shorter than 150 cm, so the rest of the sheet
+    // in front of the person has to reach the check with the weight.
+    eq(/typedSheet\.pbf=fat/.test(add), true, "the % fat box is the sheet's PBF and the check needs it");
     eq(/if\(wWhy\)\{[\s\S]*?return;/.test(add), true, "it has to stop, not just warn");
   });
 
@@ -3528,18 +4924,37 @@ describe("InBody sheet", () => {
       eq(/vidEl\.src=this\._mediaSrc\(v\.url\)/.test(SOURCE), true, "the video player");
       eq(/activeVideoDownloadUrl: activeVid\?this\._mediaSrc\(/.test(SOURCE), true, "the download link");
       eq(/const ready=this\._mediaSrc\(url\);/.test(SOURCE), true, "documents and scans opened in a tab");
+      // The fitness plan's demo photo and demo video are files in vx-media like any other, and
+      // this was the one render path still handing the raw stored URL to the browser. It worked
+      // for exactly as long as the bucket was public: the day it went private the coach's
+      // exercise video became a broken image, with nothing in the plan having changed.
+      const fitMedia = sourceBetween("_fitMediaEl(exId){", "// ---- Fitness sessions");
+      eq(/src:this\._mediaSrc\(m\.photo\)/.test(fitMedia), true, "the exercise demo photo");
+      eq(/this\._videoEmbedEl\(this\._mediaSrc\(m\.video\)\)/.test(fitMedia), true, "the exercise demo video");
     });
     it("opening a document never waits on a request first", () => {
       // A window opened after an await is a blocked pop-up and the document simply never
-      // appears. _mediaSrc returns what it has and signs in the background, so the window is
-      // opened in the same tick as the tap.
+      // appears. The window is opened in the same tick as the tap, and sent somewhere after.
       const fn = sourceBetween("_openUrl(url){", "_openDoc(doc){");
       eq(/await/.test(fn), false, "awaiting here is what gets the pop-up blocked");
       eq(/const ready=this\._mediaSrc\(url\);/.test(fn), true);
     });
+    // The tab gets one chance to be sent somewhere. It used to be sent to whatever _mediaSrc had
+    // to hand, which on the first tap for a file is the stored URL — the public one, from when
+    // vx-media was a public bucket. Against a private bucket that answers {"error":"Bucket not
+    // found"}, which is what the InBody Report button showed while the same file drew perfectly
+    // well on the page behind it.
+    it("a tab is not sent to the public URL of a bucket that is not public", () => {
+      const fn = sourceBetween("_openUrl(url){", "_openDoc(doc){");
+      eq(/window\.open\(''\s*,\s*'_blank'\)/.test(fn), true,
+         "the window has to be opened empty and pointed at the signed link when it arrives");
+      eq(/this\._signMedia\(path\)\.then\(/.test(fn), true, "and something has to wait for that link");
+      eq(/\/object\\\/sign\\\//.test(fn), true, "a link already signed goes straight there, with nothing to wait for");
+    });
     it("one signing request per file, not one per render", () => {
       const fn = sourceBetween("_signMedia(path){", "_sbUrl(){");
-      eq(/if\(this\._signing\[path\]\) return;/.test(fn), true);
+      eq(/if\(this\._signing\[path\]\) return this\._signing\[path\];/.test(fn), true,
+         "and the one request is handed back, so a caller that must navigate can wait for it");
       eq(/exp:Date\.now\(\)\+life\*800/.test(fn), true, "re-signed at 80% of its life, so it cannot expire mid-view");
     });
   });
@@ -4291,10 +5706,19 @@ describe("InBody sheet", () => {
 
     it("counts its own attempts rather than being re-queued as if it were new", () => {
       eq(/x\.sig===sig/.test(add), true, "it has to recognise the same write coming back");
-      eq(/_tries = _prior \+ 1/.test(add), true);
+      eq(/_tries = _prior \+ \(_answered \? 1 : 0\)/.test(add), true);
     });
     it("is set aside once it is clearly not going to work", () =>
       eq(/_tries >= 10/.test(add), true, "nothing ever takes it off the retry path"));
+    // The counter is evidence of one thing only: the database has read this request and refused
+    // it, over and over. A connection that dropped is evidence of the opposite — the request
+    // never arrived — and sending it again is the fix rather than a waste.
+    it("only counts the attempts the database actually answered", () => {
+      eq(/_answered = \(typeof status === "number" && status > 0\)/.test(add), true,
+         "NOTSENT is -1 and a dropped connection is 0; neither is an answer");
+      eq(/if\(_answered && _tries >= 10\)/.test(add), true,
+         "a write nobody has answered must never be set aside");
+    });
     // Set aside, not discarded — the club's work is not thrown away, it is moved off the path
     // that everything else is queued on, and named so somebody can act on it.
     it("is moved off the retry path rather than deleted", () => {
@@ -4306,8 +5730,8 @@ describe("InBody sheet", () => {
       eq(/not held up behind it/.test(add), true,
          "the consequence is the part the person reading it needs");
     });
-    // Ten attempts at 45 seconds is most of ten minutes — long enough that a real outage
-    // recovers on its own and nothing is set aside for a dropped connection.
+    // Ten answered attempts at 45 seconds is most of ten minutes of the database saying no.
+    // An outage is not counted at all, so the number only has to be generous about refusals.
     it("gives a real outage time to recover first", () => {
       const tries = parseInt((add.match(/_tries >= (\d+)/) || [])[1], 10);
       eq(tries >= 5 && tries <= 20, true, "it gives up after " + tries + " attempts");
@@ -4671,6 +6095,7 @@ describe("InBody sheet", () => {
     for (const [fn, latch, table] of [
       ["_squadsSeed", "_squadsSeeded", "vx_squads_t"],
       ["_videosSeed", "_videosSeeded", "vx_video_analyses"],
+      ["_sponsorsSeed", "_sponsorsSeeded", "swimmer_sponsors"],
     ]) {
       const body = methodSource(fn).body;
       it(fn + " gives up after one accepted fill", () => {
@@ -4722,6 +6147,18 @@ describe("InBody sheet", () => {
       // meet_declarations and cached in vx_meet_entries, both accounted for already.
       vx_entries_unsent: "which of this device's entry writes have not reached the database yet",
       vx_meets_unsent: "which of this device's meet writes have not reached the database yet",
+      // Which entries of the old home-screen calendar THIS device has already folded into the
+      // meets proper. The meets themselves are in club_meets and every device reads them, so
+      // this is only a note to stop one device redoing work it has finished — and a device that
+      // loses it simply finds the meet already there and marks it done again.
+      vx_cal_migrated: "which of the old calendar's entries this device has already folded in",
+      // The fourth of the same shape, and the one that decides whether a pull is allowed to
+      // overwrite this device's roster edits. It is this device's conversation with the
+      // vx_roster table — which of its rows the table has acknowledged — and it is precisely
+      // what must NOT be shared: telling the tablet which rows the laptop has sent would let
+      // the tablet decide the laptop's unsent work is stale. The roster itself is in vx_roster
+      // and in vx_roster_edits, both accounted for already.
+      vx_roster_sent: "which of this device's roster rows the database has taken",
     };
     // 2. A local copy of a database table, so the screen can draw before the read comes back.
     //    The table is the truth; losing the copy costs nothing.
@@ -4745,6 +6182,10 @@ describe("InBody sheet", () => {
       // local copy as the photos above — the table is the truth, and losing the copy costs a
       // render, not a status.
       vx_sw_status: "swimmer_status",
+      // Sponsorship left club_state for the same reason, after the same complaint: two coaches
+      // marking two swimmers inside one pull window sent two whole documents, and the second
+      // had never heard of the first. See supabase/swimmer_sponsors.sql.
+      vx_sponsored: "swimmer_sponsors",
       // Meets left club_state for a table of their own, for the reason recorded in
       // supabase/club_meets.sql: the shared document is last-write-wins, so a device replaying
       // its queue of unsent writes put its whole stale calendar back over a corrected date.
@@ -4764,8 +6205,25 @@ describe("InBody sheet", () => {
     });
     // The other direction: a key listed as synced that nothing ever writes is a screen whose
     // save was quietly renamed, and the sync list still swearing it is covered.
+    // A key can legitimately be pulled and never written — but only while something is still
+    // reading it, and only until it is gone. Anything here is a promise that both are true.
+    const READ_ONLY = {
+      // The club's second meets calendar. Nothing writes it any more: there is one place to add
+      // a meet now, and it writes club_meets. It stays in the sync list because the migration
+      // that folds its entries into the meets has to be able to SEE them — including on a phone
+      // that has not been opened since before the change, and on a device installed fresh in
+      // between. It comes out of this list, and out of the sync list, once the club's own
+      // entries have all been folded in. See _calMigrateOnce.
+      vx_meets_cal: "read by _calMigrateOnce until the old calendar has been folded in",
+    };
     it("every synced key is one something actually writes", () =>
-      eq(SYNC.filter((k) => !written.has(k)).join(", "), "", "in the sync list but never written"));
+      eq(SYNC.filter((k) => !written.has(k) && !READ_ONLY[k]).join(", "), "",
+         "in the sync list but never written"));
+    // And a key excused above must actually still be read, or it is simply dead.
+    for (const key of Object.keys(READ_ONLY))
+      it(key + " is still read by something", () =>
+        eq(new RegExp("(_loadJSON|getItem)\\(\\s*['\"]" + key + "['\"]").test(SOURCE), true,
+           key + " is excused from being written, but nothing reads it either"));
 
     // A cache is only a cache if the table behind it is really being written. Naming one above
     // is a claim, and this is what checks it.
@@ -4775,8 +6233,20 @@ describe("InBody sheet", () => {
            "nothing ever writes " + table + ", so " + key + " is not a cache — it is the only copy"));
 
     // Neither list may quietly grow to cover a real save.
+    //
+    // 13, from 12, for vx_roster_sent — the fourth "what has this device sent" key, added with
+    // the move to one roster row per swimmer. The argument the limit asks for is that it is an
+    // outbox rather than data: everything it describes lives in vx_roster and vx_roster_edits,
+    // and sharing it would let one device judge another's unsent work stale.
+    //
+    // 14, for vx_cal_migrated, folding the old home-screen calendar into the meets. The argument
+    // is that it is a tombstone, and that the alternative is worse than an extra key: without it
+    // the only "have I done this one" test is whether a meet of that name exists, so an entry
+    // the club later DELETED from the meets would be recreated from the old calendar on the next
+    // boot — a meet the club has cancelled coming back by itself, every morning. It is also the
+    // shortest-lived key here: it goes when vx_meets_cal does.
     it("the device-only list stays small enough to read", () =>
-      eq(Object.keys(DEVICE_ONLY).length <= 12, true, "if this needs to grow, the reason needs an argument"));
+      eq(Object.keys(DEVICE_ONLY).length <= 14, true, "if this needs to grow, the reason needs an argument"));
   });
 
   // Before any of that: the file has to parse. A stray brace anywhere in 16,000 lines takes the
@@ -4876,6 +6346,77 @@ describe("InBody sheet", () => {
       const sql = readFileSync(new URL("../supabase/plan_tables_repair.sql", import.meta.url), "utf8");
       eq(/add column if not exists/.test(sql), true, "safe to run twice, and on a database already correct");
       eq(/notify pgrst/.test(sql), true, "PostgREST caches the schema; without this the 400 continues");
+    });
+
+    // Adding the columns fixed the READ. Nothing had fixed the write: fitness_plans.id is still
+    // the uuid from the first migration, and every squad in this app is a slug, so a coach's save
+    // came back "invalid input syntax for type uuid: seniora" and the row never landed — while
+    // squad_plans, season_plans and fitness_sessions all take the same slugs as text.
+    it("ships the repair for the id column no squad slug can satisfy", () => {
+      const sql = readFileSync(new URL("../supabase/fitness_plans_text_id.sql", import.meta.url), "utf8");
+      eq(/alter column id type text/.test(sql), true, "a squad id is a slug, not a uuid");
+      eq(/alter column squad_id drop not null/.test(sql), true,
+         "NOT NULL on a column the app never sends fails every insert one step after the id does");
+      eq(/drop constraint fitness_plans_squad_id_fkey/.test(sql), true,
+         "and the app's squad ids can never satisfy a key into squads(id)");
+      eq(/notify pgrst/.test(sql), true, "PostgREST caches the schema; without this the 400 continues");
+      eq(/information_schema\.columns/.test(sql), true, "each step checks the shape first, so it is safe to run twice");
+      eq(/drop\s+table|delete\s+from|truncate/i.test(sql), false, "a repair must not remove anybody's plan");
+    });
+    // The three tables the app writes with a squad slug as the primary key. fitness_plans was the
+    // one left behind, and this is the assertion that says so out loud.
+    it("every plan table is written with the squad's own id", () => {
+      for (const t of ["fitness_plans", "squad_plans", "season_plans"])
+        eq(new RegExp("__vxUpsert\\('" + t + "',\\s*\\[\\{id:String\\(id\\)").test(SOURCE), true,
+           t + " is written with something other than the squad id");
+    });
+  });
+
+  // A demo photo and a demo video are filed under an exercise's id, and the default plan is handed
+  // out from render(). With ids minted fresh each time, a squad still on the untouched template
+  // got a whole new set of them every time the screen drew: upload a video, the screen redraws,
+  // and the id it was filed under no longer exists. The file is in Storage, the record is in
+  // vx_fitness_media, and nothing on screen can find either.
+  describe("an exercise keeps its id, so its video is still there after the screen redraws", () => {
+    const TEMPLATE = { title: "Dryland", sections: [
+      { title: "Warm-up", exs: [{ name: "Band pull-apart", sets: 3, reps: "10", rest: ":30" },
+                                { name: "Dead bug", sets: 3, reps: "8", rest: ":30" }] },
+      { title: "Core", exs: [{ name: "Plank", sets: 3, reps: "40", rest: ":20" }] }] };
+    const ctx = () => ({ fitnessTemplate: TEMPLATE, fitnessPlans: {},
+                         _uid: (p) => p + "_" + Math.random().toString(36).slice(2, 8) });
+
+    it("the same squad gets the same ids twice running", () => {
+      const c = ctx();
+      const get = bind("getFitPlan", c, ["makeDefaultFitnessPlan"]);
+      const a = get("seniora"), b = get("seniora");
+      eq(a.sections[0].exs[0].id, b.sections[0].exs[0].id,
+         "a new id per render is a video filed against an exercise that no longer exists");
+      eq(a.sections[1].exs[0].id, b.sections[1].exs[0].id);
+    });
+    it("no id is minted at random", () => {
+      const c = ctx();
+      c._uid = () => { throw new Error("_uid must not be called for the default plan"); };
+      const plan = bind("getFitPlan", c, ["makeDefaultFitnessPlan"])("vortexld");
+      eq(plan.sections[0].exs[0].id, "fe_vortexld_0_0");
+      eq(plan.sections[1].exs[0].id, "fe_vortexld_1_0");
+      eq(plan.sections[0].id, "fs_vortexld_0");
+    });
+    it("two squads do not share one photograph", () => {
+      const c = ctx();
+      const get = bind("getFitPlan", c, ["makeDefaultFitnessPlan"]);
+      eq(get("seniora").sections[0].exs[0].id === get("vortexld").sections[0].exs[0].id, false,
+         "the media map is keyed by exercise id alone, so a shared id is a shared photo");
+    });
+    it("a squad whose plan is saved keeps the ids it was saved with", () => {
+      const c = ctx();
+      c.fitnessPlans = { seniora: { title: "Theirs", sections: [{ id: "old_s", title: "Block", exs: [{ id: "old_e", name: "Squat" }] }] } };
+      const plan = bind("getFitPlan", c, ["makeDefaultFitnessPlan"])("seniora");
+      eq(plan.sections[0].exs[0].id, "old_e", "an existing plan must not be renumbered under a coach");
+    });
+    it("an id survives a character a squad slug should not have", () => {
+      const c = ctx();
+      const plan = bind("getFitPlan", c, ["makeDefaultFitnessPlan"])("pre team/2");
+      eq(/^fe_[A-Za-z0-9]+_0_0$/.test(plan.sections[0].exs[0].id), true, plan.sections[0].exs[0].id);
     });
   });
 
@@ -6388,7 +7929,7 @@ describe("InBody sheet", () => {
       eq(/staffPwSet=set/.test(fn), true);
     });
     it("that record reaches the club's other phones rather than one device", () =>
-      eq(/"vx_bday_sent","vx_staff_pw_set"\]/.test(SOURCE), true));
+      eq(JSON.parse(SOURCE.match(/var SYNC = (\[[^\]]*\])/)[1]).includes("vx_staff_pw_set"), true));
     it("an account with no email is told it cannot sign in, not told to try again", () => {
       eq(/No email — cannot sign in/.test(SOURCE), true);
       eq(/has no email address, so there is nothing to sign in with/.test(fn), true);
@@ -7097,9 +8638,48 @@ describe("InBody sheet", () => {
     // automatically" — sending this club to check an allowlist that was right all along.
     it("the banner says the session expired rather than naming a table", () => {
       eq(/const anon = !!window\.__vxSendingAnon;/.test(SOURCE), true, "read every poll");
-      eq(/saveFailTitle: \(S\.authDead \|\| S\.sendingAnon\)/.test(SOURCE), true, "and it changes the title");
-      eq(/saveFailActionLabel: \(S\.authDead \|\| S\.sendingAnon\) \? 'Sign in' : 'Retry'/.test(SOURCE), true,
+      eq(/saveFailTitle: this\._saveNeedsSignIn\(S\)/.test(SOURCE), true, "and it changes the title");
+      eq(/saveFailActionLabel: this\._saveNeedsSignIn\(S\) \? 'Sign in' : 'Retry'/.test(SOURCE), true,
          "Retry cannot work signed out, so the button becomes the thing that can");
+    });
+
+    /* The other half of the same fault, and the half the app could not see coming.
+       sendingAnon is this device noticing its own token is stale. A 401 is the SERVER refusing a
+       token this device still believes in — a drifted clock, a session ended elsewhere — and it
+       comes back quoting row-level security, because a request the database will not
+       authenticate fails a `to authenticated` policy just as an anonymous one does. Read as a
+       permission fault it sends a club to check a staff list their address is already in. */
+    it("a token the server refuses is a sign-in, not a permission", () => {
+      const fn = methodSource("_saveNeedsSignIn").body;
+      eq(/s\.authDead \|\| s\.sendingAnon/.test(fn), true, "the two the app can see itself");
+      eq(/s\.saveFailLast && s\.saveFailLast\.status===401/.test(fn), true, "and the one only the server knows");
+      const needs = bind("_saveNeedsSignIn", {});
+      eq(needs({ saveFailLast: { status: 401 } }), true, "a refused token asks for a sign-in");
+      eq(needs({ sendingAnon: true }), true);
+      eq(needs({ authDead: true }), true);
+      eq(needs({ saveFailLast: { status: 403 } }), false,
+         "a 403 IS a permission — that one really is the club's to change, and must not be relabelled");
+      eq(needs({ saveFailLast: { status: 0 } }), false, "and a bad connection fixes itself");
+      eq(needs({}), false);
+      eq(needs(null), false, "called before the first render, it must not throw");
+    });
+    it("and it does not read as a permission the club has to change", () => {
+      const detail = sourceBetween("saveFailDetail: this._saveNeedsSignIn(S)", "// Signed out, the Retry button is a lie");
+      eq(/staff list and not a setting/.test(detail), true,
+         "the last time this happened, the message sent them to an allowlist that was right");
+      eq(/it is the session on this device/.test(detail), true, "it has to name what IS wrong, too");
+      eq(/Nothing is lost/.test(detail), true, "and the change really is still on the device");
+    });
+    // The button now says "Sign in" for a refused token, so it has to be able to get there —
+    // but only after the retry, because a 401 starts a refresh that usually lands, and this
+    // button must not throw away a session that has just mended itself.
+    it("the Sign in button reaches the sign-in, and only once the retry has failed", () => {
+      const fn = sourceBetween("onSaveFailRetry: async()=>{", "onSaveFailDismiss");
+      const retry = fn.indexOf("await window.__vxRetryFailed()");
+      const login = fn.lastIndexOf("screen:'login'");
+      eq(retry > -1 && retry < login, true, "the retry comes first, always");
+      eq(/\(this\.state\.saveFailLast\|\|\{\}\)\.status===401/.test(fn), true,
+         "and the state is re-read after it, never the snapshot it started from");
     });
     it("it is never written to disk", () => {
       for (const m of ["_policyHold(key){", "_policyHeld(key){"])
@@ -7211,7 +8791,7 @@ describe("InBody sheet", () => {
       eq(out.length, 2);
       eq(/this\._dedupeRows\(/.test(SOURCE), true);
       eq((SOURCE.match(/this\._dedupeRows\(/g) || []).length >= 3, true,
-         "the seed, the incremental write and the rebuild all have to be guarded");
+         "the migration, the incremental write and the rebuild all have to be guarded");
     });
     it("the roster can be rebuilt from the document that still holds it", () => {
       const fn = sourceBetween("async rosterRebuildFromDocument(){", "\n  _rowKeyMap");
@@ -7255,35 +8835,245 @@ describe("InBody sheet", () => {
       eq(/gone=Object\.keys\(was\)\.filter\(k=>!\(k in now\)\)/.test(fn), true,
          "and an undone change has to remove its row, or it comes back");
     });
-    it("the migration is off, and cannot be reached by accident", () => {
-      eq(/const VX_ROSTER_ROWS=false;/.test(SOURCE), true,
-         "it lost data twice — it goes back on only after a rehearsal against a copy");
-      const fetchFn = sourceBetween("async _rosterFetch(){", "\n  async _rosterSeed");
-      eq(/if\(!VX_ROSTER_ROWS\) return;/.test(fetchFn), true, "no fetch means no rows means no row writes");
+    // Which way the club is stored is the club's own setting, not this file's.
+    //
+    // It was a build constant, which is wrong twice: a constant flips for a device whenever that
+    // device happens to load a new copy of the app, so half the club reads rows while the other
+    // half writes the document and neither sees the other's work — and nobody at a poolside can
+    // undo it.
+    it("the mode is a club setting that pulls like everything else, not a build flag", () => {
+      eq(/const VX_ROSTER_ROWS/.test(SOURCE), false, "a build flag cannot switch a club together");
+      eq(/"vx_staff_pw_set","vx_roster_mode"\]/.test(SOURCE), true, "so it has to be a synced key");
+      const on = sourceBetween("_rosterRowsOn(){", "\n  //");
+      eq(/m\.mode==='rows'/.test(on), true);
+      eq(/return !!\(m && typeof m==='object'/.test(on), true,
+         "anything else — absent, unreadable, half-written — has to mean the document");
+    });
+    it("the write path and the fetch are gated on the same answer", () => {
+      const fetchFn = sourceBetween("async _rosterFetch(){", "\n  // Recovery. The single document");
+      eq(/if\(!this\._rosterRowsOn\(\)\) return;/.test(fetchFn), true);
       const at = SOURCE.indexOf("  persistRosterEdits(){");
       const persist = SOURCE.slice(at, SOURCE.indexOf("\n  }", at));
-      eq(/if\(VX_ROSTER_ROWS && Array\.isArray\(this\.rosterRows\)\)/.test(persist), true,
-         "and the write path is gated on the same flag, not just the fetch");
+      eq(/if\(this\._rosterRowsOn\(\) && Array\.isArray\(this\.rosterRows\)\)/.test(persist), true,
+         "reading rows and writing rows must never disagree about which mode the club is in");
     });
-    it("the rows path still short-circuits before the document path", () => {
-      // The stale-device guard this used to be about is gone entirely — the merge replaced it.
-      // What still matters is the ordering: when the table exists, rows are written and the
-      // single-document write is not reached at all.
+    // The document is not left behind as an old copy: it is still written, on a delay. Every
+    // recovery in this file reads it — the nightly backups, Rebuild from the saved roster, Use
+    // the database copy, the date-of-birth restore — and a migration that stops writing it
+    // disarms all of them silently.
+    it("rows are written first, and the document is still kept behind them", () => {
       const at = SOURCE.indexOf("  persistRosterEdits(){");
       const fn = SOURCE.slice(at, SOURCE.indexOf("\n  }", at));
       const rowsAt = fn.indexOf("this._rosterPersistRows()");
-      const docAt = fn.indexOf("this._saveJSON('vx_roster_edits'");
-      eq(rowsAt > -1 && rowsAt < docAt, true,
-         "rows cannot clobber each other, and must be written instead of the document, not after it");
+      const docAt = fn.indexOf("this._rosterDocBackup()");
+      eq(rowsAt > -1 && rowsAt < docAt, true, "the small write goes first");
+      const backup = sourceBetween("_rosterDocBackup(){", "\n  }");
+      eq(/clearTimeout\(this\._rosterDocT\)/.test(backup), true,
+         "a heat of times must collapse to one document write, not eight");
+      eq(/_saveJSON\('vx_roster_edits', this\.rosterEdits\)/.test(backup), true);
     });
     it("a missing table keeps the old behaviour rather than losing the roster", () => {
-      const fn = sourceBetween("async _rosterFetch(){", "\n  async _rosterSeed");
+      const fn = sourceBetween("async _rosterFetch(){", "\n  // Recovery. The single document");
       eq(/if\(rows==null\) return;/.test(fn), true);
     });
-    it("only a manager moves the club across", () => {
-      const fn = sourceBetween("async _rosterSeed(){", "\n  _rowKeyMap");
-      eq(/this\._isFullAccess\(\)/.test(fn), true);
-      eq(/i\+=500/.test(fn), true, "317 swimmers will not go in one request");
+    // The original sin: the table came back empty, so the app published whatever overlay this
+    // device happened to be holding as the club's roster, with nobody asking.
+    it("an empty table is never seeded from whatever one device is holding", () => {
+      eq(/_rosterSeed/.test(SOURCE), false, "the seed is gone; a migration a person presses replaces it");
+      const fn = sourceBetween("async _rosterFetch(){", "\n  // Recovery. The single document");
+      eq(/if\(!rows\.length\)\{/.test(fn), true);
+      eq(/keeping the document copy/.test(fn), true, "it says so rather than acting on a guess");
+      eq(/__vxUpsert/.test(fn), false, "a read must never turn into a write of the whole roster");
+    });
+  });
+
+  /* Moving the club across.
+     The migration lost data twice in one hour, both times because it wrote first and looked
+     afterwards. What is different is not the row shape — it is the order, and that every step
+     before the last leaves the club exactly as it was. */
+  describe("moving the roster to one row per swimmer", () => {
+    const move = sourceBetween("async rosterMoveToRows(){", "\n  // Back to one document");
+
+    it("only a manager, and only once", () => {
+      eq(/if\(!this\._isFullAccess\(\)\)/.test(move), true);
+      eq(/if\(this\._rosterRowsOn\(\)\)/.test(move), true, "twice would clear a live table");
+      eq(/if\(this\._rosterMoving\) return;/.test(move), true, "and a double-press is a second clear");
+    });
+    it("it migrates the club's roster merged with this device's, not one or the other", () => {
+      eq(/key=eq\.vx_roster_edits/.test(move), true, "the club's copy, read now");
+      eq(/window\.__vxMergeRoster\(mine, dbDoc\)/.test(move), true,
+         "a write still sitting on this phone is part of the roster being moved");
+    });
+    it("an empty roster is never what gets migrated", () =>
+      eq(/if\(!\(n>0\)\)/.test(move), true));
+    it("it proves the row shape holds this roster before writing anything", () => {
+      const trip = move.indexOf("this._rosterRoundTrips(doc)");
+      const write = move.indexOf("__vxUpsert('vx_roster'");
+      eq(trip > -1 && trip < write, true, "this is the check the first migration did not have");
+      eq(/Stopped before writing anything/.test(move), true);
+    });
+    it("the document is saved, and confirmed, before a single row is written", () => {
+      const doc = move.indexOf("await this._pushSaid('vx_roster_edits')");
+      const write = move.indexOf("__vxUpsert('vx_roster'");
+      eq(doc > -1 && doc < write, true,
+         "the document is what every recovery reads — if it cannot be written, nothing else happens");
+      eq(/so nothing has moved/.test(move), true);
+    });
+    it("the table is cleared before it is written, and a refused batch stops", () => {
+      const clear = move.indexOf("__vxDelete('vx_roster'");
+      const write = move.indexOf("__vxUpsert('vx_roster'");
+      eq(clear > -1 && clear < write, true, "half-written rows plus a rebuild is where duplicates came from");
+      eq(/Stopped at row/.test(move), true);
+      eq(/still on the single document/.test(move), true, "and the club is told it lost nothing");
+    });
+    it("what the database actually holds is read back and checked again", () => {
+      const back = move.indexOf("__vxSelect('vx_roster'");
+      const flip = move.indexOf("_saveJSON('vx_roster_mode'");
+      eq(back > -1 && back < flip, true, "a 201 says the write was taken, not that the table is right");
+      eq(/do not match the roster/.test(move), true);
+    });
+    it("the club is only told to read rows once all of that has passed", () => {
+      const flip = move.indexOf("_saveJSON('vx_roster_mode'");
+      for (const before of ["_rosterRoundTrips(doc)", "await this._pushSaid('vx_roster_edits')",
+                            "__vxUpsert('vx_roster'", "__vxSelect('vx_roster'"]) {
+        eq(move.indexOf(before) > -1 && move.indexOf(before) < flip, true, before + " must come first");
+      }
+    });
+    it("a mode that cannot be saved leaves the club on the document", () => {
+      eq(/this\.rosterMode=null;/.test(move), true,
+         "a device reading rows while the club reads the document is the split this exists to prevent");
+    });
+    /* The guards, run rather than read.
+       Everything above checks the ORDER of the migration, which is what went wrong last time.
+       These check the thing that order exists to protect: that the app can actually tell when
+       the row shape would drop something, against a roster built by the app's own rebuild. */
+    const rosterCtx = () => {
+      const c = {
+        squads: [{ id: "junior", name: "Junior" }, { id: "seniora", name: "Senior A" }],
+        roster: {},
+        rosterEdits: { edits: {}, deleted: {}, added: {} },
+      };
+      for (const m of ["rebuildRoster", "_patchAnywhere", "_ageFromDob", "_dobParts", "_rosterRowsFrom",
+                       "_rosterEditsFrom", "_dedupeRows", "_rowKeyMap", "_rosterSnapshotOf",
+                       "_rosterRoundTrips", "_rosterSame", "_rosterMergeRows", "_rosterTotalFor"])
+        c[m] = bind(m, c);
+      return c;
+    };
+    const withBase = (base, fn) => {
+      const had = globalThis.window.VX_ROSTER;
+      globalThis.window.VX_ROSTER = base;
+      try { return fn(); } finally { globalThis.window.VX_ROSTER = had; }
+    };
+    const BASE = { junior: [{ id: "sw1", name: "Aria Baker", dob: "2013-04-05", gender: "Girls" },
+                            { id: "sw9", name: "Gone Swimmer", dob: "2012-01-01", gender: "Boys" }],
+                   seniora: [] };
+
+    it("a roster the rows can hold is reported as safe to move", () => withBase(BASE, () => {
+      const c = rosterCtx();
+      const trip = c._rosterRoundTrips({
+        edits: { junior: { sw1: { dob: "2013-04-06" } } },
+        deleted: { junior: { sw9: true } },
+        added: { seniora: [{ id: "new1", name: "New Swimmer", dob: "2011-02-03" }] },
+      });
+      eq(trip.ok, true, trip.why);
+      eq(trip.before, 2, "one base swimmer left, plus the added one");
+    }));
+
+    // The shape that used to lose a date of birth: a swimmer the club ADDED who also has an edit
+    // filed against them. One `patch` column could hold the added record or the typed one, never
+    // both, so a date typed after the swimmer was added did not reach the rows — while the
+    // document still showed it, because rebuildRoster fills the added record from the patch. The
+    // halves are kept apart now, so there is nothing left to lose and the check says so.
+    it("a swimmer who was both added and typed into keeps both halves", () => withBase(BASE, () => {
+      const c = rosterCtx();
+      const doc = {
+        edits: { seniora: { new1: { dob: "2011-02-03" } } },
+        deleted: {},
+        added: { seniora: [{ id: "new1", name: "New Swimmer" }] },
+      };
+      const trip = c._rosterRoundTrips(doc);
+      eq(trip.ok, true, trip.why);
+      eq(trip.lost.length, 0, "nothing the club can see goes missing on the way to rows");
+      const row = c._rosterRowsFrom(doc).find((r) => r.id === "seniora::new1");
+      eq(row.added, true, "still the swimmer the club added");
+      eq(row.edit_patch.dob, "2011-02-03", "and still carrying the date somebody typed in");
+    }));
+
+    it("the check compares what the club would SEE, not what the JSON looks like", () => {
+      const src = methodSource("_rosterSnapshotOf").body;
+      eq(/this\.rebuildRoster\(\)/.test(src), true,
+         "a migration checked against a second copy of the logic proves only that the copy agrees");
+      eq(/finally\{ this\.rosterEdits=keep;/.test(src), true, "and it must put the live roster back");
+      eq(/sw\.dob\|\|''/.test(src), true, "the date of birth is the fact this keeps losing");
+    });
+    it("putting the roster back is what the snapshot leaves behind", () => withBase(BASE, () => {
+      const c = rosterCtx();
+      c.rosterEdits = { edits: { junior: { sw1: { name: "Kept" } } }, deleted: {}, added: {} };
+      c.rebuildRoster();
+      const before = JSON.stringify(c.roster);
+      c._rosterSnapshotOf({ edits: {}, deleted: { junior: { sw1: true } }, added: {} });
+      eq(JSON.stringify(c.roster), before, "checking a roster must not become editing one");
+    }));
+
+    // Which copy wins on a pull, which is where both of the old failures lived: taking the table
+    // whole loses this device's unsent work, and letting the whole overlay win republishes a
+    // stale phone over the club.
+    it("the table wins for a swimmer this device has not touched", () => {
+      const c = rosterCtx();
+      const theirs = [{ id: "junior::sw1", squad_id: "junior", sw_id: "sw1", patch: { dob: "2013-04-06" } }];
+      const mine = { edits: { junior: { sw1: { dob: "1999-01-01" } } }, deleted: {}, added: {} };
+      const sent = c._rowKeyMap(c._rosterRowsFrom(mine));      // this device sent that, and it landed
+      const out = c._rosterMergeRows(theirs, mine, sent);
+      eq(out.pending.length, 0);
+      eq(c._rosterEditsFrom(out.rows).edits.junior.sw1.dob, "2013-04-06", "another coach's newer row wins");
+    });
+    it("a change this device has not sent yet survives the pull", () => {
+      const c = rosterCtx();
+      const theirs = [{ id: "junior::sw1", squad_id: "junior", sw_id: "sw1", patch: { dob: "2013-04-06" } }];
+      const sent = c._rowKeyMap(c._rosterRowsFrom({ edits: { junior: { sw1: { dob: "2013-04-06" } } }, deleted: {}, added: {} }));
+      const mine = { edits: { junior: { sw1: { dob: "2014-09-09" } } }, deleted: {}, added: {} };   // typed since
+      const out = c._rosterMergeRows(theirs, mine, sent);
+      eq(out.pending.length, 1, "it differs from what this device last sent, so it is still on its way");
+      eq(c._rosterEditsFrom(out.rows).edits.junior.sw1.dob, "2014-09-09");
+    });
+    // The fingerprint decides what gets sent. A swimmer the club added and then typed a date into
+    // changes only `edit_patch` — so a fingerprint taken from `patch` alone calls that row
+    // unchanged and never sends it, and the date sits on one phone forever. That is the lost
+    // dates of birth arriving by a different door, which is why both halves are in the key.
+    it("a date typed into an added swimmer counts as a change", () => {
+      const c = rosterCtx();
+      const added = { edits: {}, deleted: {}, added: { seniora: [{ id: "new1", name: "New Swimmer" }] } };
+      const typed = { edits: { seniora: { new1: { dob: "2011-02-03" } } }, deleted: {},
+                      added: { seniora: [{ id: "new1", name: "New Swimmer" }] } };
+      const sent = c._rowKeyMap(c._rosterRowsFrom(added));      // the club added them, and it landed
+      const now = c._rowKeyMap(c._rosterRowsFrom(typed));       // then somebody typed the date in
+      eq(now["seniora::new1"] !== sent["seniora::new1"], true, "the typed half has to move the key");
+    });
+    it("a device with no record of what it sent defers to the table", () => {
+      const c = rosterCtx();
+      const theirs = [{ id: "junior::sw1", squad_id: "junior", sw_id: "sw1", patch: { dob: "2013-04-06" } }];
+      const mine = { edits: { junior: { sw1: { dob: "1999-01-01" } } }, deleted: {}, added: {} };
+      const out = c._rosterMergeRows(theirs, mine, null);
+      eq(out.pending.length, 0, "guessing everything is unsent is how 317 got back over 304");
+      eq(c._rosterEditsFrom(out.rows).edits.junior.sw1.dob, "2013-04-06");
+    });
+    it("rows the table has never heard of are kept, not dropped", () => {
+      const c = rosterCtx();
+      const mine = { edits: { seniora: { sw2: { age: 14 } } }, deleted: {}, added: {} };
+      const out = c._rosterMergeRows([], mine, {});      // sent nothing: every row is pending
+      eq(out.pending.length, 1);
+      eq(c._rosterEditsFrom(out.rows).edits.seniora.sw2.age, 14);
+    });
+
+    it("going back needs no copying, because the document was never abandoned", () => {
+      const back = sourceBetween("async rosterBackToDocument(){", "\n  // What the two copies say");
+      eq(/clearTimeout\(this\._rosterDocT\)/.test(back), true, "flush the delayed write first");
+      eq(/await this\._pushSaid\('vx_roster_edits'\)/.test(back), true, "and wait for it");
+      const doc = back.indexOf("await this._pushSaid('vx_roster_edits')");
+      const flip = back.indexOf("_saveJSON('vx_roster_mode'");
+      eq(doc > -1 && doc < flip, true, "or the club is sent back to a document missing the last minute");
+      eq(/been left on rows\. Nothing is lost/.test(back), true,
+         "a document that would not save leaves the club where it is, and says so");
     });
   });
 
@@ -8265,9 +10055,13 @@ describe("a device's own write does not outrank the database for ever", () => {
   it("applyPull was found", () => eq(pull.includes("takeRemote"), true, "applyPull moved or was renamed"));
   it("a copy the database already holds is not sent back", () => {
     const sends = pull.match(/pushKey\(r\.key,/g) || [];
-    eq(sends.length, 2, "expected the two catch-up pushes; found " + sends.length);
+    eq(sends.length, 3, "expected the three catch-up pushes; found " + sends.length);
     eq(/if\(_mineStr!==_remoteStr\) pushKey\(r\.key,/.test(pull), true, "the mirror is pushed unconditionally");
     eq(/if\(localVal!==_remoteStr\) pushKey\(r\.key,/.test(pull), true, "the disk copy is pushed unconditionally");
+    // The third is the roster merged on the way down. Same rule, and the same reason: it is
+    // sent only when merging actually produced something the database is not already holding,
+    // so a device with nothing to add sends nothing and this cannot become a write per pull.
+    eq(/if\(_bothStr!==_incoming\)\{/.test(pull), true, "the merged roster is pushed unconditionally");
   });
 });
 
@@ -8428,6 +10222,103 @@ describe("swimmer status: an empty read does not wipe the club", () => {
 });
 
 
+/* ------------------------------------ the mark that another device rubbed out
+   Sponsorship lived in vx_sponsored, one document in club_state holding every
+   sponsored swimmer at once, and club_state is last-write-wins. Two coaches
+   marking two swimmers inside one twenty-second pull window sent two whole
+   documents, and the second had never heard of the first — so the badge was
+   gold on the phone that made it and gone from the database, which is exactly
+   what "the mark as sponsor is not saving" looks like from the poolside.
+
+   It is one row per swimmer now. These are the parts of that which can be read
+   off the source: the toggle must not touch the blob, un-marking has to beat a
+   legacy flag, and an empty read must not invent a club with no sponsors. */
+describe("sponsorship: one row per swimmer, not one document for the club", () => {
+  const meta = (ctx) => bind("_swMeta", ctx, []);
+
+  it("a swimmer nobody has an opinion about is not sponsored", () => {
+    const ctx = { swimmerMeta: {}, sponsoredMap: {}, swimmerDocs: {} };
+    eq(meta(ctx)("r9").sponsored, false);
+  });
+
+  it("the map says who is sponsored", () => {
+    const ctx = { swimmerMeta: {}, sponsoredMap: { r9: true }, swimmerDocs: {} };
+    eq(meta(ctx)("r9").sponsored, true);
+  });
+
+  // The old vx_sw_meta blob still carries sponsored:true for swimmers marked before the move,
+  // so it has to keep showing the badge...
+  it("a flag left in the old blob still shows", () => {
+    const ctx = { swimmerMeta: { r9: { sponsored: true } }, sponsoredMap: {}, swimmerDocs: {} };
+    eq(meta(ctx)("r9").sponsored, true);
+  });
+
+  // ...but it must not be able to veto the club. This was `sponsoredMap[id] || base.sponsored`
+  // with un-marking expressed as a deleted key, so for those swimmers the button did nothing at
+  // all: tap it, and the OR put the badge straight back, for ever.
+  it("and un-marking that swimmer beats it, rather than being ignored", () => {
+    const ctx = { swimmerMeta: { r9: { sponsored: true } }, sponsoredMap: { r9: false }, swimmerDocs: {} };
+    eq(meta(ctx)("r9").sponsored, false,
+       "the old blob outvoted the coach, which is a button that cannot be pressed");
+  });
+
+  it("un-marking writes false rather than removing the swimmer", () => {
+    const body = methodSource("toggleSponsor").body;
+    eq(/m\[swId\]=on;/.test(body), true,
+       "a deleted key cannot override a legacy flag, and an empty table would then be "
+       + "indistinguishable from a club with no sponsors — which is what the seed reads");
+  });
+
+  it("the toggle no longer sends the whole document to club_state", () => {
+    const body = methodSource("toggleSponsor").body;
+    eq(/_saveJSON\(/.test(body), false,
+       "_saveJSON pushes the blob, and the blob is last-write-wins — this is the collision");
+    eq(/_saveLocalOnly\('vx_sponsored'/.test(body), true, "the local copy is still kept");
+    eq(/_sponsorPush\(swId, on\)/.test(body), true, "and the one row still has to be written");
+  });
+
+  it("vx_sponsored is off the shared document for good", () => {
+    const SYNC = JSON.parse(SOURCE.match(/var SYNC = (\[[^\]]*\])/)[1]);
+    eq(SYNC.includes("vx_sponsored"), false,
+       "left in the list, applyPull writes the stale document back over the table's answer");
+  });
+
+  const newCtx = () => ({ sponsoredMap: { r9: true }, swimmerMeta: {}, _saveLocalOnly() {},
+                          forceUpdate() {}, _sponsorsSeed: async () => {} });
+
+  itAsync("a table that answers with nothing changes nothing on the device", async () => {
+    globalThis.window = { __vxSelect: () => Promise.resolve([]) };
+    const ctx = newCtx();
+    await bind("_sponsorsFetch", ctx, [])();
+    eq(ctx.sponsoredMap, { r9: true }, "an empty read wiped the badges on this device");
+  });
+
+  itAsync("a read that failed outright changes nothing either", async () => {
+    globalThis.window = { __vxSelect: () => Promise.resolve(null) };
+    const ctx = newCtx();
+    await bind("_sponsorsFetch", ctx, [])();
+    eq(ctx.sponsoredMap, { r9: true }, "a failed read wiped the badges on this device");
+  });
+
+  itAsync("rows are authoritative, including the ones that say no", async () => {
+    globalThis.window = { __vxSelect: () => Promise.resolve([
+      { sw_id: "r131", sponsored: true }, { sw_id: "r9", sponsored: false },
+    ]) };
+    const ctx = newCtx();
+    await bind("_sponsorsFetch", ctx, [])();
+    eq(ctx.sponsoredMap, { r131: true, r9: false },
+       "a false row is how the club un-marks a swimmer the old document still says yes about");
+  });
+
+  it("a sponsorship write that never left says so, rather than blaming the database", () => {
+    const push = methodSource("_sponsorPush").body;
+    eq(/notSent:true/.test(push), true,
+       "__vxUpsert returns false both when it queues for a sign-in and when the database refuses; "
+       + "without notSent every dead session reads as a refusal");
+  });
+});
+
+
 /* ------------------------------------------------------------------- connector
    The club as an MCP connector, so it can be asked about from claude.ai.
 
@@ -8443,6 +10334,192 @@ const MCP = await import("../src/lib/mcpServer.ts?probe=configured");
 const MCP_URL_ROUTE = await import("../src/app/api/mcp/s/[token]/route.ts");
 delete process.env.VX_MCP_TOKEN;
 const MCP_UNSET = await import("../src/lib/mcpServer.ts?probe=unconfigured");
+
+/* --------------------------------------------------------------- season analysis
+   The Season Plan drew phases and counted metres, but never put the two next to each
+   other: a season that had drifted off the shape its coach drew looked exactly like one
+   that had not. The chart and the two breakdowns under it are all read off the sessions
+   already saved, so the numbers must agree with the plan screen's own arithmetic. */
+describe("season analysis", () => {
+  const metres = bind("planMetres", {}, []);
+  const zoneMetres = bind("planZoneMetres", {}, []);
+
+  const plan = {
+    zone: "EN2",
+    sections: [
+      { title: "Warm-up", sets: [{ dist: 400, reps: 1 }] },
+      { title: "Main set", rounds: 2, sets: [{ dist: 100, reps: 8, zone: "EN3" }, { dist: 25, reps: 4, zone: "SP3" }] },
+    ],
+  };
+
+  it("a set with no zone of its own inherits the session's", () =>
+    eq(zoneMetres({ zone: "EN1", sections: [{ sets: [{ dist: 200, reps: 2 }] }] }), { EN1: 400 }));
+  it("a set's own zone wins over the session's", () =>
+    eq(zoneMetres({ zone: "EN1", sections: [{ sets: [{ dist: 200, reps: 2, zone: "SP1" }] }] }), { SP1: 400 }));
+  it("rounds multiply the zone the same way they multiply the total", () =>
+    eq(zoneMetres({ sections: [{ rounds: 3, sets: [{ dist: 100, reps: 8, zone: "EN2" }] }] }), { EN2: 2400 }));
+  it("a circuit counts", () =>
+    eq(zoneMetres({ sections: [{ sets: [{ dist: 50, reps: 4, circuit: 2, zone: "EN1" }] }] }), { EN1: 400 }));
+  it("the mix adds back up to the session the plan screen shows", () => {
+    const mix = zoneMetres(plan);
+    eq(Object.keys(mix).reduce((a, k) => a + mix[k], 0), metres(plan),
+      "a zone breakdown that does not total the session is a breakdown of a different session");
+  });
+
+  // The weeks the Season Plan builds, cut down to what the analysis reads.
+  const wk = (n, phase, color, loadPct, sessionM, sessionCount, startISO, endISO, isTarget) =>
+    ({ n, phase, phaseColor: color, loadPct, sessionM, sessionCount, startISO, endISO, isTarget: !!isTarget });
+  const weeks = [
+    wk(1, "Preparation", "#12A0AE", 25, 0, 0, "2026-08-31", "2026-09-06"),
+    wk(2, "Preparation", "#12A0AE", 25, 20000, 5, "2026-09-07", "2026-09-13"),
+    wk(3, "Build", "#0C6CE0", 82, 30000, 6, "2026-09-14", "2026-09-20"),
+    wk(4, "Taper", "#7C4DFF", 38, 10000, 3, "2026-09-21", "2026-09-27", true),
+  ];
+  const sessions = [
+    { date: "2026-09-10", plan },                 // inside the season
+    { date: "2026-06-01", plan },                 // before it starts
+    { date: "2027-01-01", plan },                 // after it ends
+  ];
+  const an = bind("seasonAnalysis", {}, ["planZoneMetres", "_zoneMeta"])(weeks, sessions);
+
+  it("an empty season is not a chart", () =>
+    eq(bind("seasonAnalysis", {}, ["planZoneMetres", "_zoneMeta"])([], []).hasWeeks, false));
+  it("the shape is drawn before a single session exists", () => {
+    const dry = bind("seasonAnalysis", {}, ["planZoneMetres", "_zoneMeta"])(
+      weeks.map((w) => ({ ...w, sessionM: 0, sessionCount: 0 })), []);
+    eq(dry.hasActual, false);
+    eq(dry.chart.actualLine, "", "there is no real line to draw yet");
+    eq(dry.chart.intendLine.split(" ").length, 4, "the intended shape is still four weeks wide");
+  });
+  it("the built line is drawn once there are sessions", () =>
+    eq(an.chart.actualLine.split(" ").length, 4));
+  it("the area closes onto the baseline so it can be filled", () => {
+    const pts = an.chart.actualArea.split(" ");
+    eq(pts[0].split(",")[1], "96");
+    eq(pts[pts.length - 1].split(",")[1], "96");
+  });
+  it("the peak is the biggest week, not the last one", () => {
+    eq(an.chart.peakDot.km, "30.0");
+    eq(an.chart.peakDot.week, 3);
+  });
+  it("the peak sits on the line rather than beside it", () => {
+    eq(an.chart.peakDot.x >= 8 && an.chart.peakDot.x <= 312, true);
+    eq(an.chart.actualLine.split(" ").includes(an.chart.peakDot.x.toFixed(1) + "," + an.chart.peakDot.y.toFixed(1)), true);
+  });
+  it("the peak week is labelled on the chart, not only in the header", () => {
+    const card = sourceBetween("Season volume curve", "Where the metres went");
+    eq(/<text[^>]*>\{\{ seasonAnPeak\.t \}\}/.test(card), true);
+  });
+  it("the label is pulled inside the plot at either end", () => {
+    const wide = bind("seasonAnalysis", {}, ["planZoneMetres", "_zoneMeta"]);
+    const first = wide([wk(1, "P", "#12A0AE", 25, 9000, 2, "2026-08-31", "2026-09-06"),
+      wk(2, "P", "#12A0AE", 25, 1000, 1, "2026-09-07", "2026-09-13")], []);
+    eq(first.chart.peakDot.x, 8, "the peak really is at the left edge");
+    eq(first.chart.peakDot.lx, 24, "but its label is not half off the chart");
+  });
+  it("a target meet is marked on the season, not left to memory", () => eq(an.chart.races.length, 1));
+  it("the season totals the weeks", () => eq(an.totalKm, "60.0"));
+  it("only the weeks with sessions count as built", () => eq(an.coverLabel, "3 of 4 weeks built"));
+
+  it("consecutive weeks of one phase are one band", () => eq(an.chart.bands.length, 3));
+  it("the bands span the whole axis", () => {
+    const last = an.chart.bands[an.chart.bands.length - 1];
+    eq(an.chart.bands[0].x, 8);
+    eq(Math.round(last.x + last.w), 312);
+  });
+  it("a mesocycle reports its own volume, not the season's", () => {
+    eq(an.phaseRows.map((p) => p.km), ["20.0", "30.0", "10.0"]);
+    eq(an.phaseRows.map((p) => p.sessions), [5, 6, 3]);
+  });
+  it("a two-week phase averages over both weeks", () => eq(an.phaseRows[0].avgKm, "10.0"));
+
+  it("the zone mix reads the sets, not the session's headline zone", () =>
+    eq(an.zones.map((z) => z.label), ["E-2", "E-3", "SP-3"]));
+  it("zones are ordered easy to fast", () => eq(an.zones[0].code, "EN2"));
+  it("a session outside the season is not counted in its mix", () => {
+    const total = an.zones.reduce((a, z) => a + Number(z.km) * 1000, 0);
+    eq(Math.round(total), metres(plan), "three saved sessions, one season — only the one inside it counts");
+  });
+  it("a custom zone still gets a slice rather than being dropped", () => {
+    const one = bind("seasonAnalysis", {}, ["planZoneMetres", "_zoneMeta"])(
+      [wk(1, "Prep", "#12A0AE", 25, 1000, 1, "2026-08-31", "2026-09-06")],
+      [{ date: "2026-09-01", plan: { zone: "Recovery", sections: [{ sets: [{ dist: 1000, reps: 1 }] }] } }]);
+    eq(one.zones.map((z) => z.label), ["Recovery"]);
+    eq(one.zones[0].pctLabel, "100%");
+  });
+});
+
+/* ------------------------------------------------- chart labels the runtime can paint
+   Every {{ }} the design runtime renders is wrapped in an element so it can be keyed.
+   That wrapper was always a <span>, which inside an SVG <text> is not a text-content
+   element and paints nothing — so a label written as <text>{{ d.t }}</text> came out
+   blank while any literal text beside it still drew. The progression charts on every
+   swimmer profile have shown dots with no times for exactly that reason. The runtime
+   ships in this repo, so the fix and this guard live here too: if the runtime is ever
+   replaced wholesale, this fails rather than the labels quietly going blank again. */
+describe("interpolations inside an SVG text element", () => {
+  const RUNTIME = readFileSync(new URL("../public/assets/support.js", import.meta.url), "utf8");
+
+  it("the wrapper is chosen from the parent element, not hardcoded", () =>
+    eq(/const wrap = \(\(\) => \{/.test(RUNTIME), true));
+  it("an SVG text parent gets a tspan", () =>
+    eq(/return t === "text" \|\| t === "tspan" \|\| t === "textpath" \? "tspan" : "span";/.test(RUNTIME), true));
+  it("sc-if and sc-for between the text and its parent are seen through", () =>
+    eq(/while \(p2 && \/\^sc-\(if\|for\)\$\/i\.test\(p2\.tagName \|\| ""\)\) p2 = p2\.parentNode;/.test(RUNTIME), true));
+  it("no interpolation wrapper is left hardcoded to span", () => {
+    const fn = RUNTIME.slice(RUNTIME.indexOf("function walkText("), RUNTIME.indexOf("function walkFor("));
+    eq(/h\(\s*"span"/.test(fn), false, "a hardcoded span here is a label that cannot paint in a chart");
+    eq((fn.match(/h\(\s*wrap\b/g) || []).length, 3, "all three wrapper sites use the parent-aware tag");
+  });
+  // The charts that were blank, and the one added with them.
+  it("the charts still write their labels as text elements", () => {
+    eq(/<text x="\{\{ d\.x \}\}" y="\{\{ d\.labelY \}\}"/.test(SOURCE), true, "swimmer progression");
+    eq(/<text x="\{\{ seasonAnPeak\.lx \}\}"/.test(SOURCE), true, "season volume curve");
+  });
+});
+
+/* ------------------------------------------------- the worker between a fix and a coach
+   The service worker served everything under /assets/ cache-first and never revalidated it.
+   Our scripts carry no hash in their filename — /assets/support.js is the same URL in every
+   deploy — so a returning device read it once and never asked again. A runtime fix shipped
+   inside one therefore reached nobody: the navigation is network-first, so the device pulled
+   the NEW proto.html and the worker handed it the OLD runtime alongside it, which is a worse
+   state than either version on its own. Reproduced in a browser before this was changed. */
+describe("a script the app ships is never served from a stale cache", () => {
+  const SW = readFileSync(new URL("../public/sw.js", import.meta.url), "utf8");
+  const handler = SW.slice(SW.indexOf('addEventListener("fetch"') >= 0
+    ? SW.indexOf('addEventListener("fetch"') : SW.indexOf("addEventListener('fetch'"), SW.indexOf("// ---- Push"));
+
+  it("scripts are matched before the cache-first rule can claim them", () => {
+    const js = handler.indexOf("\\.m?js$");
+    const staticFirst = handler.indexOf("(assets|fonts|images)");
+    eq(js !== -1, true, "there is no rule for scripts at all");
+    eq(js < staticFirst, true, "the cache-first rule runs first and swallows every .js");
+  });
+  it("a script is fetched before the cache is consulted", () => {
+    const branch = handler.slice(handler.indexOf("\\.m?js$"), handler.indexOf("(assets|fonts|images)"));
+    eq(/event\.respondWith\(\s*fetch\(req\)/.test(branch), true, "network-first, or a fix cannot ship");
+    eq(/\.catch\(\(\) => caches\.match\(req\)\)/.test(branch), true, "still works offline");
+  });
+  it("the cache is still filled, so the app opens offline", () => {
+    const branch = handler.slice(handler.indexOf("\\.m?js$"), handler.indexOf("(assets|fonts|images)"));
+    eq(/caches\.open\(STATIC\)/.test(branch), true);
+    eq(/res && res\.ok/.test(branch), true, "a 404 or a 502 must never be stored as the app");
+  });
+  it("icons and fonts stay cache-first — they are hashed and need the speed", () => {
+    const branch = handler.slice(handler.indexOf("(assets|fonts|images)"));
+    eq(/caches\.match\(req\)\.then\(\(cached\) =>\s*cached \|\|/.test(branch), true);
+  });
+  // Bumping the version is what clears the caches already holding the stale runtime:
+  // activate() deletes every cache whose key is not the current one.
+  it("the cache version moved, so the devices already holding the old runtime drop it", () => {
+    const v = /const VERSION = '([^']+)'/.exec(SW);
+    eq(!!v, true);
+    eq(v[1] === "vortex-v2", false, "v2 is the version that cached the stale runtime");
+  });
+  it("activate still deletes every cache that is not the current one", () =>
+    eq(/keys\.filter\(\(k\) => k !== APP_SHELL && k !== STATIC\)\.map\(\(k\) => caches\.delete\(k\)\)/.test(SW), true));
+});
 
 describe("the club as a connector", () => {
   const post = (method, token) =>
@@ -8548,6 +10625,7 @@ describe("the club as a connector", () => {
    roster ids. Two id spaces that can never meet: every lookup missed, and both tools reported
    the miss as fact rather than as a failure to look. */
 const MCP_DATA = await import("../src/lib/mcpData.ts");
+const BUNDLED = await MCP_DATA.loadRoster();
 
 describe("the connector knows who a swimmer is", () => {
   const EXPORT = JSON.parse(
@@ -8585,7 +10663,7 @@ describe("the connector knows who a swimmer is", () => {
   it("a swimmer's id is not a slug of their name", () => {
     // The exact shape of the old bug: an id built from the name looks plausible and joins to
     // nothing. If one comes back, the fallback in swimmerId() has quietly become the norm.
-    const slugs = MCP_DATA.allSwimmers().filter((s) => s.id.includes("::"));
+    const slugs = MCP_DATA.allSwimmers(BUNDLED).filter((s) => s.id.includes("::"));
     eq(slugs.length, 0, `${slugs.length} swimmers still have a name-slug id, e.g. ${slugs[0]?.id}`);
   });
 
@@ -8596,14 +10674,14 @@ describe("the connector knows who a swimmer is", () => {
     // Written as a literal id on purpose. Asking allSwimmers() for an id and feeding it back is
     // circular — it passes just as happily when both sides are name-slugs that match the
     // database nowhere. "r3" is what attendance_marks actually holds for this child.
-    eq(MCP_DATA.nameOf("r3"), "Arissa Afiq");
-    eq(MCP_DATA.allSwimmers().find((s) => s.id === "r3")?.name, "Arissa Afiq");
+    eq(MCP_DATA.nameOf(BUNDLED, "r3"), "Arissa Afiq");
+    eq(MCP_DATA.allSwimmers(BUNDLED).find((s) => s.id === "r3")?.name, "Arissa Afiq");
   });
 
   it("a swimmer the roster has never heard of is returned as-is, not as a wrong name", () => {
     // The database holds ids for swimmers added after this export (swms…). Guessing a name for
     // one of those would be worse than showing the id, so nameOf hands it back unchanged.
-    eq(MCP_DATA.nameOf("swms01fgni_15167"), "swms01fgni_15167");
+    eq(MCP_DATA.nameOf(BUNDLED, "swms01fgni_15167"), "swms01fgni_15167");
   });
 
   it("swimmer_progress can reach the marks it was missing", () => {
@@ -8611,12 +10689,177 @@ describe("the connector knows who a swimmer is", () => {
     // now the same id, so a real register can be found; before, the comparison was a name-slug
     // against "r3" and every swimmer looked like they had never been marked.
     // A mark as the database stores one, for a swimmer the roster knows.
-    const someone = MCP_DATA.allSwimmers()[0];
+    const someone = MCP_DATA.allSwimmers(BUNDLED)[0];
     const mark = { squad_id: someone.squad, day: "2026-08-01", sw_id: someone.id, status: "present" };
     const bare = someone.id.split("::").pop();
     eq((mark.sw_id || "").split("::").pop() === bare, true,
        "the swimmer's id and the mark's sw_id no longer meet — swimmer_progress is blind again");
-    eq(MCP_DATA.nameOf(mark.sw_id), someone.name);
+    eq(MCP_DATA.nameOf(BUNDLED, mark.sw_id), someone.name);
+  });
+});
+
+/* --------------------------------------------- the squads are the club's, not the export's
+   club_overview said Pre-Team had 3 swimmers while Pre-Team's own register covered 36. Both
+   numbers were real: 3 is what the roster export was exported with, and 36 is the club. Every
+   squad move since that file was written lives in the club's overlay (vx_roster_edits) and not
+   in the file, and a move is recorded as deleted-here plus added-there — so membership cannot
+   be read off the snapshot at all, only rebuilt from it.
+
+   Same shape of mistake as the ids: a confident number that is not the club. */
+describe("the squads are the club's, not the export's", () => {
+  const base = [
+    { slug: "preteam", name: "Pre-Team", swimmers: [
+      { id: "r1", first: "Stays", last: "Put" },
+      { id: "r2", first: "Moves", last: "Up" },
+      { id: "r3", first: "Leaves", last: "Club" },
+    ] },
+    { slug: "advb", name: "Advanced B", swimmers: [{ id: "r4", first: "Already", last: "Here" }] },
+  ];
+  // One of each way the club and the file disagree.
+  const edits = {
+    edits:   { advb: { r2: { name: "Moves Up-Married" } } },
+    deleted: { preteam: { r2: true, r3: true } },
+    added:   { advb: [{ id: "r2", first: "Moves", last: "Up" }, { id: "r9", first: "Joined", last: "Later" }] },
+  };
+  const merged = MCP_DATA.mergeRoster(base, edits);
+  const by = (slug) => merged.find((sq) => sq.slug === slug).swimmers.map((s) => s.id);
+
+  it("a swimmer who moved squad is in the new one and not the old", () => {
+    // The delete and the add are two halves of one move. Honouring only the add would put a
+    // child in two squads at once and count them twice in the headcount.
+    eq(by("preteam").includes("r2"), false, "still in the squad they left");
+    eq(by("advb").includes("r2"), true, "never arrived in the squad they moved to");
+  });
+
+  it("a swimmer who left the club is out of the roster", () => {
+    eq(by("preteam"), ["r1"]);
+  });
+
+  it("a swimmer the club added is in it", () => {
+    eq(by("advb"), ["r4", "r2", "r9"]);
+  });
+
+  it("the headcount is the merged squad, not the exported one", () => {
+    // The bug as it was reported: Pre-Team exported with 3, and 3 was the answer given.
+    eq(base.find((sq) => sq.slug === "preteam").swimmers.length, 3, "fixture drifted");
+    eq(MCP_DATA.squads({ squads: merged, live: true, names: new Map() })
+        .find((sq) => sq.slug === "preteam").swimmers, 1);
+  });
+
+  it("a rename filed under the squad they moved to is applied", () => {
+    const moved = merged.find((sq) => sq.slug === "advb").swimmers.find((s) => s.id === "r2");
+    eq(moved.last, "Up-Married", "the club renamed them and the connector kept the old name");
+  });
+
+  it("a swimmer who has left still has a name for the marks they left behind", () => {
+    // The trap in making membership live: attendance_marks and invoices keep rows for swimmers
+    // who have gone, and resolving those against current membership only would print their id —
+    // undoing the fix that made that column readable at all.
+    const roster = { squads: merged, live: true,
+                     names: new Map([["r3", "Leaves Club"], ["r1", "Stays Put"]]) };
+    eq(MCP_DATA.allSwimmers(roster).some((s) => s.id === "r3"), false, "still counted as a member");
+    eq(MCP_DATA.nameOf(roster, "r3"), "Leaves Club", "a departed swimmer went back to being an id");
+  });
+
+  it("a swimmer the overlay holds under three squads is in exactly one", () => {
+    // The case that made this merge wrong on real data, and it is not hypothetical: moves used
+    // to append the swimmer to the squad they joined without removing them from the one they
+    // left, so overlays holding one child under two or three squads are in the database and on
+    // every device that has pulled since. Reading `added` per squad and trusting it counts that
+    // child once in each — the exact double-count this is supposed to prevent.
+    const three = MCP_DATA.mergeRoster(
+      [{ slug: "junior", name: "Junior", swimmers: [] },
+       { slug: "seniorb", name: "Senior B", swimmers: [] },
+       { slug: "legend", name: "Legend", swimmers: [] }],
+      { edits: {}, deleted: {},
+        added: {
+          legend:  [{ id: "r5", first: "One", last: "Child", movedAt: 1000 }],
+          junior:  [{ id: "r5", first: "One", last: "Child", movedAt: 3000 }],
+          seniorb: [{ id: "r5", first: "One", last: "Child", movedAt: 2000 }],
+        } });
+    const where = three.filter((sq) => sq.swimmers.some((s) => s.id === "r5")).map((sq) => sq.slug);
+    eq(where, ["junior"], "one child, counted in " + where.length + " squads");
+  });
+
+  it("the squad moved to most recently wins over the one with no deletion against it", () => {
+    // The order of those two rules undid a move in front of a coach when it was the other way
+    // round: a stale copy with no deletion recorded beat a move made ten seconds earlier. A
+    // stamp says what happened and when; a missing deletion only says nothing has happened yet.
+    const moved = MCP_DATA.mergeRoster(
+      [{ slug: "legend", name: "Legend", swimmers: [] },
+       { slug: "vortexb", name: "Vortex B", swimmers: [] }],
+      { edits: {},
+        // Nothing deleted against Legend — the older, weaker signal.
+        deleted: { vortexb: {} },
+        added: {
+          legend:  [{ id: "r6", first: "Just", last: "Moved" }],
+          vortexb: [{ id: "r6", first: "Just", last: "Moved", movedAt: 9000 }],
+        } });
+    const where = moved.filter((sq) => sq.swimmers.some((s) => s.id === "r6")).map((sq) => sq.slug);
+    eq(where, ["vortexb"], "the move was quietly undone by a copy that predates it");
+  });
+
+  it("with no stamp anywhere, the squad they were not deleted out of wins", () => {
+    const old = MCP_DATA.mergeRoster(
+      [{ slug: "adva", name: "Advanced A", swimmers: [] },
+       { slug: "junior", name: "Junior", swimmers: [] }],
+      { edits: {}, deleted: { adva: { r7: true } },
+        added: { adva: [{ id: "r7", first: "No", last: "Stamp" }],
+                 junior: [{ id: "r7", first: "No", last: "Stamp" }] } });
+    const where = old.filter((sq) => sq.swimmers.some((s) => s.id === "r7")).map((sq) => sq.slug);
+    eq(where, ["junior"]);
+  });
+
+  it("an overlay missing a part does not take the roster with it", () => {
+    // An overlay written by an older build, or half restored, can arrive without `deleted`. The
+    // app guards this for the same reason: it is not a wrong roster, it is a crash.
+    eq(MCP_DATA.mergeRoster(base, { edits: {}, deleted: {}, added: {} }).length, 2);
+    const bare = MCP_DATA.mergeRoster(base, { edits: {}, deleted: {}, added: {} });
+    eq(bare.find((sq) => sq.slug === "preteam").swimmers.length, 3, "an empty overlay changed the club");
+  });
+
+  it("a date of birth in the overlay does not escape through the merge", () => {
+    // The one that would matter. The roster export has no dob, but the club's overlay does — the
+    // app carries one on a swimmer record and the connector now reads that overlay to get squad
+    // membership right. This file's whole safety argument is that what it exposes is an
+    // allowlist rather than a filter, and this is the check that the new input did not quietly
+    // route around it. These are children; a date of birth is identifying on its own.
+    const withDob = MCP_DATA.mergeRoster(
+      [{ slug: "preteam", name: "Pre-Team", swimmers: [] }],
+      { edits: {}, deleted: {},
+        added: { preteam: [{ id: "r77", first: "Has", last: "Dob", age: 7,
+                             dob: "2019-04-01", medical_note: "asthma" }] } });
+    const roster = { squads: withDob, live: true, names: new Map([["r77", "Has Dob"]]) };
+
+    const listed = MCP_DATA.allSwimmers(roster)[0];
+    eq(Object.keys(listed).sort().join(","), "age,gender,id,name,squad,squadName");
+    eq("dob" in listed, false, "a date of birth reached the connector's output");
+
+    const rec = MCP_DATA.swimmerRecord(roster, "r77");
+    eq(Object.keys(rec.swimmer).sort().join(","), "age,gender,id,name,squad,squadName");
+    eq(JSON.stringify(rec).includes("2019-04-01"), false, "a date of birth reached swimmer_progress");
+    eq(JSON.stringify(rec).includes("asthma"), false, "a medical note reached swimmer_progress");
+  });
+
+  itAsync("a roster it could not read is served as the snapshot and SAID to be", async () => {
+    // The whole point of the previous fix was that a failure to look is not a finding. The same
+    // rule applies here: no overlay means the squads are the export's, and the answer has to
+    // carry that rather than present a stale roster as the club. No service key in this suite,
+    // so this is that path.
+    eq(BUNDLED.live, false, "the suite reached a database — this case is no longer being tested");
+    eq(BUNDLED.squads.length, 9);
+
+    const r = await (await MCP.handleRpc(
+      new Request("https://vortexswimmingclub.com/api/mcp", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: "Bearer " + MCP_TOKEN },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call",
+                               params: { name: "club_overview", arguments: {} } }),
+      }))).json();
+    const body = JSON.parse(r.result.content[0].text);
+    eq(typeof body.rosterNote, "string",
+       "the answer served the snapshot's squads without saying that is what they are");
+    eq(/could not be read/.test(body.rosterNote), true);
   });
 });
 
