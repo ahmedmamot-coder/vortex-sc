@@ -6504,6 +6504,7 @@ if ('serviceWorker' in navigator) {
                                 <sc-if value="{{ m.editingMeet }}" hint-placeholder-val="{{ false }}">
                                   <div style="background:#F8FAFC;border:1px solid #EEF1F5;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:7px">
                                     <sc-if value="{{ meetEdit.canEditCore }}" hint-placeholder-val="{{ true }}">
+                                      <label style="display:flex;flex-direction:column;gap:3px"><span style="font-size:10.5px;color:#7A8296">Meet name</span><input value="{{ meetEdit.name }}" oninput="{{ meetEdit.onName }}" placeholder="Meet name" aria-label="Meet name" style="background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-size:12.5px;font-weight:700;color:#0C1116;outline:none"></label>
                                       <p style="margin:0;font-size:10.5px;color:#7A8296;line-height:1.5">The day this meet is swum. Times already recorded keep the day they were swum on — this is the meet's own date, and it is what a swim that never had one of its own falls back to.</p>
                                       <input value="{{ meetEdit.date }}" onchange="{{ meetEdit.onDate }}" type="date" aria-label="Meet date" style="background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
                                       <input value="{{ meetEdit.location }}" oninput="{{ meetEdit.onLocation }}" placeholder="Location e.g. Hamad Aquatics Center" style="background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
@@ -6539,6 +6540,13 @@ if ('serviceWorker' in navigator) {
                                     </sc-if>
                                     <sc-if value="{{ meetEdit.errShow }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:11px;color:#B42318;font-weight:600">{{ meetEdit.err }}</p></sc-if>
                                     <button onclick="{{ meetEdit.onSave }}" style="background:#0C7A4F;color:#fff;border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">Save meet details</button>
+                                    <!-- Removing a meet is the club's to do, and it was not
+                                         possible at all: a meet added by mistake stayed on the
+                                         calendar, and in front of every family, for ever. Only a
+                                         meet the club built, and never the recorded swims. -->
+                                    <sc-if value="{{ meetEdit.canEditCore }}" hint-placeholder-val="{{ true }}">
+                                      <button onclick="{{ meetEdit.onDelete }}" style="display:flex;align-items:center;justify-content:center;gap:7px;background:#fff;color:#B42318;border:1px solid #F0D3D0;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer;margin-top:2px"><i data-lucide="trash-2" style="width:14px;height:14px"></i>Remove this meet</button>
+                                    </sc-if>
                                   </div>
                                 </sc-if>
                                 <sc-for list="{{ m.top }}" as="t" hint-placeholder-count="3">
@@ -6636,6 +6644,7 @@ if ('serviceWorker' in navigator) {
                                 <sc-if value="{{ dm.editingMeet }}" hint-placeholder-val="{{ false }}">
                                   <div style="background:#F8FAFC;border:1px solid #EEF1F5;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:7px">
                                     <sc-if value="{{ meetEdit.canEditCore }}" hint-placeholder-val="{{ true }}">
+                                      <label style="display:flex;flex-direction:column;gap:3px"><span style="font-size:10.5px;color:#7A8296">Meet name</span><input value="{{ meetEdit.name }}" oninput="{{ meetEdit.onName }}" placeholder="Meet name" aria-label="Meet name" style="background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-size:12.5px;font-weight:700;color:#0C1116;outline:none"></label>
                                       <p style="margin:0;font-size:10.5px;color:#7A8296;line-height:1.5">The day this meet is swum. Times already recorded keep the day they were swum on — this is the meet's own date, and it is what a swim that never had one of its own falls back to.</p>
                                       <input value="{{ meetEdit.date }}" onchange="{{ meetEdit.onDate }}" type="date" aria-label="Meet date" style="background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
                                       <input value="{{ meetEdit.location }}" oninput="{{ meetEdit.onLocation }}" placeholder="Location e.g. Hamad Aquatics Center" style="background:#fff;border:1px solid #E5E9F0;border-radius:9px;padding:9px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
@@ -6671,6 +6680,13 @@ if ('serviceWorker' in navigator) {
                                     </sc-if>
                                     <sc-if value="{{ meetEdit.errShow }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:11px;color:#B42318;font-weight:600">{{ meetEdit.err }}</p></sc-if>
                                     <button onclick="{{ meetEdit.onSave }}" style="background:#0C7A4F;color:#fff;border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">Save meet details</button>
+                                    <!-- Removing a meet is the club's to do, and it was not
+                                         possible at all: a meet added by mistake stayed on the
+                                         calendar, and in front of every family, for ever. Only a
+                                         meet the club built, and never the recorded swims. -->
+                                    <sc-if value="{{ meetEdit.canEditCore }}" hint-placeholder-val="{{ true }}">
+                                      <button onclick="{{ meetEdit.onDelete }}" style="display:flex;align-items:center;justify-content:center;gap:7px;background:#fff;color:#B42318;border:1px solid #F0D3D0;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer;margin-top:2px"><i data-lucide="trash-2" style="width:14px;height:14px"></i>Remove this meet</button>
+                                    </sc-if>
                                   </div>
                                 </sc-if>
                                 <sc-for list="{{ dm.top }}" as="t" hint-placeholder-count="3">
@@ -7907,7 +7923,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-29d';
+const VX_BUILD='2026-08-30a';
 // Whether the roster is one document or one row per swimmer is NOT decided here any more.
 //
 // It was a constant in this file, which is the wrong place for it twice over: a build flag flips
@@ -11481,12 +11497,125 @@ class Component extends DCLogic {
     if(!m) return;
     const info=this._meetInfo(name);
     this.setState({meetEditName:name, meetEditErr:'', meetEditDraft:{
+      name:name,
       date:this._toISODate(m.date)||'', location:m.location||'', course:m.course||'LCM',
       endDate:this._toISODate(info.endDate)||'', deadline:this._toISODate(info.deadline)||'',
       warmup:info.warmup, start:info.start, sessions:info.sessions, fee:info.fee,
       host:info.host, notes:info.notes, infoUrl:info.infoUrl, infoName:info.infoName }});
   }
   meetEditClose(){ this.setState({meetEditName:null, meetEditDraft:null, meetEditErr:''}); }
+  // ---- Renaming and removing a meet ------------------------------------------------------------
+  //
+  // A meet's NAME is its primary key. It is what club_meets is keyed on, and what the entries,
+  // the event program, the qualifying times, the details, the meet-day marks, the family's event
+  // requests and every recorded swim are all filed under. Nothing in the app holds a meet id.
+  //
+  // So renaming is not an edit of one field, and deleting is not the removal of one row. Both
+  // have to move or drop the same seven records together, or a meet is left with a program and
+  // a set of entries that nothing can find, and a coach seeding it sees an empty sheet.
+  //
+  // This is the one list of them. Anything added later that is keyed by meet name belongs here,
+  // and the test that walks it will say so.
+  MEET_KEYED(){
+    return [
+      {key:'vx_meet_entries', prop:'meetEntries'},
+      {key:'vx_meet_events',  prop:'meetEventsMap'},
+      {key:'vx_meet_cuts',    prop:'meetCuts'},
+      {key:'vx_meet_info',    prop:'meetInfo'},
+    ];
+  }
+  /** How many swims the club has already recorded under this meet's name. */
+  _meetResultCount(name){
+    let n=0;
+    this.squads.forEach(sq=>{ (this.roster[sq.id]||[]).forEach(sw=>{
+      (sw.results||[]).forEach(r=>{ if(r && r.meet===name) n++; }); }); });
+    return n;
+  }
+  /** Move every record filed under `from` to `to`, or drop them when `to` is null. */
+  _meetMoveRecords(from, to){
+    this.MEET_KEYED().forEach(({key, prop})=>{
+      const map={...(this[prop]||{})};
+      if(!Object.prototype.hasOwnProperty.call(map, from)) return;
+      const held=map[from]; delete map[from];
+      if(to) map[to]=held;
+      this[prop]=map; this._saveJSON(key, map);
+    });
+    // The meet-day marks are keyed "meet::swimmer::event", so they are matched on the prefix
+    // rather than looked up. Missing these left a swimmer marked DQ at a meet that no longer
+    // existed, and the mark reappearing on the meet that later took the same name.
+    const marks={...this._meetMarks()}; const pre=from+'::'; let touched=false;
+    Object.keys(marks).forEach(k=>{
+      if(k.indexOf(pre)!==0) return;
+      const held=marks[k]; delete marks[k]; touched=true;
+      if(to) marks[to+k.slice(from.length)]=held;
+    });
+    if(touched){ this.meetMarks=marks; this._saveJSON('vx_meet_marks', marks); }
+    // A family asked to swim an event at a meet by name. Renaming has to carry the request or
+    // the parent's request silently stops matching the meet it was made for.
+    const reqs=(this.eventRequests||[]);
+    const nextReqs = to ? reqs.map(r=>(r && r.meetName===from) ? {...r, meetName:to} : r)
+                        : reqs.filter(r=>!(r && r.meetName===from));
+    if(nextReqs.length!==reqs.length || to){
+      this.eventRequests=nextReqs; this._saveJSON('vx_event_requests', nextReqs);
+    }
+    // The status lives in the club_meets row, and the row is replaced by the caller — but the
+    // local map is read before the next fetch answers, so it moves here too.
+    const st={...(this.meetStatus||{})};
+    if(Object.prototype.hasOwnProperty.call(st, from)){
+      const held=st[from]; delete st[from];
+      if(to) st[to]=held;
+      this.meetStatus=st; try{ this._saveLocalOnly('vx_meet_status', st); }catch(e){}
+    }
+  }
+  /** Rename a meet the club built. Refused when swims are already filed under the old name:
+   *  those live on the swimmers, and moving them is a roster rewrite this must not do quietly. */
+  async meetRename(from, to){
+    from=String(from||'').trim(); to=String(to||'').trim();
+    if(!from || !to || from===to) return {ok:false};
+    if(!this._isCustomMeet(from)) return {ok:false, why:'only a meet the club built can be renamed'};
+    if(this.allMeets().some(m=>m && m.name!==from && this._sameMeetName(m.name, to)))
+      return {ok:false, why:'there is already a meet called '+to};
+    const swims=this._meetResultCount(from);
+    if(swims) return {ok:false, why:swims+' recorded swim'+(swims===1?' is':'s are')+' filed under “'+from+'”, and they live on the swimmers rather than on the meet. Renaming it here would leave them pointing at a meet that no longer exists.'};
+    // The entries move as rows, and their ids carry the meet name, so they are rewritten as a
+    // set rather than patched: read what is there, drop it, write it back under the new name.
+    const entries=((this.meetEntries||{})[from]||[]).slice();
+    if(entries.length) this._entriesSave(from, []);
+    this._meetMoveRecords(from, to);
+    if(entries.length) this._entriesSave(to, entries);
+    const old=(this.customMeets||[]).find(m=>m && m.name===from) || {};
+    this.customMeets=(this.customMeets||[]).map(m=>m && m.name===from ? {...m, name:to} : m);
+    try{ this._saveLocalOnly('vx_custom_meets', this.customMeets); }catch(e){}
+    const r=await this._meetsPush(to);
+    // The old row goes only once the new one is safely there, so a refused write leaves the meet
+    // where it was rather than nowhere at all.
+    if(r && r.ok){
+      try{ if(window.__vxDelete) await window.__vxDelete('club_meets', 'name=eq.'+encodeURIComponent(from)); }catch(e){}
+      try{ this.audit('meet.rename', to, {from, to}); }catch(e){}
+    }
+    this.forceUpdate();
+    return r && r.ok ? {ok:true} : {ok:false, why:(r&&r.why)||'it did not reach the database'};
+  }
+  /** Remove a meet the club built, and everything filed under its name. Recorded swims are
+   *  deliberately left alone: they are the swimmer's history, not the meet's. */
+  async meetDelete(name){
+    name=String(name||'').trim();
+    if(!name || !this._isCustomMeet(name)) return {ok:false, why:'only a meet the club built can be removed'};
+    const entries=((this.meetEntries||{})[name]||[]).length;
+    if(entries) this._entriesSave(name, []);      // clears the meet_declarations rows too
+    this._meetMoveRecords(name, null);
+    this.customMeets=(this.customMeets||[]).filter(m=>!(m && m.name===name));
+    try{ this._saveLocalOnly('vx_custom_meets', this.customMeets); }catch(e){}
+    let ok=false;
+    try{ ok=!!(window.__vxDelete && await window.__vxDelete('club_meets', 'name=eq.'+encodeURIComponent(name))); }catch(e){}
+    try{ this.audit('meet.delete', name, {meet:name, entries}); }catch(e){}
+    this.forceUpdate();
+    // __vxDelete answers false both when the row was refused and when there was no session to
+    // send it with — in which case it is queued and goes out on the next sign-in. The message
+    // has to cover both, because the coach's next action differs and the meet reappearing on a
+    // refresh would otherwise look like the removal simply not working.
+    return ok ? {ok:true} : {ok:false, why:'it is gone from this device, but the database has not confirmed it. If the sign-in here has expired it will go when you sign in again; until then it can come back on a refresh.'};
+  }
   meetEditField(k, v){ const d={...(this.state.meetEditDraft||{})}; d[k]=v; this.setState({meetEditDraft:d, meetEditErr:''}); }
   meetEditSave(){
     const S=this.state; const name=S.meetEditName; const d=S.meetEditDraft||{};
@@ -11513,6 +11642,16 @@ class Component extends DCLogic {
     }
     const iso=startIso;
     if(!iso) return this.setState({meetEditErr:'Pick the day the meet is swum.'});
+    // The name first, because everything below is filed under it. meetRename refuses rather
+    // than half-moves, so a refusal stops here with the meet exactly as it was.
+    const typed=String(d.name||'').trim();
+    if(typed && typed!==name){
+      return this.meetRename(name, typed).then(r=>{
+        if(!r || !r.ok) return this.setState({meetEditErr:r&&r.why?('That name could not be used — '+r.why):'The meet could not be renamed.'});
+        // Re-open on the new name so the rest of the panel saves against the meet that now exists.
+        this.setState({meetEditName:typed}, ()=>this.meetEditSave());
+      });
+    }
     const dateStr=this._mdyFromISO(iso);
     const list=(this.customMeets||[]).map(m=>m.name===name
       ? {...m, date:dateStr, location:String(d.location||'').trim(), course:(d.course==='SCM'?'SCM':'LCM')} : m);
@@ -19608,6 +19747,29 @@ class Component extends DCLogic {
       // The day, venue and course of an imported meet belong to whoever ran it. Everything
       // below is the club's own and is offered for every meet.
       canEditCore: this._isCustomMeet(S.meetEditName),
+      name: meetEditDraft.name!=null ? meetEditDraft.name : (S.meetEditName||''),
+      onName:(e)=>this.meetEditField('name', e.target.value),
+      onDelete:()=>{
+        const nm=S.meetEditName; if(!nm) return;
+        // What actually goes, counted, and what stays. "Are you sure?" over a meet with 875
+        // recorded swims behind it is not a question anybody can answer.
+        const entries=((this.meetEntries||{})[nm]||[]).length;
+        const swims=this._meetResultCount(nm);
+        const goes=[entries?(entries+' entr'+(entries===1?'y':'ies')):'', 
+                    (((this.meetCuts||{})[nm]&&Object.keys((this.meetCuts||{})[nm]).length)?'its qualifying times':''),
+                    (this._meetHasInfo(nm)?'its details':'')].filter(Boolean);
+        let msg='Remove “'+nm+'” from the calendar?';
+        if(goes.length) msg+='\n\nThis also removes '+goes.join(', ')+'.';
+        if(swims) msg+='\n\nThe '+swims+' swim'+(swims===1?'':'s')+' already recorded at this meet are NOT deleted — they stay on the swimmers, where they belong. They will simply name a meet that is no longer on the calendar.';
+        msg+='\n\nThis cannot be undone.';
+        if(!window.confirm(msg)) return;
+        this.meetDelete(nm).then(r=>{
+          this.setState({meetEditName:null, meetEditDraft:null, meetEditErr:'', meetExpanded:null});
+          this.setState(r && r.ok
+            ? {meetsMsg:nm+' removed \u2713', meetsMsgOk:true}
+            : {meetsMsg:nm+' \u2014 '+((r&&r.why)||'it could not be removed'), meetsMsgOk:false});
+        });
+      },
       endDate: meetEditDraft.endDate||'', onEndDate:(e)=>this.meetEditField('endDate', e.target.value),
       deadline: meetEditDraft.deadline||'', onDeadline:(e)=>this.meetEditField('deadline', e.target.value),
       warmup: meetEditDraft.warmup||'', onWarmup:(e)=>this.meetEditField('warmup', e.target.value),
