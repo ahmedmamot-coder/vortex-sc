@@ -2152,6 +2152,71 @@ describe("the app class defines each method once", () => {
     eq(KNOWN.every((k) => (SOURCE.match(new RegExp("^  " + k + "\\(", "gm")) || []).length === 2), true));
 });
 
+/* ------------------------------------------- a screen that contradicted itself, twice
+   The club opened the Meets screen and asked where the completed meets were. They were
+   there — behind a row that said "ALREADY SWUM · 17 meets swum" with a chevron on it.
+   But it was styled like the "COMING UP" label directly above it, which is not a
+   control: same tiny uppercase text, no background, a 22px icon where every real card
+   on that screen uses a 38px tile. It read as a heading, so nobody tapped it.
+
+   And the cards inside it said "Upcoming". */
+describe("the completed meets, and finding them", () => {
+  const ctx = (status = {}, meets = []) => ({
+    meetStatus: status, customMeets: meets, meetsMeta: [], meetInfo: {},
+    todayISO: () => "2026-08-29",
+  });
+  const deps = ["_meetStatusOf", "_meetLastISO", "_meetInfo", "MEET_INFO_BLANK", "_toISODate",
+                "todayISO", "_meetIsDone", "allMeets"];
+  const statusOf = (m, status = {}) => bind("_meetStatusOf", ctx(status), deps)(m);
+
+  // The status map only holds what somebody asserted. An imported meet has no entry in it,
+  // so every one of them read "Upcoming" — inside a list headed Completed meets.
+  it("a meet whose day has passed reads as completed, not upcoming", () =>
+    eq(statusOf({ name: "Spring Cup", date: "6/5/2026" }), "Completed"));
+  it("a meet still ahead reads as upcoming", () =>
+    eq(statusOf({ name: "VIS", date: "12/4/2026" }), "Upcoming"));
+  // What a coach actually asserted still wins, in both directions.
+  it("a status a coach set wins over the date", () => {
+    eq(statusOf({ name: "Spring Cup", date: "6/5/2026" }, { "Spring Cup": "Entries open" }), "Entries open");
+    eq(statusOf({ name: "VIS", date: "12/4/2026" }, { VIS: "Completed" }), "Completed");
+  });
+  // "Upcoming" is the value everything starts at, so storing it is not an assertion.
+  it("but a stored Upcoming is not an assertion", () =>
+    eq(statusOf({ name: "Spring Cup", date: "6/5/2026" }, { "Spring Cup": "Upcoming" }), "Completed"));
+  it("and a meet with no readable date stays upcoming", () =>
+    eq(statusOf({ name: "Unknown", date: "" }), "Upcoming"));
+
+  // The pill, the list a meet is filed under, and the button that cycles it all read the
+  // same helper now, so the screen cannot disagree with itself.
+  it("the pill and the list it sits in cannot disagree", () => {
+    const c = ctx();
+    const done = bind("_meetIsDone", c, deps);
+    for (const m of [{ name: "A", date: "6/5/2026" }, { name: "B", date: "12/4/2026" }])
+      eq(done(m), c._meetStatusOf(m) === "Completed", m.name + " is filed against what its pill says");
+  });
+  it("the status shown is what the status button cycles from", () =>
+    eq(/const cur=this\._meetStatusOf\(/.test(SOURCE), true,
+       "a meet reading Completed by its date jumped to Entries open on the first tap"));
+
+  // The affordance itself. It has to look like the other things on that screen that open.
+  it("the completed-meets row is a card, not a bare label", () => {
+    const btn = sourceBetween('<button onclick="{{ onMeetsDoneToggle }}"', "</button>");
+    eq(/background:#fff/.test(btn), true, "it read as a heading, so nobody tapped it");
+    eq(/border-radius:15px/.test(btn), true);
+    eq(/background:none/.test(btn), false, "a control has to look like one");
+    eq(/width:38px/.test(btn), true, "every real card on that screen uses a 38px icon tile");
+  });
+  // And named what the app calls them everywhere else — the pill on each one says Completed.
+  it("and is called what the status on every card calls it", () => {
+    const btn = sourceBetween('<button onclick="{{ onMeetsDoneToggle }}"', "</button>");
+    eq(/Completed meets/.test(btn), true, "the club went looking for 'completed', not 'already swum'");
+  });
+  it("the finished-camps row got the same treatment", () => {
+    const btn = sourceBetween('<button onclick="{{ onCampsDoneToggle }}"', "</button>");
+    eq(/background:none/.test(btn), false);
+  });
+});
+
 /* ----------------------------------------------------- the club had two meet calendars
    "Add to Vortex Calendar" on the Meets screen made a real meet: a row in club_meets,
    with an event program, entries, results and cut times hanging off its name. The
@@ -2360,8 +2425,8 @@ describe("splitting the meets in two", () => {
     todayISO: () => "2026-08-29",
   });
   const deps = ["_toISODate", "_meetLastISO", "_meetInfo", "MEET_INFO_BLANK", "allMeets",
-                "_meetIsDone", "todayISO", "_calUnmigrated", "_calAsMeet", "_mdyFromISO",
-                "_sameMeetName"];
+                "_meetIsDone", "_meetStatusOf", "todayISO", "_calUnmigrated", "_calAsMeet",
+                "_mdyFromISO", "_sameMeetName"];
   const done = (m, status = {}, info = {}) => bind("_meetIsDone", ctx(status, info), deps)(m);
 
   it("a meet whose day has passed is done", () =>
@@ -2582,7 +2647,8 @@ describe("the club's meets are rows, not one document", () => {
   const row = (name, extra = {}) => ({ name, meet_date: "", location: "", course: "LCM",
     events: [], status: "Upcoming", club_built: true, ...extra });
   const ctxWith = (patch = {}) => ({
-    customMeets: [], meetStatus: {}, state: {}, forceUpdate() {}, _saveLocalOnly() {},
+    customMeets: [], meetsMeta: [], meetStatus: {}, meetInfo: {}, state: {}, forceUpdate() {},
+    _saveLocalOnly() {}, todayISO: () => "2026-08-29",
     _meetUnsent: {}, _meetsMigrated: true, setState(p) { Object.assign(this.state, p); }, ...patch });
   const fetchDeps = ["_meetRowToMeet", "_meetHeldHere", "_meetsUnsent", "_meetsMigrateOnce"];
 
@@ -2659,7 +2725,9 @@ describe("the club's meets are rows, not one document", () => {
                           meetStatus: { Test: "In progress" } });
       const restore = globalThis.window;
       globalThis.window = { __vxUpsert: (t, rows) => { sent.push([t, rows]); return Promise.resolve(true); } };
-      bind("meetStatusCycle", c, ["_meetsPush", "_meetLanded", "_meetsUnsent", "_sayMeetSaved"])("Test");
+      bind("meetStatusCycle", c, ["_meetsPush", "_meetLanded", "_meetsUnsent", "_sayMeetSaved",
+                                  "_meetStatusOf", "_meetLastISO", "_meetInfo", "MEET_INFO_BLANK",
+                                  "_toISODate", "allMeets", "todayISO"])("Test");
       await new Promise((r) => setTimeout(r, 5));
       globalThis.window = restore;
       eq(sent.length, 1);
