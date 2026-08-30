@@ -1,3 +1,8 @@
+-- APPLIED to the club's database on 30 Aug 2026, recorded in the migration history as
+-- 20260830133658_fitness_plans_text_id, and verified after: id is text, squad_id is nullable,
+-- and a row carrying a squad slug inserts and reads back. Kept here as the readable record of
+-- what was changed and why. Running it again is a no-op.
+--
 -- fitness_plans still has the id column from the very first migration, and the app has never
 -- been able to write to it.
 --
