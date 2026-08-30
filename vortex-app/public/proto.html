@@ -3884,7 +3884,7 @@ if ('serviceWorker' in navigator) {
                             <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:9px">
                               <sc-for list="{{ inbodyRows }}" as="ib" hint-placeholder-count="2">
                                 <div style="display:flex;align-items:center;justify-content:space-between;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:10px;padding:9px 11px">
-                                  <span><span style="display:block;font-size:12px;font-weight:700;color:#0C1116">{{ ib.weight }} · {{ ib.fat }} · {{ ib.muscle }}</span><span style="display:block;font-size:10.5px;color:#9AA2B4;margin-top:1px">{{ ib.dateLabel }}</span></span>
+                                  <span><span style="display:block;font-size:12px;font-weight:700;color:#0C1116">{{ ib.weight }} · {{ ib.fat }} · {{ ib.muscle }}</span><span style="display:block;font-size:10.5px;color:#9AA2B4;margin-top:1px">{{ ib.dateLabel }}</span><sc-if value="{{ ib.hasWarn }}" hint-placeholder-val="{{ false }}"><span style="display:block;font-size:10.5px;font-weight:700;color:#B42318;margin-top:3px;line-height:1.35">{{ ib.warn }}</span></sc-if></span>
                                   <span style="display:flex;align-items:center;gap:6px;flex:none">
                                     <sc-if value="{{ ib.hasFile }}" hint-placeholder-val="{{ false }}"><button onclick="{{ ib.onViewFile }}" style="display:flex;align-items:center;gap:4px;background:var(--vx-blue-tint);color:var(--vx-blue-dark);border:none;border-radius:7px;padding:5px 9px;font-family:inherit;font-weight:700;font-size:10.5px;cursor:pointer"><i data-lucide="file-text" style="width:12px;height:12px"></i>Report</button></sc-if>
                                     <button onclick="{{ ib.onDelete }}" style="flex:none;width:24px;height:24px;border-radius:7px;border:none;background:#EEF1F5;color:#9AA2B4;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:13px;height:13px"></i></button>
@@ -12831,7 +12831,14 @@ class Component extends DCLogic {
     // 167 goes in the wrong box easily; refusing it here costs one correction, and accepting it
     // puts a figure on a child's record that everything else is then measured against.
     const typedH=parseFloat(f.height);
-    const wWhy=this._weightImplausible(w, isNaN(typedH)?null:typedH);
+    // The rest of the sheet as it stands at this moment — whatever was typed, over whatever an
+    // import read — so the arithmetic check has the same figures the person is looking at.
+    const typedSheet={};
+    ['height','bodyFatMass','pbf','bmi','ffm'].forEach(k=>{ const n=parseFloat(f[k]); if(!isNaN(n)) typedSheet[k]=n; });
+    if(typedSheet.pbf==null && !isNaN(fat)) typedSheet.pbf=fat;
+    const pendExtra=(this.state.ibPending&&this.state.ibPending.extra)||{};
+    ['height','bodyFatMass','pbf','bmi','ffm'].forEach(k=>{ if(typedSheet[k]==null && pendExtra[k]!=null) typedSheet[k]=pendExtra[k]; });
+    const wWhy=this._weightImplausible(w, isNaN(typedH)?null:typedH, typedSheet);
     if(wWhy){
       this.setState({profileIbMsg:'That is '+wWhy+'. Check the sheet — the weight in kilogrammes goes in the Weight box, the height in centimetres in the Height box.'});
       return;
@@ -13156,14 +13163,42 @@ class Component extends DCLogic {
   // and they are the two figures a reader — machine or person — most easily swaps. That is the
   // mix-up worth naming; the bounds catch the rest. Returns a phrase saying what is wrong with
   // the number, or '' when it looks like a weight.
-  _weightImplausible(w, h){
+  _weightImplausible(w, h, sheet){
     if(w==null || isNaN(w)) return '';
     if(h!=null && !isNaN(h) && Math.abs(w-h)<1)
       return w+' kg against a height of '+h+' cm — the same number in both boxes';
     if(w<15) return w+' kg, too light to be a swimmer’s weight';
     if(w>150) return w+' kg, too heavy to be a swimmer’s weight';
+    // Everything above only catches a height that happens to be a large number. Most of this
+    // club is under 150 cm, so the same swap on a ten-year-old reads as an entirely ordinary
+    // weight: 138 in the Weight box of a 138 cm swimmer passes every check above and lands on
+    // the record. The bounds cannot tell those apart, and no bound ever will.
+    //
+    // The sheet can. Fat mass over percent body fat IS the weight; so is fat mass plus fat free
+    // mass; so is BMI times height squared. Each is arrived at independently, so when two of
+    // them agree with each other and not with the Weight box, it is the box that is wrong —
+    // one dissenting figure is only that figure being suspect, which is what the checks in
+    // _inbodySanity are for.
+    const v=sheet||{};
+    const from=[];
+    if(v.bodyFatMass!=null && v.pbf>0) from.push([v.bodyFatMass/v.pbf*100, 'the fat mass and body-fat percentage']);
+    if(v.bodyFatMass!=null && v.ffm!=null) from.push([v.bodyFatMass+v.ffm, 'the fat mass and fat free mass']);
+    if(v.bmi!=null && v.height>0) from.push([v.bmi*Math.pow(v.height/100,2), 'the BMI and height']);
+    const off=from.filter(d=>Math.abs(w-d[0]) > Math.max(2, d[0]*0.05));
+    if(off.length>=2 && Math.abs(off[0][0]-off[1][0]) <= Math.max(2, off[0][0]*0.05))
+      return w+' kg, but '+off[0][1]+' and '+off[1][1]+' on the same sheet both make it '
+        +(Math.round(off[0][0]*10)/10)+' kg';
     return '';
   }
+  // A reading as it is stored is not quite a sheet: the columns the table lifted out are called
+  // weight/fat/muscle, while everything the sheet also carried kept its own name inside vals.
+  // The checks below read a sheet, so a stored reading has to be handed to them as one — without
+  // this, percent body fat is simply missing from every record already on the club's books and
+  // the arithmetic has nothing to check the weight against.
+  _ibAsSheet(r){ const v={...(r||{})};
+    if(v.pbf==null && v.fat!=null) v.pbf=v.fat;
+    if(v.smm==null && v.muscle!=null) v.smm=v.muscle;
+    return v; }
   _inbodySanity(d){
     const v={...(d||{})};
     const drop=(...ks)=>ks.forEach(k=>{ delete v[k]; });
@@ -13173,7 +13208,7 @@ class Component extends DCLogic {
     // Check the weight itself before trusting it, because every test below measures the rest of
     // the sheet against it. Nothing else is offered when it fails — half a sheet anchored to a
     // wrong weight is worse than no sheet.
-    const why=this._weightImplausible(W, v.height);
+    const why=this._weightImplausible(W, v.height, v);
     if(why) return {values:{testDate:v.testDate, height:v.height}, reconciled:false, badWeight:why};
 
     // Impossible for a person of this weight, whatever the sheet appeared to say.
@@ -13276,7 +13311,7 @@ class Component extends DCLogic {
     // be checked by a person rather than written to the record.
     let badWeight='';
     if(data && data.weight!=null){
-      badWeight=this._weightImplausible(data.weight, data.height);
+      badWeight=this._weightImplausible(data.weight, data.height, data);
       if(badWeight){ delete data.weight; fromPhoto=true; }
     }
 
@@ -15299,9 +15334,16 @@ class Component extends DCLogic {
     if(vim) return frame('https://player.vimeo.com/video/'+vim);
     if(/\.(mp4|webm|mov)(\?|#|$)/i.test(url)) return R.createElement('video',{key:'v', src:url, controls:true, playsInline:true, style:{width:'100%',borderRadius:10,background:'#000',display:'block'}});
     return R.createElement('a',{key:'v', href:url, target:'_blank', rel:'noreferrer', style:{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,fontWeight:700,color:'#8A22D5',textDecoration:'none'}}, '▶ Watch demo video'); }
+  // The demo photo and the demo video are files in vx-media like every other file the club
+  // stores, and vx-media is a private bucket now. Every other place that shows one — an avatar,
+  // a passport, an InBody sheet, the race-video player, a video sent to a family — asks
+  // _mediaSrc for a signed link. This one alone handed the raw stored URL to the <img> and the
+  // <video>, so it worked for exactly as long as the bucket was public and became a broken
+  // image the day it stopped being. Nothing in the plan changed, which is why it looked like
+  // the video had simply vanished.
   _fitMediaEl(exId){ const R=window.React; const m=this.getFitMedia(exId); const kids=[];
-    if(m.photo) kids.push(R.createElement('img',{key:'p', src:m.photo, alt:'', style:{width:'100%',maxHeight:200,objectFit:'cover',borderRadius:10,display:'block'}}));
-    const emb=this._videoEmbedEl(m.video); if(emb) kids.push(emb);
+    if(m.photo) kids.push(R.createElement('img',{key:'p', src:this._mediaSrc(m.photo), alt:'', style:{width:'100%',maxHeight:200,objectFit:'cover',borderRadius:10,display:'block'}}));
+    const emb=this._videoEmbedEl(this._mediaSrc(m.video)); if(emb) kids.push(emb);
     if(!kids.length) return null;
     return R.createElement('div',{style:{display:'flex',flexDirection:'column',gap:8,marginTop:8}}, kids); }
   // ---- Fitness sessions: save the dryland plan as a dated session + browse a calendar,
@@ -19103,12 +19145,23 @@ class Component extends DCLogic {
     const ibModeIsPdf = (S.inbodyMode||'pdf')==='pdf', ibModeIsQr = S.inbodyMode==='qr';
     const ibAnalysis = (()=>{
       if(!ibSel) return null;
-      const scans=this._swInbody(ibSel.id).filter(r=>r.weight!=null);
+      // A reading whose weight its own sheet contradicts is not a starting point for anything:
+      // the energy target, the protein range and the BMI are all measured against the weight,
+      // so one wrong figure does not produce one wrong line, it produces a wrong page. Those
+      // are left out here and flagged on the swimmer's record instead, where the coach can
+      // retype them off the paper.
+      const scans=this._swInbody(ibSel.id)
+        .filter(r=>r.weight!=null && !this._weightImplausible(r.weight, r.height, this._ibAsSheet(r)));
       if(!scans.length) return {hasScans:false};
       const latest=scans[0]; const prev=scans[1];
-      const heightM = 1.55 + Math.min(0.35, (ibSel.age-8)*0.02);
-      const bmi = latest.weight ? +(latest.weight/(heightM*heightM)).toFixed(1) : null;
-      const bmiClass = bmi==null?'—': bmi<18.5?'Underweight':bmi<25?'Healthy range':bmi<30?'Above range':'High';
+      // The BMI the InBody printed, or the one its own height and weight give. This used to
+      // guess the height from the swimmer's age — 1.55 m at eight years old, rising two
+      // centimetres a birthday — which is not a measurement of anybody. It read a 132 cm
+      // ten-year-old as 1.59 m and called a healthy child underweight, on a sheet that had
+      // their real height printed at the top of it.
+      const bmi = latest.bmi!=null ? latest.bmi
+        : (latest.height>0 && latest.weight ? +(latest.weight/Math.pow(latest.height/100, 2)).toFixed(1) : null);
+      const bmiClass = bmi==null?'no height on this sheet': bmi<18.5?'Underweight':bmi<25?'Healthy range':bmi<30?'Above range':'High';
       const fatDelta = (prev && latest.fat!=null && prev.fat!=null) ? +(latest.fat-prev.fat).toFixed(1) : null;
       const muscleDelta = (prev && latest.muscle!=null && prev.muscle!=null) ? +(latest.muscle-prev.muscle).toFixed(1) : null;
       const visceralFlag = latest.visceralFat!=null && latest.visceralFat>=10;
@@ -20340,8 +20393,15 @@ class Component extends DCLogic {
           const val=(k)=> k==='smm' ? (r.smm!=null?r.smm:r.muscle) : r[k];
           const detail=IB_FIELDS.filter(f=>val(f[0])!=null).map(f=>({icon:f[3], label:f[1], value:String(val(f[0]))+f[2]}));
           const open=S.ibOpen===(swObj.id+'::'+i);
+          // A scan already on the record from before the import checked its own arithmetic. It
+          // is not deleted — it is a child's record and the paper it came off still exists —
+          // but it is not left reading like a measurement either, because everything derived
+          // from it is wrong and nothing on the screen said so.
+          const warn=r.weight!=null ? this._weightImplausible(r.weight, r.height, this._ibAsSheet(r)) : '';
           return {
             dateLabel:this.shortDateISO(r.date),
+            warn: warn ? ('This reads '+warn+'. Delete it and type the sheet in again — the body-fat, protein and energy figures are all measured against the weight.') : '',
+            hasWarn: !!warn,
             weight: r.weight!=null?(r.weight+' kg'):'—', fat: r.fat!=null?(r.fat+'% fat'):'—', muscle: r.muscle!=null?(r.muscle+' kg muscle'):'—',
             detail, hasDetail:detail.length>0, open,
             moreLabel: open ? 'Hide the full sheet' : ('Show the full sheet — '+detail.length+' reading'+(detail.length===1?'':'s')),

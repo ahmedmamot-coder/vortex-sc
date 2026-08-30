@@ -4624,6 +4624,47 @@ describe("InBody sheet", () => {
       eq(!!heavy.badWeight, false, "a masters swimmer is not a misread");
       eq(!!check({ weight: 18.5, height: 110 }).badWeight, false, "a five-year-old in the learn-to-swim squad");
     });
+
+    // The bounds only ever caught the swap because this swimmer happened to be 167 cm tall.
+    // Most of the club is not. On a 138 cm ten-year-old the identical misreading produces
+    // "138 kg", which is under every limit, is not equal to a height the sheet did not give
+    // up, and goes onto the record as a measurement.
+    describe("the sheet outvotes the Weight box", () => {
+      const w = bind("_weightImplausible", {});
+      // A real 138 cm swimmer: 34.5 kg, 18% fat, so 6.2 kg of fat and 28.3 kg of fat free mass.
+      const child = { bodyFatMass: 6.2, pbf: 18, ffm: 28.3, bmi: 18.1, height: 138 };
+      it("a height under 150 read into the Weight box is caught by the sheet's own arithmetic", () => {
+        const why = w(138, null, child);
+        eq(!!why, true, "138 kg passes every bound there is");
+        eq(/34\.[45] kg/.test(why), true, "and the sheet says what the weight actually was: " + why);
+      });
+      it("the real weight from that same sheet is not refused", () =>
+        eq(w(34.5, 138, child), "", "the swap check must not fire on the number it exists to protect"));
+      it("one figure disagreeing is that figure's problem, not the weight's", () =>
+        eq(w(55.8, null, { bodyFatMass: 6.3, pbf: 35, ffm: 49.5 }), "",
+           "pbf alone contradicts; _inbodySanity drops pbf and keeps the weight"));
+      it("a sheet with nothing to cross-check against is left alone", () =>
+        eq(w(55.8, null, { smm: 27.4 }), ""));
+      it("the club's own sheet still reads clean", () =>
+        eq(w(55.8, 167, { bodyFatMass: 6.3, pbf: 11.4, ffm: 49.5, bmi: 20, height: 167 }), ""));
+
+      // A stored reading is not shaped like a sheet: the table lifted weight/fat/muscle out into
+      // columns and left the rest under their own names. Handed over as-is, percent body fat is
+      // missing from every record the club already has and the check has nothing to work with.
+      it("a reading as the table stores it is checked too", () => {
+        const asSheet = bind("_ibAsSheet", {});
+        const stored = { date: "2026-07-14", weight: 138, fat: 18, muscle: 15.2,
+                         bodyFatMass: 6.2, ffm: 28.3, bmi: 18.1, height: 138 };
+        eq(asSheet(stored).pbf, 18, "the fat column IS the sheet's percent body fat");
+        eq(asSheet(stored).smm, 15.2, "and the muscle column its skeletal muscle mass");
+        eq(!!w(stored.weight, null, asSheet(stored)), true, "a stored swap must not read as a measurement");
+      });
+      it("what the screen and the analysis check is that same shape", () => {
+        eq(/_weightImplausible\(r\.weight, r\.height, this\._ibAsSheet\(r\)\)/g.test(SOURCE), true);
+        eq((SOURCE.match(/_weightImplausible\(r\.weight, r\.height, this\._ibAsSheet\(r\)\)/g) || []).length, 2,
+           "the swimmer's record and the nutrition analysis both have to look");
+      });
+    });
   }
 
   // The reconciliation above runs only on what this device's own OCR guessed at. The 167 came
@@ -4645,7 +4686,10 @@ describe("InBody sheet", () => {
   });
   it("the same mix-up typed by hand is refused before it is saved", () => {
     const add = (SOURCE.match(/  addInbody\(swId\)\{[\s\S]*?\n    const m=this\._swMeta/) || [""])[0];
-    eq(/const wWhy=this\._weightImplausible\(w, isNaN\(typedH\)\?null:typedH\);/.test(add), true);
+    eq(/const wWhy=this\._weightImplausible\(w, isNaN\(typedH\)\?null:typedH, typedSheet\);/.test(add), true);
+    // Bounds alone cannot see a swap on a swimmer shorter than 150 cm, so the rest of the sheet
+    // in front of the person has to reach the check with the weight.
+    eq(/typedSheet\.pbf=fat/.test(add), true, "the % fat box is the sheet's PBF and the check needs it");
     eq(/if\(wWhy\)\{[\s\S]*?return;/.test(add), true, "it has to stop, not just warn");
   });
 
@@ -4880,6 +4924,13 @@ describe("InBody sheet", () => {
       eq(/vidEl\.src=this\._mediaSrc\(v\.url\)/.test(SOURCE), true, "the video player");
       eq(/activeVideoDownloadUrl: activeVid\?this\._mediaSrc\(/.test(SOURCE), true, "the download link");
       eq(/const ready=this\._mediaSrc\(url\);/.test(SOURCE), true, "documents and scans opened in a tab");
+      // The fitness plan's demo photo and demo video are files in vx-media like any other, and
+      // this was the one render path still handing the raw stored URL to the browser. It worked
+      // for exactly as long as the bucket was public: the day it went private the coach's
+      // exercise video became a broken image, with nothing in the plan having changed.
+      const fitMedia = sourceBetween("_fitMediaEl(exId){", "// ---- Fitness sessions");
+      eq(/src:this\._mediaSrc\(m\.photo\)/.test(fitMedia), true, "the exercise demo photo");
+      eq(/this\._videoEmbedEl\(this\._mediaSrc\(m\.video\)\)/.test(fitMedia), true, "the exercise demo video");
     });
     it("opening a document never waits on a request first", () => {
       // A window opened after an await is a blocked pop-up and the document simply never
