@@ -265,7 +265,14 @@ if ('serviceWorker' in navigator) {
   function _blockAdd(sig, table, payload, said){
     try{
       var a=_blockLoad().filter(function(x){ return x && x.sig!==sig; });
-      a.push({sig:sig, table:table, said:said||"", ts:Date.now()});
+      // The row ids, and never the rows. Which rows a set-aside entry is about is the one thing
+      // anything downstream has to ask — a parent's phone has to know that eight of these nine
+      // family rows were never its own — and the sig is the only place it was written, packed
+      // into a string. The bytes stay out, for the reason the whole of _failAdd says: a copy of
+      // a record in here is what filled the club's phones.
+      var ids=[]; try{ (Array.isArray(payload)?payload:[payload]).forEach(function(r){
+        if(r && r.id!=null) ids.push(String(r.id)); }); }catch(e){}
+      a.push({sig:sig, table:table, ids:ids, said:said||"", ts:Date.now()});
       _blockSave(a);
       // The account row points at a login that is gone, so the app must stop offering it. This
       // is the same list _famRefusedIds reads.
@@ -518,6 +525,44 @@ if ('serviceWorker' in navigator) {
   // What the database is refusing outright, for the screen that says so. Never retried.
   window.__vxBlocked = function(){ return _blockLoad(); };
   window.__vxClearBlocked = function(){ _blockSave([]); try{ window.dispatchEvent(new CustomEvent("vx-write-failed")); }catch(e){} };
+  // Drop specific entries from both lists, without touching anything else that is waiting.
+  //
+  // Discard is all-or-nothing and always has been, which is right for a coach looking at a bad
+  // afternoon and wrong for a write that was never this device's to make. A parent's phone
+  // carrying nine other families' account rows cannot be healed by asking the parent to press
+  // Discard: the next fetch queues all nine again. They have to be taken out and the reason
+  // has to be code, not a button.
+  //
+  // The predicate is called with {op, table, payload, said} and returns true to drop.
+  window.__vxDropWrites = function(pick){
+    if(typeof pick!=="function") return 0;
+    var dropped=0;
+    try{
+      var _ids=function(x){
+        var out=[]; try{ (Array.isArray(x&&x.payload)?x.payload:[x&&x.payload]).forEach(function(r){
+          if(r && r.id!=null) out.push(String(r.id)); }); }catch(e){}
+        if(!out.length && x && Array.isArray(x.ids)) out=x.ids.slice();
+        // Entries already on the club's phones were written before ids were kept, and the only
+        // record of which rows they are is the sig — "upsert|family_accounts|<uuid>". Read it,
+        // or the devices that actually have the problem are the ones this cannot help.
+        if(!out.length && x && typeof x.sig==="string"){
+          var parts=x.sig.split("|");
+          if(parts.length>2 && parts[2] && parts[2].charAt(0)!=="{") out=parts.slice(2).join("|").split(",");
+        }
+        return out;
+      };
+      var f=_failLoad(), fk=f.filter(function(x){ var go=false;
+        try{ go=!!pick({op:x&&x.op, table:x&&x.table, payload:x&&x.payload, ids:_ids(x), said:x&&x.said}); }catch(e){}
+        if(go) dropped++; return !go; });
+      if(fk.length!==f.length) _failSave(fk);
+      var b=_blockLoad(), bk=b.filter(function(x){ var go=false;
+        try{ go=!!pick({op:"blocked", table:x&&x.table, payload:x&&x.payload, ids:_ids(x), said:x&&x.said}); }catch(e){}
+        if(go) dropped++; return !go; });
+      if(bk.length!==b.length) _blockSave(bk);
+      if(dropped) try{ window.dispatchEvent(new CustomEvent("vx-write-failed")); }catch(e){}
+    }catch(e){}
+    return dropped;
+  };
   // A write to this table just succeeded, so whatever the database was refusing about it is
   // over. Set-aside rows were only ever cleared by somebody pressing the button on the banner,
   // which meant that after the cause was fixed the app went on reporting a fault that no longer
@@ -949,8 +994,81 @@ if ('serviceWorker' in navigator) {
       })
       .catch(function(){ return v; });   // unreadable: send what we have, which is today's behaviour
   }
+  // ---- The two keys a parent's phone is allowed to write ----------------------------------------
+  //
+  // security_4_roles.sql pins club_state's write policy to exactly two keys for anybody who is
+  // not staff: vx_event_requests and vx_notifications. A parent asking for a race writes the
+  // first, and the coach's inbox line that tells the club about it writes the second.
+  //
+  // Both are written the way every synced key is written: the whole document, last writer wins.
+  // And /api/family/state deliberately does not send either of them down — a parent has no
+  // business reading another family's race requests, or the club's notifications. So the copy on
+  // that phone is not a stale version of the club's list. It is a list with one row in it, and
+  // sending it replaced the club's.
+  //
+  // One parent tapping "Request 50 Free" would have emptied every pending request in the club
+  // and the coach's inbox with it, on every device, with nothing anywhere saying why. That is
+  // the whole reason the request panel has never been trusted with the real meets.
+  //
+  // So on a family device these two are merged rather than sent: the database's list is taken as
+  // it stands, and only rows it has never seen — this parent's new ones — go on the front of it.
+  // A family device can ADD to these lists and can never change or remove a row in them, which
+  // is exactly the authority a parent has. Staff pull both keys in full and are untouched.
+  var ADD_ONLY_KEYS = ["vx_event_requests", "vx_notifications"];
+  function _famDevice(){
+    try{ var s=JSON.parse(localStorage.getItem("vx_session")||"null"); return !!(s && s.type==="family"); }
+    catch(e){ return false; }
+  }
+  // Not a value: the answer "do not send this at all". Returned when the club's copy could not be
+  // read, because the alternative — falling back to this device's own corner of the list — is
+  // precisely the write this whole function exists to prevent. It goes back on the queue instead
+  // and the replay reads again.
+  var SKIP_SEND = "\u0000vx-skip";
+  function _addOnlyMergedWith(k, v){
+    return fetch(REST + "?select=value&key=eq." + k, { headers: dyn(), cache: "no-store" })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(rows){
+        if(rows==null) return SKIP_SEND;
+        var theirs=(rows[0] && rows[0].value);
+        // Nothing there yet, or a shape this does not recognise: there is nothing to lose, so
+        // this device's copy is the list.
+        if(!Array.isArray(theirs)) return v;
+        var mine=null; try{ mine=JSON.parse(v); }catch(e){ return v; }
+        if(!Array.isArray(mine)) return v;
+        var have={}; theirs.forEach(function(r){ if(r && r.id!=null) have[String(r.id)]=true; });
+        var added=mine.filter(function(r){ return r && r.id!=null && !have[String(r.id)]; });
+        if(!added.length) return JSON.stringify(theirs);
+        try{ console.info("vx "+k+": adding "+added.length+" row(s) to the "+theirs.length+" the database holds"); }catch(e){}
+        return JSON.stringify(added.concat(theirs).slice(0, 600));
+      })
+      .catch(function(){ return SKIP_SEND; });
+  }
+  function _mergedForSend(k, v){
+    if(k==="vx_roster_edits") return _rosterMergedWith(v);
+    if(_famDevice() && ADD_ONLY_KEYS.indexOf(k)>=0) return _addOnlyMergedWith(k, v);
+    return Promise.resolve(v);
+  }
   function pushKey(k, v){
     if (SYNC.indexOf(k) === -1) return Promise.resolve({ok:false, why:"this is not a synced key"});
+    // A family device writes exactly the two keys club_state's policy lets it write.
+    //
+    // Everything else it tries to write is not a save that failed, it is a write it was never
+    // entitled to make. /api/family/state returns nine keys of the thirty-six, so every other
+    // key reads as "not in the database" on a parent's phone — and both the boot seed and
+    // _billingSave then offered the club's squads, brand, roster and fee record up from it.
+    // Refused, every one, by a policy working exactly as written, and each one counted at a
+    // parent as a record that cannot go into the database. The club's copy was never at risk
+    // and nothing of the parent's was ever in those writes.
+    //
+    // Reporting a payment is the case that shows why this belongs here rather than at each
+    // caller: that write goes to the invoices TABLE, where a family genuinely may update their
+    // own child's row, and the club_state blob beside it is a compatibility copy for devices
+    // that have not run invoices.sql. The payment lands. Only the copy is refused, and only the
+    // copy was ever on the banner.
+    if (_famDevice() && ADD_ONLY_KEYS.indexOf(k) === -1){
+      return Promise.resolve({ok:false, notMine:true,
+        why:"this device is signed in as a family, and "+k+" is the club's record to write"});
+    }
     if (typeof v === "string" && v.length > MAX_ROW){
       var mb=(v.length/1048576).toFixed(1);
       var why="it is "+mb+" MB, which is too large for one record \u2014 this is almost always a photo "
@@ -1027,7 +1145,16 @@ if ('serviceWorker' in navigator) {
     var p;
     try {
       // The roster is merged with what the database holds; everything else is sent as it is.
-      p = (k==="vx_roster_edits" ? _rosterMergedWith(v) : Promise.resolve(v)).then(function(sendStr){
+      p = _mergedForSend(k, v).then(function(sendStr){
+        // The club's copy could not be read, so there is nothing to add this device's rows to.
+        // Answered like a request that never arrived — status 0 — so it stays on the retry queue
+        // and the replay reads again, rather than being sent as it stands and taking the club's
+        // list with it.
+        if(sendStr===SKIP_SEND){
+          return { ok:false, status:0, text:function(){ return Promise.resolve(JSON.stringify({message:
+            "this device could not read the club's "+k+" to add to it, so nothing was sent \u2014 "
+            +"nothing is lost, it is kept here and goes up on the next try"})); } };
+        }
         var sendVal=val; try{ sendVal=JSON.parse(sendStr); }catch(e){}
         if(k==="vx_roster_edits"){
           // Keep the device showing what it is about to send, or the next pull hands back the
@@ -1483,7 +1610,20 @@ if ('serviceWorker' in navigator) {
         if(localVal!==_remoteStr) pushKey(r.key, localVal);   // push it up so the server catches up
       }
     }); } catch(e){}
-    if(seed){ try { SYNC.forEach(function(k){ if(have[k]) return; var lv=localStorage.getItem(k); if(lv!=null) pushKey(k, lv); }); } catch(e){} }
+    // The seed: a key the database did not send back, but that this device has a copy of, is
+    // offered up. That is how a club whose record was lost gets it back from a phone.
+    //
+    // On a parent's phone it is the opposite of that. A family pulls its own slice — nine keys
+    // of the thirty-six — so every other key comes back "not there", and this offered the whole
+    // lot: the squads, the brand, the meet calendar, the roster. Every one refused by a policy
+    // working exactly as written, every one filed as a row the database will not take, and the
+    // count of "records that cannot go into the database" on a parent's phone was mostly this.
+    // A parent has nothing to seed with and no right to: what is missing from their slice is
+    // missing because it is not theirs, not because the club has lost it.
+    if(seed){ try {
+      var _seedable = _famDevice() ? ADD_ONLY_KEYS : SYNC;
+      _seedable.forEach(function(k){ if(have[k]) return; var lv=localStorage.getItem(k); if(lv!=null) pushKey(k, lv); });
+    } catch(e){} }
   }
   // Re-pull the shared club data with whatever credentials are current. Called once at boot
   // (anon) and again right after login (now carrying the user's JWT), so once anonymous reads
@@ -2961,30 +3101,37 @@ if ('serviceWorker' in navigator) {
                           </sc-for>
                         </div>
                       </sc-if>
+                      <sc-if value="{{ famReqHasMeets }}" hint-placeholder-val="{{ true }}">
                       <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:15px;box-shadow:0 2px 7px rgba(11,20,40,.05);margin-top:6px">
-                        <p style="margin:0 0 9px;font-size:13px;font-weight:700;color:#0C1116">Request an event</p>
+                        <p style="margin:0 0 3px;font-size:13px;font-weight:700;color:#0C1116">Choose {{ famReqSwFirst }}&rsquo;s races</p>
+                        <p style="margin:0 0 9px;font-size:11.5px;color:#7A8296;line-height:1.5">Pick every race you would like {{ famReqSwFirst }} to swim. The coach sees them together and confirms the entry.</p>
                         <div class="vx-scroll" style="display:flex;gap:6px;overflow-x:auto;margin-bottom:9px">
                           <sc-for list="{{ famReqMeetChips }}" as="mc" hint-placeholder-count="3">
                             <button onclick="{{ mc.onClick }}" style="flex:none;background:{{ mc.bg }};color:{{ mc.fg }};border:1px solid {{ mc.border }};border-radius:999px;padding:7px 13px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer">{{ mc.label }}</button>
                           </sc-for>
                         </div>
                         <p style="margin:0 0 8px;font-size:11px;color:#7A8296;line-height:1.5">{{ famReqMeetInfo }}</p>
-                        <p style="margin:0 0 6px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4">Pick an event</p>
+                        <sc-if value="{{ famReqDeadlineShow }}" hint-placeholder-val="{{ false }}">
+                          <div style="display:flex;align-items:center;gap:8px;background:{{ famReqDeadlineBg }};border-radius:10px;padding:8px 10px;margin-bottom:9px"><i data-lucide="clock" style="width:14px;height:14px;flex:none;color:{{ famReqDeadlineFg }}"></i><span style="font-size:11.5px;font-weight:600;color:{{ famReqDeadlineFg }};line-height:1.45">{{ famReqDeadlineLine }}</span></div>
+                        </sc-if>
+                        <p style="margin:0 0 6px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4">{{ famReqPickLabel }}</p>
                         <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:11px">
                           <sc-for list="{{ famReqEventChips }}" as="ec" hint-placeholder-count="6">
-                            <button onclick="{{ ec.onClick }}" style="flex:none;background:{{ ec.bg }};color:{{ ec.fg }};border:1px solid {{ ec.border }};border-radius:999px;padding:7px 13px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer">{{ ec.label }}</button>
+                            <button onclick="{{ ec.onClick }}" style="flex:none;background:{{ ec.bg }};color:{{ ec.fg }};border:1px solid {{ ec.border }};border-radius:999px;padding:7px 13px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:{{ ec.cursor }}">{{ ec.label }}</button>
                           </sc-for>
                         </div>
-                        <button onclick="{{ onFamReqSubmit }}" style="width:100%;background:var(--vx-blue);color:#fff;border:none;border-radius:10px;padding:11px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer">Request {{ famReqEvent }}</button>
-                        <sc-if value="{{ famReqMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:8px 2px 0;font-size:12px;font-weight:600;color:#0C7A4F">{{ famReqMsg }}</p></sc-if>
+                        <button onclick="{{ onFamReqSubmit }}" style="width:100%;background:{{ famReqSubmitBg }};color:{{ famReqSubmitFg }};border:none;border-radius:10px;padding:11px;font-family:inherit;font-weight:700;font-size:13px;cursor:{{ famReqSubmitCursor }}">{{ famReqSubmitLabel }}</button>
+                        <sc-if value="{{ famReqMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:8px 2px 0;font-size:12px;font-weight:600;color:{{ famReqMsgColor }}">{{ famReqMsg }}</p></sc-if>
                         <sc-if value="{{ famReqHasSent }}" hint-placeholder-val="{{ false }}">
-                          <div style="margin-top:10px;padding-top:10px;border-top:1px solid #EEF1F5;display:flex;flex-direction:column;gap:6px">
+                          <div style="margin-top:11px;padding-top:10px;border-top:1px solid #EEF1F5;display:flex;flex-direction:column;gap:7px">
+                            <span style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4">{{ famReqSentTitle }}</span>
                             <sc-for list="{{ famReqSent }}" as="rr" hint-placeholder-count="2">
-                              <div style="display:flex;align-items:center;justify-content:space-between;font-size:12px"><span style="color:#3A4152">{{ rr.event }} · {{ rr.meetName }}</span><span style="font-weight:700;color:{{ rr.color }}">{{ rr.statusLabel }}</span></div>
+                              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12px"><span style="flex:1;min-width:0;color:#3A4152">{{ rr.event }} · {{ rr.meetName }}</span><span style="flex:none;background:{{ rr.bg }};color:{{ rr.color }};border-radius:7px;padding:3px 8px;font-size:10.5px;font-weight:700">{{ rr.statusLabel }}</span></div>
                             </sc-for>
                           </div>
                         </sc-if>
                       </div>
+                      </sc-if>
                     </sc-if>
                   </div>
                 </div>
@@ -8220,7 +8367,7 @@ class Component extends DCLogic {
       entriesMeetIdx:0, entriesSwId:'', entriesSwSel:[], entriesEvent:'50 Free', entriesHeat:'', entriesLane:'', entriesQuery:'', printMode:'plan', entriesEventsSel:[],
       meetDayDate:'', meetDayMsg:'', meetDayMsgOk:true, seedBandName:'', seedBandFrom:'', seedBandTo:'', seedMsg:'',
       entryNewOpen:false, entryNewName:'', entryNewDob:'', entryNewSeed:'', entryNewErr:'',
-      famReqEvent:'50 Free', famReqMeetIdx:0,
+      famReqMeetIdx:0, famReqPicked:[], famReqMsgOk:true,
       famAttView:'month', famAttDateISO:null, famAttCalY:null, famAttCalM:null, famAttYearSel:null, famMeetSel:0,
       ladderOpen:false, ladderSecId:null, ladderShape:'up', ladderRungs:5, ladderStart:100, ladderStep:100, ladderReps:1, ladderPaceSec:60, ladderNotes:'',
       ladderTab:'auto', manReps:1, manDist:50, manPaceSec:45, manStroke:'', manList:[],
@@ -8949,7 +9096,87 @@ class Component extends DCLogic {
         || /row-level security|violates .* policy|permission denied/i.test(e.said||'');
   }
   _saveFamily(list){ this.family=list; try{ this._saveLocalOnly('vx_family', list); }catch(e){} this.setState({family:list}); }
-  async _familyFetch(){ if(!window.__vxSelect) return; const rows=await window.__vxSelect('family_accounts', 'select=*&limit=2000');
+  // ---- A parent's phone holds one family: their own -----------------------------------------
+  //
+  // This is the fault behind every family_accounts banner a parent has ever been shown, and it
+  // is not really about permissions.
+  //
+  // family_accounts used to be readable by anybody — `lk_select ... using (true)`, which the two
+  // early repair scripts each recreated — and _familyFetch reads `select=*&limit=2000` on every
+  // family sign-in. So every parent who signed in during that period downloaded the club's whole
+  // family list, names, emails, phone numbers and children, and vx_family kept it. The Stage 4
+  // lockdown then did the right thing and cut the read down to the row that carries your own
+  // email. Which turned every other family already on that phone into a row "the table has never
+  // heard of" — and the self-heal exists precisely to re-upload those.
+  //
+  // Nine rows re-sent on every fetch, nine refused by a policy that is working exactly as
+  // written, a red banner that Discard could not clear because the next fetch queued them again,
+  // and a message telling a parent their account is not being treated as staff. It was never
+  // their account. It was nine other people's.
+  //
+  // The rule this should always have had: a family device may write ONE row, the one whose email
+  // it signed in with, because that is the only row the database will ever accept from it. The
+  // rest are not its to hold either — a parent's phone carrying the club's parent contact list
+  // is a leak of its own — so they are dropped from the cache rather than merely left unsent.
+  // Say what this device is BEFORE the token lands.
+  //
+  // __vxSetAuth replays everything queued while there was no session, and the queue at that
+  // moment holds the boot seed — every synced key this device had a local copy of, offered up
+  // because the family slice returned only nine of the thirty-six. Marking the device after the
+  // token means that replay goes out as though a coach had signed in: the club's squads, brand,
+  // fee record and roster pushed from a parent's phone, refused one by one, and each one landing
+  // on the parent's banner as a record that cannot go into the database.
+  //
+  // One line, called at every point a family session begins, and every one of those writes is
+  // simply never made.
+  _famMarkDevice(email){
+    try{ localStorage.setItem('vx_session', JSON.stringify({type:'family', email:String(email||'').trim().toLowerCase()})); }catch(e){}
+  }
+  _isFamilySession(){
+    if(this.state && this.state.familyUser) return true;
+    try{ const s=JSON.parse(localStorage.getItem('vx_session')||'null'); return !!(s && s.type==='family'); }catch(e){ return false; }
+  }
+  /** The email this device is signed in as, when that is a family. '' for staff or nobody. */
+  _famOwnEmail(){
+    if(!this._isFamilySession()) return '';
+    const norm=(e)=>String(e||'').trim().toLowerCase();
+    const fu=this.state && this.state.familyUser;
+    if(fu && fu.email) return norm(fu.email);
+    try{ const s=JSON.parse(localStorage.getItem('vx_session')||'null'); if(s && s.email) return norm(s.email); }catch(e){}
+    try{ if(window.__VX_AUTH && window.__VX_AUTH.email) return norm(window.__VX_AUTH.email); }catch(e){}
+    return '';
+  }
+  _famIsMine(f, own){ return !!own && String((f&&f.email)||'').trim().toLowerCase()===own; }
+  // The rows already queued on a phone that ran the old build.
+  //
+  // Stopping the backfill from making the write again does nothing about the four sitting in the
+  // retry queue and the nine set aside, and those are what the parent is actually looking at.
+  // They are not "unsaved work" in any sense — no one on this device ever typed them, the club's
+  // own copy of every one is safe in the database, and the account row for each is written again
+  // by its owner's next sign-in. So they are taken out, once, rather than counted at somebody.
+  _famPruneForeignWrites(){
+    const own=this._famOwnEmail(); if(!own) return 0;
+    let mineId=''; try{ const fu=this.state&&this.state.familyUser; mineId=String((fu&&fu.id)||''); }catch(e){}
+    if(!window.__vxDropWrites) return 0;
+    const n=window.__vxDropWrites((w)=>{
+      if(String((w&&w.table)||'').split(' (')[0]!=='family_accounts') return false;
+      const rows=Array.isArray(w.payload)?w.payload:(w.payload?[w.payload]:[]);
+      // The payload is the honest answer when it is there: whose email is on the row.
+      if(rows.length && rows.some(r=>r&&r.email!=null)) return !rows.every(r=>this._famIsMine(r, own));
+      // A set-aside entry keeps ids and no rows. Ours is the one that carries this sign-in's id.
+      const ids=(w.ids||[]).filter(Boolean);
+      if(ids.length) return !(mineId && ids.every(id=>String(id)===mineId));
+      return false;   // nothing to judge by — leave it alone rather than throw away a real save
+    });
+    if(n) try{ console.info('vx family: took '+n+' write(s) for other families off this device'); }catch(e){}
+    return n;
+  }
+  async _familyFetch(){
+    // Before the read, not after it. A device that cannot reach the database is exactly the one
+    // sitting behind the banner, and the read below returns early when it fails — so putting
+    // this after it would skip the phones that have the problem.
+    try{ this._famPruneForeignWrites(); }catch(e){}
+    if(!window.__vxSelect) return; const rows=await window.__vxSelect('family_accounts', 'select=*&limit=2000');
     // Remember whether the read actually worked, so the admin screen can tell "nobody has
     // registered" apart from "the database refused the read" (they look identical otherwise).
     this._famFetchOk = (rows!=null);
@@ -8966,7 +9193,15 @@ class Component extends DCLogic {
               (this.state&&this.state.familyUser)?[this.state.familyUser]:[])
       .forEach(f=>{ if(!f||!f.email) return; const k=(f.email||'').trim().toLowerCase();
         if(seen.has(k)) return; seen.add(k); candidates.push(f); });
-    const localOnly=candidates.filter(f=>!have.has((f.email||'').trim().toLowerCase()));
+    let localOnly=candidates.filter(f=>!have.has((f.email||'').trim().toLowerCase()));
+    // A family device offers exactly one row: its own. See _isFamilySession above for what the
+    // other rows are and how they got here. The read has already been cut to this account by the
+    // policy, so `have` is one email — everything else in `candidates` is somebody else's, and
+    // every one of them is a write this database will refuse for as long as the app is open.
+    const _own=this._famOwnEmail();
+    if(_own){
+      localOnly=localOnly.filter(f=>this._famIsMine(f, _own));
+    }
     // Only rows that already carry the Auth uuid. There is no uuid to invent for a local-only
     // record, and sending a made-up one had every write refused rather than just that one.
     // This backfill runs on every fetch of the family list, so a row the database will never
@@ -8994,7 +9229,10 @@ class Component extends DCLogic {
         }).catch(()=>{});
       }catch(e){}
     });
-    const list=[...fromTable, ...localOnly];
+    // Pruned, not just left unsent: the club's parent contact list has no business sitting on a
+    // parent's phone, and while it sits there every later fetch reads it back as work to do.
+    const list=_own ? [...fromTable, ...localOnly].filter(f=>this._famIsMine(f, _own))
+                    : [...fromTable, ...localOnly];
     this.family=list; try{ this._saveLocalOnly('vx_family', list); }catch(e){} this.setState({family:list});
   }
   // Reset a family account's password in-app (no email needed): verify by the email
@@ -9150,6 +9388,25 @@ class Component extends DCLogic {
   // Everything that happens once a family sign-in succeeds. One path in, so the portal
   // cannot open by one route with a step missed on the other.
   async famContinueSignIn(email, authUser){
+    // The marker that says "this device is a family" goes down FIRST, before anything reads or
+    // writes on the strength of the new session. It used to be written at the end of this
+    // method, and three things in the two lines below asked the question before the answer
+    // existed:
+    //
+    //   _refetchAll() decides between /api/family/state and a direct read of the whole
+    //   club_state — so the first sign-in on a device pulled the club's roster, fees, billing
+    //   and staff overrides down to a parent's phone, which is the exact hole that route was
+    //   built to close;
+    //
+    //   _familyFetch decides whether the account rows on this device are this family's to
+    //   offer, and with no marker it treated a parent's phone as the club's own and re-sent
+    //   every family it was holding;
+    //
+    //   and pushKey decides whether a write belongs to this device at all.
+    //
+    // `email` is the address Supabase Auth just accepted, which is the same address the
+    // policies compare against. There is nothing later in this method that knows better.
+    this._famMarkDevice(email);
     this._refetchAll();
     this._postLoginRefresh();
     try{ await this._familyFetch(); }catch(e){}
@@ -9157,6 +9414,7 @@ class Component extends DCLogic {
     if(!rec){ const u=authUser||{}; const md=u.user_metadata||{}; rec={id:u.id||this._uid('fam'), name:md.name||email.split('@')[0], email, phone:md.phone||'', role:md.role||'parent', swimmerIds:md.swimmer_ids||[]};
       if(window.__vxUpsert && this._isUuid(rec.id)) try{ window.__vxUpsert('family_accounts', [{id:rec.id, name:rec.name, email:rec.email, phone:rec.phone, pass:'', role:rec.role, swimmer_ids:rec.swimmerIds, ts:Date.now()}]); }catch(e){}
       this._saveFamily([...(this.family||[]), rec]); }
+    // Written again with the record's own address, which may differ in case from what was typed.
     try{ localStorage.setItem('vx_session', JSON.stringify({type:'family', email:rec.email})); }catch(e){}
     // Signing in proves the login exists, so this row is worth offering again.
     try{ this._famClearRefused(rec.id); }catch(e){}
@@ -9223,8 +9481,14 @@ class Component extends DCLogic {
     // Take it out of the address bar before anything else: a token sitting in a URL gets
     // bookmarked, screenshotted and pasted into chats.
     try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){}
-    if(window.__vxSetAuth){ try{ window.__vxSetAuth(session); }catch(e){} }
+    // Which side this sign-in is for, read BEFORE the token is installed rather than after.
+    // __vxSetAuth replays the queue the moment it is called, and what is in that queue on a
+    // parent's phone is the boot seed — see _famMarkDevice. The address is not known yet (it
+    // takes a round trip to Supabase); the marker only has to say which side, and
+    // famContinueSignIn writes it again with the address a moment later.
     let after='family'; try{ after=sessionStorage.getItem('vx_oauth_after')||'family'; sessionStorage.removeItem('vx_oauth_after'); }catch(e){}
+    if(after!=='staff') this._famMarkDevice('');
+    if(window.__vxSetAuth){ try{ window.__vxSetAuth(session); }catch(e){} }
     await this._oauthFinish(token, after);
   }
   async _oauthEmail(token){
@@ -13913,12 +14177,39 @@ class Component extends DCLogic {
     this.setState({entryNewOpen:false, entryNewName:'', entryNewDob:'', entryNewSeed:'', entryNewErr:'', entriesSwId:newSw?newSw.id:'', squadId});
     if(newSw){ setTimeout(()=>this.entryAdd(meetName, squadId), 60); }
   }
-  famRequestEvent(swId, swName, meetName, event){
-    const rec={id:this._uid('req'), swId, swName, meetName, event, status:'pending', requestedAt:new Date().toISOString().slice(0,10)};
-    this.eventRequests=[rec, ...this.eventRequests];
+  // Tick a race on or off before sending. Nothing leaves the device until Request is pressed:
+  // a parent building a programme changes their mind two or three times, and a request per tap
+  // is a request per change of mind in the coach's inbox.
+  famReqToggle(event){
+    const cur=(this.state.famReqPicked||[]).slice();
+    const i=cur.indexOf(event);
+    if(i>=0) cur.splice(i,1); else cur.push(event);
+    this.setState({famReqPicked:cur, famReqMsg:''});
+  }
+  // Every race a family chose for one meet, sent together.
+  //
+  // One row each, because that is what the club decides on one at a time — reqDecide approves a
+  // row and entryAddOne enters that swim. One inbox line, because nine notifications for one
+  // family's meet is how a coach stops reading them.
+  famRequestEvents(swId, swName, meetName, events){
+    const list=(events||[]).filter(Boolean);
+    if(!list.length) return;
+    // Never a second row for a race this child has already asked for at this meet. The chips
+    // hide those already, and this is the rule rather than the appearance of it — a stale
+    // screen, a double tap and a replayed save all arrive here.
+    const seen={};
+    this.eventRequests.forEach(r=>{ if(r && r.swId===swId && r.meetName===meetName && r.event) seen[r.event]=true; });
+    const fresh=list.filter(ev=>!seen[ev]);
+    if(!fresh.length) return this.setState({famReqPicked:[], famReqMsg:'Those races are already on the list for '+meetName+'.', famReqMsgOk:true});
+    const at=new Date().toISOString();
+    const recs=fresh.map((event,i)=>({id:this._uid('req')+'_'+i, swId, swName, meetName, event,
+      status:'pending', requestedAt:at.slice(0,10), ts:Date.now()}));
+    this.eventRequests=[...recs, ...this.eventRequests];
     this._saveJSON('vx_event_requests', this.eventRequests);
-    this.notify('coach', 'inbox', 'New event request', swName+' requested '+event+' at '+meetName+'.');
-    this.setState({famReqMsg:'Requested '+event+' for '+meetName+' \u2713'});
+    this.notify('coach', 'inbox', 'New event request',
+      swName+' asked for '+fresh.join(', ')+' at '+meetName+'.');
+    this.setState({famReqPicked:[], famReqMsgOk:true,
+      famReqMsg:'Sent to the coach: '+fresh.join(', ')+' at '+meetName+' \u2713'});
   }
   reqDecide(id, status){ const rec=this.eventRequests.find(r=>r.id===id); this.eventRequests=this.eventRequests.map(r=>r.id===id?{...r, status}:r); this._saveJSON('vx_event_requests', this.eventRequests);
     // Approving a request now actually enters the swimmer — closing the loop end-to-end.
@@ -16314,6 +16605,7 @@ class Component extends DCLogic {
     // users insert into family_accounts, so inserting first (as anon) was rejected and the
     // registration never reached the admin — it only lived in an in-memory retry queue.
     if(_authRes.ok && _authRes.j && _authRes.j.access_token && window.__vxSetAuth){
+      this._famMarkDevice(email);
       try{ window.__vxSetAuth(_authRes.j); }catch(e){}
     }
     // The row's id IS the Auth user's uuid — that is what the foreign key points at. Sign-up
@@ -16334,7 +16626,7 @@ class Component extends DCLogic {
     this.notify('coach', 'user-plus', _signTitle, _signBody);
     // Append-only alert row so the admin reliably receives every sign-up, on any device
     // (a synced blob would get overwritten by whichever device wrote last).
-    if(window.__vxUpsert){ try{ window.__vxUpsert('signup_alerts', [{ id:'sa'+Date.now()+'_'+Math.random().toString(36).slice(2,6), icon:'user-plus', title:_signTitle, body:_signBody, ts:Date.now() }]); }catch(e){} }
+    this._famAnnounce('register');
     const firstSwId=(S.famPicked[0]||'').split('::')[1];
     if(firstSwId) this.notify('family_sw:'+firstSwId, 'party-popper', 'Welcome to Vortex SC!', 'Hi '+S.famName.trim()+', your account is ready \u2014 a confirmation would be emailed to '+email+' in the live app. Explore performance, attendance, results and meets any time.');
     try{
@@ -16346,7 +16638,7 @@ class Component extends DCLogic {
     // A new account with children attached to it — recorded before the branch below, because
     // only one of the two paths signs the person in and both create the account.
     try{ this.audit('family.register', S.famName.trim()+' · '+email, {side:'family', role:S.famRole||'parent', children:(rec.swimmerIds||[]).length}); }catch(e){}
-    if(_hasSession){ try{ this._pushSend({role:'staff'}, _signTitle, _signBody, '/'); }catch(e){} this._refetchAll(); this._postLoginRefresh(); }
+    if(_hasSession){ this._refetchAll(); this._postLoginRefresh(); }
     if(_hasSession || _ar.netfail){ try{ localStorage.setItem('vx_session', JSON.stringify({type:'family', email:rec.email})); }catch(e){}
       this.setState({familyUser:rec, familyActiveIdx:0, screen:'app', view:'family', famErr:'', famBusy:false}); }
     else { this.setState({famBusy:false, famMode:'login', famPass:'', famPass2:'', famErr:'', famRegisteredMsg:'Account created! We emailed a confirmation link to '+email+'. Open it, then sign in.'}); }
@@ -16355,6 +16647,22 @@ class Component extends DCLogic {
   //  1) upsert the account row — this is the reliable moment, because the user is now
   //     signed in, so the write can't be refused the way it can during registration;
   //  2) log the sign-in for the admin (an alert row every device picks up, plus a push).
+  // Tell the club a family arrived — through the server, which is the only thing that may write
+  // the club's own alert feed.
+  //
+  // Nothing here is taken from the page: the route reads the caller's own family_accounts row and
+  // composes the line itself, so a parent can neither write free text into a coach's feed nor
+  // raise an alert about somebody else's family. And it is fire-and-forget on purpose — a failure
+  // to announce is the club's problem to see in its own logs, never a red bar on a parent's phone
+  // about a record that was never theirs.
+  _famAnnounce(kind){
+    try{
+      const tok=(window.__VX_AUTH && window.__VX_AUTH.token)||''; if(!tok) return;
+      fetch('/api/family/announce', { method:'POST',
+        headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+tok },
+        body: JSON.stringify({ kind }) }).catch(()=>{});
+    }catch(e){}
+  }
   _famRecordLogin(rec){
     if(!rec || !rec.email) return;
     const kids=(rec.swimmerIds||[]).map(uid=>{ const h=this._famResolve(uid); return h?h.sw.name:null; }).filter(Boolean).join(', ');
@@ -16364,8 +16672,10 @@ class Component extends DCLogic {
     const title='Family sign-in';
     const body=(rec.name||rec.email)+' signed in ('+rec.email+')'+(kids?(' · '+kids):' · no child linked');
     try{ this.notify('coach', 'log-in', title, body); }catch(e){}
-    try{ if(window.__vxUpsert) window.__vxUpsert('signup_alerts', [{ id:'li'+Date.now()+'_'+Math.random().toString(36).slice(2,6), icon:'log-in', title, body, ts:Date.now() }]); }catch(e){}
-    try{ this._pushSend({role:'staff'}, title, body, '/'); }catch(e){}
+    // Told to the club by the server, not written from this phone. signup_alerts is staff-only
+    // and /api/push/send requires staff, both correctly — so from here the row was refused and
+    // counted on the parent's banner, and the club heard nothing. See /api/family/announce.
+    this._famAnnounce('sign-in');
   }
   async famLogin(){ this.setState({famErr:''});
     // No table read before sign-in — the account is looked up AFTER Supabase Auth
@@ -16376,6 +16686,7 @@ class Component extends DCLogic {
     // 1) Supabase Auth first (this enforces the email confirmation).
     const res=await this._authPost('/token?grant_type=password', {email, password:pass});
     if(res.ok && res.j && res.j.access_token){
+      this._famMarkDevice(email);
       if(window.__vxSetAuth){ try{ window.__vxSetAuth(res.j); }catch(e){} }
       return this.famContinueSignIn(email, res.j.user||{});
     }
@@ -20946,26 +21257,89 @@ class Component extends DCLogic {
           famPayLinkHas: !!link, onFamPayLink:()=>this._openUrl(link),
         };
       })(),
-      ...(()=>{ const fu=S.familyUser; if(!fu) return {};
+      // ---- The races a parent asks for -----------------------------------------------------
+      //
+      // The meets offered here were `this.meetsMeta.slice(0,4)` \u2014 window.VX_MEETS, the season
+      // that has already been swum, shipped with the app. The cards directly above this panel
+      // were fixed months ago to show the meets that are actually still ahead, and this was
+      // left behind, so a parent read "Dragons meet, 25 Sep" and "VIS, 4 Dec" on the screen and
+      // was then offered a championship held on 30 April to enter their child in. A request for
+      // it could never become an entry, and nothing said so.
+      //
+      // Same source as the cards now: _meetsSplit().upcoming, in the order they happen.
+      //
+      // And the races are chosen the way a family actually chooses them \u2014 all of them, then
+      // once. A meet is eight or nine swims; one chip and one Request button meant nine round
+      // trips, nine separate lines in the coach's inbox, and no way for either side to see the
+      // programme a child had asked for as one thing.
+      ...(()=>{ const fu=S.familyUser; if(!fu) return {famReqHasMeets:false};
         const uid=fu.swimmerIds[Math.min(S.familyActiveIdx, fu.swimmerIds.length-1)]||fu.swimmerIds[0];
         const _h=this._famResolve(uid); const sw=_h?_h.sw:null;
-        const upcomingMeets = this.meetsMeta.slice(0,4).length ? this.meetsMeta.slice(0,4) : (this.customMeets.slice(0,4));
-        const famReqMeetChips = upcomingMeets.map((m,i)=>({label:m.name, onClick:()=>this.setState({famReqMeetIdx:i}), bg:i===S.famReqMeetIdx?'#067EEA':'#fff', fg:i===S.famReqMeetIdx?'#fff':'#3A4152', border:i===S.famReqMeetIdx?'#067EEA':'#E5E9F0'}));
-        const curMeet = upcomingMeets[S.famReqMeetIdx] || upcomingMeets[0];
+        const upcomingMeets = this._meetsSplit().upcoming.slice(0,6);
+        if(!upcomingMeets.length || !sw) return {famReqHasMeets:false};
+        const meetIdx = Math.min(Math.max(S.famReqMeetIdx||0, 0), upcomingMeets.length-1);
+        const famReqMeetChips = upcomingMeets.map((m,i)=>({label:m.name, onClick:()=>this.setState({famReqMeetIdx:i, famReqPicked:[], famReqMsg:''}), bg:i===meetIdx?'#067EEA':'#fff', fg:i===meetIdx?'#fff':'#3A4152', border:i===meetIdx?'#067EEA':'#E5E9F0'}));
+        const curMeet = upcomingMeets[meetIdx];
         // The events offered are exactly the ones the admin set up for THIS meet (full details);
         // if a meet has no event list yet, fall back to the standard catalogue.
         const _mEv=this._meetEvents(curMeet); const meetEvents = _mEv.length ? _mEv : this.EVENT_CATALOG();
-        const curReqEvent = meetEvents.includes(S.famReqEvent) ? S.famReqEvent : (meetEvents[0]||'50 Free');
-        const famReqEventChips = meetEvents.map(ev=>({ label:ev, onClick:()=>this.setState({famReqEvent:ev}),
-          bg: ev===curReqEvent?'#0A0F1A':'#F8FAFC', fg: ev===curReqEvent?'#fff':'#3A4152', border: ev===curReqEvent?'#0A0F1A':'#E5E9F0' }));
-        const famReqMeetInfo = curMeet ? (curMeet.name+' · '+(curMeet.course||'LCM')+(curMeet.date?(' · '+curMeet.date):'')+' · '+meetEvents.length+' events'+(curMeet.location?(' · '+curMeet.location):'')) : 'No meet selected';
-        const famReqSent = this.eventRequests.filter(r=>r.swId===(sw&&sw.id)).slice(0,6).map(r=>({event:r.event, meetName:r.meetName,
-          statusLabel: r.status==='pending'?'Pending':(r.status==='approved'?'Approved':'Declined'),
-          color: r.status==='pending'?'#9A6206':(r.status==='approved'?'#0C7A4F':'#B42318') }));
-        return { famReqEvent:curReqEvent, onFamReqEvent:(e)=>this.setState({famReqEvent:e.target.value}),
+        // What this child has already asked for at this meet, and what the club said. A race
+        // already requested is not offered again \u2014 asking twice is how a coach ends up with two
+        // lines for one swim and no idea which is current.
+        const already={};
+        this.eventRequests.forEach(r=>{ if(r && r.swId===sw.id && r.meetName===curMeet.name && r.event) already[r.event]=r.status||'pending'; });
+        const picked=(S.famReqPicked||[]).filter(ev=>meetEvents.includes(ev) && !already[ev]);
+        // Entries that have closed are not a request a parent can still make. The card above says
+        // so already; saying it here too is the difference between a parent knowing and a parent
+        // being told by a coach a week later.
+        const info=this._meetInfo(curMeet.name);
+        const deadlineIso=this._toISODate(info.deadline);
+        const today=this.todayISO();
+        const closed = !!deadlineIso && deadlineIso < today;
+        const dDays = deadlineIso ? Math.round((new Date(deadlineIso+'T00:00:00') - new Date(today+'T00:00:00'))/86400000) : null;
+        const famReqDeadlineLine = !deadlineIso ? ''
+          : closed ? ('Entries closed on '+this._fmtDMY(deadlineIso, true)+' \u2014 ask the coach directly if you still need a swim here.')
+          : dDays===0 ? ('Entries close today \u2014 '+this._fmtDMY(deadlineIso, true))
+          : dDays===1 ? ('Entries close tomorrow \u2014 '+this._fmtDMY(deadlineIso, true))
+          : ('Entries close in '+dDays+' days \u2014 '+this._fmtDMY(deadlineIso, true));
+        const MARK={pending:['Asked','#FCEFD6','#9A6206'], approved:['Entered','#DCF5EA','#0C7A4F'], declined:['Declined','#FBE4E4','#B42318']};
+        const famReqEventChips = meetEvents.map(ev=>{
+          const st=already[ev]; const on=picked.includes(ev);
+          // A race the club has already been asked about carries its answer on the chip. The mark
+          // is part of the label rather than a second element inside the button: the chip is the
+          // whole of what a parent reads here, and "50 Free" reading the same whether it is
+          // waiting, entered or declined is how the same race gets asked for twice.
+          if(st){ const m=MARK[st]||MARK.pending;
+            return { label:ev+' \u00b7 '+m[0], cursor:'default', onClick:()=>this.setState({famReqMsg:ev+' is already on the list for this meet \u2014 '+m[0].toLowerCase()+'.', famReqMsgOk:true}),
+              bg:m[1], fg:m[2], border:m[1] }; }
+          return { label: on ? (ev+' \u2713') : ev, cursor:'pointer',
+            onClick: closed ? ()=>this.setState({famReqMsg:'Entries for this meet have closed.', famReqMsgOk:false})
+                            : ()=>this.famReqToggle(ev),
+            bg: on?'#0A0F1A':'#F8FAFC', fg: on?'#fff':'#3A4152', border: on?'#0A0F1A':'#E5E9F0' };
+        });
+        const famReqMeetInfo = curMeet.name+' \u00b7 '+(curMeet.course||'LCM')
+          +(curMeet.date?(' \u00b7 '+this._fmtDMY(this._toISODate(curMeet.date)||curMeet.date, true)):'')
+          +' \u00b7 '+meetEvents.length+' events'+(curMeet.location?(' \u00b7 '+curMeet.location):'');
+        const canSend = !closed && picked.length>0;
+        const STATUS={pending:['Waiting for the coach','#FCEFD6','#9A6206'], approved:['Entered','#DCF5EA','#0C7A4F'], declined:['Not this time','#FBE4E4','#B42318']};
+        const famReqSent = this.eventRequests.filter(r=>r && r.swId===sw.id).slice(0,12).map(r=>{
+          const st=STATUS[r.status]||STATUS.pending;
+          return {event:r.event, meetName:r.meetName, statusLabel:st[0], bg:st[1], color:st[2]}; });
+        return { famReqHasMeets:true, famReqSwFirst:String(sw.name||'').trim().split(/\s+/)[0]||'your swimmer',
           famReqMeetChips, famReqEventChips, famReqMeetInfo,
-          onFamReqSubmit: sw && curMeet ? ()=>this.famRequestEvent(sw.id, sw.name, curMeet.name, curReqEvent) : ()=>{},
+          famReqDeadlineLine, famReqDeadlineShow:!!famReqDeadlineLine,
+          famReqDeadlineBg: closed?'#FBE4E4':(dDays!=null && dDays<=3 ? '#FCEFD6':'#F1F5FB'),
+          famReqDeadlineFg: closed?'#B42318':(dDays!=null && dDays<=3 ? '#9A6206':'#3A4152'),
+          famReqPickLabel: picked.length ? (picked.length+' race'+(picked.length===1?'':'s')+' chosen') : 'Pick the races',
+          famReqSubmitLabel: closed ? 'Entries have closed'
+            : picked.length===0 ? 'Choose at least one race'
+            : ('Request '+picked.length+' race'+(picked.length===1?'':'s')+' for '+curMeet.name),
+          famReqSubmitBg: canSend?'var(--vx-blue)':'#EEF1F5', famReqSubmitFg: canSend?'#fff':'#9AA2B4',
+          famReqSubmitCursor: canSend?'pointer':'default',
+          onFamReqSubmit: canSend ? ()=>this.famRequestEvents(sw.id, sw.name, curMeet.name, picked) : ()=>{},
           famReqMsg:S.famReqMsg, famReqMsgShow:!!S.famReqMsg,
+          famReqMsgColor: S.famReqMsgOk===false ? '#B42318' : '#0C7A4F',
+          famReqSentTitle: 'Races asked for',
           famReqSent, famReqHasSent: famReqSent.length>0 };
       })(),
       // admin section overlay
@@ -21043,6 +21417,20 @@ class Component extends DCLogic {
           if(typeof window!=='undefined' && window.__vxSendingAnon){
             return 'Your database sign-in has expired, so these are reaching the database as an anonymous visitor and every one of them is refused — this is not about permissions. '
               +'Nothing is lost. Sign out and back in, and all '+((S.saveBlocked||[]).length)+' save themselves.';
+          }
+          // A parent must never be told this.
+          //
+          // "The database is not treating this account as staff" is the truth about a coach's
+          // sign-in and a category error about a parent's — a parent's account is not supposed
+          // to be staff, so the sentence describes their app working correctly, and the action
+          // it asks for is a screen they cannot open. It went out under nine rows that were
+          // never theirs to write (see _isFamilySession). Those rows are gone now; the wording
+          // is separated too, so the next unfamiliar refusal cannot borrow it.
+          if(this._isFamilySession()){
+            return 'The database would not take a change this app tried to make from your phone. '
+              +'Nothing of yours is lost and nothing you have entered is affected \u2014 your child\u2019s '
+              +'records, results and requests are all safe. If this stays here, send the club this line: '
+              +(((b[0]&&b[0].table)||'a table')+' \u2014 '+(said||'refused by a security policy'))+'.';
           }
           // Naming one cause here was wrong: the first club to see this had the email in the
           // staff list already, and the banner sent them to check the one thing that was

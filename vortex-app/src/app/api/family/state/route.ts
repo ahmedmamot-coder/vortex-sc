@@ -61,6 +61,21 @@ const PERIOD_THEN_SWIMMER_KEYS = ["vx_invoices"];
 const ARRAY_BY_SWID_KEYS = ["vx_meet_entries"];
 
 /**
+ * A flat array of rows, each naming one swimmer: [ { id, swId, meetName, event, status } ].
+ *
+ * vx_event_requests is the races a family has asked the coach for, and it is the one list in
+ * this route a family WRITES as well as reads — club_state's policy pins a non-staff write to
+ * exactly this key and vx_notifications. Withholding it was not a smaller risk than sending it,
+ * it was a different one: the portal showed every request as "Pending" for ever, because the
+ * only copy of the answer was on the coach's device, and a parent who could not see that a race
+ * had been approved asked for it again.
+ *
+ * Cut to this family's children like everything else. Which races another child has asked for is
+ * exactly the kind of thing this route exists to keep off a stranger's phone.
+ */
+const FLAT_ARRAY_BY_SWID_KEYS = ["vx_event_requests"];
+
+/**
  * The roster document, cut to this family's children.
  *
  * rebuildRoster() is base + overlay: the base is `window.VX_ROSTER`, assigned by
@@ -211,6 +226,11 @@ export function pickArraysBySwId(value: unknown, mine: Set<string>): Json {
   return out;
 }
 
+export function pickFlatArrayBySwId(value: unknown, mine: Set<string>): unknown[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((r) => mine.has(bareId((r as Json)?.swId ?? (r as Json)?.sw_id)));
+}
+
 export async function GET(request: Request) {
   if (!haveService()) {
     return Response.json({ error: "server missing SUPABASE_SERVICE_ROLE_KEY" }, { status: 500 });
@@ -242,7 +262,7 @@ export async function GET(request: Request) {
 
   const wanted = [
     ...CLUB_KEYS, ...PER_SWIMMER_KEYS, ...PERIOD_THEN_SWIMMER_KEYS, ...ARRAY_BY_SWID_KEYS,
-    ...ROSTER_DOC_KEYS,
+    ...FLAT_ARRAY_BY_SWID_KEYS, ...ROSTER_DOC_KEYS,
   ];
   const stateRes = await fetch(
     `${SB_URL}/rest/v1/club_state?select=key,value,updated_at&key=in.(${wanted.join(",")})`,
@@ -267,8 +287,9 @@ export async function GET(request: Request) {
       if (PER_SWIMMER_KEYS.includes(r.key)) return { ...r, value: pickBySwimmer(r.value, mine) };
       if (PERIOD_THEN_SWIMMER_KEYS.includes(r.key)) return { ...r, value: pickPeriodThenSwimmer(r.value, mine) };
       if (ARRAY_BY_SWID_KEYS.includes(r.key)) return { ...r, value: pickArraysBySwId(r.value, mine) };
+      if (FLAT_ARRAY_BY_SWID_KEYS.includes(r.key)) return { ...r, value: pickFlatArrayBySwId(r.value, mine) };
       if (ROSTER_DOC_KEYS.includes(r.key)) return { ...r, value: pickRosterDoc(r.value, mine) };
-      return null;   // unreachable — `wanted` is built from the five lists
+      return null;   // unreachable — `wanted` is built from the six lists
     })
     .filter(Boolean);
 
