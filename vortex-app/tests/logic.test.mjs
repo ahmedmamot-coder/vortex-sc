@@ -10979,6 +10979,62 @@ describe("a parent's phone writes one family account: its own", () => {
     eq(dropped.map((d) => (d.payload ? d.payload[0].id : d.ids[0])), ["u-other", "u-other2"]);
   });
 
+  // "6 records cannot go into the database ... it will not accept writes to attendance_marks",
+  // on a parent's Mac. She has never taken a register. Each round of this was fixed one table at
+  // a time — family_accounts, the club_state seed, signup_alerts — and they are one fault: a
+  // device offering the club's own work up from a parent's phone.
+  it("a table a family device never writes is not counted at a parent", () => {
+    noStore();
+    const seen = [];
+    globalThis.window = {
+      __vxFamilyMayWrite: (t) => ["family_accounts", "invoices", "swimmer_docs"].includes(t),
+      __vxDropWrites: (pick) => {
+        for (const w of [
+          { table: "attendance_marks", payload: [{ id: "sq_2026-08-17_r3" }], ids: [] },
+          { table: "club_state (vx_squads)", payload: null, ids: [] },
+          { table: "invoices", payload: [{ id: "iv1", swId: "r3" }], ids: [] },
+          { table: "swimmer_docs", payload: [{ id: "d1" }], ids: [] },
+        ]) if (pick({ op: "upsert", table: w.table, payload: w.payload, ids: w.ids })) seen.push(w.table);
+        return seen.length;
+      },
+    };
+    const c = ctx();
+    eq(c._famPruneForeignWrites(), 2);
+    eq(seen, ["attendance_marks", "club_state (vx_squads)"],
+       "a register and the club's squads are not this parent's work");
+  });
+
+  it("the rule is the same one the write door asks", () => {
+    // Two copies of "what may a family write" would drift, and the drift shows up as a banner
+    // nobody can clear: the door refuses a write the cleanup then declines to remove.
+    eq(/window\.__vxFamilyMayWrite = function\(table\)\{ return _famMayWrite\(table\); \}/.test(SOURCE), true);
+    for (const door of ["window.__vxUpsert", "window.__vxInsert"]) {
+      const at = SOURCE.indexOf(door + " = function");
+      const line = SOURCE.slice(at, at + 220);
+      eq(/_famDevice\(\) && !_famMayWrite\(table\)/.test(line), true,
+         door + " sends the club's tables from a parent's phone");
+    }
+    // An allowlist, so a table added next year is refused by default rather than a fortnight
+    // after a parent reports it.
+    const list = (SOURCE.match(/var FAMILY_TABLES = \[([\s\S]*?)\];/) || [])[1] || "";
+    eq(list.length > 0, true, "the allowlist is gone");
+    for (const clubs of ["attendance_marks", "plan_sessions", "squad_plans", "lounge_posts",
+                         "signup_alerts", "staff_accounts", "club_meets", "announcements"]) {
+      eq(new RegExp('"' + clubs + '"').test(list), false, clubs + " is the club's record, not a family's");
+    }
+    // And the ones a parent genuinely does, which must keep working.
+    for (const mine of ["family_accounts", "family_messages", "wellness_checkins",
+                        "wearable_readings", "invoices", "swimmer_docs"]) {
+      eq(new RegExp('"' + mine + '"').test(list), true, mine + " is something the portal asks a parent to do");
+    }
+  });
+
+  it("a refused write is dropped, never queued", () => {
+    const fn = sourceBetween("function _famRefuse(table){", "\n  }");
+    eq(/_failAdd/.test(fn), false, "queuing it is what put it on the banner in the first place");
+    eq(/return false/.test(fn), true, "the caller is told it did not go, the parent is not");
+  });
+
   it("never touches a write it cannot identify", () => {
     noStore();
     let asked = null;
@@ -11105,18 +11161,24 @@ describe("the races a parent chooses", () => {
   // The panel offered this.meetsMeta, which is window.VX_MEETS: the season already swum and
   // shipped with the app. The cards directly above it show the meets still ahead. A parent read
   // "Dragons meet, 25 Sep" and was then offered a championship held on 30 April.
-  const PANEL_START = "...(()=>{ const fu=S.familyUser; if(!fu) return {famReqHasMeets:false};";
-  it("offers the meets that are actually coming up", () => {
-    const fn = sourceBetween(PANEL_START, "// admin section overlay");
-    eq(/this\._meetsSplit\(\)\.upcoming/.test(fn), true,
-       "the same source as the cards above it, which were fixed months ago");
-    eq(/this\.meetsMeta/.test(fn), false, "an imported meet is by definition one that has been swum");
+  // The picker now lives on each meet's own card, so it is offered for exactly the meets the
+  // cards are built from — there is no second list of meets left to disagree with them.
+  it("is offered for the meets that are actually coming up, and only those", () => {
+    const cards = sourceBetween("const upcoming=this._meetsSplit().upcoming.slice(0,6).map(m=>{", "// Camps, beside the meets");
+    eq(/this\._famMeetRequest\(m, sw, evs, info, deadlineIso, today\)/.test(cards), true,
+       "the picker is built from the same meet the card is");
+    eq(/this\.meetsMeta/.test(cards), false, "an imported meet is by definition one that has been swum");
+    // And nothing else in the family screen builds a second list of meets to ask about.
+    eq(/const upcomingMeets = this\.meetsMeta/.test(SOURCE), false,
+       "the old panel offered last season's meets under a heading that said upcoming");
   });
 
-  it("says nothing rather than offering a meet that does not exist", () => {
-    const fn = sourceBetween(PANEL_START, "// admin section overlay");
-    eq(/if\(!upcomingMeets\.length \|\| !sw\) return \{famReqHasMeets:false\}/.test(fn), true,
-       "an empty panel with a Request button is worse than no panel");
+  it("asks on the card for the meet it is an entry for", () => {
+    const fn = sourceBetween("_famMeetRequest(meet, sw, meetEvents, info, deadlineIso, today){", "\n  }");
+    // Two cards are open on one screen. A shared list of ticks would have a tap on one silently
+    // arm the other, and a confirmation for one meet appear under all of them.
+    eq(/famReqToggle\(name, ev\)/.test(fn), true, "the tick has to name its meet");
+    eq(/S\.famReqMsgMeet===name/.test(fn), true, "and so does the message, or it shows on every card");
   });
 
   const ctx = (requests = [], state = {}) => {
@@ -11135,12 +11197,20 @@ describe("the races a parent chooses", () => {
 
   it("a race is ticked on and off before anything is sent", () => {
     const c = ctx();
-    c.famReqToggle("50 Free");
-    c.famReqToggle("100 Back");
-    eq(c.state.famReqPicked, ["50 Free", "100 Back"]);
-    c.famReqToggle("50 Free");
-    eq(c.state.famReqPicked, ["100 Back"], "changing your mind is not a request");
+    c.famReqToggle("Dragons meet", "50 Free");
+    c.famReqToggle("Dragons meet", "100 Back");
+    eq(c.state.famReqPicked["Dragons meet"], ["50 Free", "100 Back"]);
+    c.famReqToggle("Dragons meet", "50 Free");
+    eq(c.state.famReqPicked["Dragons meet"], ["100 Back"], "changing your mind is not a request");
     eq(c.saved, undefined, "and nothing leaves the device until Request is pressed");
+  });
+
+  it("ticking a race on one meet does not arm another", () => {
+    const c = ctx();
+    c.famReqToggle("Dragons meet", "50 Free");
+    c.famReqToggle("VIS", "200 IM");
+    eq(c.state.famReqPicked["Dragons meet"], ["50 Free"]);
+    eq(c.state.famReqPicked["VIS"], ["200 IM"], "both cards are on screen at once");
   });
 
   // A meet is eight or nine swims. One chip and one Request button meant nine round trips and
@@ -11164,7 +11234,7 @@ describe("the races a parent chooses", () => {
     c.famRequestEvents("malek", "Malek Dardir", "Dragons meet", ["50 Free", "100 Free"]);
     eq(c.saved[1].length, 2, "one new row on top of the one already there");
     eq(c.saved[1][0].event, "100 Free", "and the duplicate is dropped, not sent");
-    eq(c.state.famReqPicked, [], "the tick clears either way");
+    eq(c.state.famReqPicked["Dragons meet"], undefined, "the tick clears either way");
   });
 
   it("a whole duplicate selection sends nothing and says so", () => {
@@ -11190,11 +11260,21 @@ describe("the races a parent chooses", () => {
 
   // Entries that have closed are not a request a parent can still make; being told a week later
   // by a coach is the thing this panel exists to prevent.
-  it("a closed entry deadline stops the send rather than styling it", () => {
-    const fn = sourceBetween("const famReqEventChips = meetEvents.map(ev=>{", "// admin section overlay");
-    eq(/const canSend = !closed && picked\.length>0;/.test(fn), true);
-    eq(/onFamReqSubmit: canSend \?/.test(fn), true, "or the button is grey and still fires");
-    eq(/Entries have closed/.test(fn), true, "and it has to say which of the two it is");
+  // Entries that have closed, or a meet with no programme posted, are not a request a parent can
+  // make. Being told a week later by a coach is the thing this panel exists to prevent.
+  it("a closed deadline removes the picker rather than styling it", () => {
+    const fn = sourceBetween("_famMeetRequest(meet, sw, meetEvents, info, deadlineIso, today){", "\n  }");
+    eq(/if\(!evs\.length \|\| closed \|\| !sw\)/.test(fn), true,
+       "a grey button that still fires is worse than no button");
+    eq(/canRequest:false/.test(fn), true);
+    eq(/Entries for '\+name\+' closed on/.test(fn), true, "and the card has to say which of the two it is");
+    eq(/has not posted the event programme/.test(fn), true);
+  });
+
+  it("never guesses a programme the club has not posted", () => {
+    const fn = sourceBetween("_famMeetRequest(meet, sw, meetEvents, info, deadlineIso, today){", "\n  }");
+    eq(/EVENT_CATALOG/.test(fn), false,
+       "asking for a race that is not being swum is a request the coach can only decline");
   });
 });
 

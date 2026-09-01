@@ -1015,6 +1015,49 @@ if ('serviceWorker' in navigator) {
   // A family device can ADD to these lists and can never change or remove a row in them, which
   // is exactly the authority a parent has. Staff pull both keys in full and are untouched.
   var ADD_ONLY_KEYS = ["vx_event_requests", "vx_notifications"];
+  // ---- What a family device may write, as a list rather than a series of discoveries -----------
+  //
+  // "6 records cannot go into the database ... it will not accept writes to attendance_marks",
+  // on a parent's Mac. She has never taken a register in her life. The rows were the club's, made
+  // on that browser or queued by a build before the register upload learned to check, and
+  // vx_write_blocked keeps what it is holding until somebody presses a button — so they sat there
+  // and were shown to whoever signed in next.
+  //
+  // Each round of this has been fixed one table at a time: family_accounts, then the club_state
+  // seed, then signup_alerts, now this. They are all one fault — a device deciding to send the
+  // club's own work from a parent's phone — and the fix belongs where every table write passes,
+  // written as what a family MAY do rather than a list of what it may not. A table added next
+  // year is then refused by default rather than refused a fortnight after a parent reports it.
+  //
+  // Straight from security_4_roles.sql, which is the authority on every line of it:
+  //   family_accounts   the row carrying your own email
+  //   family_messages   a reply to the coach about your own child
+  //   wellness_checkins the morning check-in, insert and update
+  //   wearable_readings band numbers typed in by hand, insert and update
+  //   invoices          saying you have paid, on your own child's invoice
+  //   swimmer_docs      the birth certificate and ID the portal asks a parent to upload
+  //   push_subscriptions this device asking to be notified
+  //   audit_log         the record that this person signed in
+  // Anything else is the club's, and a parent's device does not offer it.
+  var FAMILY_TABLES = ["family_accounts","family_messages","wellness_checkins","wearable_readings",
+                       "invoices","swimmer_docs","push_subscriptions","audit_log"];
+  function _famMayWrite(table){
+    var t=String(table||"").split(" (")[0];
+    return FAMILY_TABLES.indexOf(t) >= 0;
+  }
+  // Never queued and never counted. Nothing of the parent's is in one of these writes, so there
+  // is nothing of theirs to lose and nothing for them to act on — and putting it on the banner is
+  // the whole of the bug being fixed. Said once per table, to the console, for whoever is looking.
+  var _famSaid = {};
+  // The same rule the queue cleanup asks, so the two can never drift into disagreeing about
+  // which writes belong to a parent.
+  window.__vxFamilyMayWrite = function(table){ return _famMayWrite(table); };
+  function _famRefuse(table){
+    var t=String(table||"").split(" (")[0];
+    if(!_famSaid[t]){ _famSaid[t]=1;
+      try{ console.info("vx: not writing "+t+" from a family device \u2014 it is the club's record"); }catch(e){} }
+    return false;
+  }
   function _famDevice(){
     try{ var s=JSON.parse(localStorage.getItem("vx_session")||"null"); return !!(s && s.type==="family"); }
     catch(e){ return false; }
@@ -1238,7 +1281,7 @@ if ('serviceWorker' in navigator) {
   // behind a 30-second cooldown, and that cooldown is the only thing keeping it finite: a refresh
   // calls __vxSetAuth, __vxSetAuth replays the failed queue, and the queue is made of writes. Do
   // it from inside the write as well and the two call each other until the tab runs out of memory.
-  window.__vxInsert = function(table, rows){ return ready().then(function(){ if(!_haveTok()){ _vxQueue(function(){ window.__vxInsert(table, rows); }); _failAdd("insert", table, rows, NOTSENT, "waiting for the sign-in to land"); return false; } return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":"return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(r.ok) _blockClearTable(table); if(!r.ok){ if(r.status===401||r.status===403){ _vxQueue(function(){ window.__vxInsert(table, rows); }); } r.text().then(function(t){ try{console.warn("vx insert "+table+" HTTP "+r.status+": "+t);}catch(e){} _failAdd("insert", table, rows, r.status, t); }); } return r.ok; }).catch(function(e){ _failAdd("insert", table, rows, 0, "network: "+(e&&e.message)); return false; }); });
+  window.__vxInsert = function(table, rows){ return ready().then(function(){ if(_famDevice() && !_famMayWrite(table)){ return _famRefuse(table); } if(!_haveTok()){ _vxQueue(function(){ window.__vxInsert(table, rows); }); _failAdd("insert", table, rows, NOTSENT, "waiting for the sign-in to land"); return false; } return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":"return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(r.ok) _blockClearTable(table); if(!r.ok){ if(r.status===401||r.status===403){ _vxQueue(function(){ window.__vxInsert(table, rows); }); } r.text().then(function(t){ try{console.warn("vx insert "+table+" HTTP "+r.status+": "+t);}catch(e){} _failAdd("insert", table, rows, r.status, t); }); } return r.ok; }).catch(function(e){ _failAdd("insert", table, rows, 0, "network: "+(e&&e.message)); return false; }); });
   };
   // A read rejected with 401 means the token expired, not that the table is empty. Returning
   // null there is why the roster and attendance came back blank after the app had been sitting
@@ -1302,7 +1345,7 @@ if ('serviceWorker' in navigator) {
   // `opts.ignoreDuplicates` sends a write that may only fill gaps: a row that already exists is
   // left exactly as it is. For a seed — a write whose whole purpose is to populate something
   // empty — that is the difference between doing nothing and replacing what a club already had.
-  window.__vxUpsert = function(table, rows, opts){ return ready().then(function(){ if(!_haveTok()){ _vxQueue(function(){ window.__vxUpsert(table, rows, opts); }); _failAdd("upsert", table, rows, NOTSENT, "waiting for the sign-in to land"); return false; } return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":((opts&&opts.ignoreDuplicates)?"resolution=ignore-duplicates":"resolution=merge-duplicates")+",return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(r.ok){ window.__vxLastWriteErr=null; _blockClearTable(table); return true; } if(r.status===401||r.status===403){ _vxQueue(function(){ window.__vxUpsert(table, rows, opts); }); } return r.text().then(function(t){ try{console.warn("vx upsert "+table+" HTTP "+r.status+": "+t);}catch(e){} _failAdd("upsert", table, rows, r.status, t); var said=""; try{ said=(JSON.parse(t)||{}).message||""; }catch(e){} window.__vxLastWriteErr={table:table, status:r.status, said:said||String(t||"").slice(0,200)}; return false; }); }).catch(function(e){ _failAdd("upsert", table, rows, 0, "network: "+(e&&e.message)); window.__vxLastWriteErr={table:table, status:0, said:"it could not be sent from this device"+((e&&e.message)?(" ("+e.message+")"):"")}; return false; }); });
+  window.__vxUpsert = function(table, rows, opts){ return ready().then(function(){ if(_famDevice() && !_famMayWrite(table)){ return _famRefuse(table); } if(!_haveTok()){ _vxQueue(function(){ window.__vxUpsert(table, rows, opts); }); _failAdd("upsert", table, rows, NOTSENT, "waiting for the sign-in to land"); return false; } return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":((opts&&opts.ignoreDuplicates)?"resolution=ignore-duplicates":"resolution=merge-duplicates")+",return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(r.ok){ window.__vxLastWriteErr=null; _blockClearTable(table); return true; } if(r.status===401||r.status===403){ _vxQueue(function(){ window.__vxUpsert(table, rows, opts); }); } return r.text().then(function(t){ try{console.warn("vx upsert "+table+" HTTP "+r.status+": "+t);}catch(e){} _failAdd("upsert", table, rows, r.status, t); var said=""; try{ said=(JSON.parse(t)||{}).message||""; }catch(e){} window.__vxLastWriteErr={table:table, status:r.status, said:said||String(t||"").slice(0,200)}; return false; }); }).catch(function(e){ _failAdd("upsert", table, rows, 0, "network: "+(e&&e.message)); window.__vxLastWriteErr={table:table, status:0, said:"it could not be sent from this device"+((e&&e.message)?(" ("+e.message+")"):"")}; return false; }); });
   };
   // Supabase Realtime (websocket) — best-effort live updates. On any change to `table`, calls
   // onChange(). Auto-reconnects, heartbeats, and re-auths on token refresh. If realtime isn't
@@ -3065,6 +3108,30 @@ if ('serviceWorker' in navigator) {
                                 <sc-if value="{{ m.hasInfoFile }}" hint-placeholder-val="{{ false }}">
                                   <button onclick="{{ m.onViewInfoFile }}" style="display:flex;align-items:center;justify-content:center;gap:7px;width:100%;background:var(--vx-blue);color:#fff;border:none;border-radius:11px;padding:11px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer"><i data-lucide="file-text" style="width:15px;height:15px"></i>{{ m.infoFileName }}</button>
                                 </sc-if>
+                                <!-- The entry, on the meet it is an entry for.
+                                     A parent reads one card, decides about that meet, and asks
+                                     there. A single picker underneath the list meant choosing the
+                                     meet twice - once by reading its card, once from a row of
+                                     chips - and the two could disagree without anything saying so. -->
+                                <sc-if value="{{ m.canRequest }}" hint-placeholder-val="{{ true }}">
+                                  <div style="background:#F6F9FE;border:1px solid #DCE7F7;border-radius:12px;padding:11px 12px;display:flex;flex-direction:column;gap:8px">
+                                    <span style="font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:#0959B4;font-weight:800">{{ m.reqTitle }}</span>
+                                    <div style="display:flex;flex-wrap:wrap;gap:5px">
+                                      <sc-for list="{{ m.reqChips }}" as="ec" hint-placeholder-count="6">
+                                        <button onclick="{{ ec.onClick }}" style="flex:none;background:{{ ec.bg }};color:{{ ec.fg }};border:1px solid {{ ec.border }};border-radius:999px;padding:6px 11px;font-family:inherit;font-size:11px;font-weight:700;cursor:{{ ec.cursor }}">{{ ec.label }}</button>
+                                      </sc-for>
+                                    </div>
+                                    <button onclick="{{ m.onReqSubmit }}" style="width:100%;background:{{ m.reqBg }};color:{{ m.reqFg }};border:none;border-radius:10px;padding:10px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:{{ m.reqCursor }}">{{ m.reqLabel }}</button>
+                                    <sc-if value="{{ m.reqMsgShow }}" hint-placeholder-val="{{ false }}"><span style="font-size:11.5px;font-weight:600;color:{{ m.reqMsgColor }};line-height:1.45">{{ m.reqMsg }}</span></sc-if>
+                                  </div>
+                                </sc-if>
+                                <!-- Entries are closed, or the club has posted no programme yet.
+                                     Said on the card rather than by leaving a button that cannot
+                                     work: being told a week later by a coach is the thing this
+                                     panel exists to prevent. -->
+                                <sc-if value="{{ m.reqShut }}" hint-placeholder-val="{{ false }}">
+                                  <div style="background:#F8FAFC;border:1px solid #EEF1F5;border-radius:12px;padding:10px 12px;display:flex;align-items:center;gap:8px"><i data-lucide="info" style="width:14px;height:14px;color:#9AA2B4;flex:none"></i><span style="font-size:11.5px;color:#7A8296;line-height:1.45">{{ m.reqShutLine }}</span></div>
+                                </sc-if>
                               </div>
                             </div>
                           </sc-for>
@@ -3101,36 +3168,17 @@ if ('serviceWorker' in navigator) {
                           </sc-for>
                         </div>
                       </sc-if>
-                      <sc-if value="{{ famReqHasMeets }}" hint-placeholder-val="{{ true }}">
-                      <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:15px;box-shadow:0 2px 7px rgba(11,20,40,.05);margin-top:6px">
-                        <p style="margin:0 0 3px;font-size:13px;font-weight:700;color:#0C1116">Choose {{ famReqSwFirst }}&rsquo;s races</p>
-                        <p style="margin:0 0 9px;font-size:11.5px;color:#7A8296;line-height:1.5">Pick every race you would like {{ famReqSwFirst }} to swim. The coach sees them together and confirms the entry.</p>
-                        <div class="vx-scroll" style="display:flex;gap:6px;overflow-x:auto;margin-bottom:9px">
-                          <sc-for list="{{ famReqMeetChips }}" as="mc" hint-placeholder-count="3">
-                            <button onclick="{{ mc.onClick }}" style="flex:none;background:{{ mc.bg }};color:{{ mc.fg }};border:1px solid {{ mc.border }};border-radius:999px;padding:7px 13px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer">{{ mc.label }}</button>
+                      <!-- What this child has asked for, across every meet, with the club's
+                           answer. The choosing happens on each meet's own card above; this is
+                           the one place that answers "so what did we ask for, and what came
+                           back" without opening them one at a time. -->
+                      <sc-if value="{{ famReqHasSent }}" hint-placeholder-val="{{ false }}">
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px 15px;box-shadow:0 2px 7px rgba(11,20,40,.05);margin-top:10px;display:flex;flex-direction:column;gap:8px">
+                          <span style="font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4">{{ famReqSentTitle }}</span>
+                          <sc-for list="{{ famReqSent }}" as="rr" hint-placeholder-count="2">
+                            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12px"><span style="flex:1;min-width:0;color:#3A4152">{{ rr.event }} · {{ rr.meetName }}</span><span style="flex:none;background:{{ rr.bg }};color:{{ rr.color }};border-radius:7px;padding:3px 8px;font-size:10.5px;font-weight:700">{{ rr.statusLabel }}</span></div>
                           </sc-for>
                         </div>
-                        <p style="margin:0 0 8px;font-size:11px;color:#7A8296;line-height:1.5">{{ famReqMeetInfo }}</p>
-                        <sc-if value="{{ famReqDeadlineShow }}" hint-placeholder-val="{{ false }}">
-                          <div style="display:flex;align-items:center;gap:8px;background:{{ famReqDeadlineBg }};border-radius:10px;padding:8px 10px;margin-bottom:9px"><i data-lucide="clock" style="width:14px;height:14px;flex:none;color:{{ famReqDeadlineFg }}"></i><span style="font-size:11.5px;font-weight:600;color:{{ famReqDeadlineFg }};line-height:1.45">{{ famReqDeadlineLine }}</span></div>
-                        </sc-if>
-                        <p style="margin:0 0 6px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4">{{ famReqPickLabel }}</p>
-                        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:11px">
-                          <sc-for list="{{ famReqEventChips }}" as="ec" hint-placeholder-count="6">
-                            <button onclick="{{ ec.onClick }}" style="flex:none;background:{{ ec.bg }};color:{{ ec.fg }};border:1px solid {{ ec.border }};border-radius:999px;padding:7px 13px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:{{ ec.cursor }}">{{ ec.label }}</button>
-                          </sc-for>
-                        </div>
-                        <button onclick="{{ onFamReqSubmit }}" style="width:100%;background:{{ famReqSubmitBg }};color:{{ famReqSubmitFg }};border:none;border-radius:10px;padding:11px;font-family:inherit;font-weight:700;font-size:13px;cursor:{{ famReqSubmitCursor }}">{{ famReqSubmitLabel }}</button>
-                        <sc-if value="{{ famReqMsgShow }}" hint-placeholder-val="{{ false }}"><p style="margin:8px 2px 0;font-size:12px;font-weight:600;color:{{ famReqMsgColor }}">{{ famReqMsg }}</p></sc-if>
-                        <sc-if value="{{ famReqHasSent }}" hint-placeholder-val="{{ false }}">
-                          <div style="margin-top:11px;padding-top:10px;border-top:1px solid #EEF1F5;display:flex;flex-direction:column;gap:7px">
-                            <span style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4">{{ famReqSentTitle }}</span>
-                            <sc-for list="{{ famReqSent }}" as="rr" hint-placeholder-count="2">
-                              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12px"><span style="flex:1;min-width:0;color:#3A4152">{{ rr.event }} · {{ rr.meetName }}</span><span style="flex:none;background:{{ rr.bg }};color:{{ rr.color }};border-radius:7px;padding:3px 8px;font-size:10.5px;font-weight:700">{{ rr.statusLabel }}</span></div>
-                            </sc-for>
-                          </div>
-                        </sc-if>
-                      </div>
                       </sc-if>
                     </sc-if>
                   </div>
@@ -8367,7 +8415,7 @@ class Component extends DCLogic {
       entriesMeetIdx:0, entriesSwId:'', entriesSwSel:[], entriesEvent:'50 Free', entriesHeat:'', entriesLane:'', entriesQuery:'', printMode:'plan', entriesEventsSel:[],
       meetDayDate:'', meetDayMsg:'', meetDayMsgOk:true, seedBandName:'', seedBandFrom:'', seedBandTo:'', seedMsg:'',
       entryNewOpen:false, entryNewName:'', entryNewDob:'', entryNewSeed:'', entryNewErr:'',
-      famReqMeetIdx:0, famReqPicked:[], famReqMsgOk:true,
+      famReqPicked:{}, famReqMsgMeet:'', famReqMsgOk:true,
       famAttView:'month', famAttDateISO:null, famAttCalY:null, famAttCalM:null, famAttYearSel:null, famMeetSel:0,
       ladderOpen:false, ladderSecId:null, ladderShape:'up', ladderRungs:5, ladderStart:100, ladderStep:100, ladderReps:1, ladderPaceSec:60, ladderNotes:'',
       ladderTab:'auto', manReps:1, manDist:50, manPaceSec:45, manStroke:'', manList:[],
@@ -9158,8 +9206,17 @@ class Component extends DCLogic {
     const own=this._famOwnEmail(); if(!own) return 0;
     let mineId=''; try{ const fu=this.state&&this.state.familyUser; mineId=String((fu&&fu.id)||''); }catch(e){}
     if(!window.__vxDropWrites) return 0;
+    const mayWrite = window.__vxFamilyMayWrite || (()=>true);
     const n=window.__vxDropWrites((w)=>{
-      if(String((w&&w.table)||'').split(' (')[0]!=='family_accounts') return false;
+      const table=String((w&&w.table)||'').split(' (')[0];
+      // A table a family device has no business writing at all. "6 records cannot go into the
+      // database ... writes to attendance_marks" was six registers, on a parent's Mac, made on
+      // that browser or queued by a build before the register upload learned to ask. Nothing of
+      // hers was in any of them, and the set-aside list keeps what it holds until somebody
+      // presses a button — so they were shown to whoever signed in next. See FAMILY_TABLES.
+      if(!mayWrite(table)) return true;
+      // A family_accounts row is a table she MAY write, but only one row of it: her own.
+      if(table!=='family_accounts') return false;
       const rows=Array.isArray(w.payload)?w.payload:(w.payload?[w.payload]:[]);
       // The payload is the honest answer when it is there: whose email is on the row.
       if(rows.length && rows.some(r=>r&&r.email!=null)) return !rows.every(r=>this._famIsMine(r, own));
@@ -9168,7 +9225,7 @@ class Component extends DCLogic {
       if(ids.length) return !(mineId && ids.every(id=>String(id)===mineId));
       return false;   // nothing to judge by — leave it alone rather than throw away a real save
     });
-    if(n) try{ console.info('vx family: took '+n+' write(s) for other families off this device'); }catch(e){}
+    if(n) try{ console.info('vx family: took '+n+' write(s) that were not this family\u2019s off this device'); }catch(e){}
     return n;
   }
   async _familyFetch(){
@@ -14180,11 +14237,69 @@ class Component extends DCLogic {
   // Tick a race on or off before sending. Nothing leaves the device until Request is pressed:
   // a parent building a programme changes their mind two or three times, and a request per tap
   // is a request per change of mind in the coach's inbox.
-  famReqToggle(event){
-    const cur=(this.state.famReqPicked||[]).slice();
+  //
+  // Kept per meet, because the picker is now on each meet's own card: two cards are open on the
+  // same screen, and a shared list would have a tick on one of them silently arm the other.
+  famReqToggle(meetName, event){
+    const all={...(this.state.famReqPicked||{})};
+    const cur=(all[meetName]||[]).slice();
     const i=cur.indexOf(event);
     if(i>=0) cur.splice(i,1); else cur.push(event);
-    this.setState({famReqPicked:cur, famReqMsg:''});
+    all[meetName]=cur;
+    this.setState({famReqPicked:all, famReqMsg:'', famReqMsgMeet:''});
+  }
+  // Everything the request panel on ONE meet's card needs.
+  //
+  // Built here rather than in the render body because it is per meet now and the map that draws
+  // the cards is already the longest expression in this file.
+  _famMeetRequest(meet, sw, meetEvents, info, deadlineIso, today){
+    const name=meet.name;
+    const S=this.state;
+    const first=String((sw&&sw.name)||'').trim().split(/\s+/)[0]||'your swimmer';
+    // The events the club set up for THIS meet. No fallback to the standard catalogue here: on
+    // a card, an events list the club has not posted is not a menu to guess from — asking for a
+    // race that is not being swum is a request the coach can only decline.
+    const evs=(meetEvents||[]).filter(Boolean);
+    const closed = !!deadlineIso && deadlineIso < today;
+    if(!evs.length || closed || !sw){
+      return { canRequest:false, reqShut: !!sw && (closed || !evs.length),
+        reqShutLine: closed
+          ? ('Entries for '+name+' closed on '+this._fmtDMY(deadlineIso, true)+'. Ask the coach directly if '+first+' still needs a swim here.')
+          : 'The club has not posted the event programme for this meet yet — the races appear here as soon as it does.' };
+    }
+    // What this child has already asked for at this meet, and what the club said back.
+    const already={};
+    (this.eventRequests||[]).forEach(r=>{ if(r && r.swId===sw.id && r.meetName===name && r.event) already[r.event]=r.status||'pending'; });
+    const picked=((S.famReqPicked||{})[name]||[]).filter(ev=>evs.includes(ev) && !already[ev]);
+    const MARK={pending:['Asked','#FCEFD6','#9A6206'], approved:['Entered','#DCF5EA','#0C7A4F'], declined:['Declined','#FBE4E4','#B42318']};
+    const reqChips=evs.map(ev=>{
+      const st=already[ev]; const on=picked.includes(ev);
+      // A race the club has already been asked about carries its answer on the chip. The mark is
+      // part of the label rather than a second element inside the button: the chip is the whole
+      // of what a parent reads, and "50 Free" reading the same whether it is waiting, entered or
+      // declined is how the same race gets asked for twice.
+      if(st){ const mk=MARK[st]||MARK.pending;
+        return { label:ev+' \u00b7 '+mk[0], cursor:'default', bg:mk[1], fg:mk[2], border:mk[1],
+          onClick:()=>this.setState({famReqMsg:ev+' is already on the list for this meet \u2014 '+mk[0].toLowerCase()+'.', famReqMsgMeet:name, famReqMsgOk:true}) }; }
+      return { label: on ? (ev+' \u2713') : ev, cursor:'pointer',
+        bg: on?'#0A0F1A':'#fff', fg: on?'#fff':'#3A4152', border: on?'#0A0F1A':'#DCE7F7',
+        onClick:()=>this.famReqToggle(name, ev) };
+    });
+    const can=picked.length>0;
+    return {
+      canRequest:true, reqShut:false, reqShutLine:'',
+      reqTitle: picked.length
+        ? (picked.length+' race'+(picked.length===1?'':'s')+' chosen for '+first)
+        : ('Choose '+first+'\u2019s races'),
+      reqChips,
+      reqLabel: can ? ('Request '+picked.length+' race'+(picked.length===1?'':'s')) : 'Pick a race to request',
+      reqBg: can?'var(--vx-blue)':'#EEF1F5', reqFg: can?'#fff':'#9AA2B4', reqCursor: can?'pointer':'default',
+      onReqSubmit: can ? ()=>this.famRequestEvents(sw.id, sw.name, name, picked) : ()=>{},
+      // The message belongs to the card it was raised on, or a confirmation for one meet appears
+      // under every meet at once.
+      reqMsgShow: !!S.famReqMsg && S.famReqMsgMeet===name,
+      reqMsg: S.famReqMsg||'', reqMsgColor: S.famReqMsgOk===false ? '#B42318' : '#0C7A4F',
+    };
   }
   // Every race a family chose for one meet, sent together.
   //
@@ -14200,7 +14315,9 @@ class Component extends DCLogic {
     const seen={};
     this.eventRequests.forEach(r=>{ if(r && r.swId===swId && r.meetName===meetName && r.event) seen[r.event]=true; });
     const fresh=list.filter(ev=>!seen[ev]);
-    if(!fresh.length) return this.setState({famReqPicked:[], famReqMsg:'Those races are already on the list for '+meetName+'.', famReqMsgOk:true});
+    const _clear=(msg, ok)=>{ const all={...(this.state.famReqPicked||{})}; delete all[meetName];
+      this.setState({famReqPicked:all, famReqMsg:msg, famReqMsgMeet:meetName, famReqMsgOk:ok!==false}); };
+    if(!fresh.length) return _clear('Those races are already on the list for '+meetName+'.', true);
     const at=new Date().toISOString();
     const recs=fresh.map((event,i)=>({id:this._uid('req')+'_'+i, swId, swName, meetName, event,
       status:'pending', requestedAt:at.slice(0,10), ts:Date.now()}));
@@ -14208,8 +14325,7 @@ class Component extends DCLogic {
     this._saveJSON('vx_event_requests', this.eventRequests);
     this.notify('coach', 'inbox', 'New event request',
       swName+' asked for '+fresh.join(', ')+' at '+meetName+'.');
-    this.setState({famReqPicked:[], famReqMsgOk:true,
-      famReqMsg:'Sent to the coach: '+fresh.join(', ')+' at '+meetName+' \u2713'});
+    _clear('Sent to the coach: '+fresh.join(', ')+' \u2713', true);
   }
   reqDecide(id, status){ const rec=this.eventRequests.find(r=>r.id===id); this.eventRequests=this.eventRequests.map(r=>r.id===id?{...r, status}:r); this._saveJSON('vx_event_requests', this.eventRequests);
     // Approving a request now actually enters the swimmer — closing the loop end-to-end.
@@ -21043,7 +21159,18 @@ class Component extends DCLogic {
               : qc.qualified===0
                 ? ('None of the '+qc.total+' standards met yet')
                 : (qc.qualified+' of '+qc.total+' standards already met'))
-              : '' };
+              : '',
+            // ---- asking for this child's races, on the card for the meet they are for --------
+            //
+            // The picker used to be one panel under the whole list, with its own row of meet
+            // chips. So a parent chose the meet twice: once by reading the card that answered
+            // their questions, once from a chip whose only label was a name — and the panel's
+            // idea of "this meet" and the card they had just read could differ with nothing on
+            // screen saying so. It also offered `meetsMeta`, last season's imported meets, which
+            // is how a parent came to be invited to enter a championship swum on 30 April.
+            //
+            // One card, one meet, one decision.
+            ...this._famMeetRequest(m, sw, evs, info, deadlineIso, today) };
         });
         // Camps, beside the meets and read the same way.
         const famCamps=this._campsSplit().upcoming.map(c=>{
@@ -21272,75 +21399,16 @@ class Component extends DCLogic {
       // once. A meet is eight or nine swims; one chip and one Request button meant nine round
       // trips, nine separate lines in the coach's inbox, and no way for either side to see the
       // programme a child had asked for as one thing.
-      ...(()=>{ const fu=S.familyUser; if(!fu) return {famReqHasMeets:false};
+      // Every race this child has asked for, across every meet, with the club's answer.
+      ...(()=>{ const fu=S.familyUser; if(!fu) return {famReqHasSent:false};
         const uid=fu.swimmerIds[Math.min(S.familyActiveIdx, fu.swimmerIds.length-1)]||fu.swimmerIds[0];
         const _h=this._famResolve(uid); const sw=_h?_h.sw:null;
-        const upcomingMeets = this._meetsSplit().upcoming.slice(0,6);
-        if(!upcomingMeets.length || !sw) return {famReqHasMeets:false};
-        const meetIdx = Math.min(Math.max(S.famReqMeetIdx||0, 0), upcomingMeets.length-1);
-        const famReqMeetChips = upcomingMeets.map((m,i)=>({label:m.name, onClick:()=>this.setState({famReqMeetIdx:i, famReqPicked:[], famReqMsg:''}), bg:i===meetIdx?'#067EEA':'#fff', fg:i===meetIdx?'#fff':'#3A4152', border:i===meetIdx?'#067EEA':'#E5E9F0'}));
-        const curMeet = upcomingMeets[meetIdx];
-        // The events offered are exactly the ones the admin set up for THIS meet (full details);
-        // if a meet has no event list yet, fall back to the standard catalogue.
-        const _mEv=this._meetEvents(curMeet); const meetEvents = _mEv.length ? _mEv : this.EVENT_CATALOG();
-        // What this child has already asked for at this meet, and what the club said. A race
-        // already requested is not offered again \u2014 asking twice is how a coach ends up with two
-        // lines for one swim and no idea which is current.
-        const already={};
-        this.eventRequests.forEach(r=>{ if(r && r.swId===sw.id && r.meetName===curMeet.name && r.event) already[r.event]=r.status||'pending'; });
-        const picked=(S.famReqPicked||[]).filter(ev=>meetEvents.includes(ev) && !already[ev]);
-        // Entries that have closed are not a request a parent can still make. The card above says
-        // so already; saying it here too is the difference between a parent knowing and a parent
-        // being told by a coach a week later.
-        const info=this._meetInfo(curMeet.name);
-        const deadlineIso=this._toISODate(info.deadline);
-        const today=this.todayISO();
-        const closed = !!deadlineIso && deadlineIso < today;
-        const dDays = deadlineIso ? Math.round((new Date(deadlineIso+'T00:00:00') - new Date(today+'T00:00:00'))/86400000) : null;
-        const famReqDeadlineLine = !deadlineIso ? ''
-          : closed ? ('Entries closed on '+this._fmtDMY(deadlineIso, true)+' \u2014 ask the coach directly if you still need a swim here.')
-          : dDays===0 ? ('Entries close today \u2014 '+this._fmtDMY(deadlineIso, true))
-          : dDays===1 ? ('Entries close tomorrow \u2014 '+this._fmtDMY(deadlineIso, true))
-          : ('Entries close in '+dDays+' days \u2014 '+this._fmtDMY(deadlineIso, true));
-        const MARK={pending:['Asked','#FCEFD6','#9A6206'], approved:['Entered','#DCF5EA','#0C7A4F'], declined:['Declined','#FBE4E4','#B42318']};
-        const famReqEventChips = meetEvents.map(ev=>{
-          const st=already[ev]; const on=picked.includes(ev);
-          // A race the club has already been asked about carries its answer on the chip. The mark
-          // is part of the label rather than a second element inside the button: the chip is the
-          // whole of what a parent reads here, and "50 Free" reading the same whether it is
-          // waiting, entered or declined is how the same race gets asked for twice.
-          if(st){ const m=MARK[st]||MARK.pending;
-            return { label:ev+' \u00b7 '+m[0], cursor:'default', onClick:()=>this.setState({famReqMsg:ev+' is already on the list for this meet \u2014 '+m[0].toLowerCase()+'.', famReqMsgOk:true}),
-              bg:m[1], fg:m[2], border:m[1] }; }
-          return { label: on ? (ev+' \u2713') : ev, cursor:'pointer',
-            onClick: closed ? ()=>this.setState({famReqMsg:'Entries for this meet have closed.', famReqMsgOk:false})
-                            : ()=>this.famReqToggle(ev),
-            bg: on?'#0A0F1A':'#F8FAFC', fg: on?'#fff':'#3A4152', border: on?'#0A0F1A':'#E5E9F0' };
-        });
-        const famReqMeetInfo = curMeet.name+' \u00b7 '+(curMeet.course||'LCM')
-          +(curMeet.date?(' \u00b7 '+this._fmtDMY(this._toISODate(curMeet.date)||curMeet.date, true)):'')
-          +' \u00b7 '+meetEvents.length+' events'+(curMeet.location?(' \u00b7 '+curMeet.location):'');
-        const canSend = !closed && picked.length>0;
+        if(!sw) return {famReqHasSent:false};
         const STATUS={pending:['Waiting for the coach','#FCEFD6','#9A6206'], approved:['Entered','#DCF5EA','#0C7A4F'], declined:['Not this time','#FBE4E4','#B42318']};
-        const famReqSent = this.eventRequests.filter(r=>r && r.swId===sw.id).slice(0,12).map(r=>{
+        const famReqSent=(this.eventRequests||[]).filter(r=>r && r.swId===sw.id).slice(0,12).map(r=>{
           const st=STATUS[r.status]||STATUS.pending;
           return {event:r.event, meetName:r.meetName, statusLabel:st[0], bg:st[1], color:st[2]}; });
-        return { famReqHasMeets:true, famReqSwFirst:String(sw.name||'').trim().split(/\s+/)[0]||'your swimmer',
-          famReqMeetChips, famReqEventChips, famReqMeetInfo,
-          famReqDeadlineLine, famReqDeadlineShow:!!famReqDeadlineLine,
-          famReqDeadlineBg: closed?'#FBE4E4':(dDays!=null && dDays<=3 ? '#FCEFD6':'#F1F5FB'),
-          famReqDeadlineFg: closed?'#B42318':(dDays!=null && dDays<=3 ? '#9A6206':'#3A4152'),
-          famReqPickLabel: picked.length ? (picked.length+' race'+(picked.length===1?'':'s')+' chosen') : 'Pick the races',
-          famReqSubmitLabel: closed ? 'Entries have closed'
-            : picked.length===0 ? 'Choose at least one race'
-            : ('Request '+picked.length+' race'+(picked.length===1?'':'s')+' for '+curMeet.name),
-          famReqSubmitBg: canSend?'var(--vx-blue)':'#EEF1F5', famReqSubmitFg: canSend?'#fff':'#9AA2B4',
-          famReqSubmitCursor: canSend?'pointer':'default',
-          onFamReqSubmit: canSend ? ()=>this.famRequestEvents(sw.id, sw.name, curMeet.name, picked) : ()=>{},
-          famReqMsg:S.famReqMsg, famReqMsgShow:!!S.famReqMsg,
-          famReqMsgColor: S.famReqMsgOk===false ? '#B42318' : '#0C7A4F',
-          famReqSentTitle: 'Races asked for',
-          famReqSent, famReqHasSent: famReqSent.length>0 };
+        return { famReqSent, famReqHasSent: famReqSent.length>0, famReqSentTitle:'Races asked for' };
       })(),
       // admin section overlay
       // A rejected save is never silent again: the banner names the table and the error,
