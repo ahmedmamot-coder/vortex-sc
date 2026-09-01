@@ -2152,6 +2152,160 @@ describe("the app class defines each method once", () => {
     eq(KNOWN.every((k) => (SOURCE.match(new RegExp("^  " + k + "\\(", "gm")) || []).length === 2), true));
 });
 
+/* ------------------------------------------------ renaming and removing a meet
+   A meet's NAME is its primary key. club_meets is keyed on it, and the entries, the
+   event program, the qualifying times, the details, the meet-day marks, the family's
+   event requests and every recorded swim are all filed under it. Nothing holds a meet
+   id. So renaming is not an edit of one field and deleting is not one row: both have to
+   move or drop the same records together, or a meet is left with a program and entries
+   nothing can find, and a coach seeding it opens an empty sheet.
+
+   Before this there was no way to remove a meet at all — one added by mistake stayed on
+   the calendar, and in front of every family, for ever. */
+describe("renaming and removing a meet", () => {
+  const ctx = (patch = {}) => ({
+    customMeets: [{ name: "Dragons meet", date: "9/25/2026", location: "ASD", course: "SCM" }],
+    meetsMeta: [{ name: "Imported Gala", date: "1/1/2026" }],
+    meetStatus: { "Dragons meet": "Entries open" },
+    meetEntries: {}, meetEventsMap: { "Dragons meet": ["50 Free"] },
+    meetCuts: { "Dragons meet": { "50 Free": "29.50" } },
+    meetInfo: { "Dragons meet": { warmup: "07:00" } },
+    meetMarks: { "Dragons meet::r3::50 Free": { mark: "DQ" } },
+    eventRequests: [{ id: "q1", meetName: "Dragons meet", event: "50 Free" }],
+    squads: [{ id: "junior" }], roster: { junior: [{ id: "r3", results: [] }] },
+    state: {}, forceUpdate() {}, audit() {}, saved: {},
+    _saveJSON(k, v) { this.saved[k] = v; }, _saveLocalOnly(k, v) { this.saved[k] = v; },
+    _meetsPush(n) { this.pushed = n; return Promise.resolve({ ok: this.pushOk !== false }); },
+    _entriesSave(n, list) { this.meetEntries = { ...this.meetEntries, [n]: list };
+                            (this.entriesSaves ||= []).push([n, list.length]); },
+    pushOk: true, ...patch });
+  const deps = ["MEET_KEYED", "_meetMoveRecords", "_meetMarks", "_meetResultCount", "allMeets",
+                "_isCustomMeet", "_sameMeetName", "meetRename", "meetDelete", "_meetHasInfo",
+                "_meetInfo", "MEET_INFO_BLANK"];
+  const withDelete = (fn) => {
+    const w = globalThis.window;
+    globalThis.window = { __vxDelete: (t, qs) => { globalThis.__delCalls = [t, qs]; return Promise.resolve(true); } };
+    return Promise.resolve(fn()).finally(() => { globalThis.window = w; });
+  };
+
+  // ---- renaming ---------------------------------------------------------------------------
+  itAsync("carries every record filed under the old name", async () => {
+    const c = ctx();
+    await withDelete(() => bind("meetRename", c, deps)("Dragons meet", "Dragons Invitational"));
+    eq(c.customMeets[0].name, "Dragons Invitational");
+    eq(c.meetEventsMap["Dragons Invitational"], ["50 Free"], "the event program must move");
+    eq(c.meetCuts["Dragons Invitational"], { "50 Free": "29.50" }, "the qualifying times must move");
+    eq(c.meetInfo["Dragons Invitational"].warmup, "07:00", "the details must move");
+    eq(c.meetStatus["Dragons Invitational"], "Entries open");
+  });
+  it("and leaves nothing behind under the old one", async () => {
+    const c = ctx();
+    await withDelete(() => bind("meetRename", c, deps)("Dragons meet", "Dragons Invitational"));
+    for (const m of ["meetEventsMap", "meetCuts", "meetInfo", "meetStatus"])
+      eq(Object.prototype.hasOwnProperty.call(c[m], "Dragons meet"), false,
+         m + " still holds the old name, so the record is orphaned");
+  });
+  // Keyed "meet::swimmer::event", so matched on the prefix rather than looked up. Missing these
+  // left a swimmer marked DQ at a meet that no longer existed.
+  itAsync("moves the meet-day marks, which are keyed by prefix", async () => {
+    const c = ctx();
+    await withDelete(() => bind("meetRename", c, deps)("Dragons meet", "Dragons Invitational"));
+    eq(Object.keys(c.meetMarks), ["Dragons Invitational::r3::50 Free"]);
+  });
+  // A parent asked to swim an event at a meet BY NAME.
+  itAsync("carries the family's event requests", async () => {
+    const c = ctx();
+    await withDelete(() => bind("meetRename", c, deps)("Dragons meet", "Dragons Invitational"));
+    eq(c.eventRequests[0].meetName, "Dragons Invitational");
+  });
+  // The entry ids carry the meet name, so they are rewritten as a set rather than patched.
+  itAsync("rewrites the entries under the new name", async () => {
+    const c = ctx({ meetEntries: { "Dragons meet": [{ swId: "r3", event: "50 Free" }] } });
+    await withDelete(() => bind("meetRename", c, deps)("Dragons meet", "Dragons Invitational"));
+    eq(c.entriesSaves, [["Dragons meet", 0], ["Dragons Invitational", 1]],
+       "cleared under the old name, written back under the new one");
+  });
+
+  // The refusals. Each of these would silently detach history.
+  itAsync("refuses when swims are already recorded under the old name", async () => {
+    const c = ctx({ roster: { junior: [{ id: "r3", results: [{ meet: "Dragons meet", event: "50 Free" }] }] } });
+    const r = await withDelete(() => bind("meetRename", c, deps)("Dragons meet", "Something Else"));
+    eq(r.ok, false);
+    eq(/recorded swim/.test(r.why), true, "they live on the swimmers, not on the meet");
+    eq(c.customMeets[0].name, "Dragons meet", "and nothing moved");
+  });
+  itAsync("refuses a name another meet already has", async () => {
+    const r = await withDelete(() => bind("meetRename", ctx(), deps)("Dragons meet", "Imported Gala"));
+    eq(r.ok, false);
+    eq(/already a meet/.test(r.why), true, "two meets under one name is one meet with two of everything");
+  });
+  itAsync("refuses on a meet the club did not build", async () => {
+    const r = await withDelete(() => bind("meetRename", ctx(), deps)("Imported Gala", "Anything"));
+    eq(r.ok, false);
+  });
+  // The old row goes only once the new one is safely there.
+  itAsync("keeps the old row when the new one will not save", async () => {
+    const c = ctx({ pushOk: false });
+    globalThis.__delCalls = null;
+    const r = await withDelete(() => bind("meetRename", c, deps)("Dragons meet", "Dragons Invitational"));
+    eq(r.ok, false);
+    eq(globalThis.__delCalls, null, "deleting the old row after a refused write loses the meet entirely");
+  });
+
+  // ---- removing ---------------------------------------------------------------------------
+  itAsync("removes the meet and everything filed under it", async () => {
+    const c = ctx();
+    const r = await withDelete(() => bind("meetDelete", c, deps)("Dragons meet"));
+    eq(r.ok, true);
+    eq(c.customMeets.length, 0);
+    eq(globalThis.__delCalls[0], "club_meets");
+    for (const m of ["meetEventsMap", "meetCuts", "meetInfo", "meetStatus", "meetMarks"])
+      eq(Object.keys(c[m]).length, 0, m + " outlived the meet it belonged to");
+    eq(c.eventRequests.length, 0);
+  });
+  // The one thing a delete must never touch.
+  itAsync("never deletes the swims already recorded there", async () => {
+    const c = ctx({ roster: { junior: [{ id: "r3", results: [{ meet: "Dragons meet", event: "50 Free", time: "29.10" }] }] } });
+    await withDelete(() => bind("meetDelete", c, deps)("Dragons meet"));
+    eq(c.roster.junior[0].results.length, 1, "a swimmer's race history is theirs, not the meet's");
+    eq(c.saved.vx_roster_edits, undefined, "and the roster is not rewritten at all");
+  });
+  itAsync("clears the entries, so no declaration outlives the meet", async () => {
+    const c = ctx({ meetEntries: { "Dragons meet": [{ swId: "r3", event: "50 Free" }] } });
+    await withDelete(() => bind("meetDelete", c, deps)("Dragons meet"));
+    eq(c.entriesSaves, [["Dragons meet", 0]]);
+  });
+  itAsync("refuses on a meet the club did not build", async () => {
+    const r = await withDelete(() => bind("meetDelete", ctx(), deps)("Imported Gala"));
+    eq(r.ok, false);
+    eq(/club built/.test(r.why), true);
+  });
+  // Gone here but not there is the one outcome that comes back by itself on the next pull.
+  itAsync("says so when the database did not confirm the removal", async () => {
+    const c = ctx();
+    const w = globalThis.window;
+    globalThis.window = { __vxDelete: () => Promise.resolve(false) };
+    const r = await bind("meetDelete", c, deps)("Dragons meet");
+    globalThis.window = w;
+    eq(r.ok, false);
+    eq(/has not confirmed it/.test(r.why), true);
+    eq(/sign in again/.test(r.why), true, "queued and refused answer the same, and need different actions");
+  });
+
+  // The list of name-keyed records is the whole safety of both operations. If something new is
+  // filed by meet name and not added to it, this is the test that should have caught it.
+  it("every synced document keyed by meet name is in the list", () => {
+    const listed = (methodSource("MEET_KEYED").body.match(/key:'(vx_[a-z_]+)'/g) || [])
+      .map((m) => m.slice("key:'".length, -1));
+    for (const k of ["vx_meet_entries", "vx_meet_events", "vx_meet_cuts", "vx_meet_info"])
+      eq(listed.includes(k), true, k + " is keyed by meet name but is not moved on a rename");
+    // The two that are NOT in the list, because they are handled by hand for a reason.
+    const src = methodSource("_meetMoveRecords").body;
+    eq(/vx_meet_marks/.test(src), true, "the marks are prefix-keyed and need their own pass");
+    eq(/vx_event_requests/.test(src), true, "the requests hold the name in a field, not as the key");
+  });
+});
+
 /* ------------------------------------------- a screen that contradicted itself, twice
    The club opened the Meets screen and asked where the completed meets were. They were
    there — behind a row that said "ALREADY SWUM · 17 meets swum" with a chevron on it.
@@ -6465,6 +6619,58 @@ describe("InBody sheet", () => {
       const c = ctx();
       const plan = bind("getFitPlan", c, ["makeDefaultFitnessPlan"])("pre team/2");
       eq(/^fe_[A-Za-z0-9]+_0_0$/.test(plan.sections[0].exs[0].id), true, plan.sections[0].exs[0].id);
+    });
+  });
+
+  // The demo video reached Storage every time and never reached the record. The club's own
+  // vx_fitness_media holds entries for exercises whose video files are sitting in the bucket —
+  // every one of them with an empty video field.
+  //
+  // _hydrateShared replaces whole shared documents from the pulled copy, and it runs on EVERY
+  // data refresh. An upload takes seconds; a pull landing in that window carries the copy from
+  // before it, so the entry is replaced by the one without the video, on screen and on disk, and
+  // the next write pushes that back up.
+  describe("a pull cannot take back what this device just uploaded", () => {
+    const keep = bind("_keepMine", {});
+    const PULLED = { ex1: { video: "" }, ex2: { photo: "p.jpg", video: "" } };
+
+    it("the entry this device wrote survives the pull", () => {
+      const mine = { ex1: { video: "just-uploaded.mp4" }, ex2: { photo: "p.jpg", video: "" } };
+      const out = keep(PULLED, mine, { ex1: true });
+      eq(out.ex1.video, "just-uploaded.mp4", "the upload is what the pull was about to erase");
+    });
+    it("everything this device has not touched still comes from the pull", () => {
+      const mine = { ex1: { video: "mine.mp4" } };
+      const out = keep({ ex1: { video: "" }, ex3: { photo: "theirs.jpg" } }, mine, { ex1: true });
+      eq(out.ex3.photo, "theirs.jpg", "another coach's entry must still arrive");
+    });
+    it("clearing a video is a write like any other, so it is not undone either", () => {
+      const out = keep({ ex2: { photo: "p.jpg", video: "old.mp4" } },
+                       { ex2: { photo: "p.jpg", video: "" } }, { ex2: true });
+      eq(out.ex2.video, "", "a clear that the pull put back would be just as wrong");
+    });
+    it("nothing edited means the pulled copy is taken whole", () =>
+      eq(JSON.stringify(keep(PULLED, { ex1: { video: "x" } }, {})), JSON.stringify(PULLED)));
+    it("an empty or missing pull does not invent entries", () => {
+      eq(JSON.stringify(keep(null, null, null)), "{}");
+      eq(keep(null, { ex1: { video: "m.mp4" } }, { ex1: true }).ex1.video, "m.mp4");
+    });
+
+    // Both fitness documents go through it, with the guard each already keeps.
+    it("the refresh puts this device's own fitness writes back on top", () => {
+      const line = (SOURCE.match(/this\.fitnessPlans=.*this\.fitnessMedia=[^\n]*/) || [""])[0];
+      eq(/_keepMine\(g\('vx_fitness_media'[^)]*\), this\.fitnessMedia, this\._editedFitMedia\)/.test(line), true,
+         "the media map is still replaced wholesale: " + line);
+      eq(/_keepMine\(g\('vx_fitness_plans'[^)]*\), this\.fitnessPlans, this\._editedFitSquads\)/.test(line), true,
+         "the plan document is still replaced wholesale: " + line);
+    });
+    it("every write to the media map says which exercise it touched", () => {
+      const src = sourceBetween("_saveFitMedia(map, exId){", "async _uploadMedia(");
+      for (const fn of ["fitSetVideo", "fitClearVideo", "fitClearPhoto"])
+        eq(new RegExp(fn + "[\\s\\S]*?_saveFitMedia\\(m, exId\\)").test(src), true,
+           fn + " saves without naming the exercise, so the guard cannot protect it");
+      eq(/video:u\}; this\._saveFitMedia\(m, exId\)/.test(SOURCE), true, "the video upload itself");
+      eq(/photo:val\}; this\._saveFitMedia\(m, exId\)/.test(SOURCE), true, "and the photo upload");
     });
   });
 
