@@ -4548,6 +4548,20 @@ describe("InBody sheet", () => {
       }, mine);
       eq(JSON.stringify(entries), JSON.stringify({ Test: [{ swId: "r3", name: "my child", lane: 5 }] }),
          "a meet entry for another family's child came back");
+
+      // The races a family has asked the coach for. A flat array, one row per swim, and the one
+      // list here a family WRITES as well as reads. Withholding it was not the safer half of the
+      // choice: the portal then showed every request as "Pending" for ever, because the only
+      // copy of the answer was on the coach's device, and a parent who cannot see that a race
+      // was approved asks for it again.
+      const reqs = M.pickFlatArrayBySwId([
+        { id: "q1", swId: "r3",  meetName: "Dragons meet", event: "50 Free", status: "approved" },
+        { id: "q2", swId: "r76", meetName: "Dragons meet", event: "50 Free", status: "pending" },
+      ], mine);
+      eq(JSON.stringify(reqs), JSON.stringify([{ id: "q1", swId: "r3", meetName: "Dragons meet", event: "50 Free", status: "approved" }]),
+         "another child's race request came back");
+      eq(JSON.stringify(M.pickFlatArrayBySwId(null, mine)), "[]", "a missing key must not become a crash");
+      eq(JSON.stringify(M.pickFlatArrayBySwId({ notAnArray: true }, mine)), "[]");
     });
 
     it("the roster document is cut to this family's children, not withheld", async () => {
@@ -4602,12 +4616,36 @@ describe("InBody sheet", () => {
       // stale squads and dates of birth — so the answer is to cut it, not to drop it.
       eq(/const ROSTER_DOC_KEYS = \["vx_roster_edits"\]/.test(SRC), true,
          "vx_roster_edits is no longer the sliced roster key");
+      // Same shape of exception, same reason: returned SLICED, never whole.
+      eq(/const FLAT_ARRAY_BY_SWID_KEYS = \["vx_event_requests"\]/.test(SRC), true,
+         "vx_event_requests is no longer the sliced request key");
+      for (const whole of ["CLUB_KEYS", "PER_SWIMMER_KEYS"]) {
+        const l = (SRC.match(new RegExp("const " + whole + " = \\[([\\s\\S]*?)\\]")) || [])[1] || "";
+        eq(/vx_event_requests/.test(l), false,
+           "vx_event_requests is in " + whole + ", which would hand a parent every family's requests");
+      }
       for (const whole of ["CLUB_KEYS", "PER_SWIMMER_KEYS"]) {
         const list = (SRC.match(new RegExp("const " + whole + " = \\[([\\s\\S]*?)\\]")) || [])[1] || "";
         eq(/vx_roster_edits/.test(list), false,
            "vx_roster_edits is in " + whole + ", which would return the whole club's roster");
       }
       eq(/requireUser/.test(SRC), true, "the family slice does not authenticate its caller");
+
+      // Telling the club a family arrived is the club's own record being written, so it is
+      // written by the server. From the phone it could not work at all: signup_alerts is
+      // staff-only and /api/push/send requires staff, so the insert came back 403 and landed on
+      // the parent's banner as a record that could never go into the database — while the club
+      // heard nothing about the sign-up at all.
+      const ANN = readFileSync(new URL("../src/app/api/family/announce/route.ts", import.meta.url), "utf8");
+      eq(/requireUser\(request\)/.test(ANN), true, "anyone could raise an alert on the club's feed");
+      // The line is composed here from the caller's OWN row. Nothing a parent types may reach a
+      // coach's feed, and no alert may be about somebody else's family.
+      eq(/email=eq\.\$\{encodeURIComponent\(\s*who\.caller\.email,?\s*\)\}/.test(ANN), true,
+         "the alert is built from a row the caller named rather than the one they signed in as");
+      eq(/body\.kind === "register"/.test(ANN), true, "the body decides more than which of the two happened");
+      for (const free of ["body.title", "body.message", "body.name", "body.body"]) {
+        eq(ANN.includes(free), false, free + " is taken from the request, which is free text on the club's feed");
+      }
       // The meet details and the camps are the club telling its members what is happening.
       // They are the same for every family and name nobody, so they belong in CLUB_KEYS —
       // and a family screen that cannot read them shows a meet with no entry deadline on it,
@@ -4983,8 +5021,13 @@ describe("InBody sheet", () => {
       globalThis.location = { hash, pathname: "/", search: "", origin: "https://c" };
       globalThis.history = { replaceState() { ctx.urlCleaned = true; } };
       globalThis.sessionStorage = { getItem: () => "family", removeItem() {}, setItem() {} };
-      globalThis.window = { __vxSetAuth: (sess) => { ctx.authSet = sess; } };
-      try { await bind("_checkOAuthHash", ctx, [])(); }
+      // The device is marked as a family BEFORE the token is installed, because installing it
+      // replays everything queued while there was no session — on a parent's phone, the boot
+      // seed. Recorded in order here so that can be asserted rather than assumed.
+      const order = [];
+      globalThis.localStorage = { getItem: () => null, setItem: (k, v) => { if (k === "vx_session") order.push(v); } };
+      globalThis.window = { __vxSetAuth: (sess) => { ctx.authSet = sess; ctx.markedFirst = order.length > 0; } };
+      try { await bind("_checkOAuthHash", ctx, ["_famMarkDevice"])(); }
       finally { [globalThis.location, globalThis.history, globalThis.sessionStorage, globalThis.window] = restore; }
       return ctx;
     };
@@ -4992,6 +5035,11 @@ describe("InBody sheet", () => {
     itAsync("a valid return opens the app", async () => {
       const ctx = await runReturn("#access_token=abc&refresh_token=r&expires_in=3600");
       eq(ctx.finished.after, "family");
+    });
+    itAsync("the device is a family device before the token replays anything", async () => {
+      const ctx = await runReturn("#access_token=abc&refresh_token=r&expires_in=3600");
+      eq(ctx.markedFirst, true,
+         "installing the token replays the boot seed, which on a parent's phone is the club's own record");
     });
     itAsync("the token is taken out of the address bar immediately", async () => {
       const ctx = await runReturn("#access_token=abc&refresh_token=r");
@@ -6953,8 +7001,13 @@ describe("InBody sheet", () => {
       // not read, and does not have to be stopped from trying.
       const push = sourceBetween("function _mergeRoster(mine, theirs){", "\n  window.__vxMergeRoster");
       eq(/out\.deleted\[sq\]\[sw\]=true/.test(push), true, "deletions have to survive a stale copy");
-      eq(/k==="vx_roster_edits" \? _rosterMergedWith\(v\)/.test(SOURCE), true,
+      // The routing moved into _mergedForSend when the family device's two add-only keys joined
+      // the roster there. Same requirement, asked of the function that now decides it.
+      const route = sourceBetween("function _mergedForSend(k, v){", "\n  function pushKey");
+      eq(/k==="vx_roster_edits"\) return _rosterMergedWith\(v\)/.test(route), true,
          "the roster is still being sent as a replacement");
+      eq(/p = _mergedForSend\(k, v\)/.test(SOURCE), true,
+         "and pushKey is sending whatever that decides, not the raw value");
       // Read from the database at the moment of writing, not from a mirror up to 20s old — which
       // is exactly long enough for two coaches on poolside to lose each other's work.
       eq(/select=value&key=eq\.vx_roster_edits/.test(SOURCE), true,
@@ -8627,7 +8680,7 @@ describe("InBody sheet", () => {
   // a real login, the restore changed which logins exist, and Discard does not help because the
   // next fetch queues it again.
   describe("a family row the database can never accept", () => {
-    const fn = sourceBetween("const _refused=this._famRefusedIds();", "const list=[...fromTable");
+    const fn = sourceBetween("const _refused=this._famRefusedIds();", "// Pruned, not just left unsent");
 
     it("is not offered again", () => {
       eq(/_refused\.indexOf\(f\.id\)>=0/.test(fn), true,
@@ -8746,13 +8799,17 @@ describe("InBody sheet", () => {
         eq(/if\(this\._dbAnon\(\)\) return;/.test(seed), true,
            what + ": an empty read while signed out says nothing about the table");
       }
-      const fam = sourceBetween("const _refused=this._famRefusedIds();", "const list=[...fromTable");
+      const fam = sourceBetween("const _refused=this._famRefusedIds();", "// Pruned, not just left unsent");
       eq(/if\(!this\._dbAnon\(\)\) localOnly\.forEach/.test(fam), true,
          "the family backfill is what re-sent all thirty");
       // The families must still be listed. Losing the screen because a token expired would be a
       // worse bug than the one being fixed.
-      eq(/const list=\[\.\.\.fromTable, \.\.\.localOnly\];/.test(SOURCE), true,
+      eq(/: \[\.\.\.fromTable, \.\.\.localOnly\];/.test(SOURCE), true,
          "the list is still assembled and shown");
+      // On a family device that list is one family — their own — which is a separate rule from
+      // this one and must not quietly undo it for the club's own screen.
+      eq(/_own \? \[\.\.\.fromTable, \.\.\.localOnly\]\.filter\(f=>this\._famIsMine\(f, _own\)\)/.test(SOURCE), true,
+         "a parent's phone keeps its own row and nobody else's");
       const anon = sourceBetween("_dbAnon(){", "\n  }");
       eq(/window\.__vxSendingAnon/.test(anon), true, "which _curTok already sets, and nothing asked");
     });
@@ -11050,6 +11107,380 @@ describe("the squads are the club's, not the export's", () => {
     eq(typeof body.rosterNote, "string",
        "the answer served the snapshot's squads without saying that is what they are");
     eq(/could not be read/.test(body.rosterNote), true);
+  });
+});
+
+/* ============================================================ family access
+   Four screens a parent sent in on one morning: "9 records cannot go into the
+   database", "4 changes have not been saved - family_accounts - HTTP 403", an
+   offer to throw those four away, and, on the meets tab, a panel inviting her
+   to enter her child in a championship that had been swum in April.
+
+   Neither was about her account. */
+describe("a parent's phone writes one family account: its own", () => {
+  const FAM = (over = {}) => ({
+    state: { familyUser: { id: "u-nancy", email: "nancy_ehab@hotmail.com", name: "Nancy" }, ...over },
+  });
+  const ctx = (over) => {
+    const c = FAM(over);
+    c._isFamilySession = bind("_isFamilySession", c);
+    c._famOwnEmail = bind("_famOwnEmail", c, ["_isFamilySession"]);
+    c._famIsMine = bind("_famIsMine", c);
+    c._famPruneForeignWrites = bind("_famPruneForeignWrites", c, ["_famOwnEmail", "_famIsMine", "_isFamilySession"]);
+    return c;
+  };
+  const noStore = () => { globalThis.localStorage = { getItem: () => null, setItem: () => {} }; };
+
+  it("knows which row is its own, whatever case or spacing it was typed in", () => {
+    noStore(); globalThis.window = {};
+    const c = ctx();
+    eq(c._famOwnEmail(), "nancy_ehab@hotmail.com");
+    eq(c._famIsMine({ email: "  Nancy_Ehab@Hotmail.com " }, c._famOwnEmail()), true,
+       "the policy lowercases and trims both sides; so must this, or its own row looks foreign");
+    eq(c._famIsMine({ email: "someone.else@gmail.com" }, c._famOwnEmail()), false);
+  });
+
+  // A staff device is the one that legitimately holds the club's family list and re-uploads a
+  // registration that never landed. Nothing here may touch it.
+  it("says nothing about a staff device", () => {
+    globalThis.localStorage = { getItem: (k) => (k === "vx_session" ? JSON.stringify({ type: "staff", id: "ahmed" }) : null), setItem: () => {} };
+    globalThis.window = {};
+    const c = ctx({ familyUser: null });
+    eq(c._isFamilySession(), false);
+    eq(c._famOwnEmail(), "", "an empty own-email is what leaves the club's own backfill alone");
+  });
+
+  it("still knows its own email at boot, before the portal has opened", () => {
+    globalThis.localStorage = { getItem: (k) => (k === "vx_session" ? JSON.stringify({ type: "family", email: "Nancy_Ehab@Hotmail.com" }) : null), setItem: () => {} };
+    globalThis.window = {};
+    const c = ctx({ familyUser: null });
+    eq(c._famOwnEmail(), "nancy_ehab@hotmail.com",
+       "the prune runs before the first fetch, which is exactly when there is no familyUser yet");
+  });
+
+  // The nine and the four. Stopping the backfill from making the write again does nothing about
+  // the ones already on the phone, and those are what the parent is looking at.
+  it("takes other families' queued writes off the phone and keeps its own", () => {
+    noStore();
+    const queue = [
+      { op: "upsert", table: "family_accounts", payload: [{ id: "u-nancy", email: "nancy_ehab@hotmail.com" }] },
+      { op: "upsert", table: "family_accounts", payload: [{ id: "u-other", email: "another.parent@gmail.com" }] },
+      { op: "upsert", table: "club_state (vx_event_requests)", payload: [{ id: "req1" }] },
+    ];
+    const blocked = [
+      { sig: "upsert|family_accounts|u-other2", table: "family_accounts", ids: ["u-other2"] },
+      { sig: "upsert|family_accounts|u-nancy", table: "family_accounts", ids: ["u-nancy"] },
+    ];
+    const dropped = [];
+    globalThis.window = {
+      __vxDropWrites: (pick) => {
+        let n = 0;
+        for (const w of queue) if (pick({ op: w.op, table: w.table, payload: w.payload, ids: [] })) { dropped.push(w); n++; }
+        for (const b of blocked) if (pick({ op: "blocked", table: b.table, payload: null, ids: b.ids })) { dropped.push(b); n++; }
+        return n;
+      },
+    };
+    const c = ctx();
+    eq(c._famPruneForeignWrites(), 2, "one queued row and one set-aside row, both other families'");
+    eq(dropped.map((d) => (d.payload ? d.payload[0].id : d.ids[0])), ["u-other", "u-other2"]);
+  });
+
+  // "6 records cannot go into the database ... it will not accept writes to attendance_marks",
+  // on a parent's Mac. She has never taken a register. Each round of this was fixed one table at
+  // a time — family_accounts, the club_state seed, signup_alerts — and they are one fault: a
+  // device offering the club's own work up from a parent's phone.
+  it("a table a family device never writes is not counted at a parent", () => {
+    noStore();
+    const seen = [];
+    globalThis.window = {
+      __vxFamilyMayWrite: (t) => ["family_accounts", "invoices", "swimmer_docs"].includes(t),
+      __vxDropWrites: (pick) => {
+        for (const w of [
+          { table: "attendance_marks", payload: [{ id: "sq_2026-08-17_r3" }], ids: [] },
+          { table: "club_state (vx_squads)", payload: null, ids: [] },
+          { table: "invoices", payload: [{ id: "iv1", swId: "r3" }], ids: [] },
+          { table: "swimmer_docs", payload: [{ id: "d1" }], ids: [] },
+        ]) if (pick({ op: "upsert", table: w.table, payload: w.payload, ids: w.ids })) seen.push(w.table);
+        return seen.length;
+      },
+    };
+    const c = ctx();
+    eq(c._famPruneForeignWrites(), 2);
+    eq(seen, ["attendance_marks", "club_state (vx_squads)"],
+       "a register and the club's squads are not this parent's work");
+  });
+
+  it("the rule is the same one the write door asks", () => {
+    // Two copies of "what may a family write" would drift, and the drift shows up as a banner
+    // nobody can clear: the door refuses a write the cleanup then declines to remove.
+    eq(/window\.__vxFamilyMayWrite = function\(table\)\{ return _famMayWrite\(table\); \}/.test(SOURCE), true);
+    for (const door of ["window.__vxUpsert", "window.__vxInsert"]) {
+      const at = SOURCE.indexOf(door + " = function");
+      const line = SOURCE.slice(at, at + 220);
+      eq(/_famDevice\(\) && !_famMayWrite\(table\)/.test(line), true,
+         door + " sends the club's tables from a parent's phone");
+    }
+    // An allowlist, so a table added next year is refused by default rather than a fortnight
+    // after a parent reports it.
+    const list = (SOURCE.match(/var FAMILY_TABLES = \[([\s\S]*?)\];/) || [])[1] || "";
+    eq(list.length > 0, true, "the allowlist is gone");
+    for (const clubs of ["attendance_marks", "plan_sessions", "squad_plans", "lounge_posts",
+                         "signup_alerts", "staff_accounts", "club_meets", "announcements"]) {
+      eq(new RegExp('"' + clubs + '"').test(list), false, clubs + " is the club's record, not a family's");
+    }
+    // And the ones a parent genuinely does, which must keep working.
+    for (const mine of ["family_accounts", "family_messages", "wellness_checkins",
+                        "wearable_readings", "invoices", "swimmer_docs"]) {
+      eq(new RegExp('"' + mine + '"').test(list), true, mine + " is something the portal asks a parent to do");
+    }
+  });
+
+  it("a refused write is dropped, never queued", () => {
+    const fn = sourceBetween("function _famRefuse(table){", "\n  }");
+    eq(/_failAdd/.test(fn), false, "queuing it is what put it on the banner in the first place");
+    eq(/return false/.test(fn), true, "the caller is told it did not go, the parent is not");
+  });
+
+  it("never touches a write it cannot identify", () => {
+    noStore();
+    let asked = null;
+    globalThis.window = { __vxDropWrites: (pick) => (asked = pick({ op: "blocked", table: "family_accounts", payload: null, ids: [] })) ? 1 : 0 };
+    const c = ctx();
+    c._famPruneForeignWrites();
+    eq(asked, false, "an entry with nothing to judge by is somebody's save, not somebody else's row");
+  });
+
+  // The backfill itself.
+  it("offers only its own row, and keeps only its own row", () => {
+    const fam = sourceBetween("const _own=this._famOwnEmail();", "this.family=list;");
+    eq(/localOnly=localOnly\.filter\(f=>this\._famIsMine\(f, _own\)\)/.test(fam), true,
+       "every other row is a write this database refuses for as long as the app is open");
+    eq(/_own \? \[\.\.\.fromTable, \.\.\.localOnly\]\.filter\(f=>this\._famIsMine\(f, _own\)\)/.test(fam), true,
+       "and it is dropped from the cache, or the next fetch reads it back as work to do");
+  });
+
+  it("the prune runs before the read, not after it", () => {
+    const fn = sourceBetween("async _familyFetch(){", "const fromTable=");
+    const prune = fn.indexOf("_famPruneForeignWrites");
+    const read = fn.indexOf("await window.__vxSelect");
+    eq(prune > -1 && prune < read, true,
+       "the read returns early when it fails, and that is the phone with the problem");
+  });
+
+  // "You are signed in, but the database is not treating this account as staff." True of a
+  // coach, a category error about a parent, and the action it asks for is a screen a parent
+  // cannot open.
+  it("a parent is never told their account is not staff", () => {
+    const detail = sourceBetween("blockedDetail: (()=>{", "onBlockedDismiss:");
+    const guard = detail.indexOf("this._isFamilySession()");
+    const staffLine = detail.indexOf("as staff, so it will not accept writes to");
+    eq(guard > -1 && guard < staffLine, true, "the family wording has to come first, or the staff one still runs");
+    const famBranch = detail.slice(guard, staffLine);
+    eq(/Nothing of yours is lost/.test(famBranch), true, "and it has to say what is true of a parent");
+  });
+});
+
+describe("a parent's phone cannot empty the club's shared lists", () => {
+  // club_state's policy pins a non-staff write to two keys: vx_event_requests and
+  // vx_notifications. Both are written as whole documents, last writer wins, and
+  // /api/family/state deliberately never sent either of them down, so the copy on a parent's
+  // phone is not a stale version of the club's list, it is a list with one row in it.
+  const SKIP = "@@skip@@";
+  const merge = (theirs, mine, ok = true) => {
+    const src = sourceBetween("function _addOnlyMergedWith(k, v){", "\n  function _mergedForSend");
+    return runInSandbox(src + "\nreturn _addOnlyMergedWith(k, v);", {
+      k: "vx_event_requests",
+      v: JSON.stringify(mine),
+      REST: "https://db/club_state",
+      dyn: () => ({}),
+      SKIP_SEND: SKIP,
+      fetch: () => Promise.resolve({ ok, json: () => Promise.resolve(theirs === null ? [] : [{ value: theirs }]) }),
+      console: { info: () => {}, warn: () => {} },
+    });
+  };
+
+  itAsync("keeps every row the database holds and adds only the new ones", async () => {
+    const club = [{ id: "r1", swId: "a", event: "50 Free", status: "approved" },
+                  { id: "r2", swId: "b", event: "100 Fly", status: "pending" }];
+    const phone = [{ id: "r9", swId: "malek", event: "200 Free", status: "pending" }, club[0]];
+    const out = JSON.parse(await merge(club, phone));
+    eq(out.length, 3, "one parent asking for a race replaced every pending request in the club");
+    eq(out.map((r) => r.id), ["r9", "r1", "r2"], "the new one on the front, the club's own untouched");
+    eq(out.find((r) => r.id === "r1").status, "approved",
+       "and a family device can never change a row the club has already decided");
+  });
+
+  itAsync("sends nothing at all when the club's copy could not be read", async () => {
+    eq(await merge(null, [{ id: "r9" }], false), SKIP,
+       "falling back to this device's corner of the list is the very write this prevents");
+  });
+
+  itAsync("a first request into an empty list still goes", async () => {
+    const out = JSON.parse(await merge(null, [{ id: "r9", event: "50 Free" }]));
+    eq(out.length, 1, "there is nothing there to lose");
+  });
+
+  it("only on a family device, and only for those two keys", () => {
+    const route = sourceBetween("function _mergedForSend(k, v){", "\n  function pushKey");
+    eq(/_famDevice\(\) && ADD_ONLY_KEYS\.indexOf\(k\)>=0/.test(route), true,
+       "staff pull both keys in full, so last-write-wins is right for them and must not change");
+    eq(/var ADD_ONLY_KEYS = \["vx_event_requests", "vx_notifications"\]/.test(SOURCE), true,
+       "the same two keys security_4_roles.sql lets a parent write");
+  });
+
+  // The other half of the same count. A family pulls its own slice, nine keys of thirty-six, so
+  // every other key comes back "not there" — and the seed then offered the club's squads, brand,
+  // meet calendar and roster up from a parent's phone. Refused, every one, by a policy working
+  // exactly as written, and filed as a record that cannot go into the database.
+  it("a parent's phone seeds nothing it does not own", () => {
+    const seed = (family, disk) => {
+      const pushed = [];
+      const src = sourceBetween("function applyPull(rows, seed){", "\n  // Re-pull the shared club");
+      runInSandbox(src + "\napplyPull([], true);", {
+        localStorage: { getItem: (k) => (k in disk ? disk[k] : null), setItem: () => {} },
+        window: { __VX_PULLED: {} },
+        origSet: () => {},
+        pushKey: (k) => pushed.push(k),
+        _keepReplaced: () => {},
+        _famDevice: () => family,
+        ADD_ONLY_KEYS: ["vx_event_requests", "vx_notifications"],
+        SYNC: ["vx_squads", "vx_roster_edits", "vx_brand", "vx_event_requests", "vx_notifications"],
+      });
+      return pushed;
+    };
+    const disk = { vx_squads: "[1]", vx_roster_edits: "{}", vx_brand: "{}", vx_event_requests: "[]", vx_notifications: "[]" };
+    eq(seed(true, disk).sort(), ["vx_event_requests", "vx_notifications"],
+       "the club's roster was being offered up from a parent's phone, and refused");
+    eq(seed(false, disk).length, 5,
+       "and a staff device still seeds everything — that is how a club gets its record back");
+  });
+
+  it("a skipped send is queued, not reported as saved", () => {
+    const fn = sourceBetween("p = _mergedForSend(k, v)", "var _stamp = Date.now();");
+    eq(/sendStr===SKIP_SEND/.test(fn), true);
+    eq(/status:0/.test(fn), true,
+       "status 0 is nobody answered, which keeps it on the retry queue rather than setting it aside");
+  });
+});
+
+describe("the races a parent chooses", () => {
+  // The panel offered this.meetsMeta, which is window.VX_MEETS: the season already swum and
+  // shipped with the app. The cards directly above it show the meets still ahead. A parent read
+  // "Dragons meet, 25 Sep" and was then offered a championship held on 30 April.
+  // The picker now lives on each meet's own card, so it is offered for exactly the meets the
+  // cards are built from — there is no second list of meets left to disagree with them.
+  it("is offered for the meets that are actually coming up, and only those", () => {
+    const cards = sourceBetween("const upcoming=this._meetsSplit().upcoming.slice(0,6).map(m=>{", "// Camps, beside the meets");
+    eq(/this\._famMeetRequest\(m, sw, evs, info, deadlineIso, today\)/.test(cards), true,
+       "the picker is built from the same meet the card is");
+    eq(/this\.meetsMeta/.test(cards), false, "an imported meet is by definition one that has been swum");
+    // And nothing else in the family screen builds a second list of meets to ask about.
+    eq(/const upcomingMeets = this\.meetsMeta/.test(SOURCE), false,
+       "the old panel offered last season's meets under a heading that said upcoming");
+  });
+
+  it("asks on the card for the meet it is an entry for", () => {
+    const fn = sourceBetween("_famMeetRequest(meet, sw, meetEvents, info, deadlineIso, today){", "\n  }");
+    // Two cards are open on one screen. A shared list of ticks would have a tap on one silently
+    // arm the other, and a confirmation for one meet appear under all of them.
+    eq(/famReqToggle\(name, ev\)/.test(fn), true, "the tick has to name its meet");
+    eq(/S\.famReqMsgMeet===name/.test(fn), true, "and so does the message, or it shows on every card");
+  });
+
+  const ctx = (requests = [], state = {}) => {
+    const c = {
+      eventRequests: requests,
+      state: { famReqPicked: [], ...state },
+      _uid: (p) => p + "1",
+      setState: (s) => { c.state = { ...c.state, ...s }; },
+      notify: (...a) => { c.notified = (c.notified || []).concat([a]); },
+      _saveJSON: (k, v) => { c.saved = [k, v]; },
+    };
+    c.famReqToggle = bind("famReqToggle", c);
+    c.famRequestEvents = bind("famRequestEvents", c);
+    return c;
+  };
+
+  it("a race is ticked on and off before anything is sent", () => {
+    const c = ctx();
+    c.famReqToggle("Dragons meet", "50 Free");
+    c.famReqToggle("Dragons meet", "100 Back");
+    eq(c.state.famReqPicked["Dragons meet"], ["50 Free", "100 Back"]);
+    c.famReqToggle("Dragons meet", "50 Free");
+    eq(c.state.famReqPicked["Dragons meet"], ["100 Back"], "changing your mind is not a request");
+    eq(c.saved, undefined, "and nothing leaves the device until Request is pressed");
+  });
+
+  it("ticking a race on one meet does not arm another", () => {
+    const c = ctx();
+    c.famReqToggle("Dragons meet", "50 Free");
+    c.famReqToggle("VIS", "200 IM");
+    eq(c.state.famReqPicked["Dragons meet"], ["50 Free"]);
+    eq(c.state.famReqPicked["VIS"], ["200 IM"], "both cards are on screen at once");
+  });
+
+  // A meet is eight or nine swims. One chip and one Request button meant nine round trips and
+  // nine separate lines in the coach's inbox.
+  it("sends every chosen race as its own row, in one go", () => {
+    const c = ctx();
+    c.famRequestEvents("malek", "Malek Dardir", "Dragons meet", ["50 Free", "100 Free", "200 IM"]);
+    const [key, rows] = c.saved;
+    eq(key, "vx_event_requests");
+    eq(rows.length, 3, "the club decides them one at a time, so they are stored one at a time");
+    eq(rows.map((r) => r.event), ["50 Free", "100 Free", "200 IM"]);
+    eq(rows.every((r) => r.status === "pending" && r.swId === "malek" && r.meetName === "Dragons meet"), true);
+    eq(new Set(rows.map((r) => r.id)).size, 3, "a shared id would have the coach approve one and enter another");
+    eq(rows.every((r) => typeof r.ts === "number"), true, "stamped, so the club's answer can outrank the ask");
+    eq((c.notified || []).length, 1, "one inbox line for one family's meet, not nine");
+    eq(/50 Free, 100 Free, 200 IM/.test(c.notified[0][3]), true, "naming all of them");
+  });
+
+  it("never asks twice for the same race at the same meet", () => {
+    const c = ctx([{ id: "old", swId: "malek", meetName: "Dragons meet", event: "50 Free", status: "approved" }]);
+    c.famRequestEvents("malek", "Malek Dardir", "Dragons meet", ["50 Free", "100 Free"]);
+    eq(c.saved[1].length, 2, "one new row on top of the one already there");
+    eq(c.saved[1][0].event, "100 Free", "and the duplicate is dropped, not sent");
+    eq(c.state.famReqPicked["Dragons meet"], undefined, "the tick clears either way");
+  });
+
+  it("a whole duplicate selection sends nothing and says so", () => {
+    const c = ctx([{ id: "old", swId: "malek", meetName: "Dragons meet", event: "50 Free", status: "pending" }]);
+    c.famRequestEvents("malek", "Malek Dardir", "Dragons meet", ["50 Free"]);
+    eq(c.saved, undefined, "an empty write is still a write over the club's list");
+    eq(/already on the list/.test(c.state.famReqMsg), true);
+  });
+
+  it("the same race at a different meet is a different request", () => {
+    const c = ctx([{ id: "old", swId: "malek", meetName: "Dragons meet", event: "50 Free", status: "pending" }]);
+    c.famRequestEvents("malek", "Malek Dardir", "VIS", ["50 Free"]);
+    eq(c.saved[1].length, 2);
+    eq(c.saved[1][0].meetName, "VIS");
+  });
+
+  it("another child's request is not in the way", () => {
+    const c = ctx([{ id: "old", swId: "ali", meetName: "Dragons meet", event: "50 Free", status: "pending" }]);
+    c.famRequestEvents("malek", "Malek Dardir", "Dragons meet", ["50 Free"]);
+    eq(c.saved[1].length, 2);
+    eq(c.saved[1][0].swId, "malek");
+  });
+
+  // Entries that have closed are not a request a parent can still make; being told a week later
+  // by a coach is the thing this panel exists to prevent.
+  // Entries that have closed, or a meet with no programme posted, are not a request a parent can
+  // make. Being told a week later by a coach is the thing this panel exists to prevent.
+  it("a closed deadline removes the picker rather than styling it", () => {
+    const fn = sourceBetween("_famMeetRequest(meet, sw, meetEvents, info, deadlineIso, today){", "\n  }");
+    eq(/if\(!evs\.length \|\| closed \|\| !sw\)/.test(fn), true,
+       "a grey button that still fires is worse than no button");
+    eq(/canRequest:false/.test(fn), true);
+    eq(/Entries for '\+name\+' closed on/.test(fn), true, "and the card has to say which of the two it is");
+    eq(/has not posted the event programme/.test(fn), true);
+  });
+
+  it("never guesses a programme the club has not posted", () => {
+    const fn = sourceBetween("_famMeetRequest(meet, sw, meetEvents, info, deadlineIso, today){", "\n  }");
+    eq(/EVENT_CATALOG/.test(fn), false,
+       "asking for a race that is not being swum is a request the coach can only decline");
   });
 });
 
