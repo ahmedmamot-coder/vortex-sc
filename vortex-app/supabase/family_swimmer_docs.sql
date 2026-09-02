@@ -32,8 +32,8 @@
 --  work — a policy written against a comparison that never returns true is just staff-only with
 --  extra words.
 --
---  security_5_swimmer_docs.sql predicted it exactly, and left the question open rather than
---  guess:
+--  security_5_swimmer_docs.sql — in the repo-root supabase/ directory, not this one — predicted
+--  it exactly, and left the question open rather than guess:
 --
 --      "whether swimmer_docs.swimmer_id and family_accounts.swimmer_ids use the same shape.
 --       The app stores a family's children as 'squad::id' and takes the last segment when it
