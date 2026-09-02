@@ -252,7 +252,33 @@ After Stage 4:
 | family accounts | the list | their own row |
 | staff accounts | change | look up a username to sign in; no changes |
 | announcements | write | read |
-| club_state | everything | read; may write only `vx_billing`, `vx_sw_meta`, `vx_event_requests`, `vx_notifications` |
+| club_state | everything | read; may write only `vx_event_requests` and `vx_notifications` |
+
+### A parent uploading their child's documents
+
+**Run `supabase/family_swimmer_docs.sql`.** Two things, and the first is a bug rather than a
+policy decision.
+
+`vx_is_my_swimmer()` has never matched anything. `security_5_swimmer_docs.sql` predicted it and
+left the question open: the app stores a family's children as `"squad::id"` in
+`family_accounts.swimmer_ids`, and the per-swimmer tables store the bare `id`, so
+`vx_is_my_swimmer('r3')` asks whether `'r3'` is in `{'preteam::r3'}` and answers no. Every
+per-swimmer family rule in Stage 4 — attendance, invoices, memberships, wellness, wearables,
+InBody, documents, messages — has therefore behaved as staff-only since it ran. `/api/family/state`
+carries a `bareId()` helper for exactly this mismatch; the database policies never got one. The
+script gives them one, and it widens nothing: it cannot match a child who is not already on that
+family's list.
+
+On top of that it lets a family **insert and update** rows in `swimmer_docs` for their own
+children, which is what the Documents tab's Upload buttons have always implied. Storage already
+accepted the file — the bucket takes any signed-in user — so what failed was the row that points
+at it, leaving the file orphaned and the parent looking at "Uploaded, but sync failed".
+
+**DELETE is deliberately not granted.** A birth certificate or medical certificate on file is the
+club's compliance record as much as the family's paperwork, so removing one stays staff's. A
+parent replaces instead: rows are keyed `swimmerid::kind`, so a second upload of the same kind
+updates the row. The family Documents tab no longer shows a delete button, so nothing on screen
+promises what the database refuses.
 
 ### The part that is still open, and why
 
