@@ -74,6 +74,23 @@ export function testTypeOf(row: { test_type?: string | null; distance: number })
   return row.distance === 400 ? "400" : "1000";
 }
 
+/**
+ * A T-pace is a speed, and /100 is only the unit it is quoted in. What a coach writes on the
+ * board is "8 × 150 on the T-pace", so the number they need is the 150 — and doing that
+ * multiplication in their head, poolside, for every rep length in a set, is where the errors come
+ * from. These are the rep lengths the club's sets are built out of, and proto.html carries the
+ * same list in TPACE_LADDER.
+ */
+export const PACE_LADDER = [50, 75, 100, 150, 200, 300, 400] as const;
+
+export function paceLadder(tPacePer100: number): { metres: number; seconds: number }[] {
+  if (!(tPacePer100 > 0)) return [];
+  return PACE_LADDER.map((metres) => ({
+    metres,
+    seconds: Number(((tPacePer100 * metres) / 100).toFixed(2)),
+  }));
+}
+
 export function formatMetres(m: number): string {
   const n = Number(m) || 0;
   return Number.isInteger(n) ? String(n) : n.toFixed(1);

@@ -8,6 +8,7 @@ import {
   fixedClockProtocol,
   fixedClockTest,
   formatMetres,
+  paceLadder,
   tPaceFromDistanceTrial,
   tPaceFromFixedClock,
   type TPaceTestType,
@@ -30,6 +31,25 @@ const BUTTONS: { type: TPaceTestType; label: string }[] = [
   ...(["t30", "t20"] as const).map((t) => ({ type: t, label: `${FIXED_CLOCK_TESTS[t].label} test` })),
 ];
 
+/** The rep lengths a set is written in, so the coach does not multiply the T-pace by hand. */
+function PaceLadder({ tPace }: { tPace: number }) {
+  const rows = paceLadder(tPace);
+  if (!rows.length) return null;
+  return (
+    <div className="grid grid-cols-4 gap-1.5 mt-2">
+      {rows.map((r) => (
+        <div
+          key={r.metres}
+          className="text-center rounded-[var(--radius-sm)] border border-[#E5E9F0] bg-[#F4F7FB] px-0.5 py-1"
+        >
+          <span className="block text-[9.5px] font-bold text-[#7A8296]">{r.metres}m</span>
+          <span className="block text-[11.5px] font-bold text-[#0C1116]">{formatTime(r.seconds)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function TPaceClient({
   slug,
   swimmers,
@@ -51,14 +71,16 @@ export default function TPaceClient({
   const fixed = fixedClockTest(type);
 
   const preview = (() => {
+    let t100: number | null = null;
     if (fixed) {
       const m = parseFloat(distText.trim());
-      if (!Number.isFinite(m) || m <= 0) return null;
-      return formatTime(tPaceFromFixedClock(type, m)!);
+      if (Number.isFinite(m) && m > 0) t100 = tPaceFromFixedClock(type, m);
+    } else {
+      const secs = parseTimeToSeconds(timeText);
+      if (secs != null && secs > 0) t100 = tPaceFromDistanceTrial(Number(type), secs);
     }
-    const secs = parseTimeToSeconds(timeText);
-    if (secs == null || secs <= 0) return null;
-    return formatTime(tPaceFromDistanceTrial(Number(type), secs));
+    if (t100 == null) return null;
+    return { seconds: t100, text: formatTime(t100) };
   })();
 
   function save() {
@@ -149,7 +171,10 @@ export default function TPaceClient({
           )}
 
           {preview && (
-            <p className="text-sm text-[var(--vx-success)]">T-pace ≈ {preview} / 100m</p>
+            <>
+              <p className="text-sm text-[var(--vx-success)]">T-pace ≈ {preview.text} / 100m</p>
+              <PaceLadder tPace={preview.seconds} />
+            </>
           )}
           {error && <p className="text-sm text-[var(--vx-danger)]">{error}</p>}
           <button
@@ -169,32 +194,37 @@ export default function TPaceClient({
           const overdue = t.retest_due && new Date(t.retest_due) < new Date();
           const tFixed = fixedClockTest(t.type);
           return (
-            <div key={t.id} className="flex items-center justify-between rounded-[var(--radius-md)] bg-white border border-[#E5E9F0] px-3 py-2">
-              <div>
-                <p className="text-[#0C1116] text-sm">{t.name}</p>
-                <p className="text-xs text-[#7A8296]">
-                  {/* A fixed-clock test reads as the distance covered. Printing "30:00.00" would
-                      show the protocol every swimmer shares rather than this swimmer's result. */}
-                  {tFixed
-                    ? `${tFixed.label} · ${formatMetres(t.distance)}m`
-                    : `${formatMetres(t.distance)}m in ${formatTime(t.time_seconds)}`}{" "}
-                  · {formatShortDate(t.tested_at)}
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="text-right">
-                  <p className="text-[#0C1116] font-bold text-sm">{formatTime(t.t_pace_seconds)}</p>
-                  <p className="text-[10px]" style={{ color: overdue ? "var(--vx-danger)" : "var(--vx-slate-300)" }}>
-                    {overdue ? "retest due" : "/100m"}
+            <div key={t.id} className="rounded-[var(--radius-md)] bg-white border border-[#E5E9F0] px-3 py-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[#0C1116] text-sm">{t.name}</p>
+                  <p className="text-xs text-[#7A8296]">
+                    {/* A fixed-clock test reads as the distance covered. Printing "30:00.00" would
+                        show the protocol every swimmer shares rather than this swimmer's result. */}
+                    {tFixed
+                      ? `${tFixed.label} · ${formatMetres(t.distance)}m`
+                      : `${formatMetres(t.distance)}m in ${formatTime(t.time_seconds)}`}{" "}
+                    · {formatShortDate(t.tested_at)}
                   </p>
                 </div>
-                <button
-                  onClick={() => startTransition(() => deleteTPaceTest(slug, t.id).then(() => {}))}
-                  className="text-[var(--vx-danger)] text-xs"
-                >
-                  ✕
-                </button>
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <p className="text-[#0C1116] font-bold text-sm">{formatTime(t.t_pace_seconds)}</p>
+                    <p className="text-[10px]" style={{ color: overdue ? "var(--vx-danger)" : "var(--vx-slate-300)" }}>
+                      {overdue ? "retest due" : "/100m"}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => startTransition(() => deleteTPaceTest(slug, t.id).then(() => {}))}
+                    className="text-[var(--vx-danger)] text-xs"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
+              {/* The ladder rides on the saved trial: a coach logs the test once and needs these
+                  numbers days later, every time they write a set off that swimmer's pace. */}
+              <PaceLadder tPace={t.t_pace_seconds} />
             </div>
           );
         })}

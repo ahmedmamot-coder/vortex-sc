@@ -12080,4 +12080,76 @@ describe("the t-pace route without the migration run", () => {
   });
 });
 
+/* ------------------------------------------------- the pace ladder, both apps
+   A T-pace is a speed; /100 is only the unit it is quoted in. A coach writing
+   "8 × 150 on the T-pace" needs the 150, and multiplying it out in their head
+   poolside for every rep length is where the errors come from. */
+describe("pace ladder", () => {
+  const { paceLadder, PACE_LADDER } = TPACE_LIB;
+  const ladder = bind("tpaceLadder", { TPACE_LADDER: [...PACE_LADDER] }, ["fmt"]);
+
+  it("both apps ladder the same rep lengths", () => {
+    const proto = sourceBetween("get TPACE_LADDER(){ return [", "]; }")
+      .replace("get TPACE_LADDER(){ return [", "").split(",").map((n) => Number(n.trim()));
+    eq(proto.join(","), [...PACE_LADDER].join(","),
+       "proto.html and src/lib/tpace-tests.ts ladder different distances");
+    eq(proto.join(","), "50,75,100,150,200,300,400");
+  });
+
+  // The screenshot the club sent: Yassmin, 2300 m in the T30, T-pace 1:18.26/100.
+  it("2300 m in a T30 gives the club's own numbers", () => {
+    const t100 = TPACE_LIB.tPaceFromFixedClock("t30", 2300);
+    eq(+t100.toFixed(2), 78.26);
+    const rows = paceLadder(t100);
+    const got = Object.fromEntries(rows.map((r) => [r.metres, r.seconds]));
+    eq(got[50], 39.13);
+    eq(got[75], 58.7);
+    eq(got[100], 78.26, "the 100 has to still be the T-pace itself");
+    eq(got[150], 117.39);
+    eq(got[200], 156.52);
+    eq(got[300], 234.78);
+    eq(got[400], 313.04);
+  });
+
+  it("the 100 is always the T-pace, whatever the pace", () => {
+    for (const t of [78.26, 100, 109.09, 145.5]) {
+      const row = paceLadder(t).find((r) => r.metres === 100);
+      eq(row.seconds, Number(t.toFixed(2)));
+    }
+  });
+
+  it("it scales linearly", () => {
+    const rows = paceLadder(100);
+    eq(rows.find((r) => r.metres === 50).seconds, 50);
+    eq(rows.find((r) => r.metres === 400).seconds, 400);
+  });
+
+  it("no ladder without a pace", () => {
+    for (const v of [0, -1, NaN, null, undefined]) eq(paceLadder(v).length, 0);
+  });
+
+  it("proto formats the same numbers as minutes and seconds", () => {
+    const rows = ladder(78.26);
+    eq(rows.length, 7);
+    eq(rows[0].label, "50m");
+    eq(rows[0].time, "39.13");
+    eq(rows[2].time, "1:18.26", "the 100 reads as the T-pace on the card above it");
+    eq(rows[6].time, "5:13.04");
+  });
+
+  it("the ladder is on the saved trial, not only the form", () => {
+    // A coach logs the test once and needs these numbers days later.
+    const rows = sourceBetween("const tpSelTests=(tpSel ?", "onDelete:");
+    eq(/paces:this\.tpaceLadder\(t\.tpace100\)/.test(rows), true);
+    const card = sourceBetween('<sc-for list="{{ tpSelTests }}"', "</sc-for>");
+    eq(/\{\{ t\.paces \}\}/.test(card), true, "the saved trial card never renders the ladder");
+    eq(/\{\{ p\.label \}\}/.test(card) && /\{\{ p\.time \}\}/.test(card), true);
+  });
+
+  it("and on the live preview as the distance is typed", () => {
+    const form = sourceBetween('<sc-if value="{{ tpFixedPreviewShow }}"', "</sc-if>");
+    eq(/\{\{ tpFixedPreviewPaces \}\}/.test(form), true);
+  });
+});
+
 await report();
