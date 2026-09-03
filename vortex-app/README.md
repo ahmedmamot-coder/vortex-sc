@@ -14,6 +14,11 @@ Built with Next.js (App Router) + Supabase (Postgres, Auth, RLS).
 3. In the Supabase dashboard, open the **SQL Editor** and run, in order:
    - `supabase/migrations/0001_init.sql`
    - `supabase/migrations/0002_swimmer_search.sql`
+   - `supabase/tpace_fixed_clock.sql` — lets a T-pace trial say which test it was,
+     so a T30/T20 (fixed clock, distance measured) is not read back as a 1000/400
+     trial (fixed distance, time measured). Safe to re-run. Until it runs, the
+     1000 m and 400 m trials work as normal and the T30/T20 buttons report that
+     the club has not run it yet.
 4. In **Authentication → Providers → Email**, turn **off** "Confirm email" so
    family registration signs people in immediately (or leave it on and they'll
    confirm via email first — your choice).
