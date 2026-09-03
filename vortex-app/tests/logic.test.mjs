@@ -11657,11 +11657,43 @@ describe("the club's list of what families have asked for", () => {
 /* ================================== a suggestion the family answers, and the entry that follows
    The answer travels on a phone that is not allowed to write the club's entries. */
 describe("a family answering the coach's suggestion", () => {
+  const SQL = readFileSync(new URL("../supabase/family_answer_suggestion.sql", import.meta.url), "utf8");
+
   it("does not try to write the entry from the parent's phone", () => {
     const fn = sourceBetween("reqAccept(id, yes){", "\n  }");
     eq(/if\(yes && !this\._isFamilySession\(\)\)/.test(fn), true,
        "vx_meet_entries is not one of the two keys a parent may write — it would enter them on that phone alone");
     eq(/notify\('coach'/.test(fn), true, "the club is told either way");
+  });
+
+  /* The last path still assembling the club's list on a phone and posting it back. Nothing was
+     lost here — the row exists already and only its status moves — but it is the same mechanism
+     that made a request vanish twice, on the same key. */
+  it("is one call the database applies, not a document this phone sends back", () => {
+    const fn = sourceBetween("reqAccept(id, yes){", "\n  }");
+    eq(/__vxRpc\('vx_answer_suggestion'/.test(fn), true);
+    const rpc = fn.slice(fn.indexOf("if(window.__vxRpc"), fn.indexOf("this.eventRequests=this.eventRequests.map(r=>r.id===id?{...r, status}:r);"));
+    eq(/_saveJSON\('vx_event_requests'/.test(rpc), false,
+       "sending this phone's copy back is the write this removes");
+    eq(/_saveLocalOnly\('vx_event_requests'/.test(rpc), true);
+    eq(/did not reach the club, so nothing has been recorded/.test(fn), true,
+       "a card claiming an answer was recorded over a write that never left is the bug being fixed");
+  });
+
+  it("changes the row in place and tells the club in one transaction", () => {
+    eq(/for update/.test(SQL), true, "the same lock a new request takes");
+    eq(/jsonb_agg\(\s*case when e->>'id' = p_id/.test(SQL), true, "the one row, not the whole list re-sent");
+    eq(/perform public\.vx_state_prepend\('vx_notifications'/.test(SQL), true,
+       "no answer the coach was never told about, and no alert for an answer that did not land");
+  });
+
+  it("only for that family's own child, only a race the club put forward, and only once", () => {
+    eq(/vx_is_my_swimmer\(v_row->>'swId'\) or public\.vx_is_staff\(\)/.test(SQL), true);
+    eq(/errcode = '42501'/.test(SQL), true);
+    eq(/\(v_row->>'status'\) is distinct from 'suggested'/.test(SQL), true,
+       "a request the family raised themselves is not theirs to approve");
+    eq(/'already', true/.test(SQL), true, "a second tap on a stale screen changes nothing and is not an error");
+    eq(/security definer/.test(SQL), true);
   });
 
   it("and the entry is made by the next staff device that looks", () => {

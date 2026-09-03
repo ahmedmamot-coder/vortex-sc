@@ -14852,6 +14852,31 @@ class Component extends DCLogic {
   reqAccept(id, yes){
     const rec=(this.eventRequests||[]).find(r=>r.id===id); if(!rec) return;
     const status = yes ? 'approved' : 'declined';
+    const said = yes ? ('Accepted '+rec.event+' — '+String(rec.swName||'').split(' ')[0]+' is entered ✓')
+                     : ('Turned down '+rec.event+'.');
+    const _say=(msg, ok)=>this.setState({famReqMsg:msg, famReqMsgMeet:rec.meetName, famReqMsgOk:ok!==false});
+    // The database changes the row — see supabase/family_answer_suggestion.sql.
+    //
+    // This was the last path still assembling the club's list on a phone and posting it back: read
+    // all of it, change the one row, send it all back. That read is what lost a request twice, on
+    // this very key. Nothing was lost here, because the row already exists and only its status
+    // moves — but "only delayed" is not a promise worth keeping when the fix is one call.
+    //
+    // The club's notification goes in the same transaction, so there can be no answer the coach
+    // was never told about, and no alert for an answer that did not land.
+    if(window.__vxRpc && this._isFamilySession()){
+      _say('Sending …', true);
+      return window.__vxRpc('vx_answer_suggestion', {p_id:id, p_yes:!!yes})
+        .then(r=>{
+          if(!r || r.__err) return _say('That did not reach the club, so nothing has been recorded — '
+            +'please try again in a moment, or tell the coach directly.', false);
+          // Kept locally WITHOUT pushing: the club already holds the answer, and sending this
+          // phone's copy of the list back is the write this change removes.
+          this.eventRequests=this.eventRequests.map(x=>x.id===id?{...x, status}:x);
+          this._saveLocalOnly('vx_event_requests', this.eventRequests);
+          _say(r.already ? 'That race was already settled.' : said, true);
+        });
+    }
     this.eventRequests=this.eventRequests.map(r=>r.id===id?{...r, status}:r);
     this._saveJSON('vx_event_requests', this.eventRequests);
     // The entry itself is the club's record, and a family device may not write it — vx_meet_entries
@@ -14862,9 +14887,7 @@ class Component extends DCLogic {
     this.notify('coach', yes?'check-circle-2':'x-circle',
       yes?'Suggested race accepted':'Suggested race turned down',
       rec.swName+' — '+rec.event+' at '+rec.meetName+'.');
-    this.setState({famReqMsg: yes ? ('Accepted '+rec.event+' — '+rec.swName.split(' ')[0]+' is entered ✓')
-                                  : ('Turned down '+rec.event+'.'),
-                   famReqMsgMeet:rec.meetName, famReqMsgOk:true});
+    _say(said, true);
   }
   /** Every approved request actually in the meet, made good on a staff device.
    *
