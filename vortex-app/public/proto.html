@@ -8943,6 +8943,12 @@ class Component extends DCLogic {
   _fitnessLocked(){ const a=(this.accounts||[]).find(x=>x.id===this.state.pickedId)||{};
     // Locked to the Fitness Plan tool if their role mentions "fitness" OR the account is Coach Nedhal.
     if(a.id==='ahmed'||a.id==='sameh') return false; // club admins always have full access
+    // Ahmed Abdelwahab is an Assistant Coach as well as a Fitness Coach, and the club opened every
+    // tool to him — so the fitness-only lock does not apply even though his role still carries
+    // "Fitness Coach". Matched by his sign-in email (stable) and by his name, because the account
+    // id comes from the staff table and is not fixed here.
+    const _email=String(a.email||'').trim().toLowerCase(), _name=String(a.label||a.user||'');
+    if(_email==='ahmed.a@vortex.qa' || /abdel\s*wahab/i.test(_name)) return false;
     return /fitness/i.test(a.role||'') || /nedhal/i.test(a.label||'') || /nedhal/i.test(a.user||''); }
   openTool(t, club){ if(this._fitnessLocked() && t!=='fitness') t='fitness';
     // Meet Day is the Meet Entries screen in its live mode. It had no tile of its own, so the
