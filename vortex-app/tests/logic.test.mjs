@@ -5442,6 +5442,30 @@ describe("InBody sheet", () => {
          "'all squads' and 'full access' read as the same thing until one of them says otherwise"));
   });
 
+  // The Tools & AI grid hides every tile but Fitness Plan for a "Fitness Coach" — right for
+  // Coach Nedhal, who only writes dryland. But Ahmed Abdelwahab holds two positions, Assistant
+  // Coach AND Fitness Coach, and the club opened every tool to him. The role string still carries
+  // "Fitness Coach", so without an exemption he was locked to the one tile too.
+  describe("Ahmed Abdelwahab is not fitness-locked", () => {
+    const locked = (a) => bind("_fitnessLocked", { accounts: [a], state: { pickedId: a.id } })();
+
+    it("opens every tool to him even though his role includes Fitness Coach", () => {
+      eq(locked({ id: "st_ahmed.a@vortex.qa", label: "Ahmed Abdelwahab",
+                  role: "Assistant Coach · Fitness Coach", email: "ahmed.a@vortex.qa" }), false);
+    });
+
+    it("recognises him by his sign-in email whatever the account id is", () => {
+      eq(locked({ id: "whatever", label: "A. A.",
+                  role: "Fitness Coach", email: "Ahmed.A@Vortex.qa" }), false,
+         "the staff table assigns the id — the email is the stable identity");
+    });
+
+    it("still locks a fitness-only coach like Coach Nedhal", () => {
+      eq(locked({ id: "nedhal", label: "Coach Nedhal", user: "nedhal",
+                  role: "Fitness Coach", email: "nedhal@vortexswimmingclub.com" }), true);
+    });
+  });
+
   // A white screen and "Can't find variable: _lockSquad" — the whole app, on every device,
   // because a rename left one reference behind. `new Function(src)` parses it happily: an
   // undeclared variable is not a syntax error, it is a runtime one, and the runtime here is a
