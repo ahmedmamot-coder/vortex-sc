@@ -197,6 +197,12 @@ if ('serviceWorker' in navigator) {
   var FAILK = "vx_failed_writes";
   function _failLoad(){ try{ return JSON.parse(localStorage.getItem(FAILK)||"[]")||[]; }catch(e){ return []; } }
   function _failSave(a){ try{ localStorage.setItem(FAILK, JSON.stringify(a.slice(-100))); }catch(e){} }
+  // The last time ANY write actually landed. It is how _failAdd tells "there is no connection"
+  // (nothing lands, so a dropped write keeps trying) apart from "the connection is fine and this
+  // one write will not go" (small writes land, the big roster document does not) — the second is
+  // the only case where a dropped write is set aside rather than retried for ever.
+  window.__vxLastWriteOkTs = 0;
+  function _noteWriteOk(){ try{ window.__vxLastWriteOkTs = Date.now(); }catch(e){} }
   var _lastAuthFix=0;
   // Which failures can a retry ever fix?
   //
@@ -414,12 +420,34 @@ if ('serviceWorker' in navigator) {
       _since = (_was && (_was.since || _was.ts)) || 0;
     }catch(e){}
     // NOTSENT (-1) never left the device and 0 is a connection that dropped. Neither is an
-    // answer, so neither moves the counter.
+    // answer, so as a rule neither moves the counter.
     var _answered = (typeof status === "number" && status > 0);
-    var _tries = _prior + (_answered ? 1 : 0);
+    // The one exception, and the whole of this fix. A dropped connection is normally evidence of
+    // nothing \u2014 the request never arrived, and the fix is to try again \u2014 so a write that keeps
+    // dropping must keep trying, for as long as the outage lasts. But "the outage" is a claim,
+    // and this device can check it: if it has LANDED another write since this one was first
+    // stranded, the database is plainly reachable and there is no outage. This one write is the
+    // problem, not the connection.
+    //
+    // The roster document is the write this happens to. It is the largest single body the app
+    // sends \u2014 a couple of megabytes \u2014 so on a marginal poolside link it is the first to be cut
+    // off while the small writes beside it (a register, a T-pace, a mark) go straight through.
+    // Never counted, it retried behind a red "1 change has not been saved \u00b7 could not reach the
+    // database just now" on every phone in the club, for ever, under a line that was not even
+    // true: the database was being reached. Counted once reachability is proven, it is set aside
+    // like any other write that has had its ten goes \u2014 off the retry path, off the banner, with
+    // the rest of the device's saves freed from behind it. Nothing is lost: the roster also lives
+    // in the per-swimmer vx_roster rows and in localStorage, every recovery path still reads the
+    // document, and any coach's phone on a solid connection carries it back up.
+    var _reachable = !!(window.__vxLastWriteOkTs && _since && window.__vxLastWriteOkTs >= _since);
+    var _countable = _answered || (status === 0 && _reachable);
+    var _tries = _prior + (_countable ? 1 : 0);
     a=a.filter(function(x){ return x && x.sig !== sig; });
-    if(_answered && _tries >= 10){
-      _blockAdd(sig, table, payload, (said||"it could not be sent")+" \u2014 tried "+_tries
+    if(_countable && _tries >= 10){
+      var _setAsideWhy = said || (status === 0
+        ? "this device kept dropping its connection while sending it, though the database was reachable for other saves"
+        : "it could not be sent");
+      _blockAdd(sig, table, payload, _setAsideWhy+" \u2014 tried "+_tries
         +" times and set aside, so the rest of this device's saves are not held up behind it");
       _failSave(a);
       window.__vxLastError = { table:table, status:status, body:String(body||"").slice(0,300), ts:Date.now() };
@@ -1303,7 +1331,7 @@ if ('serviceWorker' in navigator) {
         return fetch(REST, { method:"POST", headers: dyn({"Prefer":"resolution=merge-duplicates,return=minimal"}),
           body: JSON.stringify([{ key:k, value:sendVal, updated_at:new Date(_stamp).toISOString() }]) });
       })
-      .then(function(r){ window.__vxSyncOk = r.ok; if(r.ok) _blockClearTable("club_state");
+      .then(function(r){ window.__vxSyncOk = r.ok; if(r.ok){ _noteWriteOk(); _blockClearTable("club_state"); }
         if(r.ok) return {ok:true};
         if(r.status===401||r.status===403){ _vxQueue(function(){ var cur=null; try{ cur=localStorage.getItem(k); }catch(e){} pushKey(k, cur==null?v:cur); }); }
         return r.text().then(function(t){ try{ console.warn("vx sync HTTP "+r.status+" on "+k+": "+t); }catch(e){}
@@ -1349,7 +1377,7 @@ if ('serviceWorker' in navigator) {
   // behind a 30-second cooldown, and that cooldown is the only thing keeping it finite: a refresh
   // calls __vxSetAuth, __vxSetAuth replays the failed queue, and the queue is made of writes. Do
   // it from inside the write as well and the two call each other until the tab runs out of memory.
-  window.__vxInsert = function(table, rows){ return ready().then(function(){ if(_famDevice() && !_famMayWrite(table)){ return _famRefuse(table); } if(!_haveTok()){ _vxQueue(function(){ window.__vxInsert(table, rows); }); _failAdd("insert", table, rows, NOTSENT, "waiting for the sign-in to land"); return false; } return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":"return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(r.ok) _blockClearTable(table); if(!r.ok){ if(r.status===401||r.status===403){ _vxQueue(function(){ window.__vxInsert(table, rows); }); } r.text().then(function(t){ try{console.warn("vx insert "+table+" HTTP "+r.status+": "+t);}catch(e){} _failAdd("insert", table, rows, r.status, t); }); } return r.ok; }).catch(function(e){ _failAdd("insert", table, rows, 0, "network: "+(e&&e.message)); return false; }); });
+  window.__vxInsert = function(table, rows){ return ready().then(function(){ if(_famDevice() && !_famMayWrite(table)){ return _famRefuse(table); } if(!_haveTok()){ _vxQueue(function(){ window.__vxInsert(table, rows); }); _failAdd("insert", table, rows, NOTSENT, "waiting for the sign-in to land"); return false; } return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":"return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(r.ok){ _noteWriteOk(); _blockClearTable(table); } if(!r.ok){ if(r.status===401||r.status===403){ _vxQueue(function(){ window.__vxInsert(table, rows); }); } r.text().then(function(t){ try{console.warn("vx insert "+table+" HTTP "+r.status+": "+t);}catch(e){} _failAdd("insert", table, rows, r.status, t); }); } return r.ok; }).catch(function(e){ _failAdd("insert", table, rows, 0, "network: "+(e&&e.message)); return false; }); });
   };
   // A read rejected with 401 means the token expired, not that the table is empty. Returning
   // null there is why the roster and attendance came back blank after the app had been sitting
@@ -1413,7 +1441,7 @@ if ('serviceWorker' in navigator) {
   // `opts.ignoreDuplicates` sends a write that may only fill gaps: a row that already exists is
   // left exactly as it is. For a seed — a write whose whole purpose is to populate something
   // empty — that is the difference between doing nothing and replacing what a club already had.
-  window.__vxUpsert = function(table, rows, opts){ return ready().then(function(){ if(_famDevice() && !_famMayWrite(table)){ return _famRefuse(table); } if(!_haveTok()){ _vxQueue(function(){ window.__vxUpsert(table, rows, opts); }); _failAdd("upsert", table, rows, NOTSENT, "waiting for the sign-in to land"); return false; } return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":((opts&&opts.ignoreDuplicates)?"resolution=ignore-duplicates":"resolution=merge-duplicates")+",return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(r.ok){ window.__vxLastWriteErr=null; _blockClearTable(table); return true; } if(r.status===401||r.status===403){ _vxQueue(function(){ window.__vxUpsert(table, rows, opts); }); } return r.text().then(function(t){ try{console.warn("vx upsert "+table+" HTTP "+r.status+": "+t);}catch(e){} _failAdd("upsert", table, rows, r.status, t); var said=""; try{ said=(JSON.parse(t)||{}).message||""; }catch(e){} window.__vxLastWriteErr={table:table, status:r.status, said:said||String(t||"").slice(0,200)}; return false; }); }).catch(function(e){ _failAdd("upsert", table, rows, 0, "network: "+(e&&e.message)); window.__vxLastWriteErr={table:table, status:0, said:"it could not be sent from this device"+((e&&e.message)?(" ("+e.message+")"):"")}; return false; }); });
+  window.__vxUpsert = function(table, rows, opts){ return ready().then(function(){ if(_famDevice() && !_famMayWrite(table)){ return _famRefuse(table); } if(!_haveTok()){ _vxQueue(function(){ window.__vxUpsert(table, rows, opts); }); _failAdd("upsert", table, rows, NOTSENT, "waiting for the sign-in to land"); return false; } return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":((opts&&opts.ignoreDuplicates)?"resolution=ignore-duplicates":"resolution=merge-duplicates")+",return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(r.ok){ _noteWriteOk(); window.__vxLastWriteErr=null; _blockClearTable(table); return true; } if(r.status===401||r.status===403){ _vxQueue(function(){ window.__vxUpsert(table, rows, opts); }); } return r.text().then(function(t){ try{console.warn("vx upsert "+table+" HTTP "+r.status+": "+t);}catch(e){} _failAdd("upsert", table, rows, r.status, t); var said=""; try{ said=(JSON.parse(t)||{}).message||""; }catch(e){} window.__vxLastWriteErr={table:table, status:r.status, said:said||String(t||"").slice(0,200)}; return false; }); }).catch(function(e){ _failAdd("upsert", table, rows, 0, "network: "+(e&&e.message)); window.__vxLastWriteErr={table:table, status:0, said:"it could not be sent from this device"+((e&&e.message)?(" ("+e.message+")"):"")}; return false; }); });
   };
   // Supabase Realtime (websocket) — best-effort live updates. On any change to `table`, calls
   // onChange(). Auto-reconnects, heartbeats, and re-auths on token refresh. If realtime isn't
@@ -22358,6 +22386,17 @@ class Component extends DCLogic {
         }
         const fam=b.filter(x=>x&&x.table==='family_accounts').length;
         if(fam===b.length && fam>0) return 'They are family accounts that point at logins which no longer exist — the restore changed which logins there are. Nothing is lost: they are still listed in the app, and they will save themselves the next time those people sign in.';
+        // A change this phone could not get onto the wire — not a row the database refused. The
+        // roster document is the largest single thing the app sends, so on a weak connection it is
+        // the first to be dropped while the small writes beside it go through. Left on the retry
+        // queue it sat on every phone as "not saved" under a line that was not even true, because
+        // the database was being reached. It is safe on this device, every recovery path still
+        // reads it, and any coach's phone on a solid connection carries it up — so there is nothing
+        // to send to whoever looks after the database, and nothing to do.
+        if(/kept dropping its connection/i.test(said))
+          return 'This phone could not get one change onto the wire — almost always the full roster, which is '
+            +'the largest thing the app sends and so the first to be dropped on a weak connection. It is safe on '
+            +'this device and nothing is lost; any coach’s phone with a solid connection carries it up. You can clear this.';
         return 'The database is refusing the rows themselves, so retrying cannot help. Show this to whoever looks after the database: '+said;
       })(),
       onBlockedDismiss: ()=>{ try{ if(window.__vxClearBlocked) window.__vxClearBlocked(); }catch(e){} this.setState({saveBlocked:[], saveBlockedHidden:true}); },
