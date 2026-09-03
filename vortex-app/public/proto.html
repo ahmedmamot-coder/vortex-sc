@@ -5951,6 +5951,8 @@ if ('serviceWorker' in navigator) {
                         </sc-for>
                       </div>
 
+                      <input value="{{ reqQuery }}" oninput="{{ onReqQuery }}" placeholder="Search swimmer, squad or race…" style="width:100%;background:#fff;border:1px solid #E5E9F0;border-radius:10px;padding:9px 12px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none;box-sizing:border-box">
+
                       <sc-if value="{{ reqMsgShow }}" hint-placeholder-val="{{ false }}">
                         <p style="margin:0 2px;font-size:12px;font-weight:600;color:{{ reqMsgColor }}">{{ reqMsg }}</p>
                       </sc-if>
@@ -5962,52 +5964,94 @@ if ('serviceWorker' in navigator) {
                       <sc-for list="{{ reqMeetGroups }}" as="g" hint-placeholder-count="2">
                         <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
                           <p style="margin:0;font-size:13.5px;font-weight:800;color:#0C1116">{{ g.meetName }}</p>
-                          <p style="margin:2px 0 10px;font-size:11.5px;color:#7A8296">{{ g.meetSub }}</p>
+                          <p style="margin:2px 0 2px;font-size:11.5px;color:#7A8296">{{ g.meetSub }}</p>
+                          <p style="margin:0 0 10px;font-size:11px;font-weight:700;color:#9AA2B4">{{ g.headLine }}</p>
 
-                          <div style="display:flex;flex-direction:column;gap:7px">
-                            <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="2">
-                              <div style="background:#F8FAFC;border:1px solid #EEF1F5;border-radius:12px;padding:10px 11px">
-                                <div style="display:flex;align-items:center;gap:8px">
-                                  <button onclick="{{ r.onOpenSwimmer }}" style="flex:1;min-width:0;text-align:left;background:none;border:none;padding:0;font-family:inherit;cursor:pointer">
-                                    <span style="display:block;font-size:13px;font-weight:700;color:#0C1116">{{ r.swName }} — {{ r.event }}</span>
-                                    <span style="display:block;font-size:11px;color:#7A8296;margin-top:1px">{{ r.whenLine }}</span>
+                          <!-- One line per swimmer. Wide content scrolls inside its own box rather
+                               than pushing the page sideways on a phone. -->
+                          <div class="vx-scroll" style="overflow-x:auto">
+                            <div style="min-width:560px">
+                              <div style="display:grid;grid-template-columns:1.4fr .9fr 2.2fr auto;gap:10px;padding:0 10px 7px;border-bottom:1px solid #EEF1F5">
+                                <span style="font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#9AA2B4">Swimmer</span>
+                                <span style="font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#9AA2B4">Squad</span>
+                                <span style="font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#9AA2B4">Races asked for</span>
+                                <span style="font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#9AA2B4;text-align:right">Waiting</span>
+                              </div>
+
+                              <sc-for list="{{ g.swRows }}" as="sw" hint-placeholder-count="3">
+                                <div style="border-bottom:1px solid #F4F6F8">
+                                  <button onclick="{{ sw.onToggle }}" style="width:100%;text-align:left;background:none;border:none;font-family:inherit;cursor:pointer;display:grid;grid-template-columns:1.4fr .9fr 2.2fr auto;gap:10px;align-items:center;padding:10px">
+                                    <span style="display:flex;align-items:center;gap:8px;min-width:0">
+                                      <span style="width:28px;height:28px;flex:none;border-radius:9px;background:#EAF1FE;color:#067EEA;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px">{{ sw.initials }}</span>
+                                      <span style="font-size:13px;font-weight:700;color:#0C1116;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ sw.swName }}</span>
+                                    </span>
+                                    <span style="font-size:11.5px;color:#7A8296;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ sw.squadName }}</span>
+                                    <span style="display:flex;flex-wrap:wrap;gap:4px">
+                                      <sc-for list="{{ sw.raceChips }}" as="c" hint-placeholder-count="3">
+                                        <span style="background:{{ c.bg }};color:{{ c.fg }};border-radius:999px;padding:3px 8px;font-size:10.5px;font-weight:700">{{ c.label }}</span>
+                                      </sc-for>
+                                    </span>
+                                    <span style="display:flex;align-items:center;gap:7px;justify-content:flex-end">
+                                      <sc-if value="{{ sw.waitingShow }}" hint-placeholder-val="{{ true }}">
+                                        <span style="background:#FCEFD6;color:#9A6206;border-radius:999px;padding:3px 9px;font-size:10.5px;font-weight:800;white-space:nowrap">{{ sw.waitingLine }}</span>
+                                      </sc-if>
+                                      <i data-vx-icon="{{ sw.openIcon }}" style="width:15px;height:15px;color:#9AA2B4"></i>
+                                    </span>
                                   </button>
-                                  <span style="flex:none;background:{{ r.markBg }};color:{{ r.markFg }};border-radius:999px;padding:4px 9px;font-size:10.5px;font-weight:700">{{ r.markLabel }}</span>
-                                </div>
-                                <sc-if value="{{ r.canDecide }}" hint-placeholder-val="{{ true }}">
-                                  <div style="display:flex;gap:7px;margin-top:9px">
-                                    <button onclick="{{ r.onApprove }}" style="flex:1;background:#0C7A4F;color:#fff;border:none;border-radius:9px;padding:8px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">Approve &amp; enter</button>
-                                    <button onclick="{{ r.onDecline }}" style="flex:none;background:#fff;color:#B42318;border:1px solid #F1D3D3;border-radius:9px;padding:8px 12px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">Decline</button>
-                                  </div>
-                                </sc-if>
-                                <sc-if value="{{ r.waitingFamily }}" hint-placeholder-val="{{ false }}">
-                                  <p style="margin:8px 0 0;font-size:11px;color:#1B5FB0;line-height:1.4">You suggested this one — it enters them as soon as the family accepts it in their app.</p>
-                                </sc-if>
-                              </div>
-                            </sc-for>
-                          </div>
 
-                          <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
-                            <sc-for list="{{ g.suggestRows }}" as="s" hint-placeholder-count="1">
-                              <div style="border-top:1px solid #EEF1F5;padding-top:9px">
-                                <button onclick="{{ s.onToggle }}" style="background:none;border:none;padding:0;color:var(--vx-blue);font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">{{ s.toggleLabel }} — {{ s.swName }}</button>
-                                <sc-if value="{{ s.open }}" hint-placeholder-val="{{ false }}">
-                                  <div style="margin-top:8px">
-                                    <sc-if value="{{ s.hasFree }}" hint-placeholder-val="{{ true }}">
-                                      <div style="display:flex;flex-wrap:wrap;gap:6px">
-                                        <sc-for list="{{ s.chips }}" as="c" hint-placeholder-count="4">
-                                          <button onclick="{{ c.onClick }}" style="background:#fff;color:#3A4152;border:1px solid #DCE7F7;border-radius:999px;padding:6px 11px;font-family:inherit;font-weight:600;font-size:11.5px;cursor:pointer">{{ c.label }}</button>
-                                        </sc-for>
+                                  <sc-if value="{{ sw.open }}" hint-placeholder-val="{{ false }}">
+                                    <div style="padding:2px 10px 12px;display:flex;flex-direction:column;gap:7px">
+                                      <div style="display:flex;gap:8px;flex-wrap:wrap">
+                                        <button onclick="{{ sw.onOpenSwimmer }}" style="background:none;border:none;padding:0;color:var(--vx-blue);font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Open {{ sw.swName }}’s profile</button>
+                                        <sc-if value="{{ sw.approveAllShow }}" hint-placeholder-val="{{ false }}">
+                                          <button onclick="{{ sw.onApproveAll }}" style="background:#0C7A4F;color:#fff;border:none;border-radius:9px;padding:6px 12px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">{{ sw.approveAllLabel }}</button>
+                                        </sc-if>
                                       </div>
-                                      <p style="margin:7px 0 0;font-size:10.5px;color:#9AA2B4;line-height:1.4">Tapping a race sends it to the family to accept. It does not enter them on its own.</p>
-                                    </sc-if>
-                                    <sc-if value="{{ s.noneShow }}" hint-placeholder-val="{{ false }}">
-                                      <p style="margin:0;font-size:11px;color:#9AA2B4;line-height:1.4">{{ s.noneLine }}</p>
-                                    </sc-if>
-                                  </div>
-                                </sc-if>
-                              </div>
-                            </sc-for>
+
+                                      <sc-for list="{{ sw.raceRows }}" as="r" hint-placeholder-count="2">
+                                        <div style="background:#F8FAFC;border:1px solid #EEF1F5;border-radius:12px;padding:9px 11px">
+                                          <div style="display:flex;align-items:center;gap:8px">
+                                            <span style="flex:1;min-width:0">
+                                              <span style="display:block;font-size:12.5px;font-weight:700;color:#0C1116">{{ r.event }}</span>
+                                              <span style="display:block;font-size:10.5px;color:#7A8296;margin-top:1px">{{ r.whenLine }}</span>
+                                            </span>
+                                            <span style="flex:none;background:{{ r.markBg }};color:{{ r.markFg }};border-radius:999px;padding:4px 9px;font-size:10.5px;font-weight:700">{{ r.markLabel }}</span>
+                                          </div>
+                                          <sc-if value="{{ r.canDecide }}" hint-placeholder-val="{{ true }}">
+                                            <div style="display:flex;gap:7px;margin-top:8px">
+                                              <button onclick="{{ r.onApprove }}" style="flex:1;background:#0C7A4F;color:#fff;border:none;border-radius:9px;padding:8px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">Approve &amp; enter</button>
+                                              <button onclick="{{ r.onDecline }}" style="flex:none;background:#fff;color:#B42318;border:1px solid #F1D3D3;border-radius:9px;padding:8px 12px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">Decline</button>
+                                            </div>
+                                          </sc-if>
+                                          <sc-if value="{{ r.waitingFamily }}" hint-placeholder-val="{{ false }}">
+                                            <p style="margin:7px 0 0;font-size:10.5px;color:#1B5FB0;line-height:1.4">You suggested this one — it enters them as soon as the family accepts it in their app.</p>
+                                          </sc-if>
+                                        </div>
+                                      </sc-for>
+
+                                      <div style="border-top:1px solid #EEF1F5;padding-top:8px">
+                                        <button onclick="{{ sw.onSuggestToggle }}" style="background:none;border:none;padding:0;color:var(--vx-blue);font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">{{ sw.suggestLabel }}</button>
+                                        <sc-if value="{{ sw.suggestOpen }}" hint-placeholder-val="{{ false }}">
+                                          <div style="margin-top:8px">
+                                            <sc-if value="{{ sw.hasFree }}" hint-placeholder-val="{{ true }}">
+                                              <div style="display:flex;flex-wrap:wrap;gap:6px">
+                                                <sc-for list="{{ sw.chips }}" as="c" hint-placeholder-count="4">
+                                                  <button onclick="{{ c.onClick }}" style="background:#fff;color:#3A4152;border:1px solid #DCE7F7;border-radius:999px;padding:6px 11px;font-family:inherit;font-weight:600;font-size:11.5px;cursor:pointer">{{ c.label }}</button>
+                                                </sc-for>
+                                              </div>
+                                              <p style="margin:7px 0 0;font-size:10.5px;color:#9AA2B4;line-height:1.4">Tapping a race sends it to the family to accept. It does not enter them on its own.</p>
+                                            </sc-if>
+                                            <sc-if value="{{ sw.noneShow }}" hint-placeholder-val="{{ false }}">
+                                              <p style="margin:0;font-size:11px;color:#9AA2B4;line-height:1.4">{{ sw.noneLine }}</p>
+                                            </sc-if>
+                                          </div>
+                                        </sc-if>
+                                      </div>
+                                    </div>
+                                  </sc-if>
+                                </div>
+                              </sc-for>
+                            </div>
                           </div>
                         </div>
                       </sc-for>
@@ -19360,53 +19404,104 @@ class Component extends DCLogic {
       .sort((a,b)=>(b.ts||0)-(a.ts||0));
     const _reqMeetOrder = [];
     _reqShown.forEach(r=>{ if(_reqMeetOrder.indexOf(r.meetName)<0) _reqMeetOrder.push(r.meetName); });
+    // One line per swimmer, not one card per race.
+    //
+    // A card each was fine for three requests from one family. The club has 317 swimmers and a
+    // meet programme runs to twenty races, so at a full entry deadline that is a screen nobody
+    // scrolls to the end of — and the question a coach actually has is "who has asked for what",
+    // which is a swimmer's question, not a race's.
+    const reqQuery = (S.reqQuery||'').trim().toLowerCase();
     const reqMeetGroups = _reqMeetOrder.map(meetName=>{
       const rows = _reqShown.filter(r=>r.meetName===meetName);
       const meet = _reqMeetByName[meetName] || null;
       const progEvents = meet ? this._meetEvents(meet) : [];
-      // Who this meet's requests are about, so "suggest another race" can be offered per swimmer
-      // rather than per row — the coach is adding races for a child, not for a request.
       const swIds = []; rows.forEach(r=>{ if(swIds.indexOf(r.swId)<0) swIds.push(r.swId); });
-      const suggestFor = (S.reqSuggestFor===meetName+'::'+(S.reqSuggestSw||'')) ? (S.reqSuggestSw||'') : '';
+
+      const _raceRow = (r)=>{
+        const mk = REQ_MARK[_reqStatus(r)] || REQ_MARK.pending;
+        return {
+          event:r.event, swName:r.swName||'Swimmer',
+          markLabel:mk[0], markBg:mk[1], markFg:mk[2],
+          whenLine: (r.by==='coach'?'Suggested by the club':'Asked by the family')
+                    + (r.requestedAt?(' · '+this._fmtDMY(r.requestedAt, true)):''),
+          canDecide: _reqStatus(r)==='pending',
+          waitingFamily: _reqStatus(r)==='suggested',
+          onApprove:()=>{ this.reqDecide(r.id,'approved');
+            this.setState({reqMsg:'Approved — '+(r.swName||'the swimmer')+' is entered for '+r.event+'.', reqMsgOk:true}); },
+          onDecline:()=>{ this.reqDecide(r.id,'declined');
+            this.setState({reqMsg:'Declined '+r.event+' for '+(r.swName||'the swimmer')+'.', reqMsgOk:true}); },
+        };
+      };
+
+      const swRows = swIds.map(swId=>{
+        const mine = rows.filter(r=>r.swId===swId);
+        const swName = (mine[0]||{}).swName || 'Swimmer';
+        const sw = _reqFlat.find(s=>s.id===swId) || null;
+        const waiting = mine.filter(r=>_reqStatus(r)==='pending');
+        const openKey = meetName+'::'+swId;
+        const isOpen = S.reqOpenSw===openKey;
+        const suggestOn = S.reqSuggestFor===openKey;
+        const taken={}; (this.eventRequests||[]).forEach(r=>{ if(r && r.swId===swId && r.meetName===meetName && r.event) taken[r.event]=true; });
+        const free = progEvents.filter(ev=>ev && !taken[ev]);
+        return {
+          swId, swName,
+          squadName: sw ? sw.squadName : '—',
+          initials: sw ? sw.initials : (swName.slice(0,1).toUpperCase()),
+          // Every race this child has asked for at this meet, on one line, each carrying its own
+          // answer — which is the whole row a coach reads before deciding anything.
+          raceChips: mine.map(r=>{ const mk=REQ_MARK[_reqStatus(r)]||REQ_MARK.pending;
+            return { label:r.event, bg:mk[1], fg:mk[2] }; }),
+          raceCount: mine.length,
+          countLine: mine.length + (mine.length===1?' race':' races'),
+          waitingCount: waiting.length,
+          waitingShow: waiting.length>0,
+          waitingLine: waiting.length + ' waiting',
+          open:isOpen,
+          onToggle:()=>this.setState({reqOpenSw: isOpen?'':openKey, reqSuggestFor:'', reqMsg:''}),
+          openIcon: isOpen ? 'chevron-up' : 'chevron-down',
+          // The common case at an entry deadline: everything this child asked for, entered.
+          approveAllShow: waiting.length>1,
+          approveAllLabel: 'Approve all '+waiting.length,
+          onApproveAll:()=>{ waiting.forEach(r=>this.reqDecide(r.id,'approved'));
+            this.setState({reqMsg:'Approved '+waiting.length+' race'+(waiting.length===1?'':'s')+' for '+swName+'.', reqMsgOk:true}); },
+          onOpenSwimmer:()=>{ if(!sw) return;
+            this.setState({tool:null, view:'squad', squadId:sw.squadId, tab:'group', swimmerId:sw.id}); this.openSwimmer(sw.id); },
+          raceRows: mine.map(_raceRow),
+          // ---- suggest another race, for this child ----
+          suggestOpen: suggestOn,
+          suggestLabel: suggestOn ? 'Close' : 'Suggest another race',
+          onSuggestToggle:()=>this.setState({reqSuggestFor: suggestOn?'':openKey, reqMsg:''}),
+          hasFree: free.length>0,
+          noneShow: free.length===0,
+          noneLine: progEvents.length
+            ? (swName.split(' ')[0]+' is already on the list for every race in this meet’s programme.')
+            : 'The club has not posted this meet’s event programme, so there is nothing to suggest from yet.',
+          chips: free.map(ev=>({ label:ev, onClick:()=>this.reqSuggest(swId, swName, meetName, ev) })),
+        };
+      })
+      // Searching by swimmer, race or squad — the three things a coach knows when they come
+      // looking for one entry among three hundred.
+      .filter(sw=>!reqQuery || sw.swName.toLowerCase().includes(reqQuery)
+                            || String(sw.squadName||'').toLowerCase().includes(reqQuery)
+                            || sw.raceChips.some(c=>c.label.toLowerCase().includes(reqQuery)))
+      // Whoever is still waiting on the club, first.
+      .sort((a,b)=> (b.waitingCount-a.waitingCount) || a.swName.localeCompare(b.swName));
+
+      // Counted from the rows actually on screen, not from the meet's total: a header reading
+      // "1 swimmer · 9 races" over three chips is the search quietly disagreeing with itself.
+      const shownRaces = swRows.reduce((n,sw)=>n+sw.raceCount, 0);
+      const shownWaiting = swRows.reduce((n,sw)=>n+sw.waitingCount, 0);
       return {
         meetName,
         meetSub: (meet && meet.date) ? (meet.date + (meet.location?(' · '+meet.location):'')) : 'Meet not in the calendar',
         count: rows.length,
-        rows: rows.map(r=>{
-          const mk = REQ_MARK[_reqStatus(r)] || REQ_MARK.pending;
-          const open = _reqStatus(r)==='pending';
-          const waitingFamily = _reqStatus(r)==='suggested';
-          return {
-            swName:r.swName||'Swimmer', event:r.event,
-            markLabel:mk[0], markBg:mk[1], markFg:mk[2],
-            whenLine: (r.by==='coach'?'Suggested by the club':'Asked by the family')
-                      + (r.requestedAt?(' · '+this._fmtDMY(r.requestedAt, true)):''),
-            canDecide: open, waitingFamily,
-            onApprove:()=>{ const sw=_reqFlat.find(s=>s.id===r.swId); this.reqDecide(r.id,'approved');
-              if(sw) this.setState({reqMsg:'Approved — '+(r.swName||'the swimmer')+' is entered for '+r.event+'.', reqMsgOk:true}); },
-            onDecline:()=>{ this.reqDecide(r.id,'declined'); this.setState({reqMsg:'Declined '+r.event+' for '+(r.swName||'the swimmer')+'.', reqMsgOk:true}); },
-            onOpenSwimmer:()=>{ const sw=_reqFlat.find(s=>s.id===r.swId); if(!sw) return;
-              this.setState({tool:null, view:'squad', squadId:sw.squadId, tab:'group', swimmerId:sw.id}); this.openSwimmer(sw.id); },
-          };
-        }),
-        // ---- suggest another race, per swimmer ----
-        suggestRows: swIds.map(swId=>{
-          const swName=(rows.find(r=>r.swId===swId)||{}).swName||'Swimmer';
-          const taken={}; (this.eventRequests||[]).forEach(r=>{ if(r && r.swId===swId && r.meetName===meetName && r.event) taken[r.event]=true; });
-          const free=progEvents.filter(ev=>ev && !taken[ev]);
-          const on = suggestFor===swId;
-          return { swName, open:on,
-            toggleLabel: on ? 'Close' : 'Suggest another race',
-            onToggle:()=>this.setState({reqSuggestFor: on?'':(meetName+'::'+swId), reqSuggestSw: on?'':swId, reqMsg:''}),
-            hasFree: free.length>0,
-            noneShow: free.length===0,
-            noneLine: progEvents.length
-              ? (swName.split(' ')[0]+' is already on the list for every race in this meet’s programme.')
-              : 'The club has not posted this meet’s event programme, so there is nothing to suggest from yet.',
-            chips: free.map(ev=>({ label:ev, onClick:()=>this.reqSuggest(swId, swName, meetName, ev) })) };
-        }),
+        headLine: swRows.length + (swRows.length===1?' swimmer · ':' swimmers · ')
+                  + shownRaces + (shownRaces===1?' race':' races')
+                  + (shownWaiting?(' · '+shownWaiting+' waiting'):''),
+        hasRows: swRows.length>0,
+        swRows,
       };
-    });
+    }).filter(g=>g.hasRows);
     const reqEmpty = reqMeetGroups.length===0;
     const reqEmptyLine = reqCounts.all===0
       ? 'No family has asked for a race yet. When one does it appears here, and the club gets a notification.'
@@ -22636,6 +22731,7 @@ class Component extends DCLogic {
       // ---- event requests ----
       toolRequests:S.tool==='requests',
       reqTabs, reqMeetGroups, reqEmpty, reqEmptyLine,
+      reqQuery:S.reqQuery||'', onReqQuery:(e)=>this.setState({reqQuery:e.target.value}),
       reqOpenCount:reqCounts.open,
       reqHeadLine: reqCounts.open===1 ? '1 waiting' : (reqCounts.open+' waiting'),
       reqMsg:S.reqMsg||'', reqMsgShow:!!S.reqMsg,

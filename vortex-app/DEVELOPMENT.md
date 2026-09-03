@@ -314,6 +314,13 @@ A parent picks races on a meet's own card and taps Request. The database appends
 via `vx_request_events(...)`, and the club sees them in **Tools & AI → Meet Requests** — every meet
 at once, with a count on the tile.
 
+That screen is **one row per swimmer**, not one card per race: name, squad, every race they have
+asked for with its own answer on the chip, and how many are still waiting. Opening a row shows the
+races individually with Approve / Decline, an *Approve all* when more than one is waiting, and the
+suggest control. There is a search across swimmer, squad and race, and whoever is still waiting on
+the club sorts first. A card per race was readable for one family; at an entry deadline with 317
+swimmers and a twenty-race programme it is a screen nobody reaches the end of.
+
 ### Why the database writes it, and not the phone
 
 `vx_event_requests` is a whole JSON document in `club_state`, and a parent's phone holds only its
