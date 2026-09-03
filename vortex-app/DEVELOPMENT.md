@@ -306,6 +306,48 @@ A write the database refuses now shows in the app as *"refused — this account 
 make that change"* and is **not** retried, so a policy that is too tight shows up as a clear
 message rather than a red banner that never clears.
 
+## The races a family asks for, and where the club reads them
+
+A parent picks races on a meet's own card and taps Request. Each race becomes one row in
+`club_state.vx_event_requests`, and the club sees them in **Tools & AI → Meet Requests** — every
+meet at once, with a count on the tile.
+
+Before that screen existed the only view of a request was Meets → *that one meet* → Entries,
+filtered to that meet and to `pending`. A request for a meet nobody happened to open was a request
+nobody could see, while the parent had been told *"Sent to the coach ✓"*.
+
+**The list is not a document one device owns.** This is the thing to keep in mind before changing
+anything here. Every other synced key is written whole, last writer wins, which is right for the
+squads or the fee plan — one person edits those at a time. `vx_event_requests` and
+`vx_notifications` are different: a parent's phone adds to them and so does every coach. A staff
+device that has been open since before a parent tapped Request holds a list without that request in
+it, and **every save sends every key**, so the next save of anything at all put the old list back.
+
+That is not hypothetical. On 3 September 2026 every `club_state` key was rewritten inside three
+seconds — `vx_event_requests` at 10:06:00, `vx_notifications` at 10:06:00.7 — and a 50 Breast
+request went with them: the row, and the inbox line that was the only sign it had ever happened.
+
+So both keys are merged on the way out, by two rules:
+
+| device | rule | why |
+|---|---|---|
+| a parent's phone | may **add** a row, and may answer a `suggested` row for their own child — nothing else | their copy is their own slice, not the club's list |
+| a coach's phone | keeps any row the database holds that it has not seen; its own version wins for rows it does have | approving and declining has to stick |
+
+### Both directions
+
+A coach can also put a race **forward**: `Suggest another race` on a request writes the same row
+with `status:'suggested'`, and the family sees it on that meet's card with *Yes, enter them* /
+*No thanks*. A suggestion is never an entry on its own — a swimmer in a race their parents never
+agreed to is what this panel exists to prevent, and the coach suggesting it does not change that.
+
+The entry itself is always written by a staff device. `vx_meet_entries` is not one of the two keys
+a parent may write, so a family accepting a suggestion records the answer and nothing else;
+`_reqEnterApproved()` runs on every staff pull and on open, and enters any approved request that
+has no entry yet. `entryAddOne` refuses to add the same swim twice, so it is safe to run always.
+
+No SQL for any of this — `security_4_roles.sql` already lets a family write those two keys.
+
 ## Memberships and meet entries live in the database, one row each
 
 **Run `supabase/memberships_and_entries.sql`.** Until it exists both keep working exactly as

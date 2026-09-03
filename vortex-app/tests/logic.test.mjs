@@ -11320,12 +11320,44 @@ describe("a parent's phone cannot empty the club's shared lists", () => {
     eq(out.length, 1, "there is nothing there to lose");
   });
 
-  it("only on a family device, and only for those two keys", () => {
+  // This test used to assert the opposite — that the merge was for family devices only, because
+  // "staff pull both keys in full, so last-write-wins is right for them". That was wrong, and it
+  // is the belief that lost a request. Pulling in full is not the same as pulling recently: a
+  // staff device holds the list as it was when it last pulled, and every save sends every key. On
+  // 3 September every club_state key was rewritten inside three seconds and a parent's 50 Breast
+  // request went with them — the row, and the inbox line that was the only sign it had happened.
+  //
+  // So both devices merge these two keys now, by different rules: a family may add a row (and
+  // answer a suggestion about their own child), staff may add and change but never silently drop
+  // a row they have not heard about.
+  it("neither device replaces these two lists wholesale", () => {
     const route = sourceBetween("function _mergedForSend(k, v){", "\n  function pushKey");
-    eq(/_famDevice\(\) && ADD_ONLY_KEYS\.indexOf\(k\)>=0/.test(route), true,
-       "staff pull both keys in full, so last-write-wins is right for them and must not change");
+    eq(/ADD_ONLY_KEYS\.indexOf\(k\)>=0/.test(route), true, "both keys still route through a merge");
+    eq(/_famDevice\(\) \? _addOnlyMergedWith\(k, v\) : _rowListMergedWith\(k, v\)/.test(route), true,
+       "a family adds; staff merge by row — nobody sends a whole document over these two");
     eq(/var ADD_ONLY_KEYS = \["vx_event_requests", "vx_notifications"\]/.test(SOURCE), true,
        "the same two keys security_4_roles.sql lets a parent write");
+  });
+
+  // The staff half of that. A coach's phone that has not pulled since a parent tapped Request must
+  // not put its older copy back — but it must still be able to approve, which means its version of
+  // a row it does have has to win.
+  itAsync("a coach's save keeps a request that phone had never seen", async () => {
+    const clubHas = [{ id: "r_parent", event: "50 Breast", status: "pending" },
+                     { id: "r_old", event: "50 Free", status: "approved" }];
+    const staffHas = [{ id: "r_old", event: "50 Free", status: "declined" }];
+    const src = sourceBetween("function _rowListMergedWith(k, v){", "\n  function _mergedForSend");
+    const out = JSON.parse(await runInSandbox(
+      src + "\nreturn _rowListMergedWith('vx_event_requests', JSON.stringify(MINE));",
+      { REST: "r", dyn: () => ({}),
+        fetch: () => Promise.resolve({ ok: true, json: () => Promise.resolve([{ value: clubHas }]) }),
+        MINE: staffHas,
+        _byNewest: (l) => l,
+        console: { info: () => {} } }));
+    const ids = out.map((r) => r.id).sort();
+    eq(ids.join(","), "r_old,r_parent", "the request this device never saw survives the save");
+    eq(out.find((r) => r.id === "r_old").status, "declined",
+       "and the decision this device did make still wins for the row it holds");
   });
 
   // The other half of the same count. A family pulls its own slice, nine keys of thirty-six, so
@@ -11481,6 +11513,81 @@ describe("the races a parent chooses", () => {
     const fn = sourceBetween("_famMeetRequest(meet, sw, meetEvents, info, deadlineIso, today){", "\n  }");
     eq(/EVENT_CATALOG/.test(fn), false,
        "asking for a race that is not being swum is a request the coach can only decline");
+  });
+});
+
+/* ============================================ where the club reads those requests
+   A parent tapped Request, was told "Sent to the coach ✓", and the only place that
+   could ever have shown it was Meets → that one meet → Entries, filtered to that meet
+   and to pending. A request for a meet nobody opened was a request nobody saw. */
+describe("the club's list of what families have asked for", () => {
+  it("is a screen of its own, reachable from the tools grid", () => {
+    eq(/\{id:'requests', icon:'inbox', title:'Meet Requests'/.test(SOURCE), true,
+       "buried three levels inside one meet is the same as absent");
+    eq(/toolRequests:S\.tool==='requests'/.test(SOURCE), true);
+  });
+
+  it("carries a count, because an unopened screen is the whole of the problem", () => {
+    const tiles = sourceBetween("const _openReqCount=", "const toolTiles=(_fitOnly");
+    eq(/r\.status==='pending'/.test(tiles), true, "only what is actually waiting on the club");
+    eq(/badgeShow: t\.id==='requests' && _openReqCount>0/.test(SOURCE), true);
+  });
+
+  it("spans every meet, not the one that happens to be open", () => {
+    const blk = sourceBetween("const reqFilter = S.reqFilter", "const reqEmpty = reqMeetGroups.length===0;");
+    eq(/r\.meetName===entryMeetName/.test(blk), false, "that filter is what hid the request");
+    eq(/_reqMeetOrder\.indexOf\(r\.meetName\)<0/.test(blk), true, "grouped by meet, all of them");
+    // Decided requests do not vanish: "did the coach ever see it?" is the question this answers.
+    eq(/reqTabs = \[\['open','Waiting'\],\['approved','Entered'\],\['declined','Declined'\],\['all','All'\]\]/.test(blk), true);
+  });
+
+  // The coach's half of the conversation. Approving was the only thing they could say back.
+  it("lets the coach put a race forward, without entering the child on their own", () => {
+    const fn = sourceBetween("reqSuggest(swId, swName, meetName, event){", "\n  }");
+    eq(/status:'suggested'/.test(fn), true);
+    eq(/entryAddOne/.test(fn), false,
+       "a swimmer in a race their parents never agreed to is what the request panel exists to prevent");
+    eq(/notify\('family_sw:'\+swId/.test(fn), true, "and the family has to be told it is waiting on them");
+    eq(/const clash=/.test(fn), true, "never a second row for a race already on the list");
+  });
+
+  it("only offers races that are in the meet's own programme", () => {
+    const blk = sourceBetween("suggestRows: swIds.map(swId=>{", "const reqEmpty");
+    eq(/progEvents\.filter\(ev=>ev && !taken\[ev\]\)/.test(blk), true,
+       "and never one this child is already down for");
+    eq(/has not posted this meet’s event programme/.test(blk), true);
+  });
+});
+
+/* ================================== a suggestion the family answers, and the entry that follows
+   The answer travels on a phone that is not allowed to write the club's entries. */
+describe("a family answering the coach's suggestion", () => {
+  it("does not try to write the entry from the parent's phone", () => {
+    const fn = sourceBetween("reqAccept(id, yes){", "\n  }");
+    eq(/if\(yes && !this\._isFamilySession\(\)\)/.test(fn), true,
+       "vx_meet_entries is not one of the two keys a parent may write — it would enter them on that phone alone");
+    eq(/notify\('coach'/.test(fn), true, "the club is told either way");
+  });
+
+  it("and the entry is made by the next staff device that looks", () => {
+    const fn = sourceBetween("_reqEnterApproved(){", "\n  }");
+    eq(/if\(this\._isFamilySession\(\)\) return;/.test(fn), true);
+    eq(/r\.status!=='approved'/.test(fn), true);
+    eq(/const have=\(this\.meetEntries\[r\.meetName\]\|\|\[\]\)\.some/.test(fn), true,
+       "checked before adding, so running it on every pull cannot double-enter anybody");
+    eq(/_reqEnterApproved\(\);/.test(sourceBetween("this.squadEdits=g('vx_squads'", "_tickStatusBar()")), true,
+       "run after the pull, the moment a staff device holds both the answer and the entry list");
+    // And on open as well: a coach with no signal still holds the answer, and the entry is due.
+    eq(/_reqEnterApproved\(\); \}catch\(e\)\{\} \}, 1200\)/.test(SOURCE), true,
+       "a pull that never happens must not be the only thing that makes the entry");
+  });
+
+  it("the answer survives the family device's own add-only rule", () => {
+    const fn = sourceBetween("function _addOnlyMergedWith(k, v){", "\n  function _mergedForSend");
+    eq(/r\.status!=="suggested"/.test(fn), true, "only a row the club put forward");
+    eq(/m\.status!=="approved" && m\.status!=="declined"/.test(fn), true, "only the two answers");
+    eq(/Object\.assign\(\{\}, r, \{status:m\.status/.test(fn), true,
+       "the status and nothing else — the rest of the row stays as the club wrote it");
   });
 });
 

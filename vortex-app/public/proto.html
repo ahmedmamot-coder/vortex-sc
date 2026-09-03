@@ -1001,10 +1001,11 @@ if ('serviceWorker' in navigator) {
   // first, and the coach's inbox line that tells the club about it writes the second.
   //
   // Both are written the way every synced key is written: the whole document, last writer wins.
-  // And /api/family/state deliberately does not send either of them down — a parent has no
-  // business reading another family's race requests, or the club's notifications. So the copy on
-  // that phone is not a stale version of the club's list. It is a list with one row in it, and
-  // sending it replaced the club's.
+  // And what a parent's phone holds of them is not the club's list: /api/family/state sends down
+  // that family's own request rows and no others (FLAT_ARRAY_BY_SWID_KEYS), and sends no
+  // notifications at all — a parent has no business reading another family's race requests or the
+  // club's inbox. So the copy on that phone is not a stale version of the club's list. It is a
+  // list with this family's rows in it, and sending it replaced the club's.
   //
   // One parent tapping "Request 50 Free" would have emptied every pending request in the club
   // and the coach's inbox with it, on every device, with nothing anywhere saying why. That is
@@ -1080,15 +1081,82 @@ if ('serviceWorker' in navigator) {
         if(!Array.isArray(mine)) return v;
         var have={}; theirs.forEach(function(r){ if(r && r.id!=null) have[String(r.id)]=true; });
         var added=mine.filter(function(r){ return r && r.id!=null && !have[String(r.id)]; });
-        if(!added.length) return JSON.stringify(theirs);
-        try{ console.info("vx "+k+": adding "+added.length+" row(s) to the "+theirs.length+" the database holds"); }catch(e){}
-        return JSON.stringify(added.concat(theirs).slice(0, 600));
+        // The one change a family device is allowed to make to a row it did not write: answering
+        // a race the coach put forward for their child. Without this the accept button is a lie —
+        // the row is already in the club's list, so add-only finds nothing to add and sends the
+        // club's copy back unchanged, suggestion still waiting.
+        //
+        // Narrow on purpose: only from 'suggested', only to the two answers, and only the status.
+        // Everything else about the row stays as the club wrote it. This is not the authorisation
+        // boundary — club_state's policy is, and it lets a family write this key outright — it is
+        // the rule that stops a stale phone quietly undoing the club's work.
+        var mineById={}; mine.forEach(function(r){ if(r && r.id!=null) mineById[String(r.id)]=r; });
+        var answered=0;
+        var next=theirs.map(function(r){
+          if(!r || r.id==null || r.status!=="suggested") return r;
+          var m=mineById[String(r.id)];
+          if(!m || (m.status!=="approved" && m.status!=="declined")) return r;
+          answered++;
+          return Object.assign({}, r, {status:m.status, answeredAt:Date.now()});
+        });
+        if(!added.length && !answered) return JSON.stringify(theirs);
+        try{ console.info("vx "+k+": adding "+added.length+" row(s) and answering "+answered
+          +" to the "+theirs.length+" the database holds"); }catch(e){}
+        return JSON.stringify(added.concat(next).slice(0, 600));
       })
       .catch(function(){ return SKIP_SEND; });
   }
+  // Newest first, which is the order both of these lists are read in. A request carries ts (ms)
+  // and requestedAt (a date); a notification carries at (ISO). A row with none of them keeps the
+  // place it already had rather than being thrown to the end.
+  function _rowTime(r){
+    if(!r) return 0;
+    if(typeof r.ts==="number") return r.ts;
+    var t;
+    if(r.at){ t=new Date(r.at).getTime(); if(t===t) return t; }
+    if(r.requestedAt){ t=new Date(r.requestedAt).getTime(); if(t===t) return t; }
+    return 0;
+  }
+  function _byNewest(list){
+    return list.map(function(r,i){ return {r:r, i:i, t:_rowTime(r)}; })
+      .sort(function(a,b){ return (b.t-a.t) || (a.i-b.i); })
+      .map(function(x){ return x.r; });
+  }
+  // The two lists that several devices add to independently, merged by row rather than replaced.
+  //
+  // Every synced key is a whole document, and a whole document write is last writer wins. That is
+  // right for the squads or the fee plan, which one person edits at a time. It is wrong for these
+  // two: a parent's phone adds to them, and so does every coach. A staff device that has been open
+  // since before a parent tapped Request holds a list without that request in it — and the next
+  // save of anything from that device puts the old list back, because every key goes up together.
+  //
+  // That is not hypothetical. On 3 September every club_state key was rewritten inside three
+  // seconds, vx_event_requests at 10:06:00 and vx_notifications at 10:06:00.7, and a 50 Breast
+  // request for one swimmer went with them — the row, and the inbox line that was the only thing
+  // that would have told anybody it had ever happened.
+  //
+  // So: a row the database holds and this device has never seen is kept, and a row this device
+  // does have is written as this device has it — which is what makes approving and declining
+  // stick. Family devices keep the stricter rule above: they may add a row and nothing else.
+  function _rowListMergedWith(k, v){
+    return fetch(REST + "?select=value&key=eq." + k, { headers: dyn(), cache: "no-store" })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(rows){
+        var theirs=(rows && rows[0] && rows[0].value);
+        if(!Array.isArray(theirs)) return v;
+        var mine=null; try{ mine=JSON.parse(v); }catch(e){ return v; }
+        if(!Array.isArray(mine)) return v;
+        var have={}; mine.forEach(function(r){ if(r && r.id!=null) have[String(r.id)]=true; });
+        var unseen=theirs.filter(function(r){ return r && r.id!=null && !have[String(r.id)]; });
+        if(!unseen.length) return v;
+        try{ console.info("vx "+k+": keeping "+unseen.length+" row(s) this device had not heard about"); }catch(e){}
+        return JSON.stringify(_byNewest(mine.concat(unseen)).slice(0, 600));
+      })
+      .catch(function(){ return v; });   // unreadable: send what we have, which is today's behaviour
+  }
   function _mergedForSend(k, v){
     if(k==="vx_roster_edits") return _rosterMergedWith(v);
-    if(_famDevice() && ADD_ONLY_KEYS.indexOf(k)>=0) return _addOnlyMergedWith(k, v);
+    if(ADD_ONLY_KEYS.indexOf(k)>=0) return _famDevice() ? _addOnlyMergedWith(k, v) : _rowListMergedWith(k, v);
     return Promise.resolve(v);
   }
   function pushKey(k, v){
@@ -2556,7 +2624,10 @@ if ('serviceWorker' in navigator) {
                   <div style="padding:16px 15px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
                     <sc-for list="{{ toolTiles }}" as="t" hint-placeholder-count="8">
                       <button onclick="{{ t.onClick }}" style="text-align:left;background:#fff;border:1px solid #EEF1F5;border-radius:20px;padding:15px;box-shadow:0 10px 26px rgba(11,20,40,.07);cursor:pointer;display:flex;flex-direction:column;gap:20px;min-height:116px">
-                        <span style="width:44px;height:44px;border-radius:14px;background:{{ t.grad }};color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:{{ t.glow }}"><i data-vx-icon="{{ t.icon }}" style="width:21px;height:21px"></i></span>
+                        <span style="display:flex;align-items:flex-start;justify-content:space-between;width:100%">
+                          <span style="width:44px;height:44px;border-radius:14px;background:{{ t.grad }};color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:{{ t.glow }}"><i data-vx-icon="{{ t.icon }}" style="width:21px;height:21px"></i></span>
+                          <sc-if value="{{ t.badgeShow }}" hint-placeholder-val="{{ false }}"><span style="min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:#E5484D;color:#fff;font-size:11.5px;font-weight:800;display:flex;align-items:center;justify-content:center">{{ t.badge }}</span></sc-if>
+                        </span>
                         <span><span style="display:block;font-weight:700;font-size:14px;color:#0C1116">{{ t.title }}</span><span style="display:block;font-size:11px;color:#7A8296;margin-top:2px;line-height:1.3">{{ t.sub }}</span></span>
                       </button>
                     </sc-for>
@@ -3127,6 +3198,27 @@ if ('serviceWorker' in navigator) {
                                      there. A single picker underneath the list meant choosing the
                                      meet twice - once by reading its card, once from a row of
                                      chips - and the two could disagree without anything saying so. -->
+                                <!-- The coach has put a race forward for this child. It is an
+                                     entry only once the family says yes: a swimmer put in a race
+                                     their parents never agreed to is the thing this panel exists
+                                     to prevent, in the other direction. -->
+                                <sc-if value="{{ m.sugShow }}" hint-placeholder-val="{{ false }}">
+                                  <div style="display:flex;flex-direction:column;gap:6px">
+                                    <sc-for list="{{ m.sugRows }}" as="sg" hint-placeholder-count="1">
+                                      <div style="background:#EAF1FE;border:1px solid #CFE0F7;border-radius:12px;padding:10px 12px">
+                                        <div style="display:flex;align-items:center;gap:7px">
+                                          <i data-lucide="sparkles" style="width:14px;height:14px;color:#1B5FB0;flex:none"></i>
+                                          <span style="flex:1;font-size:12.5px;font-weight:700;color:#0C1116">{{ sg.event }}</span>
+                                        </div>
+                                        <p style="margin:4px 0 0;font-size:11.5px;color:#3A4152;line-height:1.45">{{ sg.line }}</p>
+                                        <div style="display:flex;gap:7px;margin-top:9px">
+                                          <button onclick="{{ sg.onAccept }}" style="flex:1;background:#0C7A4F;color:#fff;border:none;border-radius:9px;padding:8px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">Yes, enter them</button>
+                                          <button onclick="{{ sg.onNo }}" style="flex:none;background:#fff;color:#7A8296;border:1px solid #DCE7F7;border-radius:9px;padding:8px 12px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">No thanks</button>
+                                        </div>
+                                      </div>
+                                    </sc-for>
+                                  </div>
+                                </sc-if>
                                 <sc-if value="{{ m.canRequest }}" hint-placeholder-val="{{ true }}">
                                   <div style="background:#F6F9FE;border:1px solid #DCE7F7;border-radius:12px;padding:11px 12px;display:flex;flex-direction:column;gap:8px">
                                     <span style="font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:#0959B4;font-weight:800">{{ m.reqTitle }}</span>
@@ -3788,7 +3880,10 @@ if ('serviceWorker' in navigator) {
                       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
                         <sc-for list="{{ toolTiles }}" as="t" hint-placeholder-count="8">
                           <button onclick="{{ t.onClick }}" style="text-align:left;background:#fff;border:1px solid #E5E9F0;border-radius:17px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05);cursor:pointer;display:flex;flex-direction:column;gap:20px;min-height:112px">
-                            <span style="width:40px;height:40px;border-radius:12px;background:{{ t.tint }};color:{{ t.color }};display:flex;align-items:center;justify-content:center"><i data-vx-icon="{{ t.icon }}" style="width:20px;height:20px"></i></span>
+                            <span style="display:flex;align-items:flex-start;justify-content:space-between;width:100%">
+                              <span style="width:40px;height:40px;border-radius:12px;background:{{ t.tint }};color:{{ t.color }};display:flex;align-items:center;justify-content:center"><i data-vx-icon="{{ t.icon }}" style="width:20px;height:20px"></i></span>
+                              <sc-if value="{{ t.badgeShow }}" hint-placeholder-val="{{ false }}"><span style="min-width:21px;height:21px;padding:0 6px;border-radius:11px;background:#E5484D;color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center">{{ t.badge }}</span></sc-if>
+                            </span>
                             <span><span style="display:block;font-weight:700;font-size:14px;color:#0C1116">{{ t.title }}</span><span style="display:block;font-size:11px;color:#7A8296;margin-top:2px;line-height:1.3">{{ t.sub }}</span></span>
                           </button>
                         </sc-for>
@@ -5827,6 +5922,83 @@ if ('serviceWorker' in navigator) {
                           <span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:14px;color:#0C1116">{{ t.name }}</span><span style="display:block;font-size:11.5px;color:#7A8296;margin-top:1px">{{ t.squadName }} · Age {{ t.age }} · {{ t.topLine }}</span></span>
                           <i data-lucide="chevron-right" style="width:16px;height:16px;color:#9AA2B4"></i>
                         </button>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+
+                  <!-- EVENT REQUESTS — every meet, every family, in one place -->
+                  <sc-if value="{{ toolRequests }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;flex-direction:column;gap:12px">
+                      <div style="background:#0A0F1A;color:#fff;border-radius:16px;padding:16px;display:flex;align-items:center;gap:12px">
+                        <span style="width:42px;height:42px;flex:none;border-radius:12px;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center"><i data-lucide="inbox" style="width:22px;height:22px;color:#FFD666"></i></span>
+                        <div><p style="margin:0;font-size:14px;font-weight:800">Meet Requests</p><p style="margin:2px 0 0;font-size:12px;color:rgba(255,255,255,.6)">Every meet · {{ reqHeadLine }}</p></div>
+                      </div>
+
+                      <div class="vx-scroll" style="display:flex;gap:6px;overflow-x:auto">
+                        <sc-for list="{{ reqTabs }}" as="t" hint-placeholder-count="4">
+                          <button onclick="{{ t.onClick }}" style="flex:none;background:{{ t.bg }};color:{{ t.fg }};border:1px solid {{ t.border }};border-radius:999px;padding:7px 13px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">{{ t.label }}</button>
+                        </sc-for>
+                      </div>
+
+                      <sc-if value="{{ reqMsgShow }}" hint-placeholder-val="{{ false }}">
+                        <p style="margin:0 2px;font-size:12px;font-weight:600;color:{{ reqMsgColor }}">{{ reqMsg }}</p>
+                      </sc-if>
+
+                      <sc-if value="{{ reqEmpty }}" hint-placeholder-val="{{ false }}">
+                        <div style="text-align:center;padding:36px 20px;color:#9AA2B4"><i data-lucide="inbox" style="width:30px;height:30px"></i><p style="font-size:12.5px;margin-top:10px;line-height:1.5">{{ reqEmptyLine }}</p></div>
+                      </sc-if>
+
+                      <sc-for list="{{ reqMeetGroups }}" as="g" hint-placeholder-count="2">
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                          <p style="margin:0;font-size:13.5px;font-weight:800;color:#0C1116">{{ g.meetName }}</p>
+                          <p style="margin:2px 0 10px;font-size:11.5px;color:#7A8296">{{ g.meetSub }}</p>
+
+                          <div style="display:flex;flex-direction:column;gap:7px">
+                            <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="2">
+                              <div style="background:#F8FAFC;border:1px solid #EEF1F5;border-radius:12px;padding:10px 11px">
+                                <div style="display:flex;align-items:center;gap:8px">
+                                  <button onclick="{{ r.onOpenSwimmer }}" style="flex:1;min-width:0;text-align:left;background:none;border:none;padding:0;font-family:inherit;cursor:pointer">
+                                    <span style="display:block;font-size:13px;font-weight:700;color:#0C1116">{{ r.swName }} — {{ r.event }}</span>
+                                    <span style="display:block;font-size:11px;color:#7A8296;margin-top:1px">{{ r.whenLine }}</span>
+                                  </button>
+                                  <span style="flex:none;background:{{ r.markBg }};color:{{ r.markFg }};border-radius:999px;padding:4px 9px;font-size:10.5px;font-weight:700">{{ r.markLabel }}</span>
+                                </div>
+                                <sc-if value="{{ r.canDecide }}" hint-placeholder-val="{{ true }}">
+                                  <div style="display:flex;gap:7px;margin-top:9px">
+                                    <button onclick="{{ r.onApprove }}" style="flex:1;background:#0C7A4F;color:#fff;border:none;border-radius:9px;padding:8px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">Approve &amp; enter</button>
+                                    <button onclick="{{ r.onDecline }}" style="flex:none;background:#fff;color:#B42318;border:1px solid #F1D3D3;border-radius:9px;padding:8px 12px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">Decline</button>
+                                  </div>
+                                </sc-if>
+                                <sc-if value="{{ r.waitingFamily }}" hint-placeholder-val="{{ false }}">
+                                  <p style="margin:8px 0 0;font-size:11px;color:#1B5FB0;line-height:1.4">You suggested this one — it enters them as soon as the family accepts it in their app.</p>
+                                </sc-if>
+                              </div>
+                            </sc-for>
+                          </div>
+
+                          <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
+                            <sc-for list="{{ g.suggestRows }}" as="s" hint-placeholder-count="1">
+                              <div style="border-top:1px solid #EEF1F5;padding-top:9px">
+                                <button onclick="{{ s.onToggle }}" style="background:none;border:none;padding:0;color:var(--vx-blue);font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">{{ s.toggleLabel }} — {{ s.swName }}</button>
+                                <sc-if value="{{ s.open }}" hint-placeholder-val="{{ false }}">
+                                  <div style="margin-top:8px">
+                                    <sc-if value="{{ s.hasFree }}" hint-placeholder-val="{{ true }}">
+                                      <div style="display:flex;flex-wrap:wrap;gap:6px">
+                                        <sc-for list="{{ s.chips }}" as="c" hint-placeholder-count="4">
+                                          <button onclick="{{ c.onClick }}" style="background:#fff;color:#3A4152;border:1px solid #DCE7F7;border-radius:999px;padding:6px 11px;font-family:inherit;font-weight:600;font-size:11.5px;cursor:pointer">{{ c.label }}</button>
+                                        </sc-for>
+                                      </div>
+                                      <p style="margin:7px 0 0;font-size:10.5px;color:#9AA2B4;line-height:1.4">Tapping a race sends it to the family to accept. It does not enter them on its own.</p>
+                                    </sc-if>
+                                    <sc-if value="{{ s.noneShow }}" hint-placeholder-val="{{ false }}">
+                                      <p style="margin:0;font-size:11px;color:#9AA2B4;line-height:1.4">{{ s.noneLine }}</p>
+                                    </sc-if>
+                                  </div>
+                                </sc-if>
+                              </div>
+                            </sc-for>
+                          </div>
+                        </div>
                       </sc-for>
                     </div>
                   </sc-if>
@@ -14437,7 +14609,8 @@ class Component extends DCLogic {
     const already={};
     (this.eventRequests||[]).forEach(r=>{ if(r && r.swId===sw.id && r.meetName===name && r.event) already[r.event]=r.status||'pending'; });
     const picked=((S.famReqPicked||{})[name]||[]).filter(ev=>evs.includes(ev) && !already[ev]);
-    const MARK={pending:['Asked','#FCEFD6','#9A6206'], approved:['Entered','#DCF5EA','#0C7A4F'], declined:['Declined','#FBE4E4','#B42318']};
+    const MARK={pending:['Asked','#FCEFD6','#9A6206'], approved:['Entered','#DCF5EA','#0C7A4F'], declined:['Declined','#FBE4E4','#B42318'],
+      dismissed:['Declined','#FBE4E4','#B42318'], suggested:['Coach suggests','#EAF1FE','#1B5FB0']};
     const reqChips=evs.map(ev=>{
       const st=already[ev]; const on=picked.includes(ev);
       // A race the club has already been asked about carries its answer on the chip. The mark is
@@ -14451,9 +14624,19 @@ class Component extends DCLogic {
         bg: on?'#0A0F1A':'#fff', fg: on?'#fff':'#3A4152', border: on?'#0A0F1A':'#DCE7F7',
         onClick:()=>this.famReqToggle(name, ev) };
     });
+    // Races the coach has put forward for this child at this meet, waiting on the family. They sit
+    // above the chips because they are the one thing on this card that is asking the parent a
+    // question rather than offering them a choice.
+    const sugRows=(this.eventRequests||[])
+      .filter(r=>r && r.swId===sw.id && r.meetName===name && r.event && r.status==='suggested')
+      .map(r=>({ event:r.event,
+        line: 'The coach suggests '+first+' swims this one.',
+        onAccept:()=>this.reqAccept(r.id, true),
+        onNo:()=>this.reqAccept(r.id, false) }));
     const can=picked.length>0;
     return {
       canRequest:true, reqShut:false, reqShutLine:'',
+      sugRows, sugShow: sugRows.length>0,
       reqTitle: picked.length
         ? (picked.length+' race'+(picked.length===1?'':'s')+' chosen for '+first)
         : ('Choose '+first+'\u2019s races'),
@@ -14501,6 +14684,67 @@ class Component extends DCLogic {
         rec.event+' at '+rec.meetName+' \u2014 '+(status==='approved'?'you\u2019re entered.':'not approved this time.'));
     }
     this.forceUpdate();
+  }
+  // ---- the other direction: the coach offers a race the family did not ask for ----------------
+  //
+  // A request is a conversation, and until now it could only be answered yes or no. A coach
+  // reading "50 Breast at the Dragons Invitational" almost always knows a second race that child
+  // should be swimming at the same meet, and had nowhere to say so — the swimmer was entered by
+  // the coach with the family never told, or it was said in the car park and forgotten.
+  //
+  // A suggestion is the same row with the arrow reversed: raised by the club, waiting on the
+  // family, and entered the moment they accept. It is not an entry on its own — a coach putting a
+  // child in a race their parents have not agreed to is the thing the request panel exists to
+  // avoid.
+  reqSuggest(swId, swName, meetName, event){
+    if(!swId || !meetName || !event) return;
+    const clash=(this.eventRequests||[]).find(r=>r && r.swId===swId && r.meetName===meetName && r.event===event);
+    if(clash) return this.setState({reqMsg:event+' is already on the list for '+swName+' at this meet.', reqMsgOk:true});
+    const rec={id:this._uid('req'), swId, swName, meetName, event, status:'suggested', by:'coach',
+      requestedAt:new Date().toISOString().slice(0,10), ts:Date.now()};
+    this.eventRequests=[rec, ...this.eventRequests];
+    this._saveJSON('vx_event_requests', this.eventRequests);
+    this.notify('family_sw:'+swId, 'sparkles', 'The coach suggested a race',
+      event+' at '+meetName+' — open Meets to accept it.');
+    this.setState({reqMsg:'Suggested '+event+' to '+swName+'’s family ✓', reqMsgOk:true});
+  }
+  // The family's answer to that suggestion. Accepting enters the swimmer, exactly as approving a
+  // request does, because the coach has already decided — this is the consent that was missing.
+  reqAccept(id, yes){
+    const rec=(this.eventRequests||[]).find(r=>r.id===id); if(!rec) return;
+    const status = yes ? 'approved' : 'declined';
+    this.eventRequests=this.eventRequests.map(r=>r.id===id?{...r, status}:r);
+    this._saveJSON('vx_event_requests', this.eventRequests);
+    // The entry itself is the club's record, and a family device may not write it — vx_meet_entries
+    // is not one of the two keys club_state lets a parent write, so calling entryAddOne here would
+    // enter the swimmer on this phone and nowhere else. _reqEnterApproved on the next staff device
+    // to open the app makes the entry, from the answer this row now carries.
+    if(yes && !this._isFamilySession()){ try{ this.entryAddOne(rec.meetName, rec.swId, rec.event); }catch(e){} }
+    this.notify('coach', yes?'check-circle-2':'x-circle',
+      yes?'Suggested race accepted':'Suggested race turned down',
+      rec.swName+' — '+rec.event+' at '+rec.meetName+'.');
+    this.setState({famReqMsg: yes ? ('Accepted '+rec.event+' — '+rec.swName.split(' ')[0]+' is entered ✓')
+                                  : ('Turned down '+rec.event+'.'),
+                   famReqMsgMeet:rec.meetName, famReqMsgOk:true});
+  }
+  /** Every approved request actually in the meet, made good on a staff device.
+   *
+   *  Two paths approve a race: a coach tapping Approve, which enters the swimmer there and then,
+   *  and a family accepting a race the coach suggested — which happens on a phone that is not
+   *  allowed to write the entries. So the answer travels and the entry does not, and this closes
+   *  that gap on the next staff device to look. entryAddOne already refuses to add a swim twice,
+   *  so running it on every approved row costs nothing and cannot double-enter anybody.
+   */
+  _reqEnterApproved(){
+    if(this._isFamilySession()) return;
+    let made=0;
+    (this.eventRequests||[]).forEach(r=>{
+      if(!r || r.status!=='approved' || !r.meetName || !r.swId || !r.event) return;
+      const have=(this.meetEntries[r.meetName]||[]).some(e=>e.swId===r.swId && e.event===r.event);
+      if(have) return;
+      try{ this.entryAddOne(r.meetName, r.swId, r.event); made++; }catch(e){}
+    });
+    if(made){ try{ console.info('vx requests: entered '+made+' approved swim(s) that had no entry yet'); }catch(e){} }
   }
   async _loungeFetch(){
     if(!window.__vxSelect) return;
@@ -17999,6 +18243,10 @@ class Component extends DCLogic {
     if(location.hash==='#print-preview') this.setState({screen:'app', pickedId:'ahmed', view:'squad', squadId:'seniora', tab:'plans', printPreviewOpen:true});
     this._checkRecoveryHash();
     this._checkOAuthHash();
+    // Also here, not only after a pull: a coach who opens the app with no signal still holds the
+    // answer a family gave on their own phone, and the entry is due either way. entryAddOne will
+    // not add a swim twice, so running it in both places is free.
+    setTimeout(()=>{ try{ this._reqEnterApproved(); }catch(e){} }, 1200);
     this._tickStatusBar();
     this._statusInt=setInterval(()=>this._tickStatusBar(), 15000);
     this._onStatusEvt=()=>this._tickStatusBar();
@@ -18222,6 +18470,10 @@ class Component extends DCLogic {
     // Squads were missing from this list, so a squad renamed or recoloured on one device did not
     // reach any other until that device was reloaded — every other synced key is applied here.
     this.squadEdits=g('vx_squads', this.squadEdits); try{ this._rebuildSquads(); this.rebuildRoster(); }catch(e){}
+    // A race a family accepted is approved but not yet entered — the phone that answered could not
+    // write the entries. Done here, after the pull, because this is the moment a staff device first
+    // holds both the answer and the entry list it belongs in.
+    try{ this._reqEnterApproved(); }catch(e){}
     try{ this.setState({family:this.family}); }catch(e){ this.forceUpdate(); }
   }
   _tickStatusBar(){
@@ -18619,6 +18871,9 @@ class Component extends DCLogic {
       {id:'tpace', icon:'gauge', title:'T-Pace Tests', sub:'Log 1000/400 trials · retest due', tint:'rgba(6,126,234,.1)', color:'#067EEA'},
       {id:'promo', icon:'trending-up', title:'Level-Up Review', sub:'Promotion candidates & reviews', tint:'rgba(12,122,79,.1)', color:'#0C7A4F'},
       {id:'entries', icon:'list-ordered', title:'Meet Entries', sub:'Heats · lanes · printable program', tint:'rgba(200,30,91,.1)', color:'#C81E5B'},
+      // Requests used to live only inside one meet's Entries tab, filtered to that meet and to
+      // pending — so a request for a meet nobody had opened was a request nobody could see.
+      {id:'requests', icon:'inbox', title:'Meet Requests', sub:'Races families have asked for', tint:'rgba(245,166,35,.12)', color:'#C77E12'},
       {id:'fitness', icon:'dumbbell', title:'Fitness Plan', sub:'Dryland blocks & exercises', tint:'rgba(138,34,213,.1)', color:'#8A22D5'},
       {id:'inbody', icon:'scan-line', title:'InBody Import', sub:'PDF / QR scan · health analysis', tint:'rgba(200,30,91,.1)', color:'#C81E5B'},
       {id:'sponsors', icon:'crown', title:'Sponsors', sub:'VIP sponsored swimmers directory', tint:'rgba(200,155,60,.16)', color:'#9A6206'},
@@ -18641,8 +18896,13 @@ class Component extends DCLogic {
     // The 2027 tile: gradient in the feature's colour with the glyph knocked out in white.
     // `tint` feeds the tile background in the markup, so switching it here restyles every
     // tool at once without touching the template.
+    // A count on the tile, because a request the club never opens is the whole of the problem
+    // this screen exists to solve. Shown only when something is actually waiting.
+    const _openReqCount=(this.eventRequests||[]).filter(r=>r && (!r.status || r.status==='pending')).length;
     const toolTiles=(_fitOnly? toolDefs.filter(t=>t.id==='fitness') : toolDefs).map(t=>({...t,
       tint:this._gradTile(t.color), color:'#fff',
+      badge: (t.id==='requests' && _openReqCount>0) ? String(_openReqCount) : '',
+      badgeShow: t.id==='requests' && _openReqCount>0,
       grad:this._gradTile(t.color), glow:this._tileGlow(t.color), onClick:T(t.id, scopeClub)}));
 
     // ---- roster ----
@@ -18982,6 +19242,94 @@ class Component extends DCLogic {
         topLine: sw.topEvent ? (sw.topEvent+' · '+sw.topTime) : 'No PB logged',
         onClick:()=>{ this.setState({tool:null, view:'squad', squadId:sw.squadId, tab:'group', swimmerId:sw.id}); this.openSwimmer(sw.id); } }));
     const talentEmpty = talentRows.length===0;
+
+    // ---- Event Requests — every meet, in one place --------------------------------------------
+    //
+    // The only view of these was inside Meets → one meet → Entries, filtered to that meet and to
+    // pending. A request for a meet nobody had opened that week was a request nobody saw, and the
+    // family had been told "Sent to the coach ✓". This is the list that sentence promises.
+    const reqFilter = S.reqFilter || 'open';
+    const _reqStatus = r => (r && r.status) || 'pending';
+    const reqAll = (this.eventRequests||[]).filter(r=>r && r.event && r.meetName);
+    const reqCounts = {
+      open: reqAll.filter(r=>_reqStatus(r)==='pending' || _reqStatus(r)==='suggested').length,
+      approved: reqAll.filter(r=>_reqStatus(r)==='approved').length,
+      declined: reqAll.filter(r=>_reqStatus(r)==='declined' || _reqStatus(r)==='dismissed').length,
+    };
+    reqCounts.all = reqAll.length;
+    const reqTabs = [['open','Waiting'],['approved','Entered'],['declined','Declined'],['all','All']]
+      .map(([id,label])=>({ label: label+' ('+(reqCounts[id]||0)+')', active:reqFilter===id,
+        bg: reqFilter===id?'#0A0F1A':'#fff', fg: reqFilter===id?'#fff':'#3A4152',
+        border: reqFilter===id?'#0A0F1A':'#DCE7F7',
+        onClick:()=>this.setState({reqFilter:id}) }));
+    const _reqMatch = r => reqFilter==='all' ? true
+      : reqFilter==='open' ? (_reqStatus(r)==='pending' || _reqStatus(r)==='suggested')
+      : reqFilter==='approved' ? _reqStatus(r)==='approved'
+      : (_reqStatus(r)==='declined' || _reqStatus(r)==='dismissed');
+    const REQ_MARK = { pending:['Waiting on the club','#FCEFD6','#9A6206'],
+                       suggested:['Waiting on the family','#EAF1FE','#1B5FB0'],
+                       approved:['Entered','#DCF5EA','#0C7A4F'],
+                       declined:['Declined','#FBE4E4','#B42318'],
+                       dismissed:['Declined','#FBE4E4','#B42318'] };
+    const _reqFlat = this.allSwimmersFlat();
+    const _reqMeetByName = {}; this.allMeets().forEach(m=>{ if(m && m.name) _reqMeetByName[m.name]=m; });
+    // Grouped by meet, newest request first inside each, so a coach works down one meet at a time
+    // — which is how entries are actually decided.
+    const _reqShown = reqAll.filter(_reqMatch).slice()
+      .sort((a,b)=>(b.ts||0)-(a.ts||0));
+    const _reqMeetOrder = [];
+    _reqShown.forEach(r=>{ if(_reqMeetOrder.indexOf(r.meetName)<0) _reqMeetOrder.push(r.meetName); });
+    const reqMeetGroups = _reqMeetOrder.map(meetName=>{
+      const rows = _reqShown.filter(r=>r.meetName===meetName);
+      const meet = _reqMeetByName[meetName] || null;
+      const progEvents = meet ? this._meetEvents(meet) : [];
+      // Who this meet's requests are about, so "suggest another race" can be offered per swimmer
+      // rather than per row — the coach is adding races for a child, not for a request.
+      const swIds = []; rows.forEach(r=>{ if(swIds.indexOf(r.swId)<0) swIds.push(r.swId); });
+      const suggestFor = (S.reqSuggestFor===meetName+'::'+(S.reqSuggestSw||'')) ? (S.reqSuggestSw||'') : '';
+      return {
+        meetName,
+        meetSub: (meet && meet.date) ? (meet.date + (meet.location?(' · '+meet.location):'')) : 'Meet not in the calendar',
+        count: rows.length,
+        rows: rows.map(r=>{
+          const mk = REQ_MARK[_reqStatus(r)] || REQ_MARK.pending;
+          const open = _reqStatus(r)==='pending';
+          const waitingFamily = _reqStatus(r)==='suggested';
+          return {
+            swName:r.swName||'Swimmer', event:r.event,
+            markLabel:mk[0], markBg:mk[1], markFg:mk[2],
+            whenLine: (r.by==='coach'?'Suggested by the club':'Asked by the family')
+                      + (r.requestedAt?(' · '+this._fmtDMY(r.requestedAt, true)):''),
+            canDecide: open, waitingFamily,
+            onApprove:()=>{ const sw=_reqFlat.find(s=>s.id===r.swId); this.reqDecide(r.id,'approved');
+              if(sw) this.setState({reqMsg:'Approved — '+(r.swName||'the swimmer')+' is entered for '+r.event+'.', reqMsgOk:true}); },
+            onDecline:()=>{ this.reqDecide(r.id,'declined'); this.setState({reqMsg:'Declined '+r.event+' for '+(r.swName||'the swimmer')+'.', reqMsgOk:true}); },
+            onOpenSwimmer:()=>{ const sw=_reqFlat.find(s=>s.id===r.swId); if(!sw) return;
+              this.setState({tool:null, view:'squad', squadId:sw.squadId, tab:'group', swimmerId:sw.id}); this.openSwimmer(sw.id); },
+          };
+        }),
+        // ---- suggest another race, per swimmer ----
+        suggestRows: swIds.map(swId=>{
+          const swName=(rows.find(r=>r.swId===swId)||{}).swName||'Swimmer';
+          const taken={}; (this.eventRequests||[]).forEach(r=>{ if(r && r.swId===swId && r.meetName===meetName && r.event) taken[r.event]=true; });
+          const free=progEvents.filter(ev=>ev && !taken[ev]);
+          const on = suggestFor===swId;
+          return { swName, open:on,
+            toggleLabel: on ? 'Close' : 'Suggest another race',
+            onToggle:()=>this.setState({reqSuggestFor: on?'':(meetName+'::'+swId), reqSuggestSw: on?'':swId, reqMsg:''}),
+            hasFree: free.length>0,
+            noneShow: free.length===0,
+            noneLine: progEvents.length
+              ? (swName.split(' ')[0]+' is already on the list for every race in this meet’s programme.')
+              : 'The club has not posted this meet’s event programme, so there is nothing to suggest from yet.',
+            chips: free.map(ev=>({ label:ev, onClick:()=>this.reqSuggest(swId, swName, meetName, ev) })) };
+        }),
+      };
+    });
+    const reqEmpty = reqMeetGroups.length===0;
+    const reqEmptyLine = reqCounts.all===0
+      ? 'No family has asked for a race yet. When one does it appears here, and the club gets a notification.'
+      : 'Nothing under this filter — try “All”.';
 
     // ---- Recovery Board (WHOOP/Fitbit) — who is run-down, worst first ----
     const recoveryPool = S.toolScopeClub ? this.allSwimmersFlat() : (this.roster[S.squadId]||[]).map(sw=>({...sw, squadId:S.squadId, squadName:squad.name}));
@@ -22188,6 +22536,13 @@ class Component extends DCLogic {
       promoRows, promoEmpty, promoScopeLabel,
       toolEntries:S.tool==='entries', toolFitness:S.tool==='fitness', toolInbody:S.tool==='inbody', toolSponsors:S.tool==='sponsors',
       toolTalent:S.tool==='talent', talentRows, talentEmpty, talentScopeLabel:toolScope,
+      // ---- event requests ----
+      toolRequests:S.tool==='requests',
+      reqTabs, reqMeetGroups, reqEmpty, reqEmptyLine,
+      reqOpenCount:reqCounts.open,
+      reqHeadLine: reqCounts.open===1 ? '1 waiting' : (reqCounts.open+' waiting'),
+      reqMsg:S.reqMsg||'', reqMsgShow:!!S.reqMsg,
+      reqMsgColor: S.reqMsgOk===false ? '#B42318' : '#0C7A4F',
       // ---- birthdays ----
       toolBdays:S.tool==='bdays', bdayScopeLabel:toolScope,
       bdayTodayRows, bdayHasToday: bdayTodayRows.length>0,
