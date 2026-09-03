@@ -11604,10 +11604,53 @@ describe("the club's list of what families have asked for", () => {
   });
 
   it("only offers races that are in the meet's own programme", () => {
-    const blk = sourceBetween("suggestRows: swIds.map(swId=>{", "const reqEmpty");
+    const blk = sourceBetween("const swRows = swIds.map(swId=>{", "const reqEmpty");
     eq(/progEvents\.filter\(ev=>ev && !taken\[ev\]\)/.test(blk), true,
        "and never one this child is already down for");
     eq(/has not posted this meet’s event programme/.test(blk), true);
+  });
+
+  /* A card per race was fine for three requests from one family. With 317 swimmers and a
+     twenty-race programme it is a screen nobody scrolls to the end of — and the question a
+     coach has at an entry deadline is "who has asked for what", which is a swimmer's
+     question, not a race's. */
+  describe("read one swimmer at a time, not one race at a time", () => {
+    const blk = () => sourceBetween("const swRows = swIds.map(swId=>{", "const reqEmpty");
+
+    it("is a row per swimmer, carrying every race they asked for", () => {
+      eq(/raceChips: mine\.map/.test(blk()), true, "all their races on the one line, each with its answer");
+      eq(/raceRows: mine\.map\(_raceRow\)/.test(blk()), true, "and the per-race decision under it when opened");
+      eq(/squadName: sw \? sw\.squadName/.test(blk()), true, "which squad, because that is how a coach narrows it");
+    });
+
+    it("puts whoever is still waiting on the club first", () => {
+      eq(/\.sort\(\(a,b\)=> \(b\.waitingCount-a\.waitingCount\) \|\| a\.swName\.localeCompare\(b\.swName\)\)/.test(blk()), true,
+         "decided rows must not push the undecided ones off the screen");
+    });
+
+    it("can be searched by the three things a coach knows", () => {
+      const f = blk();
+      eq(/sw\.swName\.toLowerCase\(\)\.includes\(reqQuery\)/.test(f), true);
+      eq(/String\(sw\.squadName\|\|''\)\.toLowerCase\(\)\.includes\(reqQuery\)/.test(f), true);
+      eq(/sw\.raceChips\.some\(c=>c\.label\.toLowerCase\(\)\.includes\(reqQuery\)\)/.test(f), true);
+      // A meet whose swimmers all filtered out is not an empty meet card.
+      eq(/\.filter\(g=>g\.hasRows\)/.test(SOURCE), true);
+    });
+
+    it("approves a whole family's entry in one press when there is more than one", () => {
+      const f = blk();
+      eq(/approveAllShow: waiting\.length>1/.test(f), true, "one race needs no 'all'");
+      eq(/waiting\.forEach\(r=>this\.reqDecide\(r\.id,'approved'\)\)/.test(f), true);
+    });
+
+    it("and the wide table scrolls in its own box, not the page", () => {
+      const tab = sourceBetween('<sc-for list="{{ reqMeetGroups }}"', "<!-- DAILY ATTENDANCE");
+      eq(/overflow-x:auto/.test(tab), true);
+      eq(/min-width:560px/.test(tab), true, "columns that collapse are not a table");
+      // An icon named at render time must not be one lucide can take away from React.
+      eq(/data-lucide="\{\{ sw\.openIcon/.test(tab), false);
+      eq(/data-vx-icon="\{\{ sw\.openIcon/.test(tab), true);
+    });
   });
 });
 
