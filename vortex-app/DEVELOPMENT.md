@@ -381,6 +381,15 @@ with `status:'suggested'`, and the family sees it on that meet's card with *Yes,
 *No thanks*. A suggestion is never an entry on its own — a swimmer in a race their parents never
 agreed to is what this panel exists to prevent, and the coach suggesting it does not change that.
 
+**Run `supabase/family_answer_suggestion.sql`.** The family's answer is applied by the database
+too — `vx_answer_suggestion(id, yes)` takes the same row lock, changes that one row in place, and
+writes the coach's notification in the same transaction. It was the last path still reading the
+club's whole list on a phone and posting it back. Nothing was lost that way, because the row
+already exists and only its status moves, but it is the same mechanism that made a request vanish
+twice on the same key. A parent may answer only for their own child, only a row the club actually
+put forward (`status = 'suggested'`), and answering twice returns `already` rather than sending a
+second alert.
+
 The entry itself is always written by a staff device. `vx_meet_entries` is not one of the two keys
 a parent may write, so a family accepting a suggestion records the answer and nothing else;
 `_reqEnterApproved()` runs on every staff pull and on open, and enters any approved request that
