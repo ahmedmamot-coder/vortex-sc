@@ -11760,75 +11760,106 @@ describe("a family uploading their own child's document", () => {
   });
 });
 
-/* ------------------------------------------------------------------ T30 test
-   Thirty minutes of continuous freestyle: the clock is fixed and the DISTANCE is
-   the result, which is the opposite way round from the 1000 m and 400 m trials.
-   Everything below is about not letting that inversion turn into a wrong T-pace —
-   the number every E-2 / E-3 set in the squad is then written off. */
-describe("T30 test", () => {
-  const ctx = () => ({
-    T30_SEC: 1800,
-    state: { tpaceType: "t30", tpaceDist: "", tpaceTime: "", tpaceErr: "" },
+/* --------------------------------------------------- fixed-clock T-pace tests
+   The T30 and T20 are the trials where the CLOCK is fixed and the distance is
+   the result — the opposite way round from the 1000 m and 400 m trials, which
+   fix the distance and time it. Everything below is about not letting that
+   inversion turn into a wrong T-pace: the number every E-2 / E-3 set in the
+   squad is then written off. */
+describe("fixed-clock T-pace tests (T30 / T20)", () => {
+  const FIXED = { t30:{label:"T30",mins:30,sec:1800,min:100,max:6000,eg:1650},
+                  t20:{label:"T20",mins:20,sec:1200,min:100,max:4000,eg:1100} };
+  const ctx = (type = "t30") => ({
+    TPACE_FIXED: FIXED,
+    state: { tpaceType: type, tpaceDist: "", tpaceTime: "", tpaceErr: "" },
     tpaceTests: {},
     saved: null,
     _saveJSON(k, v) { this.saved = [k, v]; },
     setState(p) { Object.assign(this.state, p); },
   });
+  const LOG_DEPS = ["tpaceCompute", "tpaceComputeFixed", "tpaceFixed", "parseTimeStr"];
 
-  const compute = bind("tpaceComputeT30", { T30_SEC: 1800 });
-  it("the shipped test really is thirty minutes", () =>
-    eq(/get T30_SEC\(\)\{ return 1800; \}/.test(SOURCE), true));
-  it("1800 m in 30 min is 1:40 per 100", () => eq(compute(1800), 100));
-  it("1650 m in 30 min", () => eq(+compute(1650).toFixed(2), 109.09));
-  it("a faster swimmer covers more and paces lower", () => eq(compute(2000) < compute(1500), true));
-
-  it("logs the metres swum, not an invented time", () => {
-    const c = ctx(); c.state.tpaceDist = "1650";
-    bind("tpaceLog", c, ["tpaceCompute", "tpaceComputeT30", "parseTimeStr"])("s1");
-    const rec = c.tpaceTests.s1[0];
-    eq(rec.type, "t30");
-    eq(rec.dist, 1650);
-    eq(rec.sec, 1800, "the 30 minutes is the protocol, and it is the same for everyone");
-    eq(rec.tpace100, 109.09);
-    eq(c.state.tpaceErr, "");
-    eq(c.state.tpaceDist, "", "the field clears so the next swimmer is not logged twice");
-    eq(c.saved[0], "vx_tpace");
+  // The table is the whole feature: if a row's seconds are wrong, every pace off it is wrong,
+  // and nothing else in the app would notice.
+  it("the shipped table really is 30 and 20 minutes", () => {
+    const tbl = sourceBetween("get TPACE_FIXED(){ return {", "}; }");
+    eq(/t30:\s*\{label:'T30', mins:30, sec:1800/.test(tbl), true);
+    eq(/t20:\s*\{label:'T20', mins:20, sec:1200/.test(tbl), true);
   });
+
+  const compute = bind("tpaceComputeFixed", { TPACE_FIXED: FIXED }, ["tpaceFixed"]);
+  it("1800 m in 30 min is 1:40 per 100", () => eq(compute("t30", 1800), 100));
+  it("1650 m in 30 min", () => eq(+compute("t30", 1650).toFixed(2), 109.09));
+  it("1200 m in 20 min is 1:40 per 100", () => eq(compute("t20", 1200), 100));
+  it("1100 m in 20 min", () => eq(+compute("t20", 1100).toFixed(2), 109.09));
+  it("the same pace over either clock agrees", () =>
+    eq(compute("t30", 1800), compute("t20", 1200),
+       "100 m/min is 100 m/min — the test length must not change the pace"));
+  it("a faster swimmer covers more and paces lower", () => eq(compute("t30", 2000) < compute("t30", 1500), true));
+  it("a distance trial is not a fixed-clock test", () => eq(compute("1000", 1000), null));
+
+  for (const [type, dist, pace] of [["t30", 1650, 109.09], ["t20", 1100, 109.09]]) {
+    it(`${type}: logs the metres swum, not an invented time`, () => {
+      const c = ctx(type); c.state.tpaceDist = String(dist);
+      bind("tpaceLog", c, LOG_DEPS)("s1");
+      const rec = c.tpaceTests.s1[0];
+      eq(rec.type, type);
+      eq(rec.dist, dist);
+      eq(rec.sec, FIXED[type].sec, "the clock is the protocol, and it is the same for everyone");
+      eq(rec.tpace100, pace);
+      eq(c.state.tpaceErr, "");
+      eq(c.state.tpaceDist, "", "the field clears so the next swimmer is not logged twice");
+      eq(c.saved[0], "vx_tpace");
+    });
+  }
 
   it("a lap count typed instead of metres is refused", () => {
     // 66 lengths of a 25 m pool is 1650 m. Logged as 66 it would read as a T-pace of
     // 45:27/100 and quietly poison every zone target taken off it.
     const c = ctx(); c.state.tpaceDist = "66";
-    bind("tpaceLog", c, ["tpaceCompute", "tpaceComputeT30", "parseTimeStr"])("s1");
+    bind("tpaceLog", c, LOG_DEPS)("s1");
     eq(c.tpaceTests.s1, undefined);
     eq(/between 100 and 6000/.test(c.state.tpaceErr), true);
   });
 
   it("metres typed twice over is refused too", () => {
     const c = ctx(); c.state.tpaceDist = "16500";
-    bind("tpaceLog", c, ["tpaceCompute", "tpaceComputeT30", "parseTimeStr"])("s1");
+    bind("tpaceLog", c, LOG_DEPS)("s1");
     eq(c.tpaceTests.s1, undefined);
+  });
+
+  it("each test's ceiling is its own, not the T30's", () => {
+    // 5000 m is a fine T30 entry and an impossible T20 one — 250 m/min for twenty minutes.
+    const ok = ctx("t30"); ok.state.tpaceDist = "5000";
+    bind("tpaceLog", ok, LOG_DEPS)("s1");
+    eq(ok.tpaceTests.s1[0].dist, 5000);
+
+    const no = ctx("t20"); no.state.tpaceDist = "5000";
+    bind("tpaceLog", no, LOG_DEPS)("s1");
+    eq(no.tpaceTests.s1, undefined);
+    eq(/20-minute/.test(no.state.tpaceErr), true, "the message must name the test the coach chose");
+    eq(/between 100 and 4000/.test(no.state.tpaceErr), true);
   });
 
   it("an empty or non-numeric distance is refused", () => {
     for (const v of ["", "  ", "abc"]) {
       const c = ctx(); c.state.tpaceDist = v;
-      bind("tpaceLog", c, ["tpaceCompute", "tpaceComputeT30", "parseTimeStr"])("s1");
+      bind("tpaceLog", c, LOG_DEPS)("s1");
       eq(c.tpaceTests.s1, undefined, `distance ${JSON.stringify(v)} must not be logged`);
     }
   });
 
   it("a stale time in the other field is never read as metres", () => {
-    // The two trial types share one form. Switching to T30 with "14:32.50" still sitting in
-    // the time box must not log 14 metres, or anything else.
+    // The trial types share one form. Switching to T30 with "14:32.50" still sitting in the
+    // time box must not log 14 metres, or anything else.
     const c = ctx(); c.state.tpaceTime = "14:32.50"; c.state.tpaceDist = "";
-    bind("tpaceLog", c, ["tpaceCompute", "tpaceComputeT30", "parseTimeStr"])("s1");
+    bind("tpaceLog", c, LOG_DEPS)("s1");
     eq(c.tpaceTests.s1, undefined);
   });
 
   it("the timed trials still work exactly as they did", () => {
-    const c = ctx(); c.state.tpaceType = "1000"; c.state.tpaceTime = "14:00.00";
-    bind("tpaceLog", c, ["tpaceCompute", "tpaceComputeT30", "parseTimeStr"])("s1");
+    const c = ctx("1000"); c.state.tpaceTime = "14:00.00";
+    bind("tpaceLog", c, LOG_DEPS)("s1");
     eq(c.tpaceTests.s1[0].type, "1000");
     eq(c.tpaceTests.s1[0].tpace100, 84);
     eq(c.tpaceTests.s1[0].dist, undefined);
@@ -11836,38 +11867,61 @@ describe("T30 test", () => {
 
   it("nothing is logged without a swimmer", () => {
     const c = ctx(); c.state.tpaceDist = "1650";
-    bind("tpaceLog", c, ["tpaceCompute", "tpaceComputeT30", "parseTimeStr"])(null);
+    bind("tpaceLog", c, LOG_DEPS)(null);
     eq(c.saved, null);
     eq(c.state.tpaceErr, "Pick a swimmer first.");
   });
 
-  it("a T30 reads as a distance on screen, a trial reads as a time", () => {
-    const labels = bind("tpaceTestLabels", {}, ["fmt", "fmtMetres"]);
+  it("a fixed-clock test reads as a distance, a trial reads as a time", () => {
+    const labels = bind("tpaceTestLabels", { TPACE_FIXED: FIXED }, ["fmt", "fmtMetres", "tpaceFixed"]);
     eq(labels({ type: "t30", dist: 1650, sec: 1800 }).typeLabel, "T30");
     eq(labels({ type: "t30", dist: 1650, sec: 1800 }).valueLabel, "1650 m",
        "30:00.00 is the protocol every swimmer shares — it says nothing about this one");
+    eq(labels({ type: "t20", dist: 1100, sec: 1200 }).typeLabel, "T20");
+    eq(labels({ type: "t20", dist: 1100, sec: 1200 }).valueLabel, "1100 m");
     eq(labels({ type: "t30", dist: 1637.5, sec: 1800 }).valueLabel, "1637.5 m");
     eq(labels({ type: "1000", sec: 840 }).valueLabel, "14:00.00");
     eq(labels({ type: "400", sec: 330 }).typeLabel, "400m");
   });
 
-  it("the board ranks a T30 by distance, longest first", () => {
-    // Sorting it by `sec` like the other two boards would call the whole squad a tie:
-    // every T30 lasts 1800 seconds.
-    const board = sourceBetween("if(boardSel==='t30'){", "} else if(boardSel==='tp1000'");
-    eq(/sort\(\(a,b\)=>b\.dist-a\.dist\)/.test(board), true);
-    eq(/b\.dist>a\.dist\?b:a/.test(board), true, "the best T30 is the longest, not the shortest");
+  // A T30 logged before the T20 existed must keep reading back the same way. The record shape
+  // did not change, and this is what says so.
+  it("T30 records logged by the shipped version still read correctly", () => {
+    const labels = bind("tpaceTestLabels", { TPACE_FIXED: FIXED }, ["fmt", "fmtMetres", "tpaceFixed"]);
+    const old = { date: "2026-09-03", type: "t30", dist: 1650, sec: 1800, tpace100: 109.09 };
+    eq(labels(old).typeLabel, "T30");
+    eq(labels(old).valueLabel, "1650 m");
   });
 
-  it("the form asks for metres, and says so", () => {
+  it("the boards rank a fixed-clock test by distance, longest first", () => {
+    // Sorting them by `sec` like the distance boards would call the whole squad a tie:
+    // every T30 lasts 1800 seconds and every T20 lasts 1200.
+    const board = sourceBetween("if(this.tpaceFixed(boardSel)){", "} else if(boardSel==='tp1000'");
+    eq(/sort\(\(a,b\)=>b\.dist-a\.dist\)/.test(board), true);
+    eq(/b\.dist>a\.dist\?b:a/.test(board), true, "the best is the longest, not the shortest");
+    eq(/t\.type===boardSel/.test(board), true, "a T20 must not be ranked on the T30 board");
+  });
+
+  it("both fixed-clock tests are reachable from the form and the boards", () => {
     const form = sourceBetween('<p style="margin:0 0 9px;font-size:13px;font-weight:700;color:#0C1116">Log a new trial</p>', "{{ tpaceErr }}");
     eq(/onTpTypeT30/.test(form), true, "there is no way to reach the T30 without a button");
-    eq(/Distance in metres/.test(form), true);
-    // The protocol the coaches asked for, on the screen where it is carried out.
-    eq(/30 minutes/.test(form), true);
-    eq(/No stopping/.test(form), true);
-    eq(/[Cc]ount the laps/.test(form), true);
+    eq(/onTpTypeT20/.test(form), true, "there is no way to reach the T20 without a button");
+    // The protocol and the example distance are per-test now, so neither may be hard-coded.
+    eq(/30 minutes/.test(form), false, "the protocol text must come from the test, not the markup");
+    eq(/e\.g\. 1650/.test(form), false, "the example distance must come from the test");
+    eq(/\{\{ tpFixedNote \}\}/.test(form), true);
+    const chips = sourceBetween("const boardKindDefs=[", "];");
+    eq(/id:'t30'/.test(chips) && /id:'t20'/.test(chips), true);
+  });
+
+  // The protocol the coaches asked for has to survive being moved out of the markup.
+  it("the protocol still says the things a coach has to be told", () => {
+    const note = sourceBetween("const tpFixedNote = tpFixed ?", ") : '';");
+    eq(/minutes/.test(note), true);
+    eq(/No stopping/.test(note), true);
+    eq(/[Cc]ount the laps/.test(note), true);
   });
 });
+
 
 await report();

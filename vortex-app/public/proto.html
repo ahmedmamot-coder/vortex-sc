@@ -4619,7 +4619,7 @@ if ('serviceWorker' in navigator) {
                       </div>
                       <div style="background:#0A0F1A;color:#fff;border-radius:16px;padding:15px">
                         <p style="margin:0 0 8px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">T-pace &amp; poolside HR check</p>
-                        <p style="margin:0;font-family:var(--font-mono);font-size:12px;line-height:1.95;color:#CFE0FF">maxHR = 220 − age<br>Pulse check: count beats for 6 sec × 10 = HR (bpm)<br>T-pace / 100 = 1000 m trial ÷ 10<br>T-pace / 100 = 400 m trial × 2.5 ÷ 10<br>T-pace / 100 = 1800 s ÷ (T30 metres ÷ 100)</p>
+                        <p style="margin:0;font-family:var(--font-mono);font-size:12px;line-height:1.95;color:#CFE0FF">maxHR = 220 − age<br>Pulse check: count beats for 6 sec × 10 = HR (bpm)<br>T-pace / 100 = 1000 m trial ÷ 10<br>T-pace / 100 = 400 m trial × 2.5 ÷ 10<br>T-pace / 100 = 1800 s ÷ (T30 metres ÷ 100)<br>T-pace / 100 = 1200 s ÷ (T20 metres ÷ 100)</p>
                       </div>
                     </div>
                   </sc-if>
@@ -4634,18 +4634,19 @@ if ('serviceWorker' in navigator) {
                         </div>
                         <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
                           <p style="margin:0 0 9px;font-size:13px;font-weight:700;color:#0C1116">Log a new trial</p>
-                          <div style="display:flex;gap:7px;margin-bottom:9px">
-                            <button onclick="{{ onTpType1000 }}" style="flex:1;padding:9px;border-radius:10px;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;border:1px solid var(--vx-blue);background:{{ tpType1000Bg }};color:{{ tpType1000Fg }}">1000m trial</button>
-                            <button onclick="{{ onTpType400 }}" style="flex:1;padding:9px;border-radius:10px;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;border:1px solid var(--vx-blue);background:{{ tpType400Bg }};color:{{ tpType400Fg }}">400m trial</button>
-                            <button onclick="{{ onTpTypeT30 }}" style="flex:1;padding:9px;border-radius:10px;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;border:1px solid var(--vx-blue);background:{{ tpTypeT30Bg }};color:{{ tpTypeT30Fg }}">T30 test</button>
+                          <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:9px">
+                            <button onclick="{{ onTpType1000 }}" style="padding:9px;border-radius:10px;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;border:1px solid var(--vx-blue);background:{{ tpType1000Bg }};color:{{ tpType1000Fg }}">1000m trial</button>
+                            <button onclick="{{ onTpType400 }}" style="padding:9px;border-radius:10px;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;border:1px solid var(--vx-blue);background:{{ tpType400Bg }};color:{{ tpType400Fg }}">400m trial</button>
+                            <button onclick="{{ onTpTypeT30 }}" style="padding:9px;border-radius:10px;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;border:1px solid var(--vx-blue);background:{{ tpTypeT30Bg }};color:{{ tpTypeT30Fg }}">T30 test</button>
+                            <button onclick="{{ onTpTypeT20 }}" style="padding:9px;border-radius:10px;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;border:1px solid var(--vx-blue);background:{{ tpTypeT20Bg }};color:{{ tpTypeT20Fg }}">T20 test</button>
                           </div>
-                          <sc-if value="{{ tpaceIsT30 }}" hint-placeholder-val="{{ false }}">
+                          <sc-if value="{{ tpaceIsFixed }}" hint-placeholder-val="{{ false }}">
                             <div style="background:#0A0F1A;color:#fff;border-radius:12px;padding:11px 13px;margin-bottom:9px">
-                              <p style="margin:0;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">T30 · 30 minutes continuous freestyle</p>
-                              <p style="margin:6px 0 0;font-size:12px;line-height:1.55;color:#CFE0FF">Steady, moderate-to-strong pace for the full 30 minutes — cover as much distance as possible. No stopping, for any reason. Count the laps carefully; the total distance swum is what gets written here.</p>
+                              <p style="margin:0;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">{{ tpFixedHead }}</p>
+                              <p style="margin:6px 0 0;font-size:12px;line-height:1.55;color:#CFE0FF">{{ tpFixedNote }}</p>
                             </div>
-                            <input value="{{ tpaceDist }}" oninput="{{ onTpaceDist }}" inputmode="decimal" placeholder="Distance in metres e.g. 1650" style="width:100%;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:11px 12px;font-family:var(--font-mono);font-size:14px;color:#0C1116;outline:none;box-sizing:border-box">
-                            <sc-if value="{{ tpaceT30PreviewShow }}" hint-placeholder-val="{{ false }}"><p style="margin:7px 2px 0;font-size:11.5px;color:#0C7A4F;font-weight:600">{{ tpaceT30Preview }}</p></sc-if>
+                            <input value="{{ tpaceDist }}" oninput="{{ onTpaceDist }}" inputmode="decimal" placeholder="{{ tpFixedPlaceholder }}" style="width:100%;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:11px 12px;font-family:var(--font-mono);font-size:14px;color:#0C1116;outline:none;box-sizing:border-box">
+                            <sc-if value="{{ tpFixedPreviewShow }}" hint-placeholder-val="{{ false }}"><p style="margin:7px 2px 0;font-size:11.5px;color:#0C7A4F;font-weight:600">{{ tpFixedPreview }}</p></sc-if>
                           </sc-if>
                           <sc-if value="{{ tpaceIsTimed }}" hint-placeholder-val="{{ true }}">
                             <input value="{{ tpaceTime }}" oninput="{{ onTpaceTime }}" placeholder="Time e.g. 14:32.50" style="width:100%;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:11px 12px;font-family:var(--font-mono);font-size:14px;color:#0C1116;outline:none;box-sizing:border-box">
@@ -13013,38 +13014,51 @@ class Component extends DCLogic {
     this.setState({syncMsg:'Uploading '+n+' data sets to the database…', syncMsgColor:'#0C7A4F'});
     setTimeout(()=>{ const ok=window.__vxSyncOk; this.setState({ syncMsg: ok===false ? 'Some writes were rejected — check the browser console for “vx sync HTTP …”.' : ('Synced '+n+' data sets to the database ✓ — check Supabase → club_state.'), syncMsgColor: ok===false ? '#B42318' : '#0C7A4F' }); }, 2500);
   }
-  // The T30 is the club's third T-pace trial: thirty minutes of continuous freestyle, no stopping,
-  // and the swimmer's own lap count is the result. It is measured the other way round from the
-  // 1000 m and 400 m trials — the clock is fixed at 30:00 and the DISTANCE is what varies — so it
-  // is entered as metres, and the pace falls out of the same division either way:
+  // Two ways to arrive at a T-pace, and they are measured in opposite directions.
+  //
+  // The 1000 m and 400 m trials fix the DISTANCE and time it. The T30 and T20 fix the CLOCK and
+  // measure how far the swimmer got — thirty (or twenty) minutes of continuous freestyle, no
+  // stopping, and the swimmer's own lap count is the result. Same division either way:
   //
   //   1000 m trial : T-pace/100 = time ÷ 10
   //   400 m trial  : T-pace/100 = time × 2.5 ÷ 10
   //   T30          : T-pace/100 = 1800 s ÷ (metres ÷ 100)
+  //   T20          : T-pace/100 = 1200 s ÷ (metres ÷ 100)
   //
-  // Storing the metres rather than a made-up time keeps the log honest about what was measured:
-  // 1650 m is a lap count a coach can check, 1:49.09 is not.
-  get T30_SEC(){ return 1800; }
+  // The fixed-clock ones live in this table rather than in branches, because the T20 arrived the
+  // week after the T30 and every branch would have had to be found and doubled. The form, the
+  // log, the labels and the leaderboard all read the table; a third one is a row here.
+  //
+  // `max` is the swim nobody has ever done — 200 m per minute is well inside a world record —
+  // and it is there to catch the two typos that matter. Below `min` is a lap count entered where
+  // metres belong (66 lengths, not 1650 m); above `max` is metres typed twice over. Either one
+  // computes to a plausible-looking T-pace that then drives every E-2 / E-3 set written off it,
+  // which is why they are refused at the door rather than shown as a warning.
+  get TPACE_FIXED(){ return {
+    t30: {label:'T30', mins:30, sec:1800, min:100, max:6000, eg:1650},
+    t20: {label:'T20', mins:20, sec:1200, min:100, max:4000, eg:1100},
+  }; }
+  tpaceFixed(type){ return this.TPACE_FIXED[type] || null; }
   tpaceCompute(type, sec){ return type==='1000' ? sec/10 : (sec*2.5)/10; }
-  tpaceComputeT30(dist){ return (this.T30_SEC*100)/dist; }
-  // How a logged trial reads on screen. A T30 shows the distance swum, not 30:00 — the half hour
-  // is the protocol, not the measurement, so printing it would say nothing about the swimmer.
+  tpaceComputeFixed(type, dist){ const f=this.tpaceFixed(type); return f ? (f.sec*100)/dist : null; }
+  // How a logged trial reads on screen. A fixed-clock test shows the distance swum, not 30:00 —
+  // the half hour is the protocol every swimmer shares, so printing it would say nothing about
+  // this one.
   tpaceTestLabels(t){
-    if(t.type==='t30') return {typeLabel:'T30', valueLabel:this.fmtMetres(t.dist)+' m'};
+    const f=this.tpaceFixed(t.type);
+    if(f) return {typeLabel:f.label, valueLabel:this.fmtMetres(t.dist)+' m'};
     return {typeLabel: t.type==='1000'?'1000m':'400m', valueLabel:this.fmt(t.sec)};
   }
   fmtMetres(m){ const n=+m||0; return Number.isInteger(n) ? String(n) : n.toFixed(1); }
   tpaceLog(swId){ const S=this.state;
     if(!swId) return this.setState({tpaceErr:'Pick a swimmer first.'});
-    if(S.tpaceType==='t30'){
+    const fixed=this.tpaceFixed(S.tpaceType);
+    if(fixed){
       const dist=parseFloat((S.tpaceDist||'').trim().replace(/[^0-9.]/g,''));
-      if(!isFinite(dist) || dist<=0) return this.setState({tpaceErr:'Enter the distance swum in metres, e.g. 1650.'});
-      // A 30-minute swim outside this range is a typo — laps counted instead of metres (25),
-      // or metres typed twice over (16500) — and a T-pace computed from either is nonsense
-      // that would then drive every E-2 / E-3 set the coach writes off it.
-      if(dist<100 || dist>6000) return this.setState({tpaceErr:'That does not look like a 30-minute distance. Enter total metres swum, between 100 and 6000.'});
-      const t100=this.tpaceComputeT30(dist);
-      const rec={date:new Date().toISOString().slice(0,10), type:'t30', dist:+dist.toFixed(1), sec:this.T30_SEC, tpace100:+t100.toFixed(2)};
+      if(!isFinite(dist) || dist<=0) return this.setState({tpaceErr:'Enter the distance swum in metres, e.g. '+fixed.eg+'.'});
+      if(dist<fixed.min || dist>fixed.max) return this.setState({tpaceErr:'That does not look like a '+fixed.mins+'-minute distance. Enter total metres swum, between '+fixed.min+' and '+fixed.max+'.'});
+      const t100=this.tpaceComputeFixed(S.tpaceType, dist);
+      const rec={date:new Date().toISOString().slice(0,10), type:S.tpaceType, dist:+dist.toFixed(1), sec:fixed.sec, tpace100:+t100.toFixed(2)};
       this.tpaceTests={...this.tpaceTests, [swId]:[rec, ...(this.tpaceTests[swId]||[])]};
       this._saveJSON('vx_tpace', this.tpaceTests);
       return this.setState({tpaceDist:'', tpaceErr:''});
@@ -18993,7 +19007,7 @@ class Component extends DCLogic {
       {id:'review', icon:'shield-check', title:'AI Plan Review', sub:'Check plan vs zone rules', tint:'rgba(39,51,214,.1)', color:'#2733D6'},
       {id:'clock', icon:'timer', title:'Pace Clock', sub:'Run the session poolside', tint:'rgba(200,30,91,.1)', color:'#C81E5B'},
       {id:'zoneeng', icon:'activity', title:'Zone Engine', sub:'6-zone rules & squad limits', tint:'rgba(12,122,79,.1)', color:'#0C7A4F'},
-      {id:'tpace', icon:'gauge', title:'T-Pace Tests', sub:'Log 1000/400/T30 trials · retest due', tint:'rgba(6,126,234,.1)', color:'#067EEA'},
+      {id:'tpace', icon:'gauge', title:'T-Pace Tests', sub:'Log 1000/400/T30/T20 · retest due', tint:'rgba(6,126,234,.1)', color:'#067EEA'},
       {id:'promo', icon:'trending-up', title:'Level-Up Review', sub:'Promotion candidates & reviews', tint:'rgba(12,122,79,.1)', color:'#0C7A4F'},
       {id:'entries', icon:'list-ordered', title:'Meet Entries', sub:'Heats · lanes · printable program', tint:'rgba(200,30,91,.1)', color:'#C81E5B'},
       // Requests used to live only inside one meet's Entries tab, filtered to that meet and to
@@ -19713,7 +19727,7 @@ class Component extends DCLogic {
       {label:'Zone permission', status: perm===2?'pass':(perm===1?'warn':'fail'), msg: perm===2?(squad.name+' trains '+zName+' as a normal zone.'):perm===1?(zName+' is introduced carefully at '+squad.name+' — keep volume low and rest generous.'):(zName+' is not appropriate for '+squad.name+' at this age. Drop to an aerobic zone (E-1 / E-2).')},
       {label:'Session volume', status: rvTotal<=rvCap?'pass':(rvTotal<=rvCap*1.15?'warn':'fail'), msg: rvTotal<=rvCap?(rvTotal.toLocaleString()+' m is within the ~'+rvCap.toLocaleString()+' m guide for '+squad.name+'.'):(rvTotal.toLocaleString()+' m is over the ~'+rvCap.toLocaleString()+' m guide — trim the main set.')},
       {label:'Session structure', status:(hasW&&hasM&&hasC)?'pass':'warn', msg:(hasW&&hasM&&hasC)?'Warm-up, main set and cool-down are all present.':'A complete session needs a warm-up, a main set and a cool-down.'},
-      {label:'Pace basis', status:(zi===1||zi===2)?'warn':'pass', msg:(zi===1||zi===2)?'E-2 / E-3 pace should come from a current T-pace test — log a 1000 m trial, a 400 m trial or a T30, don\u2019t guess.':'Speed zones use max-effort targets with full recovery.'},
+      {label:'Pace basis', status:(zi===1||zi===2)?'warn':'pass', msg:(zi===1||zi===2)?'E-2 / E-3 pace should come from a current T-pace test — log a 1000 m trial, a 400 m trial, a T30 or a T20, don\u2019t guess.':'Speed zones use max-effort targets with full recovery.'},
     ];
     const rvChecksV=rvChecks.map(c=>{ const m=c.status==='pass'?{bg:'#E7F6EE',fg:'#0C7A4F',ic:'check'}:c.status==='warn'?{bg:'#FBF0DD',fg:'#9A6206',ic:'info'}:{bg:'#FBE4E4',fg:'#B42318',ic:'x'}; return {label:c.label, msg:c.msg, bg:m.bg, fg:m.fg, ic:m.ic}; });
     const rvFail=rvChecks.filter(c=>c.status==='fail').length, rvWarn=rvChecks.filter(c=>c.status==='warn').length;
@@ -19762,10 +19776,15 @@ class Component extends DCLogic {
       dateLabel:this.shortDateISO(t.date), typeLabel:L.typeLabel, time:L.valueLabel, tpace:this.fmt(t.tpace100),
       onDelete: tpSel?()=>this.tpaceDelete(tpSel.id, i):null }; });
     const tpHasSel = !!tpSel;
-    const tpType1000On = S.tpaceType==='1000', tpType400On = S.tpaceType==='400', tpTypeT30On = S.tpaceType==='t30';
-    // The T30 asks for metres, every other trial asks for a time, so the form swaps its one input
-    // rather than accepting a lap count into a field labelled "Time".
-    const tpaceT30Preview = (()=>{ if(!tpTypeT30On) return ''; const d=parseFloat((S.tpaceDist||'').trim()); if(!isFinite(d)||d<=0) return ''; return 'T-pace ≈ '+this.fmt(+this.tpaceComputeT30(d).toFixed(2))+'/100'; })();
+    const tpType1000On = S.tpaceType==='1000', tpType400On = S.tpaceType==='400';
+    const tpTypeT30On = S.tpaceType==='t30', tpTypeT20On = S.tpaceType==='t20';
+    // A fixed-clock test asks for metres, a distance trial asks for a time, so the form swaps its
+    // one input rather than accepting a lap count into a field labelled "Time".
+    const tpFixed = this.tpaceFixed(S.tpaceType);
+    const tpFixedHead = tpFixed ? (tpFixed.label+' · '+tpFixed.mins+' minutes continuous freestyle') : '';
+    const tpFixedNote = tpFixed ? ('Steady, moderate-to-strong pace for the full '+tpFixed.mins+' minutes — cover as much distance as possible. No stopping, for any reason. Count the laps carefully; the total distance swum is what gets written here.') : '';
+    const tpFixedPlaceholder = tpFixed ? ('Distance in metres e.g. '+tpFixed.eg) : '';
+    const tpFixedPreview = (()=>{ if(!tpFixed) return ''; const d=parseFloat((S.tpaceDist||'').trim()); if(!isFinite(d)||d<=0) return ''; return 'T-pace ≈ '+this.fmt(+this.tpaceComputeFixed(S.tpaceType, d).toFixed(2))+'/100'; })();
 
     // ---- Level-Up Review (promotion engine) ----
     // Who may approve a promotion. This was a hand-written list of three account ids, and it was
@@ -20123,7 +20142,7 @@ class Component extends DCLogic {
     const insightAttend={pct:attendPctNum+'%', dash:((attendPctNum/100)*276.5).toFixed(1)+' 276.5'};
     const insightStats=[{label:'Avg / swimmer', value:avgKm+' km', color:'#067EEA'},{label:'PBs this month', value:String(pbsMonth), color:'#0C7A4F'},{label:'Sessions', value:String(sessionsCount), color:'#2733D6'}];
     // boards — live from real T-pace tests and real competition results
-    const boardKindDefs=[{id:'tp1000',label:'T-Pace · 1000m'},{id:'tp400',label:'T-Pace · 400m'},{id:'t30',label:'T-Pace · T30'},{id:'comp',label:'Competition'}];
+    const boardKindDefs=[{id:'tp1000',label:'T-Pace · 1000m'},{id:'tp400',label:'T-Pace · 400m'},{id:'t30',label:'T-Pace · T30'},{id:'t20',label:'T-Pace · T20'},{id:'comp',label:'Competition'}];
     const boardSel = S.boardSel || 'tp1000';
     const boardChips=boardKindDefs.map(b=>({label:b.label, onClick:()=>this.setState({boardSel:b.id}), bg:boardSel===b.id?squad.accent:'#fff', fg:boardSel===b.id?'#fff':'#3A4152', border:boardSel===b.id?squad.accent:'#E5E9F0'}));
     const boardIsComp = boardSel==='comp';
@@ -20132,12 +20151,13 @@ class Component extends DCLogic {
     const onBoardEvent=(e)=>this.setState({boardEvent:e.target.value});
     const rosterListB = this.roster[S.squadId]||[];
     let boardTitle, boardMeta, boardRows=[], boardEmpty=false;
-    if(boardSel==='t30'){
-      // The T30 is the one board where the best swimmer is not the fastest number. The clock is
-      // the same 30 minutes for everyone, so it ranks on distance covered, longest first — sorting
-      // it by `sec` like the other two would rank the whole squad as a tie.
-      const rows = rosterListB.map(sw=>{ const tests=(this.tpaceTests[sw.id]||[]).filter(t=>t.type==='t30' && t.dist>0); if(!tests.length) return null; const best=tests.reduce((a,b)=>b.dist>a.dist?b:a); return {sw, dist:best.dist, tpace:best.tpace100, date:best.date}; }).filter(Boolean).sort((a,b)=>b.dist-a.dist);
-      boardTitle = 'T-Pace · T30 (30 min)';
+    if(this.tpaceFixed(boardSel)){
+      // The fixed-clock boards are the ones where the best swimmer is not the fastest number. The
+      // clock is the same for everyone, so they rank on distance covered, longest first — sorting
+      // by `sec` like the distance trials would rank the whole squad as a tie.
+      const fx = this.tpaceFixed(boardSel);
+      const rows = rosterListB.map(sw=>{ const tests=(this.tpaceTests[sw.id]||[]).filter(t=>t.type===boardSel && t.dist>0); if(!tests.length) return null; const best=tests.reduce((a,b)=>b.dist>a.dist?b:a); return {sw, dist:best.dist, tpace:best.tpace100, date:best.date}; }).filter(Boolean).sort((a,b)=>b.dist-a.dist);
+      boardTitle = 'T-Pace · '+fx.label+' ('+fx.mins+' min)';
       boardMeta = squad.name+' · '+rows.length+' logged test'+(rows.length===1?'':'s');
       boardEmpty = rows.length===0;
       if(rows.length){
@@ -22998,14 +23018,17 @@ class Component extends DCLogic {
           return out; })() },
       tpaceQuery:S.tpaceQuery, onTpaceQuery:(e)=>this.setState({tpaceQuery:e.target.value}),
       tpSwimmerRows, tpHasSel, tpNoSel: !tpHasSel, tpSelName: tpSel?tpSel.name:'', tpSelInitials: tpSel?tpSel.initials:'',
-      tpType1000On, tpType400On, tpTypeT30On,
-      onTpType1000:()=>this.setState({tpaceType:'1000', tpaceErr:''}), onTpType400:()=>this.setState({tpaceType:'400', tpaceErr:''}), onTpTypeT30:()=>this.setState({tpaceType:'t30', tpaceErr:''}),
+      tpType1000On, tpType400On, tpTypeT30On, tpTypeT20On,
+      onTpType1000:()=>this.setState({tpaceType:'1000', tpaceErr:''}), onTpType400:()=>this.setState({tpaceType:'400', tpaceErr:''}),
+      onTpTypeT30:()=>this.setState({tpaceType:'t30', tpaceErr:''}), onTpTypeT20:()=>this.setState({tpaceType:'t20', tpaceErr:''}),
       tpType1000Bg: tpType1000On?'var(--vx-blue)':'#fff', tpType1000Fg: tpType1000On?'#fff':'#3A4152',
       tpType400Bg: tpType400On?'var(--vx-blue)':'#fff', tpType400Fg: tpType400On?'#fff':'#3A4152',
       tpTypeT30Bg: tpTypeT30On?'var(--vx-blue)':'#fff', tpTypeT30Fg: tpTypeT30On?'#fff':'#3A4152',
-      tpaceIsT30: tpTypeT30On, tpaceIsTimed: !tpTypeT30On,
+      tpTypeT20Bg: tpTypeT20On?'var(--vx-blue)':'#fff', tpTypeT20Fg: tpTypeT20On?'#fff':'#3A4152',
+      tpaceIsFixed: !!tpFixed, tpaceIsTimed: !tpFixed,
+      tpFixedHead, tpFixedNote, tpFixedPlaceholder,
       tpaceDist:S.tpaceDist, onTpaceDist:(e)=>this.setState({tpaceDist:e.target.value}),
-      tpaceT30Preview, tpaceT30PreviewShow: !!tpaceT30Preview,
+      tpFixedPreview, tpFixedPreviewShow: !!tpFixedPreview,
       tpaceTime:S.tpaceTime, onTpaceTime:(e)=>this.setState({tpaceTime:e.target.value}), tpaceErr:S.tpaceErr, tpaceErrShow:!!S.tpaceErr,
       onTpaceLog: tpSel?()=>this.tpaceLog(tpSel.id):()=>this.setState({tpaceErr:'Pick a swimmer first.'}),
       onTpaceBack:()=>this.setState({tpaceSwId:null}),
