@@ -3455,6 +3455,60 @@ describe("expired session", () => {
     eq(/as soon as the connection is back/.test(detail), true);
   });
 
+  // The red banner every phone in the club was showing: "1 change has not been saved · club_state
+  // (vx_roster_edits) · could not reach the database just now." A dropped connection (status 0) is
+  // never counted toward setting a write aside, and rightly so — a phone out of signal at the
+  // poolside must keep trying. But the roster document is a couple of megabytes, so on a marginal
+  // link it is the one write that keeps getting cut off while the small writes beside it land, and
+  // never-counted it retried behind that banner for ever, under a line that was not even true: the
+  // database was being reached. So a dropped write is now set aside once THIS device has landed
+  // another write since it was stranded — proof there is no outage, only this one write that will
+  // not go.
+  const ROSTER_STRANDED = () => [{
+    id: "r1", op: "push", table: "club_state (vx_roster_edits)",
+    payload: { key: "vx_roster_edits", value: null, bytes: 2_000_000 },
+    sig: "push|club_state (vx_roster_edits)|vx_roster_edits",
+    status: 0, refused: false, said: "", tries: 9, body: "network: connection reset",
+    ts: NOW, since: NOW,
+  }];
+  const rosterReply = (url) =>
+    url.includes("select=value") ? res(200, [{ value: { edits: {}, deleted: {}, added: {} } }])
+      : url.includes("/rest/v1/attendance_marks") ? res(200, [])
+        : url.includes("/rest/v1/club_state") ? Promise.reject(new Error("connection reset"))
+          : GOOD_TOKEN;
+
+  itAsync("a roster document that keeps dropping while the database is reachable is set aside, not shown for ever", async () => {
+    const t = boot({ auth: LIVE, failed: ROSTER_STRANDED(), reply: rosterReply });
+    await flush();
+    eq(t.win.__vxFailedCount(), 1, "it starts on the banner, as it should while nothing has proven the link");
+    // A small write lands — so the database is plainly reachable and this is not an outage.
+    await t.win.__vxInsert("attendance_marks", [{ id: "m1" }]);
+    await flush();
+    // The roster is pushed again and the network drops the big body again.
+    await t.win.__vxpush("vx_roster_edits", JSON.stringify({ edits: {}, deleted: {}, added: { junior: [{ id: "s1" }] } }));
+    await flush();
+    eq(t.win.__vxFailedCount(), 0, "it stops sitting on every phone as unsaved work");
+    eq(t.win.__vxBlocked().length, 1, "set aside, not lost");
+    eq(/kept dropping its connection/.test(t.win.__vxBlocked()[0].said), true, "and named for what it was");
+  });
+
+  itAsync("but with nothing proving the link, a dropped write keeps trying — an outage is not a bad write", async () => {
+    const t = boot({ auth: LIVE, failed: ROSTER_STRANDED(), reply: rosterReply });
+    await flush();
+    // No write has landed, so nothing has proven the database is reachable. The roster drops again.
+    await t.win.__vxpush("vx_roster_edits", JSON.stringify({ edits: {}, deleted: {}, added: { junior: [{ id: "s1" }] } }));
+    await flush();
+    eq(t.win.__vxFailedCount(), 1, "still waiting on the connection, still held");
+    eq(t.win.__vxBlocked().length, 0, "not set aside — trying again is the fix for an outage");
+  });
+
+  it("and set aside, it is named as a connection this device could not use, not a row the database refused", () => {
+    const detail = sourceBetween("const fam=b.filter(x=>x&&x.table==='family_accounts').length;",
+      "return 'The database is refusing the rows themselves");
+    eq(/kept dropping its connection/.test(detail), true, "the network set-aside has its own words");
+    eq(/carries it up/.test(detail), true, "and says the work is safe, not that the database refused it");
+  });
+
   // The state a coach was actually stuck in: the app still signed in, the database session
   // long gone, so every attendance mark came back 401 under "retrying automatically" — a
   // retry that could never work, for as long as the app stayed open.
@@ -5932,18 +5986,28 @@ describe("InBody sheet", () => {
 
     it("counts its own attempts rather than being re-queued as if it were new", () => {
       eq(/x\.sig===sig/.test(add), true, "it has to recognise the same write coming back");
-      eq(/_tries = _prior \+ \(_answered \? 1 : 0\)/.test(add), true);
+      eq(/_tries = _prior \+ \(_countable \? 1 : 0\)/.test(add), true);
     });
     it("is set aside once it is clearly not going to work", () =>
       eq(/_tries >= 10/.test(add), true, "nothing ever takes it off the retry path"));
-    // The counter is evidence of one thing only: the database has read this request and refused
-    // it, over and over. A connection that dropped is evidence of the opposite — the request
-    // never arrived — and sending it again is the fix rather than a waste.
-    it("only counts the attempts the database actually answered", () => {
+    // The counter is evidence of one thing: sending these bytes again cannot work. A refusal is
+    // that — the database read the request and said no, and will say no again. A dropped
+    // connection is normally the opposite — the request never arrived, so trying again is the fix.
+    //
+    // Normally. The exception is the whole of the mobile-error fix: if this device has LANDED
+    // another write since this one was stranded, the database is plainly reachable, there is no
+    // outage, and the dropped write is this write's problem — the roster document, too big to get
+    // out on a weak link while the small writes beside it go through. That, and only that, lets a
+    // dropped write be counted; NOTSENT (-1) never is.
+    it("counts an answered refusal, or a dropped write only once the database is proven reachable", () => {
       eq(/_answered = \(typeof status === "number" && status > 0\)/.test(add), true,
-         "NOTSENT is -1 and a dropped connection is 0; neither is an answer");
-      eq(/if\(_answered && _tries >= 10\)/.test(add), true,
-         "a write nobody has answered must never be set aside");
+         "NOTSENT is -1 and a dropped connection is 0; neither is an answer on its own");
+      eq(/_reachable = !!\(window\.__vxLastWriteOkTs && _since && window\.__vxLastWriteOkTs >= _since\)/.test(add), true,
+         "reachability is another write having landed since this one was stranded");
+      eq(/_countable = _answered \|\| \(status === 0 && _reachable\)/.test(add), true,
+         "a dropped write counts only when there is proof this is not an outage");
+      eq(/if\(_countable && _tries >= 10\)/.test(add), true,
+         "and during a genuine outage a dropped write is still never set aside");
     });
     // Set aside, not discarded — the club's work is not thrown away, it is moved off the path
     // that everything else is queued on, and named so somebody can act on it.
