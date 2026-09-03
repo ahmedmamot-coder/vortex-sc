@@ -12535,7 +12535,14 @@ class Component extends DCLogic {
     // One row per account (id = account id) — upsert never clobbers other accounts.
     if(window.__vxUpsert){ window.__vxUpsert('staff_accounts', [this._staffRow(id, o, isCustom)]).then(ok=>{ if(ok) this._staffFetch(); }); }
   }
-  meetsViewPdf(pdf, title){ if(!pdf) return; this._openDataUrl(pdf); }
+  // The meet information sheet is a file like every other the club keeps: a coach attaches it and
+  // it is uploaded to the vx-media bucket, which is private now. Its stored address is the public
+  // one, and following that lands on {"error":"Bucket not found"} rather than the sheet — the same
+  // trap the InBody report and the swimmer documents already climbed out of. So a stored URL is
+  // signed on the way out (a short-lived link, opened in the tap's own tick so the pop-up lives),
+  // and only a legacy base64 sheet — the ones the old calendar carried inline — still opens as a
+  // data URL. Sending a stored URL to _openDataUrl was what put "Details" onto the error page.
+  meetsViewPdf(pdf, title){ if(!pdf) return; if(/^data:/.test(pdf)){ this._openDataUrl(pdf); } else { this._openUrl(pdf); } }
   _esc(s){ return (''+(s==null?'':s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   // Open generated HTML / a stored file reliably on every platform. Android Chrome does NOT
   // render window.open('')+document.write or a long data: URL, so we build a Blob object URL
