@@ -11509,6 +11509,58 @@ describe("the races a parent chooses", () => {
     eq(/has not posted the event programme/.test(fn), true);
   });
 
+  /* The request is written by the database now, not assembled on the phone and posted back.
+     From one tap on 3 September the coach's inbox line landed at 11:26:11 and the request
+     itself never arrived — same function, same second, one key through and one not. The
+     whole-document write is what lost it: when the club's copy cannot be read the app is right
+     to send nothing (this phone holds only its own family's slice), so the write went quietly
+     onto a retry queue while the parent read "Sent to the coach ✓". */
+  describe("and the request itself reaches the club", () => {
+    const fn = () => sourceBetween("famRequestEvents(swId, swName, meetName, events){", "\n  }");
+    const SQL = readFileSync(new URL("../supabase/family_event_requests.sql", import.meta.url), "utf8");
+
+    it("is one call the database appends, not a document this phone sends back", () => {
+      const src = fn();
+      eq(/__vxRpc\('vx_request_events'/.test(src), true);
+      // Just the signed-in branch. The tail of the function is the signed-out fallback, which
+      // still queues a local write the way every other write in the app does when there is no
+      // database session — that path was never the one that lost anything.
+      const rpc = src.slice(src.indexOf("if(window.__vxRpc"), src.indexOf("// No database session"));
+      eq(/_saveJSON\('vx_event_requests'/.test(rpc), false,
+         "sending this phone's copy back is the write that lost the request");
+      eq(/_saveLocalOnly\('vx_event_requests'/.test(rpc), true,
+         "kept locally so the chips update, without pushing the club's list from here");
+      eq(/^\s*return window\.__vxRpc/m.test(rpc), true,
+         "and it returns, so the old whole-document path cannot also run");
+    });
+
+    it("says so plainly when it did not get there", () => {
+      eq(/did not reach the club, so nothing has been sent/.test(fn()), true,
+         "\"Sent to the coach ✓\" over a write that never left is the whole of this bug");
+    });
+
+    it("appends under a lock, so two parents at once do not lose each other", () => {
+      eq(/for update/.test(SQL), true);
+      eq(/limit 600/.test(SQL), true, "a whole document that grows for ever eventually cannot be saved");
+    });
+
+    it("takes the request and the coach's alert in the same transaction", () => {
+      const body = SQL.slice(SQL.indexOf("create or replace function public.vx_request_events"));
+      eq(/perform public\.vx_state_prepend\('vx_event_requests', v_added\)/.test(body), true);
+      eq(/perform public\.vx_state_prepend\('vx_notifications'/.test(body), true,
+         "the club held an alert for a request it did not have — these two cannot separate again");
+    });
+
+    it("and only for a child on that account", () => {
+      const body = SQL.slice(SQL.indexOf("create or replace function public.vx_request_events"));
+      eq(/vx_is_my_swimmer\(p_sw_id\) or public\.vx_is_staff\(\)/.test(body), true);
+      eq(/errcode = '42501'/.test(body), true);
+      // Nothing a parent types reaches the club's inbox: the name is clamped, the rest is theirs.
+      eq(/left\(coalesce\(nullif\(btrim\(p_sw_name\), ''\), 'Swimmer'\), 60\)/.test(body), true);
+      eq(/security definer/.test(body), true);
+    });
+  });
+
   it("never guesses a programme the club has not posted", () => {
     const fn = sourceBetween("_famMeetRequest(meet, sw, meetEvents, info, deadlineIso, today){", "\n  }");
     eq(/EVENT_CATALOG/.test(fn), false,

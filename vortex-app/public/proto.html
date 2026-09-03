@@ -14667,6 +14667,42 @@ class Component extends DCLogic {
     const _clear=(msg, ok)=>{ const all={...(this.state.famReqPicked||{})}; delete all[meetName];
       this.setState({famReqPicked:all, famReqMsg:msg, famReqMsgMeet:meetName, famReqMsgOk:ok!==false}); };
     if(!fresh.length) return _clear('Those races are already on the list for '+meetName+'.', true);
+    // The database appends the row itself \u2014 see supabase/family_event_requests.sql.
+    //
+    // This used to be a whole-document write: read the club's list, add to it, send it all back.
+    // That read is the weak point, and when it fails the app is right to send nothing, because
+    // sending this phone's slice would erase every other family's requests. So the write went
+    // quietly onto a retry queue while the parent read "Sent to the coach \u2713", and a refresh handed
+    // back the club's copy without it.
+    //
+    // It is not a theory about what might happen. From one tap on 3 September the coach's inbox
+    // line landed at 11:26:11 and the request itself never arrived at all \u2014 same function, same
+    // second, same session, one key through and one not. A read-modify-write from a phone was
+    // always going to lose that race.
+    //
+    // One call now, appended under a lock in one transaction, with the coach's notification in the
+    // same transaction so the club can never again hold the alert for a request it does not have.
+    // Nothing of the club's is sent from here, so there is nothing to skip and nothing to clobber.
+    if(window.__vxRpc && this._isFamilySession()){
+      _clear('Sending \u2026', true);
+      return window.__vxRpc('vx_request_events',
+          {p_sw_id:swId, p_sw_name:swName, p_meet:meetName, p_events:fresh})
+        .then(r=>{
+          if(!r || r.__err) return _clear('That did not reach the club, so nothing has been sent \u2014 '
+            +'please try again in a moment, or tell the coach directly.', false);
+          const added=(r.added||[]);
+          if(added.length){
+            // Kept locally WITHOUT pushing: the club already has these rows, and sending this
+            // phone's copy back is the exact write this whole change removes.
+            this.eventRequests=[...added, ...this.eventRequests];
+            this._saveLocalOnly('vx_event_requests', this.eventRequests);
+          }
+          _clear(added.length ? ('Sent to the coach: '+added.map(a=>a.event).join(', ')+' \u2713')
+                              : ('Those races are already on the list for '+meetName+'.'), true);
+        });
+    }
+    // No database session on this device: keep it here and let the queue send it, which is what
+    // every other write in the app does when signed out.
     const at=new Date().toISOString();
     const recs=fresh.map((event,i)=>({id:this._uid('req')+'_'+i, swId, swName, meetName, event,
       status:'pending', requestedAt:at.slice(0,10), ts:Date.now()}));

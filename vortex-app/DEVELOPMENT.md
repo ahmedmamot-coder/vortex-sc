@@ -308,20 +308,53 @@ message rather than a red banner that never clears.
 
 ## The races a family asks for, and where the club reads them
 
-A parent picks races on a meet's own card and taps Request. Each race becomes one row in
-`club_state.vx_event_requests`, and the club sees them in **Tools & AI → Meet Requests** — every
-meet at once, with a count on the tile.
+**Run `supabase/family_event_requests.sql`.**
+
+A parent picks races on a meet's own card and taps Request. The database appends each race itself,
+via `vx_request_events(...)`, and the club sees them in **Tools & AI → Meet Requests** — every meet
+at once, with a count on the tile.
+
+### Why the database writes it, and not the phone
+
+`vx_event_requests` is a whole JSON document in `club_state`, and a parent's phone holds only its
+own family's slice of it. Writing one used to mean: read the club's copy, add your row, send the
+whole thing back. **That read is the weak point.** When it fails the app is right to send nothing —
+sending the slice would erase every other family's requests — so the write went quietly onto a
+retry queue while the parent read *"Sent to the coach ✓"*, and a refresh handed back the club's copy
+without it.
+
+That is not a theory about what might happen. From one tap on 3 September 2026 the app made two
+writes milliseconds apart through the same function:
+
+| key | outcome |
+|---|---|
+| `vx_notifications` — the coach's inbox line | landed, 11:26:11 |
+| `vx_event_requests` — the request itself | never arrived; unchanged since 10:06 that morning |
+
+Same session, same second, same policy: one key through and one not. A read-modify-write from a
+phone was always going to lose that race.
+
+`vx_request_events` takes the lock, appends the rows and writes the coach's notification **in the
+same transaction**, so the club can never again hold the alert for a request it does not have. The
+phone sends nothing of the club's, so there is nothing to skip and nothing to clobber. A parent may
+only ask for a child on their own account (`vx_is_my_swimmer`), the swimmer's name is clamped to 60
+characters and nothing else is free text, so this cannot write an arbitrary line into the club's
+inbox. If the call does not get there the card says so, rather than claiming it was sent.
+
+Signed out, the old local-queue path still applies — that one was never what lost anything.
 
 Before that screen existed the only view of a request was Meets → *that one meet* → Entries,
 filtered to that meet and to `pending`. A request for a meet nobody happened to open was a request
 nobody could see, while the parent had been told *"Sent to the coach ✓"*.
 
-**The list is not a document one device owns.** This is the thing to keep in mind before changing
-anything here. Every other synced key is written whole, last writer wins, which is right for the
-squads or the fee plan — one person edits those at a time. `vx_event_requests` and
-`vx_notifications` are different: a parent's phone adds to them and so does every coach. A staff
-device that has been open since before a parent tapped Request holds a list without that request in
-it, and **every save sends every key**, so the next save of anything at all put the old list back.
+### And the other way it was lost
+
+**The list is not a document one device owns.** Every other synced key is written whole, last
+writer wins, which is right for the squads or the fee plan — one person edits those at a time.
+`vx_event_requests` and `vx_notifications` are different: a parent's phone adds to them and so does
+every coach. A staff device that has been open since before a parent tapped Request holds a list
+without that request in it, and **every save sends every key**, so the next save of anything at all
+put the old list back.
 
 That is not hypothetical. On 3 September 2026 every `club_state` key was rewritten inside three
 seconds — `vx_event_requests` at 10:06:00, `vx_notifications` at 10:06:00.7 — and a 50 Breast
@@ -346,7 +379,8 @@ a parent may write, so a family accepting a suggestion records the answer and no
 `_reqEnterApproved()` runs on every staff pull and on open, and enters any approved request that
 has no entry yet. `entryAddOne` refuses to add the same swim twice, so it is safe to run always.
 
-No SQL for any of this — `security_4_roles.sql` already lets a family write those two keys.
+`security_4_roles.sql` already lets a family write those two keys; `family_event_requests.sql` is
+what makes the request itself arrive.
 
 ## Memberships and meet entries live in the database, one row each
 
