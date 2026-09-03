@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getSquadBySlug } from "@/lib/data/squads";
 import { getSwimmersBySquad } from "@/lib/data/swimmers";
 import { getTPaceTestsForSquad } from "@/lib/data/tpace";
+import { testTypeOf } from "@/lib/tpace-tests";
 import ToolShell from "../tool-shell";
 import TPaceClient from "./t-pace-client";
 
@@ -23,9 +24,12 @@ export default async function TPacePage({ params }: { params: Promise<{ slug: st
         tests={tests.map((t) => ({
           id: t.id,
           name: `${t.swimmers.first_name} ${t.swimmers.last_name}`,
-          distance: t.distance,
-          time_seconds: t.time_seconds,
-          t_pace_seconds: t.t_pace_seconds,
+          // A row from before tpace_fixed_clock.sql carries no test_type; testTypeOf reads it
+          // off the distance, which is unambiguous for the only two trials that could exist then.
+          type: testTypeOf(t),
+          distance: Number(t.distance),
+          time_seconds: Number(t.time_seconds),
+          t_pace_seconds: Number(t.t_pace_seconds),
           tested_at: t.tested_at,
           retest_due: t.retest_due,
         }))}

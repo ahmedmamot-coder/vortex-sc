@@ -4646,7 +4646,12 @@ if ('serviceWorker' in navigator) {
                               <p style="margin:6px 0 0;font-size:12px;line-height:1.55;color:#CFE0FF">{{ tpFixedNote }}</p>
                             </div>
                             <input value="{{ tpaceDist }}" oninput="{{ onTpaceDist }}" inputmode="decimal" placeholder="{{ tpFixedPlaceholder }}" style="width:100%;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:11px 12px;font-family:var(--font-mono);font-size:14px;color:#0C1116;outline:none;box-sizing:border-box">
-                            <sc-if value="{{ tpFixedPreviewShow }}" hint-placeholder-val="{{ false }}"><p style="margin:7px 2px 0;font-size:11.5px;color:#0C7A4F;font-weight:600">{{ tpFixedPreview }}</p></sc-if>
+                            <sc-if value="{{ tpFixedPreviewShow }}" hint-placeholder-val="{{ false }}">
+                              <p style="margin:7px 2px 0;font-size:11.5px;color:#0C7A4F;font-weight:600">{{ tpFixedPreview }}</p>
+                              <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:7px">
+                                <sc-for list="{{ tpFixedPreviewPaces }}" as="p" hint-placeholder-count="7"><span style="text-align:center;background:#F4F7FB;border:1px solid #E5E9F0;border-radius:8px;padding:5px 2px"><span style="display:block;font-size:9.5px;color:#7A8296;font-weight:700">{{ p.label }}</span><span style="display:block;font-family:var(--font-mono);font-size:11.5px;color:#0C1116;font-weight:700;margin-top:1px">{{ p.time }}</span></span></sc-for>
+                              </div>
+                            </sc-if>
                           </sc-if>
                           <sc-if value="{{ tpaceIsTimed }}" hint-placeholder-val="{{ true }}">
                             <input value="{{ tpaceTime }}" oninput="{{ onTpaceTime }}" placeholder="Time e.g. 14:32.50" style="width:100%;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:11px 12px;font-family:var(--font-mono);font-size:14px;color:#0C1116;outline:none;box-sizing:border-box">
@@ -4656,9 +4661,16 @@ if ('serviceWorker' in navigator) {
                         </div>
                         <div style="display:flex;flex-direction:column;gap:8px">
                           <sc-for list="{{ tpSelTests }}" as="t" hint-placeholder-count="3">
-                            <div style="display:flex;align-items:center;justify-content:space-between;background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:11px 13px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
-                              <span><span style="display:block;font-size:12.5px;font-weight:700;color:#0C1116">{{ t.typeLabel }} · {{ t.time }}</span><span style="display:block;font-size:11px;color:#7A8296;margin-top:1px">{{ t.dateLabel }} · T-pace {{ t.tpace }}/100</span></span>
-                              <button onclick="{{ t.onDelete }}" style="flex:none;width:26px;height:26px;border-radius:8px;border:none;background:#F4F6F8;color:#9AA2B4;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:14px;height:14px"></i></button>
+                            <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:11px 13px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
+                              <div style="display:flex;align-items:center;justify-content:space-between">
+                                <span><span style="display:block;font-size:12.5px;font-weight:700;color:#0C1116">{{ t.typeLabel }} · {{ t.time }}</span><span style="display:block;font-size:11px;color:#7A8296;margin-top:1px">{{ t.dateLabel }} · T-pace {{ t.tpace }}/100</span></span>
+                                <button onclick="{{ t.onDelete }}" style="flex:none;width:26px;height:26px;border-radius:8px;border:none;background:#F4F6F8;color:#9AA2B4;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:14px;height:14px"></i></button>
+                              </div>
+                              <sc-if value="{{ t.showPaces }}" hint-placeholder-val="{{ true }}">
+                                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:9px">
+                                  <sc-for list="{{ t.paces }}" as="p" hint-placeholder-count="7"><span style="text-align:center;background:#F4F7FB;border:1px solid #E5E9F0;border-radius:8px;padding:5px 2px"><span style="display:block;font-size:9.5px;color:#7A8296;font-weight:700">{{ p.label }}</span><span style="display:block;font-family:var(--font-mono);font-size:11.5px;color:#0C1116;font-weight:700;margin-top:1px">{{ p.time }}</span></span></sc-for>
+                                </div>
+                              </sc-if>
                             </div>
                           </sc-for>
                         </div>
@@ -13050,6 +13062,15 @@ class Component extends DCLogic {
     return {typeLabel: t.type==='1000'?'1000m':'400m', valueLabel:this.fmt(t.sec)};
   }
   fmtMetres(m){ const n=+m||0; return Number.isInteger(n) ? String(n) : n.toFixed(1); }
+  // A T-pace is a speed, and /100 is only the unit it is quoted in. What a coach actually writes
+  // on the board is "8 × 150 on the T-pace", so the number they need is the 150 — and doing that
+  // multiplication in their head, poolside, for every rep length in the set, is where the errors
+  // come from. These are the rep lengths the club's sets are built out of.
+  get TPACE_LADDER(){ return [50, 75, 100, 150, 200, 300, 400]; }
+  tpaceLadder(t100){
+    if(!(t100>0)) return [];
+    return this.TPACE_LADDER.map(d=>({ label:d+'m', time:this.fmt(+((t100*d)/100).toFixed(2)) }));
+  }
   tpaceLog(swId){ const S=this.state;
     if(!swId) return this.setState({tpaceErr:'Pick a swimmer first.'});
     const fixed=this.tpaceFixed(S.tpaceType);
@@ -19797,6 +19818,9 @@ class Component extends DCLogic {
     const tpSel = tpRoster.find(sw=>sw.id===S.tpaceSwId) || null;
     const tpSelTests=(tpSel ? (this.tpaceTests[tpSel.id]||[]) : []).map((t,i)=>{ const L=this.tpaceTestLabels(t); return {
       dateLabel:this.shortDateISO(t.date), typeLabel:L.typeLabel, time:L.valueLabel, tpace:this.fmt(t.tpace100),
+      // The ladder rides on the SAVED trial, not just on the form. A coach logs the test once and
+      // then needs these numbers days later, every time they write a set off that swimmer's pace.
+      paces:this.tpaceLadder(t.tpace100), showPaces:true,
       onDelete: tpSel?()=>this.tpaceDelete(tpSel.id, i):null }; });
     const tpHasSel = !!tpSel;
     const tpType1000On = S.tpaceType==='1000', tpType400On = S.tpaceType==='400';
@@ -19807,7 +19831,9 @@ class Component extends DCLogic {
     const tpFixedHead = tpFixed ? (tpFixed.label+' · '+tpFixed.mins+' minutes continuous freestyle') : '';
     const tpFixedNote = tpFixed ? ('Steady, moderate-to-strong pace for the full '+tpFixed.mins+' minutes — cover as much distance as possible. No stopping, for any reason. Count the laps carefully; the total distance swum is what gets written here.') : '';
     const tpFixedPlaceholder = tpFixed ? ('Distance in metres e.g. '+tpFixed.eg) : '';
-    const tpFixedPreview = (()=>{ if(!tpFixed) return ''; const d=parseFloat((S.tpaceDist||'').trim()); if(!isFinite(d)||d<=0) return ''; return 'T-pace ≈ '+this.fmt(+this.tpaceComputeFixed(S.tpaceType, d).toFixed(2))+'/100'; })();
+    const tpFixedT100 = (()=>{ if(!tpFixed) return 0; const d=parseFloat((S.tpaceDist||'').trim()); if(!isFinite(d)||d<=0) return 0; return +this.tpaceComputeFixed(S.tpaceType, d).toFixed(2); })();
+    const tpFixedPreview = tpFixedT100 ? ('T-pace ≈ '+this.fmt(tpFixedT100)+'/100') : '';
+    const tpFixedPreviewPaces = this.tpaceLadder(tpFixedT100);
 
     // ---- Level-Up Review (promotion engine) ----
     // Who may approve a promotion. This was a hand-written list of three account ids, and it was
@@ -23051,7 +23077,7 @@ class Component extends DCLogic {
       tpaceIsFixed: !!tpFixed, tpaceIsTimed: !tpFixed,
       tpFixedHead, tpFixedNote, tpFixedPlaceholder,
       tpaceDist:S.tpaceDist, onTpaceDist:(e)=>this.setState({tpaceDist:e.target.value}),
-      tpFixedPreview, tpFixedPreviewShow: !!tpFixedPreview,
+      tpFixedPreview, tpFixedPreviewShow: !!tpFixedPreview, tpFixedPreviewPaces,
       tpaceTime:S.tpaceTime, onTpaceTime:(e)=>this.setState({tpaceTime:e.target.value}), tpaceErr:S.tpaceErr, tpaceErrShow:!!S.tpaceErr,
       onTpaceLog: tpSel?()=>this.tpaceLog(tpSel.id):()=>this.setState({tpaceErr:'Pick a swimmer first.'}),
       onTpaceBack:()=>this.setState({tpaceSwId:null}),

@@ -11956,4 +11956,232 @@ describe("fixed-clock T-pace tests (T30 / T20)", () => {
 });
 
 
+/* ------------------------------------- the T-pace tests, in BOTH apps at once
+   proto.html and the /squads/.../tools/t-pace route are two separate
+   implementations of the same four trials, over two separate stores (the
+   vx_tpace document and the t_pace_tests table). Nothing at runtime forces
+   them to agree, so a T30 could come to mean one thing on one screen and
+   something else on the other. This is what forces it. */
+const TPACE_LIB = await import("@/lib/tpace-tests");
+
+describe("the two apps agree on what a T30 and a T20 are", () => {
+  // Pull proto's table out of the shipped source and read it as numbers.
+  const protoTable = (() => {
+    const src = sourceBetween("get TPACE_FIXED(){ return {", "}; }");
+    const out = {};
+    for (const [, key, body] of src.matchAll(/(t\d+):\s*\{([^}]*)\}/g)) {
+      out[key] = {};
+      for (const [, k, v] of body.matchAll(/(\w+)\s*:\s*'?([^,']+)'?/g)) {
+        out[key][k] = /^\d+$/.test(v.trim()) ? Number(v.trim()) : v.trim();
+      }
+    }
+    return out;
+  })();
+
+  it("proto's table parsed at all", () =>
+    eq(Object.keys(protoTable).sort().join(","), "t20,t30"));
+
+  for (const key of ["t30", "t20"]) {
+    for (const field of ["label", "mins", "sec", "min", "max", "eg"]) {
+      it(`${key}.${field} matches in both apps`, () =>
+        eq(protoTable[key][field], TPACE_LIB.FIXED_CLOCK_TESTS[key][field],
+           `proto.html and src/lib/tpace-tests.ts disagree about ${key}.${field}`));
+    }
+  }
+
+  it("the clock is minutes and seconds saying the same thing", () => {
+    for (const t of Object.values(TPACE_LIB.FIXED_CLOCK_TESTS)) eq(t.sec, t.mins * 60);
+  });
+});
+
+describe("T-pace maths (Next.js route)", () => {
+  const { tPaceFromFixedClock, tPaceFromDistanceTrial, fixedClockTest } = TPACE_LIB;
+
+  it("1800 m in 30 min is 1:40 per 100", () => eq(tPaceFromFixedClock("t30", 1800), 100));
+  it("1650 m in 30 min", () => eq(+tPaceFromFixedClock("t30", 1650).toFixed(2), 109.09));
+  it("1100 m in 20 min", () => eq(+tPaceFromFixedClock("t20", 1100).toFixed(2), 109.09));
+  it("the same pace over either clock agrees", () =>
+    eq(tPaceFromFixedClock("t30", 1800), tPaceFromFixedClock("t20", 1200)));
+  it("a distance trial is not a fixed-clock test", () => eq(tPaceFromFixedClock("1000", 1000), null));
+  it("no pace from a zero or negative distance", () => {
+    eq(tPaceFromFixedClock("t30", 0), null);
+    eq(tPaceFromFixedClock("t30", -5), null);
+  });
+
+  it("the distance trials are unchanged", () => {
+    eq(tPaceFromDistanceTrial(1000, 840), 84);       // 14:00 over 1000 m
+    eq(tPaceFromDistanceTrial(400, 330), 82.5);      // 5:30 over 400 m
+  });
+
+  it("only t30 and t20 are fixed-clock", () => {
+    eq(fixedClockTest("t30").mins, 30);
+    eq(fixedClockTest("t20").mins, 20);
+    for (const v of ["1000", "400", "", null, undefined, "T30"]) eq(fixedClockTest(v), null);
+  });
+
+  it("each test's ceiling is its own", () => {
+    // 5000 m is a fine T30 entry and an impossible T20 one — 250 m/min for twenty minutes.
+    eq(5000 <= fixedClockTest("t30").max, true);
+    eq(5000 > fixedClockTest("t20").max, true);
+  });
+
+  it("the range message names the test the coach chose", () => {
+    const msg = TPACE_LIB.fixedClockRangeError(fixedClockTest("t20"));
+    eq(/20-minute/.test(msg), true);
+    eq(/between 100 and 4000/.test(msg), true);
+  });
+
+  it("the protocol says the things a coach has to be told", () => {
+    const note = TPACE_LIB.fixedClockProtocol(fixedClockTest("t30"));
+    eq(/30 minutes/.test(note), true);
+    eq(/No stopping/.test(note), true);
+    eq(/[Cc]ount the laps/.test(note), true);
+  });
+
+  it("metres print without a pointless decimal", () => {
+    eq(TPACE_LIB.formatMetres(1650), "1650");
+    eq(TPACE_LIB.formatMetres(1637.5), "1637.5");
+  });
+});
+
+/* A row written before supabase/tpace_fixed_clock.sql ran carries no test_type, and the column
+   simply is not returned by `select *` until it exists. Those rows must not become unreadable,
+   and must not be guessed at wrongly — before that file, the screen could write a 400 and a
+   1000 and nothing else, so the distance settles it. */
+describe("trials logged before the test_type column existed", () => {
+  const { testTypeOf } = TPACE_LIB;
+
+  it("a 400 row is a 400 trial", () => eq(testTypeOf({ distance: 400, time_seconds: 330 }), "400"));
+  it("a 1000 row is a 1000 trial", () => eq(testTypeOf({ distance: 1000, time_seconds: 840 }), "1000"));
+  it("an explicit type always wins", () => {
+    eq(testTypeOf({ test_type: "t30", distance: 1650 }), "t30");
+    eq(testTypeOf({ test_type: "t20", distance: 1100 }), "t20");
+    eq(testTypeOf({ test_type: "400", distance: 400 }), "400");
+  });
+  it("a null or junk type falls back to the distance", () => {
+    eq(testTypeOf({ test_type: null, distance: 400 }), "400");
+    eq(testTypeOf({ test_type: "", distance: 1000 }), "1000");
+    eq(testTypeOf({ test_type: "nonsense", distance: 400 }), "400");
+  });
+
+  // The dangerous case, and the reason the column exists at all: distance 1000 with
+  // time_seconds 1800 is a real 1000 m trial AND a plausible T30. Nothing may infer from the
+  // clock, because both readings are legitimate rows.
+  it("nothing is inferred from a 1800-second clock", () => {
+    eq(testTypeOf({ distance: 1000, time_seconds: 1800 }), "1000",
+       "a 30:00 thousand-metre trial is a 1000 trial; only test_type may say otherwise");
+    eq(testTypeOf({ test_type: "t30", distance: 1000, time_seconds: 1800 }), "t30");
+  });
+});
+
+describe("the t-pace route without the migration run", () => {
+  const ACTIONS = readFileSync(
+    new URL("../src/app/(staff)/squads/[slug]/tools/t-pace/actions.ts", import.meta.url), "utf8");
+  const SQL = readFileSync(new URL("../supabase/tpace_fixed_clock.sql", import.meta.url), "utf8");
+
+  it("a distance trial still saves when the column is missing", () => {
+    // 42703 is Postgres for "column does not exist". The old two trials never needed the
+    // column, so a club that has not run the SQL keeps the screen it already had.
+    eq(/42703/.test(ACTIONS), true);
+    eq(/const retry = await supabase\.from\("t_pace_tests"\)\.insert\(row\)/.test(ACTIONS), true);
+  });
+
+  it("a T30 is refused rather than written as an unreadable row", () => {
+    const branch = ACTIONS.slice(ACTIONS.indexOf("UNDEFINED_COLUMN"));
+    eq(/needs a one-off database update/.test(branch), true);
+    eq(/tpace_fixed_clock\.sql/.test(branch), true,
+       "the message has to name the file, or nobody can act on it");
+  });
+
+  it("the SQL backfills existing rows rather than defaulting them all to 1000", () => {
+    eq(/set test_type = case when distance = 400 then '400' else '1000' end/.test(SQL), true);
+    eq(/where test_type is null/.test(SQL), true, "re-running must not rewrite rows again");
+  });
+
+  it("the SQL is re-runnable", () => {
+    eq(/add column if not exists test_type/.test(SQL), true);
+    eq(/drop constraint if exists/.test(SQL), true, "a bare add constraint fails on the second run");
+  });
+
+  it("only the four known tests may be stored", () => {
+    eq(/check \(test_type in \('1000', '400', 't30', 't20'\)\)/.test(SQL), true);
+  });
+
+  it("distance widens so a half-length is not rounded away", () => {
+    eq(/alter column distance type numeric/.test(SQL), true);
+  });
+});
+
+/* ------------------------------------------------- the pace ladder, both apps
+   A T-pace is a speed; /100 is only the unit it is quoted in. A coach writing
+   "8 × 150 on the T-pace" needs the 150, and multiplying it out in their head
+   poolside for every rep length is where the errors come from. */
+describe("pace ladder", () => {
+  const { paceLadder, PACE_LADDER } = TPACE_LIB;
+  const ladder = bind("tpaceLadder", { TPACE_LADDER: [...PACE_LADDER] }, ["fmt"]);
+
+  it("both apps ladder the same rep lengths", () => {
+    const proto = sourceBetween("get TPACE_LADDER(){ return [", "]; }")
+      .replace("get TPACE_LADDER(){ return [", "").split(",").map((n) => Number(n.trim()));
+    eq(proto.join(","), [...PACE_LADDER].join(","),
+       "proto.html and src/lib/tpace-tests.ts ladder different distances");
+    eq(proto.join(","), "50,75,100,150,200,300,400");
+  });
+
+  // The screenshot the club sent: Yassmin, 2300 m in the T30, T-pace 1:18.26/100.
+  it("2300 m in a T30 gives the club's own numbers", () => {
+    const t100 = TPACE_LIB.tPaceFromFixedClock("t30", 2300);
+    eq(+t100.toFixed(2), 78.26);
+    const rows = paceLadder(t100);
+    const got = Object.fromEntries(rows.map((r) => [r.metres, r.seconds]));
+    eq(got[50], 39.13);
+    eq(got[75], 58.7);
+    eq(got[100], 78.26, "the 100 has to still be the T-pace itself");
+    eq(got[150], 117.39);
+    eq(got[200], 156.52);
+    eq(got[300], 234.78);
+    eq(got[400], 313.04);
+  });
+
+  it("the 100 is always the T-pace, whatever the pace", () => {
+    for (const t of [78.26, 100, 109.09, 145.5]) {
+      const row = paceLadder(t).find((r) => r.metres === 100);
+      eq(row.seconds, Number(t.toFixed(2)));
+    }
+  });
+
+  it("it scales linearly", () => {
+    const rows = paceLadder(100);
+    eq(rows.find((r) => r.metres === 50).seconds, 50);
+    eq(rows.find((r) => r.metres === 400).seconds, 400);
+  });
+
+  it("no ladder without a pace", () => {
+    for (const v of [0, -1, NaN, null, undefined]) eq(paceLadder(v).length, 0);
+  });
+
+  it("proto formats the same numbers as minutes and seconds", () => {
+    const rows = ladder(78.26);
+    eq(rows.length, 7);
+    eq(rows[0].label, "50m");
+    eq(rows[0].time, "39.13");
+    eq(rows[2].time, "1:18.26", "the 100 reads as the T-pace on the card above it");
+    eq(rows[6].time, "5:13.04");
+  });
+
+  it("the ladder is on the saved trial, not only the form", () => {
+    // A coach logs the test once and needs these numbers days later.
+    const rows = sourceBetween("const tpSelTests=(tpSel ?", "onDelete:");
+    eq(/paces:this\.tpaceLadder\(t\.tpace100\)/.test(rows), true);
+    const card = sourceBetween('<sc-for list="{{ tpSelTests }}"', "</sc-for>");
+    eq(/\{\{ t\.paces \}\}/.test(card), true, "the saved trial card never renders the ladder");
+    eq(/\{\{ p\.label \}\}/.test(card) && /\{\{ p\.time \}\}/.test(card), true);
+  });
+
+  it("and on the live preview as the distance is typed", () => {
+    const form = sourceBetween('<sc-if value="{{ tpFixedPreviewShow }}"', "</sc-if>");
+    eq(/\{\{ tpFixedPreviewPaces \}\}/.test(form), true);
+  });
+});
+
 await report();

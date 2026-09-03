@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import type { TPaceTestType } from "@/lib/tpace-tests";
 
 export interface TPaceTest {
   id: string;
@@ -7,6 +8,12 @@ export interface TPaceTest {
   distance: number;
   time_seconds: number;
   t_pace_seconds: number;
+  /**
+   * Which test it was. Added by supabase/tpace_fixed_clock.sql — rows written before that ran
+   * do not carry one, and `select *` simply does not return the column until it exists, so
+   * every reader goes through testTypeOf() rather than trusting this to be there.
+   */
+  test_type?: TPaceTestType | null;
   tested_at: string;
   retest_due: string | null;
 }
