@@ -2869,13 +2869,27 @@ if ('serviceWorker' in navigator) {
                                 <button onclick="{{ d.onView }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;background:var(--vx-blue);color:#fff;border:none;border-radius:10px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer"><i data-lucide="eye" style="width:14px;height:14px"></i>View</button>
                               </sc-if>
                               <button onclick="{{ d.onPick }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;background:#F4F6F8;color:#3A4152;border:none;border-radius:10px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer"><i data-lucide="upload" style="width:14px;height:14px"></i>{{ d.uploadLabel }}</button>
-                              <sc-if value="{{ d.hasFile }}" hint-placeholder-val="{{ false }}">
-                                <button onclick="{{ d.onRemove }}" style="flex:none;width:38px;background:#FDECEC;color:#E5484D;border:none;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="trash-2" style="width:14px;height:14px"></i></button>
-                              </sc-if>
+                              <!-- No delete here, and the button is gone rather than disabled.
+                                   A birth certificate or a medical certificate on file is the
+                                   club's compliance record as much as the family's paperwork, so
+                                   a document leaving it is the club's decision. Replacing one is
+                                   the case a parent actually has - a photo of the wrong page, an
+                                   expired certificate - and Upload does exactly that: every row is
+                                   keyed swimmerid::kind, so a second upload of the same kind
+                                   replaces it. supabase/family_swimmer_docs.sql grants insert and
+                                   update to a family, and deliberately not delete. -->
                             </div>
                           </div>
                         </sc-for>
                       </div>
+                      <!-- What happened to the upload, on the screen the upload was made from.
+                           This tab had no feedback of any kind: a parent tapped Upload and the
+                           card looked identical whether the file had reached the club or been
+                           refused. The staff profile has said so all along; a family had to
+                           guess. -->
+                      <sc-if value="{{ famDocMsgShow }}" hint-placeholder-val="{{ false }}">
+                        <div style="margin-top:11px;background:{{ famDocMsgBg }};border:1px solid {{ famDocMsgBorder }};border-radius:11px;padding:10px 12px;display:flex;align-items:flex-start;gap:8px"><i data-vx-icon="{{ famDocMsgIcon }}" style="width:14px;height:14px;flex:none;margin-top:1px;color:{{ famDocMsgColor }}"></i><span style="font-size:11.5px;font-weight:600;color:{{ famDocMsgColor }};line-height:1.45">{{ famDocMsg }}</span></div>
+                      </sc-if>
                       <p style="margin:11px 2px 0;font-size:11px;color:#9AA2B4;line-height:1.5">{{ tx.docsNote }}</p>
                     </sc-if>
 
@@ -13191,7 +13205,7 @@ class Component extends DCLogic {
     const file=e.target.files && e.target.files[0]; e.target.value=''; if(!file) return;
     // The kind of document, never the document. This log is read by more people than the file is.
     try{ this.audit('document.upload', key+' · '+swId, {swimmer:swId, kind:key}); }catch(e){}
-    this.setState({docBusy:key, docMsg:''});
+    this.setState({docBusy:key, docMsg:'', docOk:true});
     try{
       if(!window.__vxUploadFile) throw new Error('storage unavailable');
       const ext=((file.name||'').match(/\.([a-z0-9]+)$/i)||[])[1] || (file.type==='application/pdf'?'pdf':(file.type&&file.type.indexOf('png')>=0?'png':'jpg'));
@@ -13205,9 +13219,22 @@ class Component extends DCLogic {
       let ok=true; if(window.__vxUpsert){ ok=await window.__vxUpsert('swimmer_docs', [{id:swId+'::'+key, swimmer_id:swId, kind:key, url, name:file.name, type:file.type, uploaded_at:doc.uploadedAt, ts:Date.now()}]); }
       // Clear any stale legacy copy still sitting in the blob so it can't shadow the new one.
       const bm=this.swimmerMeta[swId]; if(bm && bm.docs && bm.docs[key]){ this._saveSwMeta(swId, {...bm, docs:{...bm.docs, [key]:false}}); }
-      this.setState({docBusy:null, docMsg: ok ? 'Uploaded & saved ✓' : 'Uploaded, but sync failed — run swimmer_docs.sql'});
+      // Two people read this line and only one of them can act on the failure.
+      //
+      // "run swimmer_docs.sql" is the right thing to tell whoever looks after the database and
+      // a dead end for a parent, who has just done everything correctly: the file IS in the
+      // club's storage, and what was refused is the row that points at it. Saying so is the
+      // difference between a parent trying again five times and a parent telling the club.
+      const _fam=this._isFamilySession();
+      this.setState({docBusy:null, docOk:!!ok, docMsg: ok
+        ? (_fam ? 'Sent to the club \u2713' : 'Uploaded & saved \u2713')
+        : (_fam
+            ? 'The file reached the club, but their records would not file it against '
+              +(String((this._famResolve(swId)||{}).sw && this._famResolve(swId).sw.name || '').split(' ')[0] || 'your swimmer')
+              +' yet. Nothing you did is wrong \u2014 please let the club know.'
+            : 'Uploaded, but sync failed \u2014 run supabase/family_swimmer_docs.sql')});
       this.forceUpdate();
-    }catch(err){ this.setState({docBusy:null, docMsg:'Upload failed — '+((err&&err.message)||'try again')}); }
+    }catch(err){ this.setState({docBusy:null, docOk:false, docMsg:'Upload failed \u2014 '+((err&&err.message)||'try again')}); }
   }
   // ---- Signed media links --------------------------------------------------------------------
   // The vx-media bucket holds children's birth certificates, passports, medical certificates,
@@ -21517,8 +21544,16 @@ class Component extends DCLogic {
             fileName: hasFile? (d.doc.name+' · '+d.doc.uploadedAt) : 'Not uploaded yet', uploadedAt: hasFile? d.doc.uploadedAt : '', uploadLabel: on?'Replace':'Upload',
             inputId:'vx-fam-doc-'+d.kind+'-input', onPick:()=>{ const el=document.getElementById('vx-fam-doc-'+d.kind+'-input'); if(el) el.click(); },
             onView: hasFile? ()=>this._openDoc(d.doc) : null,
-            onRemove: on? ()=>this.removeDoc(sw.id, d.kind) : null,
+            // No onRemove: deleting a document is staff's, not a family's. See the note in the
+            // Documents tab above and supabase/family_swimmer_docs.sql.
             onUpload:(e)=>this.uploadDoc(e, sw.id, d.kind) }; }),
+          famDocMsg: S.docMsg||'', famDocMsgShow: !!S.docMsg,
+          famDocMsgColor: S.docOk===false ? '#9A3A0B' : '#0C7A4F',
+          famDocMsgBg:    S.docOk===false ? '#FDF2E7' : '#ECFAF3',
+          famDocMsgBorder:S.docOk===false ? '#F3D9BC' : '#CDEFDD',
+          // Not an alarm bell. The file did reach the club in the case that matters, and the one
+          // thing left for a parent to do is tell somebody.
+          famDocMsgIcon:  S.docOk===false ? 'info' : 'check-circle-2',
         }; })(),
       fmBody:S.fmBody, onFmBody:(e)=>this.setState({fmBody:e.target.value}),
       fmSet:S.fmSet, onFmSet:(e)=>this.setState({fmSet:e.target.value}),

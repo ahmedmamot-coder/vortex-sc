@@ -11484,4 +11484,78 @@ describe("the races a parent chooses", () => {
   });
 });
 
+/* ================================================ a parent uploading a document
+   The Documents tab has always shown Upload buttons. Pressing one put the file in
+   storage (the bucket takes any signed-in user) and was then refused when the app
+   wrote the row that points at it — so the file was orphaned, the club never got
+   the document, and the parent read "Uploaded, but sync failed". */
+describe("a family uploading their own child's document", () => {
+  const SQL = readFileSync(new URL("../supabase/family_swimmer_docs.sql", import.meta.url), "utf8");
+
+  // The bug underneath it, and the one that had to be fixed first: a policy written against a
+  // comparison that never returns true is just staff-only with extra words.
+  it("compares the two id shapes the app actually stores", () => {
+    // family_accounts.swimmer_ids holds "squad::id" (famRegister writes the picker's values);
+    // the per-swimmer tables hold the bare id (uploadDoc writes sw.id). vx_is_my_swimmer('r3')
+    // was asking whether 'r3' is in {'preteam::r3'}.
+    eq(/create or replace function public\.vx_bare_id/.test(SQL), true);
+    eq(/regexp_replace\(coalesce\(v, ''\), '\^\.\*::', ''\)/.test(SQL), true,
+       "the last segment, which is what bareId().split('::').pop() means");
+    const fn = SQL.slice(SQL.indexOf("create or replace function public.vx_is_my_swimmer"));
+    eq(/vx_bare_id\(id\) in \(select public\.vx_bare_id\(x\) from public\.vx_my_swimmer_ids\(\) x\)/.test(fn), true,
+       "both sides have to be normalised, or the shape that is stored decides whether a rule works");
+    eq(/vx_bare_id\(id\) <> ''/.test(fn), true, "an empty id must not match a family with an empty entry");
+  });
+
+  it("lets a family add and replace, for their own children only", () => {
+    const block = SQL.slice(SQL.indexOf("if to_regclass('public.swimmer_docs')"));
+    eq(/for insert to authenticated\s*\n\s*with check \(public\.vx_is_my_swimmer\(swimmer_id::text\)\)/.test(block), true);
+    eq(/for update to authenticated\s*\n\s*using \(public\.vx_is_my_swimmer\(swimmer_id::text\)\)/.test(block), true);
+    // The staff policy is left alone: these are additional permissive policies beside it, which
+    // is how the two family exceptions already in security_4_roles.sql are written.
+    eq(/drop policy if exists vx_s4_write/.test(SQL), false, "the staff rule is not this file's to touch");
+  });
+
+  // A birth certificate or a medical certificate on file is the club's compliance record as much
+  // as the family's paperwork.
+  it("never grants a family delete", () => {
+    eq(/for delete/.test(SQL), false, "removing a document stays staff's");
+    // And nothing on screen promises otherwise — a button that 403s is worse than no button.
+    const tab = sourceBetween('<sc-if value="{{ famShowDocs }}"', "{{ tx.docsNote }}");
+    eq(/d\.onRemove/.test(tab), false, "the family Documents tab still offers a delete it cannot do");
+    eq(/d\.onUpload/.test(tab), true, "and Upload, which is the replace path, has to stay");
+  });
+
+  it("swimmer_docs is a table a family device may write", () => {
+    // Otherwise the guard added for the attendance_marks banner would refuse the upload before
+    // it ever reached the database — the two rules have to agree.
+    const list = (SOURCE.match(/var FAMILY_TABLES = \[([\s\S]*?)\];/) || [])[1] || "";
+    eq(/"swimmer_docs"/.test(list), true);
+  });
+
+  // The tab had no feedback of any kind: a parent tapped Upload and the card looked identical
+  // whether the file had reached the club or been refused. The staff profile has said so all
+  // along.
+  it("tells the parent what happened", () => {
+    const tab = sourceBetween('<sc-if value="{{ famShowDocs }}"', "{{ tx.docsNote }}");
+    eq(/famDocMsgShow/.test(tab), true, "an upload with no outcome on screen is a guess");
+    // An icon named at render time must not be one lucide can take away from React.
+    eq(/data-lucide="\{\{ famDocMsgIcon/.test(tab), false);
+    eq(/data-vx-icon="\{\{ famDocMsgIcon/.test(tab), true);
+  });
+
+  it("and says something a parent can act on when it fails", () => {
+    const fn = sourceBetween("async uploadDoc(e, swId, key){", "\n  }");
+    eq(/this\._isFamilySession\(\)/.test(fn), true,
+       "two people read this line and only one of them can run a SQL file");
+    // The file IS in storage; what was refused is the row pointing at it. Telling a parent to
+    // run swimmer_docs.sql is a dead end, and "try again" makes them repeat a working upload.
+    const famBranch = fn.slice(fn.indexOf("_fam ?"));
+    eq(/please let the club know/i.test(famBranch), true);
+    eq(/\.sql/.test(famBranch.split("'Uploaded, but sync failed")[0]), false,
+       "a parent cannot run a SQL file");
+    eq(/Nothing you did is wrong/.test(fn), true);
+  });
+});
+
 await report();
