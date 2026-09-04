@@ -4687,6 +4687,45 @@ if ('serviceWorker' in navigator) {
                           <sc-if value="{{ tpaceErrShow }}" hint-placeholder-val="{{ false }}"><p style="margin:7px 2px 0;font-size:11.5px;color:#B42318;font-weight:600">{{ tpaceErr }}</p></sc-if>
                           <button onclick="{{ onTpaceLog }}" style="width:100%;margin-top:10px;background:var(--vx-blue);color:#fff;border:none;border-radius:11px;padding:11px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer">Save trial &amp; compute T-pace</button>
                         </div>
+                        <sc-if value="{{ tpAnalysisShow }}" hint-placeholder-val="{{ true }}">
+                          <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
+                            <p style="margin:0;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#7A8296;font-weight:700">Threshold analysis</p>
+                            <p style="margin:3px 0 0;font-size:11px;color:#7A8296">from {{ tpAnSource }} · {{ tpAnKm }}</p>
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px">
+                              <span style="background:#0A0F1A;border-radius:11px;padding:9px 11px">
+                                <span style="display:block;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">T-pace</span>
+                                <span style="display:block;font-family:var(--font-mono);font-size:15px;color:#fff;font-weight:700;margin-top:2px">{{ tpAnTpace }}</span>
+                              </span>
+                              <span style="background:#0A0F1A;border-radius:11px;padding:9px 11px">
+                                <span style="display:block;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">Threshold speed</span>
+                                <span style="display:block;font-family:var(--font-mono);font-size:15px;color:#fff;font-weight:700;margin-top:2px">{{ tpAnSpeed }}</span>
+                              </span>
+                            </div>
+
+                            <p style="margin:14px 0 7px;font-size:11.5px;font-weight:700;color:#0C1116">Training zones <span style="color:#7A8296;font-weight:600">· per 100, from threshold</span></p>
+                            <div style="display:flex;flex-direction:column;gap:4px">
+                              <sc-for list="{{ tpAnZones }}" as="z" hint-placeholder-count="5">
+                                <span style="display:flex;align-items:center;gap:9px;border:1px solid #EEF1F5;border-radius:9px;padding:6px 9px">
+                                  <span style="flex:none;width:38px;text-align:center;font-family:var(--font-mono);font-size:10.5px;font-weight:700;color:#fff;background:var(--vx-blue);border-radius:6px;padding:3px 0">{{ z.key }}</span>
+                                  <span style="flex:1;min-width:0"><span style="display:block;font-size:11.5px;color:#0C1116;font-weight:600">{{ z.label }}</span><span style="display:block;font-size:9.5px;color:#9AA2B4">{{ z.offset }} s vs T-pace</span></span>
+                                  <span style="flex:none;font-family:var(--font-mono);font-size:11.5px;font-weight:700;color:#0C1116">{{ z.pace }}</span>
+                                </span>
+                              </sc-for>
+                            </div>
+                            <p style="margin:8px 2px 0;font-size:10.5px;line-height:1.5;color:#9A6206;background:#FBF0DD;border-radius:8px;padding:7px 9px">{{ tpAnSprints }} are <b>not</b> on this list on purpose. Sprint zones come from the swimmer's goal pace for a target event, never from the T30 — building a sprint set off the aerobic anchor is the one thing the test must not be used for.</p>
+
+                            <p style="margin:14px 0 7px;font-size:11.5px;font-weight:700;color:#0C1116">Race targets <span style="color:#7A8296;font-weight:600">· freestyle, projected from threshold</span></p>
+                            <div style="display:flex;flex-direction:column;gap:4px">
+                              <sc-for list="{{ tpAnRaces }}" as="r" hint-placeholder-count="6">
+                                <span style="display:flex;align-items:center;gap:9px;border:1px solid #EEF1F5;border-radius:9px;padding:6px 9px">
+                                  <span style="flex:none;width:46px;font-family:var(--font-mono);font-size:11.5px;font-weight:700;color:var(--vx-blue-dark)">{{ r.label }}</span>
+                                  <span style="flex:1;min-width:0;font-family:var(--font-mono);font-size:11.5px;color:#0C1116;font-weight:700">{{ r.time }}</span>
+                                  <span style="flex:none;font-family:var(--font-mono);font-size:10px;color:#7A8296">{{ r.pace }}/100</span>
+                                </span>
+                              </sc-for>
+                            </div>
+                          </div>
+                        </sc-if>
                         <div style="display:flex;flex-direction:column;gap:8px">
                           <sc-for list="{{ tpSelTests }}" as="t" hint-placeholder-count="3">
                             <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:11px 13px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
@@ -13107,6 +13146,83 @@ class Component extends DCLogic {
   // on the board is "8 × 150 on the T-pace", so the number they need is the 150 — and doing that
   // multiplication in their head, poolside, for every rep length in the set, is where the errors
   // come from. These are the rep lengths the club's sets are built out of.
+
+  // ---------------------------------------------------------------- T30 threshold analysis
+  //
+  // From the T30/T20 spec (Vortex SC — T30 Threshold Test Module, §3–§5). The test gives one
+  // number, the T-pace, and everything below is derived from it:
+  //
+  //   §3.1  T-pace/100     = duration ÷ (metres ÷ 100)          — already computed on the trial
+  //   §3.2  threshold speed = metres ÷ duration                 — m/s, the physiological anchor
+  //   §4    zone paces      = T-pace + offset                   — the send-offs sets are built on
+  //   §5.1  race targets    = T-pace + per-distance adjustment  — projected pace at each event
+  //
+  // THESE NUMBERS ARE THE SPEC'S DEFAULTS AND THE SPEC SAYS TO REPLACE THEM (§4.1: "Default
+  // values — REPLACE with Vortex methodology numbers"; §11: "All zone/distance/adjustment numbers
+  // live in editable config, not hardcoded"). They are in these two tables and nowhere else, so
+  // swapping in the club's own Maglischo figures is an edit here and nothing more.
+  //
+  // Offsets are seconds per 100 against the T-pace; negative is faster than threshold.
+  get TPACE_ZONES(){ return [
+    {key:'REC', label:'Recovery',            lo:11, hi:15},
+    {key:'E1',  label:'Aerobic maintenance', lo:7,  hi:10},
+    {key:'E2',  label:'Aerobic development', lo:4,  hi:6},
+    {key:'EN1', label:'Threshold (T-pace)',  lo:-1, hi:3},
+    {key:'EN2', label:'Overload / VO₂',      lo:-4, hi:-2},
+  ]; }
+  // §4.1, marked Critical: SP1–SP3 come from the swimmer's GOAL PACE for a target event, never
+  // from the aerobic anchor. They are named here so the screen can say where they come from, and
+  // deliberately carry no offset — a sprint set built off a T30 would be the exact mistake the
+  // spec is warning about.
+  get TPACE_SPRINT_ZONES(){ return [
+    {key:'SP1', label:'Race pace'}, {key:'SP2', label:'Speed'}, {key:'SP3', label:'Max speed'},
+  ]; }
+  // §5.1 simple model: an effort adjustment per race distance, relative to threshold. (§5.2's
+  // two-point model needs a CSS-2D test, which this screen does not collect.)
+  get TPACE_RACE_DISTANCES(){ return [
+    {d:50,   lo:-9, hi:-6},
+    {d:100,  lo:-5, hi:-3},
+    {d:200,  lo:-2, hi:-1},
+    {d:400,  lo:0,  hi:0},
+    {d:800,  lo:1,  hi:2},
+    {d:1500, lo:2,  hi:4},
+  ]; }
+  tpaceThresholdSpeed(metres, seconds){ return (metres>0 && seconds>0) ? metres/seconds : 0; }
+  // A pace range reads fastest-first, which is the direction a coach reads a send-off.
+  _tpRange(t100, lo, hi){
+    const a=t100+lo, b=t100+hi, f=Math.min(a,b), sl=Math.max(a,b);
+    return { fast:f, slow:sl, label: f===sl ? this.fmt(+f.toFixed(2)) : (this.fmt(+f.toFixed(2))+' – '+this.fmt(+sl.toFixed(2))) };
+  }
+  tpaceZoneTable(t100){
+    if(!(t100>0)) return [];
+    return this.TPACE_ZONES.map(z=>{ const r=this._tpRange(t100, z.lo, z.hi);
+      return { key:z.key, label:z.label, pace:r.label,
+               offset:(z.lo>0?'+':'')+z.lo+' to '+(z.hi>0?'+':'')+z.hi }; });
+  }
+  tpaceRaceTable(t100){
+    if(!(t100>0)) return [];
+    return this.TPACE_RACE_DISTANCES.map(x=>{ const r=this._tpRange(t100, x.lo, x.hi);
+      // The race target is the projected pace carried over the whole event.
+      const tf=(r.fast*x.d)/100, ts=(r.slow*x.d)/100;
+      return { label:x.d+'m', pace:r.label,
+               time: tf===ts ? this.fmt(+tf.toFixed(2)) : (this.fmt(+tf.toFixed(2))+' – '+this.fmt(+ts.toFixed(2))) }; });
+  }
+  // Everything the analysis card shows, for one logged trial.
+  tpaceAnalysis(t){
+    if(!t || !(t.tpace100>0)) return null;
+    const L=this.tpaceTestLabels(t);
+    const metres = t.dist>0 ? t.dist : t.type==='400' ? 400 : t.type==='1000' ? 1000 : 0;
+    const speed = this.tpaceThresholdSpeed(metres, t.sec);
+    return {
+      source: L.typeLabel+' · '+L.valueLabel+' · '+this.shortDateISO(t.date),
+      km: metres>0 ? (metres/1000).toFixed(2)+' km' : '—',
+      tpace: this.fmt(t.tpace100)+'/100',
+      speed: speed>0 ? speed.toFixed(2)+' m/s' : '—',
+      zones: this.tpaceZoneTable(t.tpace100),
+      sprints: this.TPACE_SPRINT_ZONES.map(z=>z.key+' '+z.label),
+      races: this.tpaceRaceTable(t.tpace100),
+    };
+  }
   get TPACE_LADDER(){ return [50, 75, 100, 150, 200, 300, 400]; }
   tpaceLadder(t100){
     if(!(t100>0)) return [];
@@ -19863,6 +19979,10 @@ class Component extends DCLogic {
       // then needs these numbers days later, every time they write a set off that swimmer's pace.
       paces:this.tpaceLadder(t.tpace100), showPaces:true,
       onDelete: tpSel?()=>this.tpaceDelete(tpSel.id, i):null }; });
+    // The analysis anchors on the swimmer's most recent trial — the T-pace it is all derived
+    // from is the same number whichever test produced it, so the card names its source rather
+    // than silently applying to whatever is on top.
+    const tpAnalysis = tpSel ? this.tpaceAnalysis((this.tpaceTests[tpSel.id]||[])[0]) : null;
     const tpHasSel = !!tpSel;
     const tpType1000On = S.tpaceType==='1000', tpType400On = S.tpaceType==='400';
     const tpTypeT30On = S.tpaceType==='t30', tpTypeT20On = S.tpaceType==='t20';
@@ -23134,6 +23254,11 @@ class Component extends DCLogic {
       onTpaceLog: tpSel?()=>this.tpaceLog(tpSel.id):()=>this.setState({tpaceErr:'Pick a swimmer first.'}),
       onTpaceBack:()=>this.setState({tpaceSwId:null}),
       tpSelTests,
+      tpAnalysisShow: !!tpAnalysis,
+      tpAnSource: tpAnalysis?tpAnalysis.source:'', tpAnKm: tpAnalysis?tpAnalysis.km:'',
+      tpAnTpace: tpAnalysis?tpAnalysis.tpace:'', tpAnSpeed: tpAnalysis?tpAnalysis.speed:'',
+      tpAnZones: tpAnalysis?tpAnalysis.zones:[], tpAnRaces: tpAnalysis?tpAnalysis.races:[],
+      tpAnSprints: tpAnalysis?tpAnalysis.sprints.join(' · '):'',
       zoneRows:zoneRowsV, zoneHeads:zoneHeadsV, zoneMatrix:zoneMatrixV,
       zoneAge, zoneMaxHR, onZoneAge:(e)=>this.setState({zoneAge: Math.max(4,Math.min(60,parseInt(e.target.value,10)||14))}),
       reviewChecksV:rvChecksV, reviewVerdict:rvVerdict, reviewPlanMeta:(zName+' · '+rvTotal.toLocaleString()+' m · '+squad.name), reviewGuide:rvGuide,

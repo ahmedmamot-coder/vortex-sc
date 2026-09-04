@@ -12272,4 +12272,123 @@ describe("pace ladder", () => {
   });
 });
 
+/* --------------------------------------------- T30 threshold analysis (spec)
+   Vortex SC — T30 Threshold Test Module, §3–§5. The test yields one number and
+   everything a coach acts on is derived from it, so each formula is pinned to
+   the spec section it comes from, with the club's own screenshot as the case. */
+describe("T30 threshold analysis", () => {
+  const ZONES = [
+    { key: "REC", label: "Recovery", lo: 11, hi: 15 },
+    { key: "E1", label: "Aerobic maintenance", lo: 7, hi: 10 },
+    { key: "E2", label: "Aerobic development", lo: 4, hi: 6 },
+    { key: "EN1", label: "Threshold (T-pace)", lo: -1, hi: 3 },
+    { key: "EN2", label: "Overload / VO₂", lo: -4, hi: -2 },
+  ];
+  const RACES = [
+    { d: 50, lo: -9, hi: -6 }, { d: 100, lo: -5, hi: -3 }, { d: 200, lo: -2, hi: -1 },
+    { d: 400, lo: 0, hi: 0 }, { d: 800, lo: 1, hi: 2 }, { d: 1500, lo: 2, hi: 4 },
+  ];
+  const SPRINTS = [
+    { key: "SP1", label: "Race pace" }, { key: "SP2", label: "Speed" }, { key: "SP3", label: "Max speed" },
+  ];
+  const ctx = () => ({ TPACE_ZONES: ZONES, TPACE_RACE_DISTANCES: RACES, TPACE_SPRINT_ZONES: SPRINTS });
+
+  // §3.2 threshold speed = metres ÷ duration.
+  const speed = bind("tpaceThresholdSpeed", {});
+  it("2300 m in 30 min is 1.28 m/s", () => eq(+speed(2300, 1800).toFixed(2), 1.28));
+  it("1200 m in 20 min is 1.00 m/s", () => eq(speed(1200, 1200), 1));
+  it("no speed without both numbers", () => {
+    eq(speed(0, 1800), 0); eq(speed(2300, 0), 0); eq(speed(-5, 1800), 0);
+  });
+
+  // §4 zonePacePer100 = tPacePer100 + offset, on the club's screenshot T-pace of 78.26.
+  const zones = bind("tpaceZoneTable", ctx(), ["_tpRange", "fmt"]);
+  it("the zone table is the five threshold-driven zones", () => {
+    const rows = zones(78.26);
+    eq(rows.map((r) => r.key).join(","), "REC,E1,E2,EN1,EN2");
+  });
+  it("REC is +11 to +15 on the T-pace", () => eq(zones(78.26)[0].pace, "1:29.26 – 1:33.26"));
+  it("EN1 straddles the T-pace itself", () => eq(zones(78.26)[3].pace, "1:17.26 – 1:21.26"));
+  it("EN2 is faster than threshold, and reads fastest-first", () => {
+    // The offsets are negative; a range printed slowest-first would be read as a send-off
+    // and swum backwards.
+    eq(zones(78.26)[4].pace, "1:14.26 – 1:16.26");
+  });
+  it("the offset is shown so a coach can check the number", () =>
+    eq(zones(78.26)[0].offset, "+11 to +15"));
+  it("no zones without a pace", () => eq(zones(0).length, 0));
+
+  // §4.1, marked Critical: SP1–SP3 come from goal pace and must NOT be derived from T-pace.
+  it("no sprint zone is computed from the T30", () => {
+    const rows = zones(78.26);
+    for (const k of ["SP1", "SP2", "SP3"]) {
+      eq(rows.some((r) => r.key === k), false, `${k} must not be derived from the aerobic anchor`);
+    }
+    // and the screen has to say why, not just omit them
+    const card = sourceBetween('<sc-if value="{{ tpAnalysisShow }}"', "</sc-if>");
+    eq(/goal pace/.test(card), true);
+    eq(/\{\{ tpAnSprints \}\}/.test(card), true);
+  });
+  it("the sprint zones are still named for the coach", () => {
+    const sprint = sourceBetween("get TPACE_SPRINT_ZONES(){ return [", "]; }");
+    for (const k of ["SP1", "SP2", "SP3"]) eq(sprint.includes(k), true);
+    eq(/lo:|hi:/.test(sprint), false, "a sprint zone carrying an offset would invite the mistake");
+  });
+
+  // §5.1 per-distance base paces.
+  const races = bind("tpaceRaceTable", ctx(), ["_tpRange", "fmt"]);
+  it("every race distance in the spec is covered", () =>
+    eq(races(78.26).map((r) => r.label).join(","), "50m,100m,200m,400m,800m,1500m"));
+  it("the 400 sits at the T-pace, which is the spec's anchor", () => {
+    const r = races(78.26).find((x) => x.label === "400m");
+    eq(r.pace, "1:18.26");
+    eq(r.time, "5:13.04");
+  });
+  it("the 50 projects much faster than threshold", () => {
+    const r = races(78.26).find((x) => x.label === "50m");
+    eq(r.pace, "1:09.26 – 1:12.26");   // -9 .. -6
+    eq(r.time, "34.63 – 36.13");
+  });
+  it("the 1500 projects slower than threshold", () => {
+    const r = races(78.26).find((x) => x.label === "1500m");
+    eq(r.pace, "1:20.26 – 1:22.26");   // +2 .. +4
+    eq(r.time, "20:03.90 – 20:33.90");
+  });
+  it("a race time is the projected pace carried over the whole event", () => {
+    const r = races(78.26).find((x) => x.label === "200m");
+    eq(r.time, "2:32.52 – 2:34.52");   // (76.26..77.26) × 2
+  });
+  it("no race targets without a pace", () => eq(races(0).length, 0));
+
+  // §11: the numbers live in config, not scattered through the code.
+  it("every offset lives in the two config tables and nowhere else", () => {
+    const zoneCfg = sourceBetween("get TPACE_ZONES(){ return [", "]; }");
+    const raceCfg = sourceBetween("get TPACE_RACE_DISTANCES(){ return [", "]; }");
+    eq(/lo:11, hi:15/.test(zoneCfg), true);
+    eq(/d:1500, lo:2,  hi:4/.test(raceCfg), true);
+    // the derivation must read the tables rather than repeat their numbers
+    const table = methodSource("tpaceZoneTable").body + methodSource("tpaceRaceTable").body;
+    eq(/\b1[15]\b/.test(table.replace(/100/g, "")), false,
+       "an offset hardcoded in the derivation would survive editing the config");
+  });
+
+  it("the analysis names the trial it came from", () => {
+    const an = bind("tpaceAnalysis", {
+      ...ctx(),
+      TPACE_FIXED: { t30:{label:'T30',mins:30,sec:1800,min:100,max:6000,eg:1650},
+                     t20:{label:'T20',mins:20,sec:1200,min:100,max:4000,eg:1100} },
+    }, ["tpaceTestLabels", "tpaceFixed", "fmt", "fmtMetres", "shortDateISO", "_dobParts",
+        "tpaceThresholdSpeed", "tpaceZoneTable", "tpaceRaceTable", "_tpRange"]);
+    const out = an({ date: "2026-09-03", type: "t30", dist: 2300, sec: 1800, tpace100: 78.26 });
+    eq(/T30 · 2300 m/.test(out.source), true);
+    eq(out.km, "2.30 km", "the coach entered metres; the km is what they think in");
+    eq(out.tpace, "1:18.26/100");
+    eq(out.speed, "1.28 m/s");
+    eq(out.zones.length, 5);
+    eq(out.races.length, 6);
+    eq(an(null), null);
+    eq(an({ tpace100: 0 }), null);
+  });
+});
+
 await report();
