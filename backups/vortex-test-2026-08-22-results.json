@@ -1,0 +1,443 @@
+{
+  "meet": {
+    "name": "Test",
+    "date": "2026-08-22",
+    "dateLabel": "22 Aug 2026",
+    "course": "LCM",
+    "location": "Hamad Aquatics Center",
+    "source": "Printed results sheet 23/08/2026 11:22 + entries export; verified against the database"
+  },
+  "summary": {
+    "swims": 33,
+    "personalBests": 23,
+    "noShows": 10,
+    "entries": 41
+  },
+  "swims": [
+    {
+      "event": "200 Back",
+      "place": 1,
+      "name": "Dylan Akarregi Murphy",
+      "squad": "Legend",
+      "swimmerId": "r228",
+      "time": "2:19.85",
+      "sec": 139.85,
+      "previousBestSec": 138.19,
+      "result": null
+    },
+    {
+      "event": "200 Back",
+      "place": 2,
+      "name": "Yassin Walid",
+      "squad": "Legend",
+      "swimmerId": "r266",
+      "time": "2:50.00",
+      "sec": 170.0,
+      "previousBestSec": null,
+      "result": "First time"
+    },
+    {
+      "event": "200 Fly",
+      "place": 1,
+      "name": "Yassin El Mahalawy",
+      "squad": "Vortex A",
+      "swimmerId": "r166",
+      "time": "2:33.35",
+      "sec": 153.35,
+      "previousBestSec": null,
+      "result": "First time"
+    },
+    {
+      "event": "200 Free",
+      "place": 1,
+      "name": "Melek Riabi",
+      "squad": "Legend",
+      "swimmerId": "r240",
+      "time": "2:05.80",
+      "sec": 125.8,
+      "previousBestSec": 126.59,
+      "result": "PB -0.79s"
+    },
+    {
+      "event": "200 Free",
+      "place": 2,
+      "name": "Hugo Hanks",
+      "squad": "Vortex A",
+      "swimmerId": "r184",
+      "time": "2:19.85",
+      "sec": 139.85,
+      "previousBestSec": 133.43,
+      "result": null
+    },
+    {
+      "event": "200 Free",
+      "place": 3,
+      "name": "Tuan Muhamed Iyaaz Cader",
+      "squad": "Vortex A",
+      "swimmerId": "r149",
+      "time": "2:21.58",
+      "sec": 141.58,
+      "previousBestSec": null,
+      "result": "First time"
+    },
+    {
+      "event": "200 Free",
+      "place": 4,
+      "name": "Miley Colaco",
+      "squad": "Vortex A",
+      "swimmerId": "r36",
+      "time": "2:24.19",
+      "sec": 144.19,
+      "previousBestSec": 142.99,
+      "result": null
+    },
+    {
+      "event": "200 Free",
+      "place": 5,
+      "name": "Amr Taher",
+      "squad": "Legend",
+      "swimmerId": "swmt44arbh_11288",
+      "time": "2:27.38",
+      "sec": 147.38,
+      "previousBestSec": null,
+      "result": "First time"
+    },
+    {
+      "event": "200 Free",
+      "place": 6,
+      "name": "Talitha Jackson",
+      "squad": "Vortex A",
+      "swimmerId": "r61",
+      "time": "2:29.05",
+      "sec": 149.05,
+      "previousBestSec": null,
+      "result": "First time"
+    },
+    {
+      "event": "200 Free",
+      "place": 7,
+      "name": "Nadine Harb",
+      "squad": "Vortex A",
+      "swimmerId": "r52",
+      "time": "2:31.52",
+      "sec": 151.52,
+      "previousBestSec": 145.27,
+      "result": null
+    },
+    {
+      "event": "200 Free",
+      "place": 8,
+      "name": "Adrian Ehab",
+      "squad": "Vortex B",
+      "swimmerId": "r164",
+      "time": "2:33.38",
+      "sec": 153.38,
+      "previousBestSec": 160.49,
+      "result": "PB -7.11s"
+    },
+    {
+      "event": "200 Free",
+      "place": 9,
+      "name": "Rakan ALKhateeb",
+      "squad": "Vortex A",
+      "swimmerId": "r122",
+      "time": "2:33.57",
+      "sec": 153.57,
+      "previousBestSec": 147.82,
+      "result": null
+    },
+    {
+      "event": "200 Free",
+      "place": 10,
+      "name": "Isla Kate Melville",
+      "squad": "Vortex A",
+      "swimmerId": "swmrxr37pz_4580",
+      "time": "2:36.83",
+      "sec": 156.83,
+      "previousBestSec": null,
+      "result": "First time"
+    },
+    {
+      "event": "200 Free",
+      "place": 11,
+      "name": "Noursin El Maghraby",
+      "squad": "Vortex A",
+      "swimmerId": "r40",
+      "time": "2:37.09",
+      "sec": 157.09,
+      "previousBestSec": 150.0,
+      "result": null
+    },
+    {
+      "event": "200 Free",
+      "place": 12,
+      "name": "AVA KIM CAHILL",
+      "squad": "Vortex A",
+      "swimmerId": "swms008u5v_3285",
+      "time": "2:41.99",
+      "sec": 161.99,
+      "previousBestSec": null,
+      "result": "First time"
+    },
+    {
+      "event": "200 Free",
+      "place": 13,
+      "name": "Ghalia Chakroun",
+      "squad": "Vortex B",
+      "swimmerId": "swms00porb_6737",
+      "time": "2:42.71",
+      "sec": 162.71,
+      "previousBestSec": null,
+      "result": "First time"
+    },
+    {
+      "event": "200 Free",
+      "place": 14,
+      "name": "ETHAN GERARD CAHILL",
+      "squad": "Vortex B",
+      "swimmerId": "swms009xix_3751",
+      "time": "2:50.27",
+      "sec": 170.27,
+      "previousBestSec": null,
+      "result": "First time"
+    },
+    {
+      "event": "200 Free",
+      "place": 15,
+      "name": "Mateja Frenc",
+      "squad": "Vortex B",
+      "swimmerId": "swmrxpdgos_3195",
+      "time": "2:53.00",
+      "sec": 173.0,
+      "previousBestSec": null,
+      "result": "First time"
+    },
+    {
+      "event": "200 Free",
+      "place": 16,
+      "name": "Farah Hefnawy",
+      "squad": "Vortex B",
+      "swimmerId": "r54",
+      "time": "2:56.17",
+      "sec": 176.17,
+      "previousBestSec": 173.42,
+      "result": null
+    },
+    {
+      "event": "200 Free",
+      "place": 17,
+      "name": "Mohamed Sherif Basha",
+      "squad": "Vortex B",
+      "swimmerId": "r256",
+      "time": "5:08.60",
+      "sec": 308.6,
+      "previousBestSec": 150.21,
+      "result": null
+    },
+    {
+      "event": "200 Free",
+      "place": 18,
+      "name": "AARON DARWOOD",
+      "squad": "Vortex B",
+      "swimmerId": "swms01gh83_16080",
+      "time": "5:15.00",
+      "sec": 315.0,
+      "previousBestSec": null,
+      "result": "First time"
+    },
+    {
+      "event": "200 IM",
+      "place": 1,
+      "name": "Kareem Ekramy",
+      "squad": "Vortex A",
+      "swimmerId": "r165",
+      "time": "2:23.61",
+      "sec": 143.61,
+      "previousBestSec": 139.29,
+      "result": null
+    },
+    {
+      "event": "400 Free",
+      "place": 1,
+      "name": "Omar Bahri",
+      "squad": "Vortex A",
+      "swimmerId": "r135",
+      "time": "4:27.71",
+      "sec": 267.71,
+      "previousBestSec": 278.31,
+      "result": "PB -10.60s"
+    },
+    {
+      "event": "400 Free",
+      "place": 2,
+      "name": "Malek Dardir",
+      "squad": "Vortex A",
+      "swimmerId": "r158",
+      "time": "4:46.23",
+      "sec": 286.23,
+      "previousBestSec": 292.2,
+      "result": "PB -5.97s"
+    },
+    {
+      "event": "400 Free",
+      "place": 3,
+      "name": "Ali Dardir",
+      "squad": "Vortex A",
+      "swimmerId": "r157",
+      "time": "4:54.13",
+      "sec": 294.13,
+      "previousBestSec": null,
+      "result": "First time"
+    },
+    {
+      "event": "400 Free",
+      "place": 4,
+      "name": "Noah Khafaja",
+      "squad": "Vortex A",
+      "swimmerId": "r197",
+      "time": "4:58.24",
+      "sec": 298.24,
+      "previousBestSec": null,
+      "result": "First time"
+    },
+    {
+      "event": "400 Free",
+      "place": 5,
+      "name": "Oliver Banfield",
+      "squad": "Vortex A",
+      "swimmerId": "r139",
+      "time": "4:59.00",
+      "sec": 299.0,
+      "previousBestSec": null,
+      "result": "First time"
+    },
+    {
+      "event": "400 Free",
+      "place": 6,
+      "name": "Mohamed Sherif Basha",
+      "squad": "Vortex B",
+      "swimmerId": "r256",
+      "time": "5:08.60",
+      "sec": 308.6,
+      "previousBestSec": 312.18,
+      "result": "PB -3.58s"
+    },
+    {
+      "event": "400 Free",
+      "place": 7,
+      "name": "AARON DARWOOD",
+      "squad": "Vortex B",
+      "swimmerId": "swms01gh83_16080",
+      "time": "5:15.00",
+      "sec": 315.0,
+      "previousBestSec": null,
+      "result": "First time"
+    },
+    {
+      "event": "400 Free",
+      "place": 8,
+      "name": "Shabbir Malik",
+      "squad": "Vortex B",
+      "swimmerId": "r205",
+      "time": "5:26.04",
+      "sec": 326.04,
+      "previousBestSec": null,
+      "result": "First time"
+    },
+    {
+      "event": "400 Free",
+      "place": 9,
+      "name": "Shabbar Malik",
+      "squad": "Vortex B",
+      "swimmerId": "r204",
+      "time": "5:32.78",
+      "sec": 332.78,
+      "previousBestSec": null,
+      "result": "First time"
+    },
+    {
+      "event": "400 Free",
+      "place": 10,
+      "name": "Tobit Raphael Castillano",
+      "squad": "Vortex A",
+      "swimmerId": "r151",
+      "time": "5:47.13",
+      "sec": 347.13,
+      "previousBestSec": 333.08,
+      "result": null
+    },
+    {
+      "event": "400 IM",
+      "place": 1,
+      "name": "Ramez Nasr",
+      "squad": "Legend",
+      "swimmerId": "r231",
+      "time": "5:29.68",
+      "sec": 329.68,
+      "previousBestSec": 332.37,
+      "result": "PB -2.69s"
+    }
+  ],
+  "marks": [
+    {
+      "event": "200 Breast",
+      "name": "Karim Hossam",
+      "swimmerId": "swms00y00j_8173",
+      "mark": "N/S"
+    },
+    {
+      "event": "200 Free",
+      "name": "Abdelrahman Abu Shanab",
+      "swimmerId": "swmt4473zw_8741",
+      "mark": "N/S"
+    },
+    {
+      "event": "200 Free",
+      "name": "Aseel Mohamed",
+      "swimmerId": "r81",
+      "mark": "N/S"
+    },
+    {
+      "event": "200 Free",
+      "name": "Amev Srivastava",
+      "swimmerId": "r258",
+      "mark": "N/S"
+    },
+    {
+      "event": "200 Free",
+      "name": "Retal Metwally",
+      "swimmerId": "r76",
+      "mark": "N/S"
+    },
+    {
+      "event": "50 Free",
+      "name": "Arissa Afiq",
+      "swimmerId": "r3",
+      "mark": "N/S"
+    },
+    {
+      "event": "50 Free",
+      "name": "Retal Metwally",
+      "swimmerId": "r76",
+      "mark": "N/S"
+    },
+    {
+      "event": "50 Free",
+      "name": "Zohan Dagsan",
+      "swimmerId": "r156",
+      "mark": "N/S"
+    },
+    {
+      "event": "50 Free",
+      "name": "Yazan Zitouni",
+      "swimmerId": "r269",
+      "mark": "N/S"
+    },
+    {
+      "event": "50 Free",
+      "name": "Mohamed Manil Djeddou",
+      "swimmerId": "r163",
+      "mark": "N/S"
+    }
+  ]
+}

@@ -1,0 +1,433 @@
+<title>Vortex Test Meet Results</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Mono:wght@400;600&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&display=swap">
+<style>
+:root {
+  --ground:#f6f8fa; --surface:#ffffff; --ink:#101720; --ink-soft:#4a5764; --ink-faint:#7b8793;
+  --rule:#dde4ec; --rule-soft:#eaeff5;
+  --accent:#6d28d9; --accent-soft:#f1ebfe;
+  --pb:#9a5b06; --pb-soft:#fdf1dd;
+  --first:#3f6f5f; --first-soft:#e6f2ec;
+  --shadow:0 1px 2px rgba(16,23,32,.05), 0 8px 24px -16px rgba(16,23,32,.28);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:#0d1218; --surface:#151d26; --ink:#e7edf4; --ink-soft:#a3b0be; --ink-faint:#75828f;
+    --rule:#26313d; --rule-soft:#1d2731;
+    --accent:#b79aff; --accent-soft:#2a1f4a;
+    --pb:#e0aa5a; --pb-soft:#38290f;
+    --first:#7dc4aa; --first-soft:#122b23;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 28px -18px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"] {
+  --ground:#0d1218; --surface:#151d26; --ink:#e7edf4; --ink-soft:#a3b0be; --ink-faint:#75828f;
+  --rule:#26313d; --rule-soft:#1d2731;
+  --accent:#b79aff; --accent-soft:#2a1f4a;
+  --pb:#e0aa5a; --pb-soft:#38290f;
+  --first:#7dc4aa; --first-soft:#122b23;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 28px -18px rgba(0,0,0,.8);
+}
+* { box-sizing:border-box; }
+body {
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:"Source Sans 3", ui-sans-serif, system-ui, sans-serif;
+  font-size:16px; line-height:1.55; -webkit-font-smoothing:antialiased;
+}
+.wrap { max-width:50rem; margin:0 auto; padding:2.5rem 1.25rem 5rem; }
+
+header.masthead { display:flex; flex-direction:column; gap:.35rem; padding-bottom:1.1rem; border-bottom:2px solid var(--ink); }
+.eyebrow { font-size:.72rem; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); font-weight:600; }
+h1 {
+  font-family:"Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  font-weight:800; font-size:clamp(2rem,6vw,3rem); line-height:1.02; margin:0;
+  letter-spacing:-.02em; text-wrap:balance;
+}
+.sub { color:var(--ink-soft); font-size:1rem; }
+
+.tally { display:grid; grid-template-columns:repeat(auto-fit,minmax(7.5rem,1fr)); gap:.75rem; margin:1.5rem 0 2.25rem; }
+.stat { background:var(--surface); border:1px solid var(--rule); border-radius:.5rem; padding:.85rem .95rem; box-shadow:var(--shadow); }
+.stat b { display:block; font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:1.65rem; font-weight:600; line-height:1.1; font-variant-numeric:tabular-nums; }
+.stat span { font-size:.78rem; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-faint); }
+.stat.is-pb b { color:var(--pb); }
+
+.provenance {
+  background:var(--accent-soft); border-left:3px solid var(--accent); border-radius:0 .4rem .4rem 0;
+  padding:.9rem 1.1rem; margin:0 0 2.5rem; font-size:.92rem; color:var(--ink-soft);
+}
+.provenance strong { color:var(--ink); font-weight:600; }
+
+.event { margin:0 0 2.25rem; }
+.event h2 {
+  font-family:"Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  font-size:1.15rem; font-weight:600; letter-spacing:.01em; margin:0 0 .5rem;
+  display:flex; align-items:baseline; justify-content:space-between; gap:1rem;
+  padding-bottom:.4rem; border-bottom:1px solid var(--rule);
+}
+.event h2 .count { font-family:"Source Sans 3", sans-serif; font-size:.76rem; font-weight:400; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-faint); white-space:nowrap; }
+
+.swims { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; }
+.swim {
+  display:grid; grid-template-columns:2.1rem 1fr auto; grid-template-areas:"place who time" ". note note";
+  align-items:baseline; gap:.15rem .7rem; padding:.6rem 0; border-bottom:1px solid var(--rule-soft);
+}
+.swim:last-child { border-bottom:0; }
+.place {
+  grid-area:place; font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:.9rem;
+  font-variant-numeric:tabular-nums; color:var(--ink-faint); text-align:right;
+}
+.place-medal { color:var(--accent); font-weight:600; }
+.place-ns { font-size:.68rem; letter-spacing:.06em; color:var(--ink-faint); }
+.who { grid-area:who; display:flex; flex-direction:column; min-width:0; }
+.name { font-weight:600; }
+.squad { font-size:.8rem; color:var(--ink-faint); }
+.time {
+  grid-area:time; font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:1.05rem; font-weight:600;
+  font-variant-numeric:tabular-nums; white-space:nowrap;
+}
+.swim-ns { opacity:.62; }
+.swim-ns .time { font-weight:400; color:var(--ink-faint); }
+.note { grid-area:note; display:flex; flex-wrap:wrap; align-items:center; gap:.5rem; }
+.tag { font-size:.72rem; font-weight:600; letter-spacing:.03em; padding:.1rem .45rem; border-radius:.25rem; white-space:nowrap; }
+.tag-pb { background:var(--pb-soft); color:var(--pb); }
+.tag-first { background:var(--first-soft); color:var(--first); }
+.prev { font-size:.76rem; color:var(--ink-faint); font-family:"IBM Plex Mono", monospace; font-variant-numeric:tabular-nums; }
+
+footer { margin-top:3rem; padding-top:1.25rem; border-top:1px solid var(--rule); font-size:.85rem; color:var(--ink-faint); }
+footer p { margin:.4rem 0; }
+
+@media print {
+  body { background:#fff; color:#000; font-size:11pt; }
+  .wrap { max-width:none; padding:0; }
+  .provenance { background:none; border-left:2px solid #000; }
+  .stat { box-shadow:none; }
+  .event { break-inside:avoid; }
+  .swim { break-inside:avoid; }
+}
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Vortex Swimming Club &middot; Doha</p>
+    <h1>Test Meet</h1>
+    <p class="sub">22 August 2026 &middot; Long course &middot; Hamad Aquatics Center</p>
+  </header>
+
+  <div class="tally">
+    <div class="stat"><b>33</b><span>Swims</span></div>
+    <div class="stat is-pb"><b>23</b><span>Personal bests</span></div>
+    <div class="stat"><b>10</b><span>No-shows</span></div>
+    <div class="stat"><b>41</b><span>Entries</span></div>
+  </div>
+
+  <p class="provenance"><strong>This page is the backup copy.</strong> It was rebuilt on 23 August 2026 from the printed
+  results sheet after the times were overwritten in the app, and checked against the club database: every personal best
+  below reconciles exactly against the swimmer&rsquo;s previous time, and every first-time swim belongs to a swimmer with
+  no earlier time in that event. It does not depend on the app, and nothing in the app can change it.</p>
+
+    <section class="event">
+      <h2>200 Back<span class="count">2 swims</span></h2>
+      <ol class="swims">
+      <li class="swim">
+        <span class="place place-medal">1</span>
+        <span class="who"><span class="name">Dylan Akarregi Murphy</span><span class="squad">Legend</span></span>
+        <span class="time">2:19.85</span>
+        <span class="note"></span>
+      </li>
+      <li class="swim">
+        <span class="place place-medal">2</span>
+        <span class="who"><span class="name">Yassin Walid</span><span class="squad">Legend</span></span>
+        <span class="time">2:50.00</span>
+        <span class="note"><span class="tag tag-first">First time</span></span>
+      </li>
+      </ol>
+    </section>
+    <section class="event">
+      <h2>200 Breast<span class="count">0 swims · 1 N/S</span></h2>
+      <ol class="swims">
+      <li class="swim swim-ns">
+        <span class="place place-ns">N/S</span>
+        <span class="who"><span class="name">Karim Hossam</span><span class="squad">did not start</span></span>
+        <span class="time">&mdash;</span>
+        <span class="note"></span>
+      </li>
+      </ol>
+    </section>
+    <section class="event">
+      <h2>200 Fly<span class="count">1 swim</span></h2>
+      <ol class="swims">
+      <li class="swim">
+        <span class="place place-medal">1</span>
+        <span class="who"><span class="name">Yassin El Mahalawy</span><span class="squad">Vortex A</span></span>
+        <span class="time">2:33.35</span>
+        <span class="note"><span class="tag tag-first">First time</span></span>
+      </li>
+      </ol>
+    </section>
+    <section class="event">
+      <h2>200 Free<span class="count">18 swims · 4 N/S</span></h2>
+      <ol class="swims">
+      <li class="swim">
+        <span class="place place-medal">1</span>
+        <span class="who"><span class="name">Melek Riabi</span><span class="squad">Legend</span></span>
+        <span class="time">2:05.80</span>
+        <span class="note"><span class="tag tag-pb">PB · 0.79s faster</span><span class="prev">was 126.59s</span></span>
+      </li>
+      <li class="swim">
+        <span class="place place-medal">2</span>
+        <span class="who"><span class="name">Hugo Hanks</span><span class="squad">Vortex A</span></span>
+        <span class="time">2:19.85</span>
+        <span class="note"></span>
+      </li>
+      <li class="swim">
+        <span class="place place-medal">3</span>
+        <span class="who"><span class="name">Tuan Muhamed Iyaaz Cader</span><span class="squad">Vortex A</span></span>
+        <span class="time">2:21.58</span>
+        <span class="note"><span class="tag tag-first">First time</span></span>
+      </li>
+      <li class="swim">
+        <span class="place">4</span>
+        <span class="who"><span class="name">Miley Colaco</span><span class="squad">Vortex A</span></span>
+        <span class="time">2:24.19</span>
+        <span class="note"></span>
+      </li>
+      <li class="swim">
+        <span class="place">5</span>
+        <span class="who"><span class="name">Amr Taher</span><span class="squad">Legend</span></span>
+        <span class="time">2:27.38</span>
+        <span class="note"><span class="tag tag-first">First time</span></span>
+      </li>
+      <li class="swim">
+        <span class="place">6</span>
+        <span class="who"><span class="name">Talitha Jackson</span><span class="squad">Vortex A</span></span>
+        <span class="time">2:29.05</span>
+        <span class="note"><span class="tag tag-first">First time</span></span>
+      </li>
+      <li class="swim">
+        <span class="place">7</span>
+        <span class="who"><span class="name">Nadine Harb</span><span class="squad">Vortex A</span></span>
+        <span class="time">2:31.52</span>
+        <span class="note"></span>
+      </li>
+      <li class="swim">
+        <span class="place">8</span>
+        <span class="who"><span class="name">Adrian Ehab</span><span class="squad">Vortex B</span></span>
+        <span class="time">2:33.38</span>
+        <span class="note"><span class="tag tag-pb">PB · 7.11s faster</span><span class="prev">was 160.49s</span></span>
+      </li>
+      <li class="swim">
+        <span class="place">9</span>
+        <span class="who"><span class="name">Rakan ALKhateeb</span><span class="squad">Vortex A</span></span>
+        <span class="time">2:33.57</span>
+        <span class="note"></span>
+      </li>
+      <li class="swim">
+        <span class="place">10</span>
+        <span class="who"><span class="name">Isla Kate Melville</span><span class="squad">Vortex A</span></span>
+        <span class="time">2:36.83</span>
+        <span class="note"><span class="tag tag-first">First time</span></span>
+      </li>
+      <li class="swim">
+        <span class="place">11</span>
+        <span class="who"><span class="name">Noursin El Maghraby</span><span class="squad">Vortex A</span></span>
+        <span class="time">2:37.09</span>
+        <span class="note"></span>
+      </li>
+      <li class="swim">
+        <span class="place">12</span>
+        <span class="who"><span class="name">AVA KIM CAHILL</span><span class="squad">Vortex A</span></span>
+        <span class="time">2:41.99</span>
+        <span class="note"><span class="tag tag-first">First time</span></span>
+      </li>
+      <li class="swim">
+        <span class="place">13</span>
+        <span class="who"><span class="name">Ghalia Chakroun</span><span class="squad">Vortex B</span></span>
+        <span class="time">2:42.71</span>
+        <span class="note"><span class="tag tag-first">First time</span></span>
+      </li>
+      <li class="swim">
+        <span class="place">14</span>
+        <span class="who"><span class="name">ETHAN GERARD CAHILL</span><span class="squad">Vortex B</span></span>
+        <span class="time">2:50.27</span>
+        <span class="note"><span class="tag tag-first">First time</span></span>
+      </li>
+      <li class="swim">
+        <span class="place">15</span>
+        <span class="who"><span class="name">Mateja Frenc</span><span class="squad">Vortex B</span></span>
+        <span class="time">2:53.00</span>
+        <span class="note"><span class="tag tag-first">First time</span></span>
+      </li>
+      <li class="swim">
+        <span class="place">16</span>
+        <span class="who"><span class="name">Farah Hefnawy</span><span class="squad">Vortex B</span></span>
+        <span class="time">2:56.17</span>
+        <span class="note"></span>
+      </li>
+      <li class="swim">
+        <span class="place">17</span>
+        <span class="who"><span class="name">Mohamed Sherif Basha</span><span class="squad">Vortex B</span></span>
+        <span class="time">5:08.60</span>
+        <span class="note"></span>
+      </li>
+      <li class="swim">
+        <span class="place">18</span>
+        <span class="who"><span class="name">AARON DARWOOD</span><span class="squad">Vortex B</span></span>
+        <span class="time">5:15.00</span>
+        <span class="note"><span class="tag tag-first">First time</span></span>
+      </li>
+      <li class="swim swim-ns">
+        <span class="place place-ns">N/S</span>
+        <span class="who"><span class="name">Abdelrahman Abu Shanab</span><span class="squad">did not start</span></span>
+        <span class="time">&mdash;</span>
+        <span class="note"></span>
+      </li>
+      <li class="swim swim-ns">
+        <span class="place place-ns">N/S</span>
+        <span class="who"><span class="name">Aseel Mohamed</span><span class="squad">did not start</span></span>
+        <span class="time">&mdash;</span>
+        <span class="note"></span>
+      </li>
+      <li class="swim swim-ns">
+        <span class="place place-ns">N/S</span>
+        <span class="who"><span class="name">Amev Srivastava</span><span class="squad">did not start</span></span>
+        <span class="time">&mdash;</span>
+        <span class="note"></span>
+      </li>
+      <li class="swim swim-ns">
+        <span class="place place-ns">N/S</span>
+        <span class="who"><span class="name">Retal Metwally</span><span class="squad">did not start</span></span>
+        <span class="time">&mdash;</span>
+        <span class="note"></span>
+      </li>
+      </ol>
+    </section>
+    <section class="event">
+      <h2>200 IM<span class="count">1 swim</span></h2>
+      <ol class="swims">
+      <li class="swim">
+        <span class="place place-medal">1</span>
+        <span class="who"><span class="name">Kareem Ekramy</span><span class="squad">Vortex A</span></span>
+        <span class="time">2:23.61</span>
+        <span class="note"></span>
+      </li>
+      </ol>
+    </section>
+    <section class="event">
+      <h2>400 Free<span class="count">10 swims</span></h2>
+      <ol class="swims">
+      <li class="swim">
+        <span class="place place-medal">1</span>
+        <span class="who"><span class="name">Omar Bahri</span><span class="squad">Vortex A</span></span>
+        <span class="time">4:27.71</span>
+        <span class="note"><span class="tag tag-pb">PB · 10.60s faster</span><span class="prev">was 278.31s</span></span>
+      </li>
+      <li class="swim">
+        <span class="place place-medal">2</span>
+        <span class="who"><span class="name">Malek Dardir</span><span class="squad">Vortex A</span></span>
+        <span class="time">4:46.23</span>
+        <span class="note"><span class="tag tag-pb">PB · 5.97s faster</span><span class="prev">was 292.20s</span></span>
+      </li>
+      <li class="swim">
+        <span class="place place-medal">3</span>
+        <span class="who"><span class="name">Ali Dardir</span><span class="squad">Vortex A</span></span>
+        <span class="time">4:54.13</span>
+        <span class="note"><span class="tag tag-first">First time</span></span>
+      </li>
+      <li class="swim">
+        <span class="place">4</span>
+        <span class="who"><span class="name">Noah Khafaja</span><span class="squad">Vortex A</span></span>
+        <span class="time">4:58.24</span>
+        <span class="note"><span class="tag tag-first">First time</span></span>
+      </li>
+      <li class="swim">
+        <span class="place">5</span>
+        <span class="who"><span class="name">Oliver Banfield</span><span class="squad">Vortex A</span></span>
+        <span class="time">4:59.00</span>
+        <span class="note"><span class="tag tag-first">First time</span></span>
+      </li>
+      <li class="swim">
+        <span class="place">6</span>
+        <span class="who"><span class="name">Mohamed Sherif Basha</span><span class="squad">Vortex B</span></span>
+        <span class="time">5:08.60</span>
+        <span class="note"><span class="tag tag-pb">PB · 3.58s faster</span><span class="prev">was 312.18s</span></span>
+      </li>
+      <li class="swim">
+        <span class="place">7</span>
+        <span class="who"><span class="name">AARON DARWOOD</span><span class="squad">Vortex B</span></span>
+        <span class="time">5:15.00</span>
+        <span class="note"><span class="tag tag-first">First time</span></span>
+      </li>
+      <li class="swim">
+        <span class="place">8</span>
+        <span class="who"><span class="name">Shabbir Malik</span><span class="squad">Vortex B</span></span>
+        <span class="time">5:26.04</span>
+        <span class="note"><span class="tag tag-first">First time</span></span>
+      </li>
+      <li class="swim">
+        <span class="place">9</span>
+        <span class="who"><span class="name">Shabbar Malik</span><span class="squad">Vortex B</span></span>
+        <span class="time">5:32.78</span>
+        <span class="note"><span class="tag tag-first">First time</span></span>
+      </li>
+      <li class="swim">
+        <span class="place">10</span>
+        <span class="who"><span class="name">Tobit Raphael Castillano</span><span class="squad">Vortex A</span></span>
+        <span class="time">5:47.13</span>
+        <span class="note"></span>
+      </li>
+      </ol>
+    </section>
+    <section class="event">
+      <h2>400 IM<span class="count">1 swim</span></h2>
+      <ol class="swims">
+      <li class="swim">
+        <span class="place place-medal">1</span>
+        <span class="who"><span class="name">Ramez Nasr</span><span class="squad">Legend</span></span>
+        <span class="time">5:29.68</span>
+        <span class="note"><span class="tag tag-pb">PB · 2.69s faster</span><span class="prev">was 332.37s</span></span>
+      </li>
+      </ol>
+    </section>
+    <section class="event">
+      <h2>50 Free<span class="count">0 swims · 5 N/S</span></h2>
+      <ol class="swims">
+      <li class="swim swim-ns">
+        <span class="place place-ns">N/S</span>
+        <span class="who"><span class="name">Arissa Afiq</span><span class="squad">did not start</span></span>
+        <span class="time">&mdash;</span>
+        <span class="note"></span>
+      </li>
+      <li class="swim swim-ns">
+        <span class="place place-ns">N/S</span>
+        <span class="who"><span class="name">Retal Metwally</span><span class="squad">did not start</span></span>
+        <span class="time">&mdash;</span>
+        <span class="note"></span>
+      </li>
+      <li class="swim swim-ns">
+        <span class="place place-ns">N/S</span>
+        <span class="who"><span class="name">Zohan Dagsan</span><span class="squad">did not start</span></span>
+        <span class="time">&mdash;</span>
+        <span class="note"></span>
+      </li>
+      <li class="swim swim-ns">
+        <span class="place place-ns">N/S</span>
+        <span class="who"><span class="name">Yazan Zitouni</span><span class="squad">did not start</span></span>
+        <span class="time">&mdash;</span>
+        <span class="note"></span>
+      </li>
+      <li class="swim swim-ns">
+        <span class="place place-ns">N/S</span>
+        <span class="who"><span class="name">Mohamed Manil Djeddou</span><span class="squad">did not start</span></span>
+        <span class="time">&mdash;</span>
+        <span class="note"></span>
+      </li>
+      </ol>
+    </section>
+
+  <footer>
+    <p>Times as recorded on the day. Two swimmers &mdash; Mohamed Sherif Basha and Aaron Darwood &mdash; appear in both
+    200 Free and 400 Free with the same time; that is how the original sheet read, and it is kept here unchanged.</p>
+    <p>Vortex Swimming Club &middot; results recovered 23 August 2026</p>
+  </footer>
+</div>

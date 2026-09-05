@@ -1,0 +1,44 @@
+Meet,Date,Course,Event,Place,Swimmer,Squad,Swimmer ID,Time,Seconds,Previous best,Result
+Test,22 Aug 2026,LCM,200 Back,1,Dylan Akarregi Murphy,Legend,r228,2:19.85,139.85,138.19,—
+Test,22 Aug 2026,LCM,200 Back,2,Yassin Walid,Legend,r266,2:50.00,170.00,,First time
+Test,22 Aug 2026,LCM,200 Fly,1,Yassin El Mahalawy,Vortex A,r166,2:33.35,153.35,,First time
+Test,22 Aug 2026,LCM,200 Free,1,Melek Riabi,Legend,r240,2:05.80,125.80,126.59,PB -0.79s
+Test,22 Aug 2026,LCM,200 Free,2,Hugo Hanks,Vortex A,r184,2:19.85,139.85,133.43,—
+Test,22 Aug 2026,LCM,200 Free,3,Tuan Muhamed Iyaaz Cader,Vortex A,r149,2:21.58,141.58,,First time
+Test,22 Aug 2026,LCM,200 Free,4,Miley Colaco,Vortex A,r36,2:24.19,144.19,142.99,—
+Test,22 Aug 2026,LCM,200 Free,5,Amr Taher,Legend,swmt44arbh_11288,2:27.38,147.38,,First time
+Test,22 Aug 2026,LCM,200 Free,6,Talitha Jackson,Vortex A,r61,2:29.05,149.05,,First time
+Test,22 Aug 2026,LCM,200 Free,7,Nadine Harb,Vortex A,r52,2:31.52,151.52,145.27,—
+Test,22 Aug 2026,LCM,200 Free,8,Adrian Ehab,Vortex B,r164,2:33.38,153.38,160.49,PB -7.11s
+Test,22 Aug 2026,LCM,200 Free,9,Rakan ALKhateeb,Vortex A,r122,2:33.57,153.57,147.82,—
+Test,22 Aug 2026,LCM,200 Free,10,Isla Kate Melville,Vortex A,swmrxr37pz_4580,2:36.83,156.83,,First time
+Test,22 Aug 2026,LCM,200 Free,11,Noursin El Maghraby,Vortex A,r40,2:37.09,157.09,150.00,—
+Test,22 Aug 2026,LCM,200 Free,12,AVA KIM CAHILL,Vortex A,swms008u5v_3285,2:41.99,161.99,,First time
+Test,22 Aug 2026,LCM,200 Free,13,Ghalia Chakroun,Vortex B,swms00porb_6737,2:42.71,162.71,,First time
+Test,22 Aug 2026,LCM,200 Free,14,ETHAN GERARD CAHILL,Vortex B,swms009xix_3751,2:50.27,170.27,,First time
+Test,22 Aug 2026,LCM,200 Free,15,Mateja Frenc,Vortex B,swmrxpdgos_3195,2:53.00,173.00,,First time
+Test,22 Aug 2026,LCM,200 Free,16,Farah Hefnawy,Vortex B,r54,2:56.17,176.17,173.42,—
+Test,22 Aug 2026,LCM,200 Free,17,Mohamed Sherif Basha,Vortex B,r256,5:08.60,308.60,150.21,—
+Test,22 Aug 2026,LCM,200 Free,18,AARON DARWOOD,Vortex B,swms01gh83_16080,5:15.00,315.00,,First time
+Test,22 Aug 2026,LCM,200 IM,1,Kareem Ekramy,Vortex A,r165,2:23.61,143.61,139.29,—
+Test,22 Aug 2026,LCM,400 Free,1,Omar Bahri,Vortex A,r135,4:27.71,267.71,278.31,PB -10.60s
+Test,22 Aug 2026,LCM,400 Free,2,Malek Dardir,Vortex A,r158,4:46.23,286.23,292.20,PB -5.97s
+Test,22 Aug 2026,LCM,400 Free,3,Ali Dardir,Vortex A,r157,4:54.13,294.13,,First time
+Test,22 Aug 2026,LCM,400 Free,4,Noah Khafaja,Vortex A,r197,4:58.24,298.24,,First time
+Test,22 Aug 2026,LCM,400 Free,5,Oliver Banfield,Vortex A,r139,4:59.00,299.00,,First time
+Test,22 Aug 2026,LCM,400 Free,6,Mohamed Sherif Basha,Vortex B,r256,5:08.60,308.60,312.18,PB -3.58s
+Test,22 Aug 2026,LCM,400 Free,7,AARON DARWOOD,Vortex B,swms01gh83_16080,5:15.00,315.00,,First time
+Test,22 Aug 2026,LCM,400 Free,8,Shabbir Malik,Vortex B,r205,5:26.04,326.04,,First time
+Test,22 Aug 2026,LCM,400 Free,9,Shabbar Malik,Vortex B,r204,5:32.78,332.78,,First time
+Test,22 Aug 2026,LCM,400 Free,10,Tobit Raphael Castillano,Vortex A,r151,5:47.13,347.13,333.08,—
+Test,22 Aug 2026,LCM,400 IM,1,Ramez Nasr,Legend,r231,5:29.68,329.68,332.37,PB -2.69s
+Test,22 Aug 2026,LCM,200 Breast,,Karim Hossam,,swms00y00j_8173,,,,N/S
+Test,22 Aug 2026,LCM,200 Free,,Abdelrahman Abu Shanab,,swmt4473zw_8741,,,,N/S
+Test,22 Aug 2026,LCM,200 Free,,Aseel Mohamed,,r81,,,,N/S
+Test,22 Aug 2026,LCM,200 Free,,Amev Srivastava,,r258,,,,N/S
+Test,22 Aug 2026,LCM,200 Free,,Retal Metwally,,r76,,,,N/S
+Test,22 Aug 2026,LCM,50 Free,,Arissa Afiq,,r3,,,,N/S
+Test,22 Aug 2026,LCM,50 Free,,Retal Metwally,,r76,,,,N/S
+Test,22 Aug 2026,LCM,50 Free,,Zohan Dagsan,,r156,,,,N/S
+Test,22 Aug 2026,LCM,50 Free,,Yazan Zitouni,,r269,,,,N/S
+Test,22 Aug 2026,LCM,50 Free,,Mohamed Manil Djeddou,,r163,,,,N/S

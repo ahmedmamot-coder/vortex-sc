@@ -620,8 +620,20 @@ if ('serviceWorker' in navigator) {
     // is made of.
     if(live===false) return {tried:0, fixed:0, signedOut:true};
     var all=_failLoad(); if(!all.length) return {tried:0, fixed:0};
-    var a=all.filter(function(x){ return !x.refused; });
-    _failSave(all.filter(function(x){ return x.refused; }));   // keep the refusals, retry the rest
+    // A refusal is not always permanent, and treating it as permanent is how a red banner
+    // outlives its cause. One write was refused with "permission denied for function
+    // vx_apply_test_meet" — a fault in the database, fixed an hour later. Nothing ever asked
+    // again, so a coach was told for thirteen hours that their account was not allowed to make
+    // a change the database had been accepting all night.
+    //
+    // What a 403 depends on — this account's permissions, and the policies on the table — are
+    // exactly the things somebody changes to fix it. So refusals stay out of the 45-second loop,
+    // and are re-offered every ten minutes. A cause that has been fixed heals itself; one that
+    // has not costs six attempts an hour and says the same thing.
+    var REFUSED_RETRY_MS = 600000;
+    var _dueAgain = function(x){ return !!x.refused && (Date.now() - (x.ts || x.since || 0)) > REFUSED_RETRY_MS; };
+    var a=all.filter(function(x){ return !x.refused || _dueAgain(x); });
+    _failSave(all.filter(function(x){ return x.refused && !_dueAgain(x); }));
     if(!a.length) return {tried:0, fixed:0};
     var fixed=0;
     return a.reduce(function(p, it){
@@ -10667,9 +10679,13 @@ class Component extends DCLogic {
     const e=ed||{edits:{}, deleted:{}, added:{}};
     const by={};
     const row=(sq, sw)=>{ const k=sq+'::'+sw;
-      return (by[k] = by[k] || { id:k, squad_id:sq, sw_id:sw, patch:{}, deleted:false, added:false }); };
+      return (by[k] = by[k] || { id:k, squad_id:sq, sw_id:sw, patch:{}, edit_patch:{}, deleted:false, added:false }); };
+    // A swimmer can be BOTH edited and added in the same squad — somebody the club added, whose
+    // date of birth was typed in afterwards. The two halves are kept apart, because one row that
+    // has to hold both in a single field can only hold one, and the half it drops is the typed
+    // one. That is what "301 dates of birth" was.
     Object.keys(e.edits||{}).forEach(sq=>Object.keys(e.edits[sq]||{}).forEach(sw=>{
-      row(sq, sw).patch = e.edits[sq][sw]||{};
+      row(sq, sw).edit_patch = e.edits[sq][sw]||{};
     }));
     Object.keys(e.deleted||{}).forEach(sq=>Object.keys(e.deleted[sq]||{}).forEach(sw=>{
       if((e.deleted[sq]||{})[sw]) row(sq, sw).deleted = true;
@@ -10684,10 +10700,12 @@ class Component extends DCLogic {
     (rows||[]).forEach(r=>{
       if(!r || !r.squad_id || !r.sw_id) return;
       if(r.deleted) (e.deleted[r.squad_id]=e.deleted[r.squad_id]||{})[r.sw_id]=true;
-      if(r.added){ (e.added[r.squad_id]=e.added[r.squad_id]||[]).push(r.patch||{}); }
-      else if(r.patch && Object.keys(r.patch).length){
-        (e.edits[r.squad_id]=e.edits[r.squad_id]||{})[r.sw_id]=r.patch;
-      }
+      if(r.added) (e.added[r.squad_id]=e.added[r.squad_id]||[]).push(r.patch||{});
+      // `edit_patch` is the typed-in half and comes back whether or not the swimmer was also
+      // added here. Rows written before that column existed carry it in `patch` instead.
+      const ep=(r.edit_patch && Object.keys(r.edit_patch).length) ? r.edit_patch
+             : (!r.added && r.patch && Object.keys(r.patch).length) ? r.patch : null;
+      if(ep) (e.edits[r.squad_id]=e.edits[r.squad_id]||{})[r.sw_id]=ep;
     });
     return e;
   }
@@ -10984,7 +11002,10 @@ class Component extends DCLogic {
       'The club is reading '+(on?'one row per swimmer':'the single document')+'. '
       +'Rows: '+rowTxt+'. Document: '+docN+' swimmers. On screen: '+this._rosterTotalFor(this.rosterEdits)+'.'});
   }
-  _rowKeyMap(rows){ const m={}; (rows||[]).forEach(r=>{ try{ m[r.id]=JSON.stringify(r.patch)+'|'+(r.deleted?'d':'')+(r.added?'a':''); }catch(e){ m[r.id]='?'; } }); return m; }
+  // Both halves of a row count. A row a coach only typed into changes `edit_patch` and nothing
+  // else, so a fingerprint taken from `patch` alone reads it as unchanged and never sends it —
+  // which is the lost dates of birth again, arriving by a different door.
+  _rowKeyMap(rows){ const m={}; (rows||[]).forEach(r=>{ try{ m[r.id]=JSON.stringify(r.patch)+'|'+JSON.stringify(r.edit_patch)+'|'+(r.deleted?'d':'')+(r.added?'a':''); }catch(e){ m[r.id]='?'; } }); return m; }
   // Write only what actually changed. A coach marking one swimmer's date of birth sends one row,
   // not the club.
   _rosterPersistRows(){
