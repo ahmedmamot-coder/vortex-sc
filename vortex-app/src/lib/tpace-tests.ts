@@ -30,8 +30,15 @@ export interface FixedClockTest {
    * computes to a believable-looking T-pace that then drives every E-2 / E-3 set written off it,
    * so they are refused rather than warned about.
    *
-   * `max` is 200 m per minute — a swim nobody has done, and well inside a world record — which
-   * is why it has to be per-test: 5000 m is a fine T30 and an impossible T20.
+   * `max` was 200 m per minute, described here as "well inside a world record". That was wrong:
+   * 200 m/min is 3.33 m/s and the 1500 free world record is about 1.72 m/s, so the ceiling was
+   * nearly twice a pace no human has swum and caught nothing. A 4500 m T30 was accepted in the
+   * live app and produced a threshold speed of 2.50 m/s with a full zone table built on it.
+   *
+   * Both ceilings are now 1.75 m/s — a shade above the 1500 free world record, held for the
+   * whole test. Still unreachable, and now low enough to catch a lap count taken against the
+   * wrong pool length or a digit too many. It stays per-test: 3000 m is a plausible-looking T30
+   * entry and an impossible T20 one.
    */
   min: number;
   max: number;
@@ -40,8 +47,8 @@ export interface FixedClockTest {
 }
 
 export const FIXED_CLOCK_TESTS: Record<"t30" | "t20", FixedClockTest> = {
-  t30: { label: "T30", mins: 30, sec: 1800, min: 100, max: 6000, eg: 1650 },
-  t20: { label: "T20", mins: 20, sec: 1200, min: 100, max: 4000, eg: 1100 },
+  t30: { label: "T30", mins: 30, sec: 1800, min: 100, max: 3150, eg: 1650 },
+  t20: { label: "T20", mins: 20, sec: 1200, min: 100, max: 2100, eg: 1100 },
 };
 
 export const DISTANCE_TRIALS = [1000, 400] as const;

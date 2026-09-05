@@ -11887,17 +11887,24 @@ describe("a family uploading their own child's document", () => {
    inversion turn into a wrong T-pace: the number every E-2 / E-3 set in the
    squad is then written off. */
 describe("fixed-clock T-pace tests (T30 / T20)", () => {
-  const FIXED = { t30:{label:"T30",mins:30,sec:1800,min:100,max:6000,eg:1650},
-                  t20:{label:"T20",mins:20,sec:1200,min:100,max:4000,eg:1100} };
+  const FIXED = { t30:{label:"T30",mins:30,sec:1800,min:100,max:3150,eg:1650},
+                  t20:{label:"T20",mins:20,sec:1200,min:100,max:2100,eg:1100} };
   const ctx = (type = "t30") => ({
     TPACE_FIXED: FIXED,
     state: { tpaceType: type, tpaceDist: "", tpaceTime: "", tpaceErr: "" },
     tpaceTests: {},
     saved: null,
-    _saveJSON(k, v) { this.saved = [k, v]; },
+    // The save is read back now, so the stub has to behave like storage that kept it — which is
+    // also what makes the "did not land" cases below mean something.
+    _saveJSON(k, v) {
+      this.saved = [k, v];
+      globalThis.localStorage = { getItem: (kk) => (kk === k ? JSON.stringify(v) : null) };
+    },
     setState(p) { Object.assign(this.state, p); },
   });
-  const LOG_DEPS = ["tpaceCompute", "tpaceComputeFixed", "tpaceFixed", "parseTimeStr"];
+  globalThis.window.__vxWhyNotSaving = () => ({ signedInToDatabase: true });
+  const LOG_DEPS = ["tpaceCompute", "tpaceComputeFixed", "tpaceFixed", "parseTimeStr",
+                    "_tpaceSaveProblem"];
 
   // The table is the whole feature: if a row's seconds are wrong, every pace off it is wrong,
   // and nothing else in the app would notice.
@@ -11939,7 +11946,7 @@ describe("fixed-clock T-pace tests (T30 / T20)", () => {
     const c = ctx(); c.state.tpaceDist = "66";
     bind("tpaceLog", c, LOG_DEPS)("s1");
     eq(c.tpaceTests.s1, undefined);
-    eq(/between 100 and 6000/.test(c.state.tpaceErr), true);
+    eq(/between 100 and 3150/.test(c.state.tpaceErr), true);
   });
 
   it("metres typed twice over is refused too", () => {
@@ -11949,16 +11956,35 @@ describe("fixed-clock T-pace tests (T30 / T20)", () => {
   });
 
   it("each test's ceiling is its own, not the T30's", () => {
-    // 5000 m is a fine T30 entry and an impossible T20 one — 250 m/min for twenty minutes.
-    const ok = ctx("t30"); ok.state.tpaceDist = "5000";
+    // 3000 m is a (very fast) T30 and an impossible T20 — 150 m/min for twenty minutes.
+    const ok = ctx("t30"); ok.state.tpaceDist = "3000";
     bind("tpaceLog", ok, LOG_DEPS)("s1");
-    eq(ok.tpaceTests.s1[0].dist, 5000);
+    eq(ok.tpaceTests.s1[0].dist, 3000);
 
-    const no = ctx("t20"); no.state.tpaceDist = "5000";
+    const no = ctx("t20"); no.state.tpaceDist = "3000";
     bind("tpaceLog", no, LOG_DEPS)("s1");
     eq(no.tpaceTests.s1, undefined);
     eq(/20-minute/.test(no.state.tpaceErr), true, "the message must name the test the coach chose");
-    eq(/between 100 and 4000/.test(no.state.tpaceErr), true);
+    eq(/between 100 and 2100/.test(no.state.tpaceErr), true);
+  });
+
+  // 5 September: a T30 of 4500 m was accepted by the live app and produced a threshold speed of
+  // 2.50 m/s — faster than the 1500 free world record — with a full zone table built on it. The
+  // old ceiling of 6000 was nearly twice a pace no human has swum, so it caught nothing.
+  it("a distance no human has swum is refused", () => {
+    for (const [type, dist] of [["t30", 4500], ["t30", 3300], ["t20", 2500]]) {
+      const c = ctx(type); c.state.tpaceDist = String(dist);
+      bind("tpaceLog", c, LOG_DEPS)("s1");
+      eq(c.tpaceTests.s1, undefined, `${dist} m over a ${type} is not a swim, it is a typo`);
+    }
+  });
+  it("and the ceilings are inside what a human can do", () => {
+    // 1500 free world record is ~1.72 m/s. A ceiling above that catches nothing.
+    const T = bind("tpaceFixed", { TPACE_FIXED: FIXED });
+    for (const k of ["t30", "t20"]) {
+      const f = T(k);
+      eq(f.max / f.sec <= 1.75, true, `${k} ceiling of ${f.max} m is ${(f.max / f.sec).toFixed(2)} m/s`);
+    }
   });
 
   it("an empty or non-numeric distance is refused", () => {
@@ -12108,15 +12134,21 @@ describe("T-pace maths (Next.js route)", () => {
   });
 
   it("each test's ceiling is its own", () => {
-    // 5000 m is a fine T30 entry and an impossible T20 one — 250 m/min for twenty minutes.
-    eq(5000 <= fixedClockTest("t30").max, true);
-    eq(5000 > fixedClockTest("t20").max, true);
+    // 3000 m is a (very fast) T30 and an impossible T20 — 150 m/min for twenty minutes.
+    eq(3000 <= fixedClockTest("t30").max, true);
+    eq(3000 > fixedClockTest("t20").max, true);
+  });
+  it("neither ceiling is above what a human can swim", () => {
+    for (const k of ["t30", "t20"]) {
+      const f = fixedClockTest(k);
+      eq(f.max / f.sec <= 1.75, true, `${k} ceiling is ${(f.max / f.sec).toFixed(2)} m/s`);
+    }
   });
 
   it("the range message names the test the coach chose", () => {
     const msg = TPACE_LIB.fixedClockRangeError(fixedClockTest("t20"));
     eq(/20-minute/.test(msg), true);
-    eq(/between 100 and 4000/.test(msg), true);
+    eq(/between 100 and 2100/.test(msg), true);
   });
 
   it("the protocol says the things a coach has to be told", () => {
@@ -12388,6 +12420,149 @@ describe("T30 threshold analysis", () => {
     eq(out.races.length, 6);
     eq(an(null), null);
     eq(an({ tpace100: 0 }), null);
+  });
+});
+
+/* ------------------------------------- a logged trial survives the club's copy
+   5 September, the live app: a coach logged a T30, watched the analysis card
+   appear, refreshed, and the test was gone. The push had been refused — the
+   sign-in on that phone had expired — and the next pull put the club's older
+   document back over the top, destroying the device's own copy on the way.
+   The database still held three T30s from 3 September and nothing from the 5th. */
+describe("a T-pace trial is not lost to the club's older copy", () => {
+  const mineOnly = { r184: [{ date: "2026-09-05", type: "t30", dist: 1800, sec: 1800, tpace100: 100 }] };
+  const theirs3  = { r52: [{ date: "2026-09-03", type: "t30", dist: 2200, sec: 1800, tpace100: 81.82 }] };
+
+  const merged = (theirs, mine) => {
+    const ctx = { saved: null, _saveJSON(k, v) { this.saved = [k, v]; } };
+    return { out: bind("_tpaceMerged", ctx)(theirs, mine), ctx };
+  };
+
+  it("a trial the club has never heard of is kept", () => {
+    const { out } = merged(theirs3, mineOnly);
+    eq(out.r184.length, 1, "the device's own trial must survive the pull");
+    eq(out.r184[0].dist, 1800);
+    eq(out.r52.length, 1, "and the club's other swimmers are still there");
+  });
+
+  it("the rescued copy is written back to the device", () => {
+    // Otherwise the trial only lives in this tab, and the next reload loses it again.
+    const { ctx } = merged(theirs3, mineOnly);
+    eq(ctx.saved[0], "vx_tpace");
+    eq(ctx.saved[1].r184.length, 1);
+  });
+
+  it("nothing is pushed when there was nothing to rescue", () => {
+    // An unconditional save here would push on every single pull.
+    const { ctx } = merged(theirs3, { r52: theirs3.r52 });
+    eq(ctx.saved, null);
+  });
+
+  it("the same trial from both sides is not duplicated", () => {
+    const { out } = merged(mineOnly, JSON.parse(JSON.stringify(mineOnly)));
+    eq(out.r184.length, 1);
+  });
+
+  it("two different trials for one swimmer both survive", () => {
+    const older = { r184: [{ date: "2026-09-01", type: "t30", dist: 1700, sec: 1800, tpace100: 105.88 }] };
+    const { out } = merged(older, mineOnly);
+    eq(out.r184.length, 2);
+    eq(out.r184[0].date, "2026-09-05", "newest first, as the screen and the analysis both assume");
+  });
+
+  it("an empty club copy does not empty the device", () => {
+    // This is the exact shape the failing pull returned: a present, non-null, empty document.
+    const { out } = merged({}, mineOnly);
+    eq(out.r184.length, 1);
+  });
+
+  it("a device with nothing of its own takes the club's copy unchanged", () => {
+    const { out } = merged(theirs3, {});
+    eq(JSON.stringify(out), JSON.stringify(theirs3));
+  });
+
+  it("neither side being there is survivable", () => {
+    eq(JSON.stringify(bind("_tpaceMerged", { _saveJSON(){} })(null, null)), "{}");
+  });
+
+  it("the boot read merges too — that is where the test was actually lost", () => {
+    // _loadJSON prefers the copy the last pull left in memory, so the club's document hides a
+    // trial it has never heard of; and the pull has by then written that same document over
+    // localStorage. Merging only inside applyPull left the screen empty on the second refresh.
+    const boot = sourceBetween("this.tpaceTests=this._tpaceMerged(this._loadJSON", ");");
+    eq(/_loadLocalOnly\('vx_tpace'/.test(boot), true,
+       "the device's own copy has to be read past the pulled one");
+  });
+
+  it("the copy the pull replaced is read back", () => {
+    // On the phone that lost the 5 September test this was the only surviving copy.
+    const fn = methodSource("_tpaceMerged").body;
+    eq(/__vxprev_vx_tpace/.test(fn), true);
+  });
+
+  it("the pull merges rather than replaces", () => {
+    const line = sourceBetween("this.tpaceTests=this._tpaceMerged(g('vx_tpace'", ";");
+    eq(/this\.tpaceTests\), this\.tpaceTests\)/.test(line), true,
+       "replacing here is what lost the 5 September test");
+  });
+});
+
+/* --------------------------- a save that did not happen must not look like one
+   5 September: a coach logged a T30, the analysis card appeared, the field
+   cleared — and club_state went sixty-five minutes without a single T-pace
+   write while other keys were landing seconds apart. The screen was reporting
+   an in-memory assignment as a save. */
+describe("the T-pace screen tells the truth about a save", () => {
+  const REC = { date: "2026-09-05", type: "t30", dist: 1800, sec: 1800, tpace100: 100 };
+  const problem = (store, signedIn) => {
+    const g = globalThis;
+    const hadLS = "localStorage" in g, oldLS = g.localStorage, oldWhy = g.window.__vxWhyNotSaving;
+    g.localStorage = { getItem: (k) => (k === "vx_tpace" ? store : null) };
+    g.window.__vxWhyNotSaving = () => ({ signedInToDatabase: signedIn });
+    try { return bind("_tpaceSaveProblem", {})("r184", REC); }
+    finally {
+      if (hadLS) g.localStorage = oldLS; else delete g.localStorage;
+      g.window.__vxWhyNotSaving = oldWhy;
+    }
+  };
+  const kept = JSON.stringify({ r184: [REC] });
+
+  it("a trial that reached the device and the club reports nothing", () =>
+    eq(problem(kept, true), ""));
+
+  it("a trial that never reached storage says the phone is full", () => {
+    // localStorage.setItem threw and the catch swallowed it, which is what a full phone does.
+    const msg = problem(null, true);
+    eq(/Not saved/.test(msg), true);
+    eq(/storage is full/.test(msg), true);
+    eq(/enter it again/i.test(msg), true, "the coach needs to know the number is not recorded");
+  });
+
+  it("a trial kept locally but not sent says exactly that", () => {
+    const msg = problem(kept, false);
+    eq(/NOT sent to the club/.test(msg), true);
+    eq(/sign-in has expired/.test(msg), true);
+    eq(/Not saved/.test(msg), false, "it IS saved here — telling them otherwise invites a re-entry");
+  });
+
+  it("a different swimmer's trial does not count as this one", () =>
+    eq(/storage is full/.test(problem(JSON.stringify({ r999: [REC] }), true)), true));
+
+  it("a same-swimmer, different-trial record does not count either", () => {
+    const other = { ...REC, dist: 1700, tpace100: 105.88 };
+    eq(/storage is full/.test(problem(JSON.stringify({ r184: [other] }), true)), true);
+  });
+
+  it("unreadable storage is treated as not saved, never as saved", () => {
+    eq(/storage is full/.test(problem("{ not json", true)), true);
+  });
+
+  it("the distance is kept in the box when the save did not land", () => {
+    // Clearing it would make the coach read the lap count off a counter a second time.
+    const fn = methodSource("tpaceLog").body;
+    eq(/bad \? \{tpaceErr:bad\} : \{tpaceDist:'', tpaceErr:''\}/.test(fn), true);
+    eq(/bad \? \{tpaceErr:bad\} : \{tpaceTime:'', tpaceErr:''\}/.test(fn), true,
+       "the 1000 and 400 trials have exactly the same exposure");
   });
 });
 

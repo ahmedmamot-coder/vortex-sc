@@ -8588,7 +8588,11 @@ class Component extends DCLogic {
     // morning.
     this._rosterSent=this._loadLocalOnly('vx_roster_sent', null);
     this.staffOverrides=this._loadJSON('vx_staff_ovr', {});
-    this.tpaceTests=this._loadJSON('vx_tpace', {});
+    // Boot is where the test was actually lost. _loadJSON prefers the copy the last pull left in
+    // memory, so a club document that has never heard of this morning's trial hides it — and the
+    // pull has by then already written that same document over localStorage. So the boot read is
+    // the union of all three: the club's copy, this device's, and the one the pull replaced.
+    this.tpaceTests=this._tpaceMerged(this._loadJSON('vx_tpace', {}), this._loadLocalOnly('vx_tpace', {}));
     this.swimmerStatus=this._loadJSON('vx_sw_status', {});
     this.swimmerMeta=this._sanitizeMeta(this._loadJSON('vx_sw_meta', {}));
     // Proactively purge any old base64 that's bloating the blob (locally and, via sync, on the
@@ -13126,9 +13130,20 @@ class Component extends DCLogic {
   // metres belong (66 lengths, not 1650 m); above `max` is metres typed twice over. Either one
   // computes to a plausible-looking T-pace that then drives every E-2 / E-3 set written off it,
   // which is why they are refused at the door rather than shown as a warning.
+  //
+  // `max` was 200 m per minute, described here as "well inside a world record". That was simply
+  // wrong: 200 m/min is 3.33 m/s, and the 1500 free world record is about 1.72 m/s. The ceiling
+  // was nearly twice a pace no human has swum, so it caught nothing — on 5 September a T30 of
+  // 4500 m was accepted and produced a threshold speed of 2.50 m/s and a whole zone table built
+  // on it. Every number on that card was impossible and none of it was flagged.
+  //
+  // Both ceilings are now 1.75 m/s — a shade above the 1500 free world record, held for the whole
+  // test. Still a pace no swimmer in this club will ever reach, and now low enough to catch the
+  // entry that matters: a lap count multiplied by the wrong pool length, or a digit too many,
+  // which is what §10 of the spec asks for.
   get TPACE_FIXED(){ return {
-    t30: {label:'T30', mins:30, sec:1800, min:100, max:6000, eg:1650},
-    t20: {label:'T20', mins:20, sec:1200, min:100, max:4000, eg:1100},
+    t30: {label:'T30', mins:30, sec:1800, min:100, max:3150, eg:1650},
+    t20: {label:'T20', mins:20, sec:1200, min:100, max:2100, eg:1100},
   }; }
   tpaceFixed(type){ return this.TPACE_FIXED[type] || null; }
   tpaceCompute(type, sec){ return type==='1000' ? sec/10 : (sec*2.5)/10; }
@@ -13239,7 +13254,10 @@ class Component extends DCLogic {
       const rec={date:new Date().toISOString().slice(0,10), type:S.tpaceType, dist:+dist.toFixed(1), sec:fixed.sec, tpace100:+t100.toFixed(2)};
       this.tpaceTests={...this.tpaceTests, [swId]:[rec, ...(this.tpaceTests[swId]||[])]};
       this._saveJSON('vx_tpace', this.tpaceTests);
-      return this.setState({tpaceDist:'', tpaceErr:''});
+      const bad=this._tpaceSaveProblem(swId, rec);
+      // The distance stays in the box when it did not land, so the coach can try again without
+      // reading it off a lap counter a second time.
+      return this.setState(bad ? {tpaceErr:bad} : {tpaceDist:'', tpaceErr:''});
     }
     const sec=this.parseTimeStr(S.tpaceTime);
     if(sec==null || sec<=0) return this.setState({tpaceErr:'Enter a valid time, e.g. 14:32.50'});
@@ -13248,7 +13266,64 @@ class Component extends DCLogic {
     const list=[rec, ...(this.tpaceTests[swId]||[])];
     this.tpaceTests={...this.tpaceTests, [swId]:list};
     this._saveJSON('vx_tpace', this.tpaceTests);
-    this.setState({tpaceTime:'', tpaceErr:''});
+    const bad=this._tpaceSaveProblem(swId, rec);
+    this.setState(bad ? {tpaceErr:bad} : {tpaceTime:'', tpaceErr:''});
+  }
+  // The union of what the club holds and what this device holds, per swimmer, newest first.
+  // Trials carry no id, so two records are the same record when every measured field matches —
+  // date, test, time and distance. Logging the same test twice on one day is not a thing a coach
+  // does by accident, and a duplicate would be visible and deletable; a lost test is neither.
+  _tpaceMerged(theirs, mine){
+    const out={...(theirs||{})}, sig=r=>[r&&r.date, r&&r.type, r&&r.sec, r&&r.dist, r&&r.tpace100].join('|');
+    let added=0;
+    // The copy the pull replaced counts as this device's too, and on the phone that lost the
+    // 5 September test it was the only one left: the pull had already written the club's document
+    // over localStorage before the boot read ran, so `mine` was empty by the time anything could
+    // rescue it. __vxprev_ is the net that was already there — 282 bytes, far inside its 256 KB
+    // limit — and nothing was reading it unless the key had vanished entirely, which it had not.
+    let prev=null; try{ prev=JSON.parse(localStorage.getItem('__vxprev_vx_tpace')||'null'); }catch(e){}
+    [mine, prev].forEach(src=>{ Object.keys(src||{}).forEach(sw=>{
+      const m=(src[sw]||[]), t=(out[sw]||[]);
+      const have={}; t.forEach(r=>{ have[sig(r)]=true; });
+      const extra=m.filter(r=>r && !have[sig(r)]);
+      if(extra.length){ added+=extra.length;
+        out[sw]=[...extra, ...t].sort((a,b)=>String((b||{}).date||'').localeCompare(String((a||{}).date||''))); }
+    }); });
+    // Put the union back on the device, so the copy the next pull reads from is the complete one
+    // and the trial is not depending on this tab staying open. Only when something was actually
+    // rescued — an unconditional save here would push on every pull.
+    if(added) { try{ this._saveJSON('vx_tpace', out); }catch(e){} }
+    return out;
+  }
+  // Did that trial actually get kept anywhere? The screen used to answer yes on the strength of
+  // an in-memory assignment: the analysis card appeared, the field cleared, and on 5 September a
+  // coach logged a T30 three times and watched it vanish on every refresh while the club's
+  // database went sixty-five minutes without a single T-pace write. A full phone and an expired
+  // sign-in both look exactly like a working one until the reload throws the day away.
+  //
+  // So the save is read back, and when it did not land the coach is told which of the two it was
+  // — the only two things that stop a write here, and they need different actions.
+  _tpaceSaveProblem(swId, rec){
+    const sig=r=>[r&&r.date, r&&r.type, r&&r.sec, r&&r.dist, r&&r.tpace100].join('|');
+    let onDevice=false;
+    try{
+      const raw=localStorage.getItem('vx_tpace');
+      const back=raw?JSON.parse(raw):null;
+      onDevice=!!(back && Array.isArray(back[swId]) && back[swId].some(r=>sig(r)===sig(rec)));
+    }catch(e){ onDevice=false; }
+    if(!onDevice){
+      return 'Not saved — this phone\u2019s storage is full, so the trial could not be kept. '
+           + 'Close some other tabs or clear website data for this site, then enter it again.';
+    }
+    // It is on the device. Whether it reached the club is a separate question, and a trial that
+    // only exists on one phone is one refresh away from the club never seeing it.
+    let signedIn=true;
+    try{ const w=window.__vxWhyNotSaving && window.__vxWhyNotSaving(); if(w) signedIn=!!w.signedInToDatabase; }catch(e){}
+    if(!signedIn){
+      return 'Saved on this phone, but NOT sent to the club \u2014 the database sign-in has expired. '
+           + 'Sign in again and it will go up on its own.';
+    }
+    return '';
   }
   tpaceDelete(swId, idx){ const list=(this.tpaceTests[swId]||[]).slice(); list.splice(idx,1); this.tpaceTests={...this.tpaceTests, [swId]:list}; this._saveJSON('vx_tpace', this.tpaceTests); this.forceUpdate(); }
   _swMeta(swId){ const base=this.swimmerMeta[swId] || {sponsored:false, docs:{birth:false, id:false, medical:false}, inbody:[]};
@@ -18796,7 +18871,19 @@ class Component extends DCLogic {
     this.billing=g('vx_billing', this.billing); this.raceSplitLog=g('vx_race_splits', this.raceSplitLog);
     this.bdaySent=g('vx_bday_sent', this.bdaySent); this.staffPwSet=g('vx_staff_pw_set', this.staffPwSet);
     this.brandConfig=g('vx_brand', this.brandConfig); this.notifications=g('vx_notifications', this.notifications);
-    this.tpaceTests=g('vx_tpace', this.tpaceTests); this.fitnessTests=g('vx_fitness_tests', this.fitnessTests);
+    // A trial this device logged is KEPT even when the club's copy has never heard of it. Every
+    // synced key is a whole document and a whole document is last-writer-wins, which is right for
+    // the squads and wrong for a log that two coaches add to from two phones. On 5 September a
+    // coach logged a T30, watched the analysis appear, refreshed, and the test was gone: the push
+    // had been refused (the sign-in on that phone had expired) and the next pull put the club's
+    // older document back over the top — destroying the device's own copy on the way, so it was
+    // not recoverable by signing in afterwards either.
+    //
+    // Merging rather than replacing means a refused write costs nothing: the trial stays on the
+    // phone, stays on the screen, and goes up whole the next time the device is signed in. It is
+    // the treatment vx_event_requests and vx_notifications already get, for the same reason.
+    this.tpaceTests=this._tpaceMerged(g('vx_tpace', this.tpaceTests), this.tpaceTests);
+    this.fitnessTests=g('vx_fitness_tests', this.fitnessTests);
     this.fitnessPlans=this._keepMine(g('vx_fitness_plans', this.fitnessPlans), this.fitnessPlans, this._editedFitSquads); this.fitnessMedia=this._keepMine(g('vx_fitness_media', this.fitnessMedia), this.fitnessMedia, this._editedFitMedia); this.waTargets=g('vx_wa_targets', this.waTargets); this.promoStore=g('vx_promo', this.promoStore); this.aiSuggOverrides=g('vx_ai_sugg_ovr', this.aiSuggOverrides);
     this.relayOverrides=g('vx_relay_ovr', this.relayOverrides);
     this.planCustom=g('vx_plan_custom', this.planCustom); ['type','stroke','tools','zone','label'].forEach(k=>{ if(!Array.isArray((this.planCustom||{})[k])){ this.planCustom=this.planCustom||{}; this.planCustom[k]=[]; } });
