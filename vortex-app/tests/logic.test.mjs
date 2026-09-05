@@ -11894,10 +11894,17 @@ describe("fixed-clock T-pace tests (T30 / T20)", () => {
     state: { tpaceType: type, tpaceDist: "", tpaceTime: "", tpaceErr: "" },
     tpaceTests: {},
     saved: null,
-    _saveJSON(k, v) { this.saved = [k, v]; },
+    // The save is read back now, so the stub has to behave like storage that kept it — which is
+    // also what makes the "did not land" cases below mean something.
+    _saveJSON(k, v) {
+      this.saved = [k, v];
+      globalThis.localStorage = { getItem: (kk) => (kk === k ? JSON.stringify(v) : null) };
+    },
     setState(p) { Object.assign(this.state, p); },
   });
-  const LOG_DEPS = ["tpaceCompute", "tpaceComputeFixed", "tpaceFixed", "parseTimeStr"];
+  globalThis.window.__vxWhyNotSaving = () => ({ signedInToDatabase: true });
+  const LOG_DEPS = ["tpaceCompute", "tpaceComputeFixed", "tpaceFixed", "parseTimeStr",
+                    "_tpaceSaveProblem"];
 
   // The table is the whole feature: if a row's seconds are wrong, every pace off it is wrong,
   // and nothing else in the app would notice.
@@ -12497,6 +12504,65 @@ describe("a T-pace trial is not lost to the club's older copy", () => {
     const line = sourceBetween("this.tpaceTests=this._tpaceMerged(g('vx_tpace'", ";");
     eq(/this\.tpaceTests\), this\.tpaceTests\)/.test(line), true,
        "replacing here is what lost the 5 September test");
+  });
+});
+
+/* --------------------------- a save that did not happen must not look like one
+   5 September: a coach logged a T30, the analysis card appeared, the field
+   cleared — and club_state went sixty-five minutes without a single T-pace
+   write while other keys were landing seconds apart. The screen was reporting
+   an in-memory assignment as a save. */
+describe("the T-pace screen tells the truth about a save", () => {
+  const REC = { date: "2026-09-05", type: "t30", dist: 1800, sec: 1800, tpace100: 100 };
+  const problem = (store, signedIn) => {
+    const g = globalThis;
+    const hadLS = "localStorage" in g, oldLS = g.localStorage, oldWhy = g.window.__vxWhyNotSaving;
+    g.localStorage = { getItem: (k) => (k === "vx_tpace" ? store : null) };
+    g.window.__vxWhyNotSaving = () => ({ signedInToDatabase: signedIn });
+    try { return bind("_tpaceSaveProblem", {})("r184", REC); }
+    finally {
+      if (hadLS) g.localStorage = oldLS; else delete g.localStorage;
+      g.window.__vxWhyNotSaving = oldWhy;
+    }
+  };
+  const kept = JSON.stringify({ r184: [REC] });
+
+  it("a trial that reached the device and the club reports nothing", () =>
+    eq(problem(kept, true), ""));
+
+  it("a trial that never reached storage says the phone is full", () => {
+    // localStorage.setItem threw and the catch swallowed it, which is what a full phone does.
+    const msg = problem(null, true);
+    eq(/Not saved/.test(msg), true);
+    eq(/storage is full/.test(msg), true);
+    eq(/enter it again/i.test(msg), true, "the coach needs to know the number is not recorded");
+  });
+
+  it("a trial kept locally but not sent says exactly that", () => {
+    const msg = problem(kept, false);
+    eq(/NOT sent to the club/.test(msg), true);
+    eq(/sign-in has expired/.test(msg), true);
+    eq(/Not saved/.test(msg), false, "it IS saved here — telling them otherwise invites a re-entry");
+  });
+
+  it("a different swimmer's trial does not count as this one", () =>
+    eq(/storage is full/.test(problem(JSON.stringify({ r999: [REC] }), true)), true));
+
+  it("a same-swimmer, different-trial record does not count either", () => {
+    const other = { ...REC, dist: 1700, tpace100: 105.88 };
+    eq(/storage is full/.test(problem(JSON.stringify({ r184: [other] }), true)), true);
+  });
+
+  it("unreadable storage is treated as not saved, never as saved", () => {
+    eq(/storage is full/.test(problem("{ not json", true)), true);
+  });
+
+  it("the distance is kept in the box when the save did not land", () => {
+    // Clearing it would make the coach read the lap count off a counter a second time.
+    const fn = methodSource("tpaceLog").body;
+    eq(/bad \? \{tpaceErr:bad\} : \{tpaceDist:'', tpaceErr:''\}/.test(fn), true);
+    eq(/bad \? \{tpaceErr:bad\} : \{tpaceTime:'', tpaceErr:''\}/.test(fn), true,
+       "the 1000 and 400 trials have exactly the same exposure");
   });
 });
 

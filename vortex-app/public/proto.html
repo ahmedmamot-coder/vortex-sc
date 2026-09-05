@@ -13254,7 +13254,10 @@ class Component extends DCLogic {
       const rec={date:new Date().toISOString().slice(0,10), type:S.tpaceType, dist:+dist.toFixed(1), sec:fixed.sec, tpace100:+t100.toFixed(2)};
       this.tpaceTests={...this.tpaceTests, [swId]:[rec, ...(this.tpaceTests[swId]||[])]};
       this._saveJSON('vx_tpace', this.tpaceTests);
-      return this.setState({tpaceDist:'', tpaceErr:''});
+      const bad=this._tpaceSaveProblem(swId, rec);
+      // The distance stays in the box when it did not land, so the coach can try again without
+      // reading it off a lap counter a second time.
+      return this.setState(bad ? {tpaceErr:bad} : {tpaceDist:'', tpaceErr:''});
     }
     const sec=this.parseTimeStr(S.tpaceTime);
     if(sec==null || sec<=0) return this.setState({tpaceErr:'Enter a valid time, e.g. 14:32.50'});
@@ -13263,7 +13266,8 @@ class Component extends DCLogic {
     const list=[rec, ...(this.tpaceTests[swId]||[])];
     this.tpaceTests={...this.tpaceTests, [swId]:list};
     this._saveJSON('vx_tpace', this.tpaceTests);
-    this.setState({tpaceTime:'', tpaceErr:''});
+    const bad=this._tpaceSaveProblem(swId, rec);
+    this.setState(bad ? {tpaceErr:bad} : {tpaceTime:'', tpaceErr:''});
   }
   // The union of what the club holds and what this device holds, per swimmer, newest first.
   // Trials carry no id, so two records are the same record when every measured field matches —
@@ -13290,6 +13294,36 @@ class Component extends DCLogic {
     // rescued — an unconditional save here would push on every pull.
     if(added) { try{ this._saveJSON('vx_tpace', out); }catch(e){} }
     return out;
+  }
+  // Did that trial actually get kept anywhere? The screen used to answer yes on the strength of
+  // an in-memory assignment: the analysis card appeared, the field cleared, and on 5 September a
+  // coach logged a T30 three times and watched it vanish on every refresh while the club's
+  // database went sixty-five minutes without a single T-pace write. A full phone and an expired
+  // sign-in both look exactly like a working one until the reload throws the day away.
+  //
+  // So the save is read back, and when it did not land the coach is told which of the two it was
+  // — the only two things that stop a write here, and they need different actions.
+  _tpaceSaveProblem(swId, rec){
+    const sig=r=>[r&&r.date, r&&r.type, r&&r.sec, r&&r.dist, r&&r.tpace100].join('|');
+    let onDevice=false;
+    try{
+      const raw=localStorage.getItem('vx_tpace');
+      const back=raw?JSON.parse(raw):null;
+      onDevice=!!(back && Array.isArray(back[swId]) && back[swId].some(r=>sig(r)===sig(rec)));
+    }catch(e){ onDevice=false; }
+    if(!onDevice){
+      return 'Not saved — this phone\u2019s storage is full, so the trial could not be kept. '
+           + 'Close some other tabs or clear website data for this site, then enter it again.';
+    }
+    // It is on the device. Whether it reached the club is a separate question, and a trial that
+    // only exists on one phone is one refresh away from the club never seeing it.
+    let signedIn=true;
+    try{ const w=window.__vxWhyNotSaving && window.__vxWhyNotSaving(); if(w) signedIn=!!w.signedInToDatabase; }catch(e){}
+    if(!signedIn){
+      return 'Saved on this phone, but NOT sent to the club \u2014 the database sign-in has expired. '
+           + 'Sign in again and it will go up on its own.';
+    }
+    return '';
   }
   tpaceDelete(swId, idx){ const list=(this.tpaceTests[swId]||[]).slice(); list.splice(idx,1); this.tpaceTests={...this.tpaceTests, [swId]:list}; this._saveJSON('vx_tpace', this.tpaceTests); this.forceUpdate(); }
   _swMeta(swId){ const base=this.swimmerMeta[swId] || {sponsored:false, docs:{birth:false, id:false, medical:false}, inbody:[]};
