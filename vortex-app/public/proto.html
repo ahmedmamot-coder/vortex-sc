@@ -2729,7 +2729,7 @@ if ('serviceWorker' in navigator) {
                     <sc-if value="{{ famMultiKids }}" hint-placeholder-val="{{ false }}">
                       <div class="vx-scroll" style="position:relative;display:flex;gap:7px;overflow-x:auto;margin-top:14px">
                         <sc-for list="{{ famKidsChips }}" as="k" hint-placeholder-count="2">
-                          <button onclick="{{ k.onClick }}" style="flex:none;background:{{ k.bg }};color:{{ k.fg }};border:1px solid {{ k.border }};border-radius:999px;padding:7px 14px;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer">{{ k.label }}</button>
+                          <button onclick="{{ k.onClick }}" style="flex:none;text-align:left;background:{{ k.bg }};color:{{ k.fg }};border:1px solid {{ k.border }};border-radius:14px;padding:8px 14px;font-family:inherit;cursor:pointer"><span style="display:block;font-size:12px;font-weight:700">{{ k.label }}</span><span style="display:block;font-size:10px;font-weight:600;margin-top:1px;color:{{ k.sub }}">{{ k.pb }}</span></button>
                         </sc-for>
                       </div>
                     </sc-if>
@@ -3151,6 +3151,36 @@ if ('serviceWorker' in navigator) {
                     </sc-if>
 
                     <sc-if value="{{ famShowMeets }}" hint-placeholder-val="{{ false }}">
+                      <!-- Training plans the coach has published to this squad. Full session, as
+                           the coach built it; published sessions only. -->
+                      <sc-if value="{{ famHasPlans }}" hint-placeholder-val="{{ false }}">
+                        <div style="margin-bottom:16px">
+                          <div style="display:flex;align-items:center;gap:8px;margin:0 2px 9px"><i data-lucide="clipboard-list" style="width:16px;height:16px;color:#067EEA"></i><p style="margin:0;font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">Training plans</p></div>
+                          <div style="display:flex;flex-direction:column;gap:10px">
+                            <sc-for list="{{ famPlans }}" as="pl" hint-placeholder-count="2">
+                              <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;box-shadow:0 2px 7px rgba(11,20,40,.05);overflow:hidden">
+                                <div style="display:flex;align-items:center;gap:12px;padding:13px 15px 11px">
+                                  <span style="flex:none;width:46px;height:46px;border-radius:13px;background:linear-gradient(140deg,#3F9CFF,#0768D6);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;box-shadow:0 6px 14px rgba(7,104,214,.28)"><span style="font-size:16px;font-weight:800">{{ pl.day }}</span><span style="font-size:9px;font-weight:700;letter-spacing:.4px">{{ pl.mon }}</span></span>
+                                  <span style="flex:1;min-width:0"><span style="display:block;font-size:14px;font-weight:700;color:#0C1116">{{ pl.title }}</span><span style="display:block;font-size:11.5px;color:#7A8296;margin-top:2px">{{ pl.dateLabel }}</span><span style="display:block;font-size:11px;color:#7A8296;margin-top:1px">{{ pl.slot }}</span></span>
+                                  <span style="flex:none;text-align:center"><span style="display:block;font-family:var(--font-mono);font-size:14px;font-weight:800;color:#067EEA">{{ pl.totalM }}</span><span style="display:block;font-size:9px;font-weight:700;text-transform:uppercase;color:#9AA2B4">metres</span></span>
+                                </div>
+                                <div style="padding:0 15px 14px;display:flex;flex-direction:column;gap:10px">
+                                  <sc-for list="{{ pl.sections }}" as="sec" hint-placeholder-count="3">
+                                    <div>
+                                      <p style="margin:0 0 5px;font-size:11px;font-weight:700;color:#0C1116">{{ sec.title }}</p>
+                                      <div style="display:flex;flex-direction:column;gap:5px">
+                                        <sc-for list="{{ sec.sets }}" as="st" hint-placeholder-count="3">
+                                          <div style="background:#F8FAFC;border:1px solid #EEF1F5;border-radius:9px;padding:8px 10px"><span style="display:block;font-size:12.5px;color:#0C1116;font-weight:600">{{ st.line }}</span><sc-if value="{{ st.hasSub }}" hint-placeholder-val="{{ false }}"><span style="display:block;font-size:10.5px;color:#7A8296;margin-top:2px">{{ st.sub }}</span></sc-if></div>
+                                        </sc-for>
+                                      </div>
+                                    </div>
+                                  </sc-for>
+                                </div>
+                              </div>
+                            </sc-for>
+                          </div>
+                        </div>
+                      </sc-if>
                       <!-- The separate "Club calendar" block that used to sit here is gone. It
                            listed the same meets a second time, from the second calendar, with
                            less on each one — a parent scrolled past a bare name and a place to
@@ -3760,7 +3790,8 @@ if ('serviceWorker' in navigator) {
                           <sc-for list="{{ savedPlanRows }}" as="sp" hint-placeholder-count="0">
                             <div style="display:flex;align-items:center;gap:11px;background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:10px 12px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
                               <span style="flex:none;text-align:center;min-width:52px"><span style="display:block;font-family:var(--font-mono);font-size:14px;font-weight:800;color:{{ squad.accent }}">{{ sp.totalM }}</span><span style="display:block;font-size:9px;font-weight:700;text-transform:uppercase;color:#9AA2B4">metres</span></span>
-                              <span style="flex:1;min-width:0"><span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:13px;font-weight:700;color:#0C1116">{{ sp.title }}</span><span style="background:{{ sp.slotBg }};color:{{ sp.slotFg }};border-radius:6px;padding:2px 7px;font-size:9.5px;font-weight:800">{{ sp.slotLabel }}</span></span><span style="display:block;font-size:11px;color:#7A8296;margin-top:2px">{{ sp.dateLabel }} · Zone {{ sp.zone }}</span></span>
+                              <span style="flex:1;min-width:0"><span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:13px;font-weight:700;color:#0C1116">{{ sp.title }}</span><span style="background:{{ sp.slotBg }};color:{{ sp.slotFg }};border-radius:6px;padding:2px 7px;font-size:9.5px;font-weight:800">{{ sp.slotLabel }}</span><sc-if value="{{ sp.pub }}" hint-placeholder-val="{{ false }}"><span style="background:#DCF5EA;color:#0C7A4F;border-radius:6px;padding:2px 7px;font-size:9.5px;font-weight:800">Shared</span></sc-if></span><span style="display:block;font-size:11px;color:#7A8296;margin-top:2px">{{ sp.dateLabel }} · Zone {{ sp.zone }}</span></span>
+                              <button onclick="{{ sp.onPublish }}" style="flex:none;width:32px;height:32px;border-radius:9px;border:none;background:{{ sp.pubBg }};color:{{ sp.pubFg }};cursor:pointer;display:flex;align-items:center;justify-content:center" title="{{ sp.pubTitle }}"><i data-lucide="send" style="width:14px;height:14px"></i></button>
                               <button onclick="{{ sp.onView }}" style="flex:none;width:32px;height:32px;border-radius:9px;border:none;background:var(--vx-blue-tint);color:var(--vx-blue-dark);cursor:pointer;display:flex;align-items:center;justify-content:center" title="View as PDF"><i data-lucide="file-text" style="width:14px;height:14px"></i></button>
                               <button onclick="{{ sp.onEdit }}" style="flex:none;width:32px;height:32px;border-radius:9px;border:none;background:#F4F6F8;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center" title="Load &amp; edit"><i data-lucide="pencil" style="width:14px;height:14px"></i></button>
                               <button onclick="{{ sp.onDelete }}" style="flex:none;width:32px;height:32px;border-radius:9px;border:none;background:#FDECEC;color:#E5484D;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="trash-2" style="width:14px;height:14px"></i></button>
@@ -18256,7 +18287,7 @@ class Component extends DCLogic {
     // If the read came back empty but we already hold saved sessions, the read was likely blocked
     // (e.g. row-level security without a token) — keep what we have rather than wiping it.
     if(rows.length===0 && this.savedPlans && Object.keys(this.savedPlans).some(k=>(this.savedPlans[k]||[]).length)) return;
-    const grouped={}; rows.forEach(r=>{ const sq=r.squad_id||'?'; (grouped[sq]=grouped[sq]||[]).push({ id:r.id, date:r.sday||'', title:r.title||'Session', zone:r.zone||'', totalM:r.total_m||0, slot:(r.plan&&r.plan._slot)||'', time:(r.plan&&r.plan._time)||'', plan:r.plan||{} }); });
+    const grouped={}; rows.forEach(r=>{ const sq=r.squad_id||'?'; (grouped[sq]=grouped[sq]||[]).push({ id:r.id, date:r.sday||'', title:r.title||'Session', zone:r.zone||'', totalM:r.total_m||0, slot:(r.plan&&r.plan._slot)||'', time:(r.plan&&r.plan._time)||'', pub:!!(r.plan&&r.plan._pub), plan:r.plan||{} }); });
     this.savedPlans=grouped; try{ this._saveJSON('vx_saved_plans', grouped); }catch(e){} this.setState({});
   }
   async savePlanSnapshot(squadId){ const S=this.state; const plan=this.getPlan(squadId); const id=this._uid('sp')+'_'+Math.random().toString(36).slice(2,6);
@@ -18270,9 +18301,26 @@ class Component extends DCLogic {
       {squad:squadId, date:date, slot:slot, metres:rec.totalM, zone:rec.zone}); }catch(e){}
     // Append a row (never overwrites another device's sessions), then refresh from the table.
     const row={ id, squad_id:squadId, title:rec.title, zone:rec.zone, total_m:rec.totalM, plan:planCopy, sday:date, ts:Date.now() };
-    try{ if(window.__vxUpsert){ const ok=await window.__vxUpsert('plan_sessions', [row]); if(ok) await this._plansFetch(); else this.setState({savedPlanMsg:'Saved on this device, but the database rejected it — run the plan_sessions SQL.'}); } }catch(e){}
+    try{ if(window.__vxUpsert){ const ok=await window.__vxUpsert('plan_sessions', [row]); if(ok) await this._plansFetch(); else this.setState({savedPlanMsg:'Saved on this device, but the database rejected it — run the plan_sessions SQL.'}); } }catch(e){} }
+  // Publish a saved session to the squad's families — or take it back. A saved session is the
+  // coach's own scheduling until this is tapped; publishing is what shares it, and the family
+  // calendar shows published sessions only. The flag rides inside the plan JSON (_pub), beside
+  // the _slot/_time this row already stashes there, so no column migration is needed. Families
+  // can read plan_sessions (RLS allows an authenticated select). Re-upsert the WHOLE row so
+  // nothing else on it is lost, and notify the families only on publish, never on a bare save.
+  async togglePlanPublish(squadId, id){
+    const list=((this.savedPlans&&this.savedPlans[squadId])||[]);
+    const rec=list.find(r=>r.id===id); if(!rec) return;
+    const next=!rec.pub;
+    const planCopy=Object.assign({}, rec.plan||{}, {_pub:next});
+    const nlist=list.map(r=> r.id===id ? {...r, pub:next, plan:planCopy} : r);
+    this.savedPlans={...(this.savedPlans||{}), [squadId]:nlist}; try{ this._saveJSON('vx_saved_plans', this.savedPlans); }catch(e){}
     const sqName=(this.squadById[squadId]&&this.squadById[squadId].name)||'';
-    this._pushSend({swimmerIds:(this.roster[squadId]||[]).map(s=>s.id)}, 'New training plan'+(sqName?(' · '+sqName):''), (rec.title||'Session')+' · '+this.shortDateISO(date), '/'); }
+    this.setState({savedPlanMsg: next ? ('Published to swimmers ✓ — families in '+(sqName||'this squad')+' can see it in their calendar.') : 'Unpublished — hidden from families.'});
+    try{ this.audit('plan.publish', (sqName||squadId)+' · '+(rec.title||'Session'), {squad:squadId, date:rec.date, published:next}); }catch(e){}
+    const row={ id:rec.id, squad_id:squadId, title:rec.title||'Session', zone:rec.zone||'', total_m:rec.totalM||0, plan:planCopy, sday:rec.date||'', ts:Date.now() };
+    try{ if(window.__vxUpsert){ const ok=await window.__vxUpsert('plan_sessions', [row]); if(ok) await this._plansFetch(); } }catch(e){}
+    if(next){ try{ this._pushSend({swimmerIds:(this.roster[squadId]||[]).map(s=>s.id)}, 'Session plan published'+(sqName?(' · '+sqName):''), (rec.title||'Session')+' · '+this.shortDateISO(rec.date||this.todayISO()), '/'); }catch(e){} } }
   loadPlanSnapshot(squadId, id){ const rec=((this.savedPlans&&this.savedPlans[squadId])||[]).find(r=>r.id===id); if(!rec) return; this.mutatePlan(squadId, p=>{ p.title=rec.plan.title; p.zone=rec.plan.zone; p.sections=JSON.parse(JSON.stringify(rec.plan.sections)); }); this.setState({savedPlanMsg:'Loaded into the editor — change date/time and Save again to reschedule.', planSessDate:rec.date||this.todayISO(), planSessSlot:rec.slot||'AM', planSessTime:rec.time||''}); }
   async deletePlanSnapshot(squadId, id){ const list=((this.savedPlans&&this.savedPlans[squadId])||[]).filter(r=>r.id!==id); this.savedPlans={...(this.savedPlans||{}), [squadId]:list}; this.setState({});
     try{ if(window.__vxDelete){ await window.__vxDelete('plan_sessions', 'id=eq.'+encodeURIComponent(id)); await this._plansFetch(); } }catch(e){} }
@@ -21762,6 +21810,7 @@ class Component extends DCLogic {
         const rows=visible.slice().sort((a,b)=>((b.date||'').localeCompare(a.date||''))|| ((a.slot==='PM'?1:0)-(b.slot==='PM'?1:0))).map(r=>{ const sm=slotMeta(r.slot); return { id:r.id, title:r.title||'Session', zone:r.zone||'', totalM:(r.totalM||0).toLocaleString(),
           dateLabel:new Date(r.date+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}),
           slotLabel:sm.label+(r.time?(' · '+r.time):''), slotBg:sm.bg, slotFg:sm.fg,
+          pub:!!r.pub, onPublish:()=>this.togglePlanPublish(S.squadId, r.id), pubBg:r.pub?'#DCF5EA':'#F4F6F8', pubFg:r.pub?'#0C7A4F':'#7A8296', pubTitle:r.pub?'Shared with families — tap to unpublish':'Publish to families',
           onView:()=>this.viewPlanSnapshotPdf(S.squadId, r.id), onEdit:()=>this.loadPlanSnapshot(S.squadId, r.id), onDelete:()=>this.deletePlanSnapshot(S.squadId, r.id) }; });
         const calObj = daySel? new Date(daySel+'T00:00:00') : (S.planSessDate? new Date(S.planSessDate+'T00:00:00') : now);
         const calY=S.planCalY!=null?S.planCalY:calObj.getFullYear(); const calM=S.planCalM!=null?S.planCalM:calObj.getMonth();
@@ -22155,7 +22204,7 @@ class Component extends DCLogic {
           famMemDueColor: dl==null?'#9AA2B4':(dl<0?'#A52A2E':(dl<=7?'#B4690E':'#0C7A4F')),
           famMemNote: m.note||'', famMemHasNote: !!m.note };
       })(),
-      famKidsChips:(S.familyUser?S.familyUser.swimmerIds:[]).map((uid,i)=>{ const h=this._famResolve(uid); const on=i===S.familyActiveIdx; return {label:h?h.sw.name.split(' ')[0]:'Not linked', onClick:()=>this.setState({familyActiveIdx:i}), bg:on?'#fff':'rgba(255,255,255,.08)', fg:on?'#0A0F1A':'#fff', border:on?'#fff':'rgba(255,255,255,.18)'}; }),
+      famKidsChips:(S.familyUser?S.familyUser.swimmerIds:[]).map((uid,i)=>{ const h=this._famResolve(uid); const on=i===S.familyActiveIdx; const sw=h&&h.sw; let pb=''; if(sw){ if(sw.topEvent && sw.topTime && sw.topTime!=='—') pb=sw.topEvent+' · '+sw.topTime; else if(sw.pbs && sw.pbs[0] && sw.pbs[0].time) pb=sw.pbs[0].event+' · '+sw.pbs[0].time; } return {label:h?h.sw.name.split(' ')[0]:'Not linked', pb:(h?(pb||'No PB yet'):''), onClick:()=>this.setState({familyActiveIdx:i}), bg:on?'#fff':'rgba(255,255,255,.08)', fg:on?'#0A0F1A':'#fff', sub:on?'rgba(10,15,26,.55)':'rgba(255,255,255,.55)', border:on?'#fff':'rgba(255,255,255,.18)'}; }),
       famMultiKids: !!(S.familyUser && S.familyUser.swimmerIds.length>1),
       ...(()=>{ const fu=S.familyUser; if(!fu) return {famSwName:'',famSwMeta:'',famSwInit:'',famGenIcon:'',famGenBg:'',famAccent:'#067EEA',famPbs:[],famResults:[],famMeetsUpcoming:[], famHasMeetsUpcoming:false, famNoMeetsUpcoming:true, famCamps:[], famHasCamps:false,famAttendPct:'—',famAttendHistory:[],famDocsRows:[],famAttMonthCells:[],famAttYearBars:[],famMeetChips:[],famMeetResultRows:[]};
         const uid=fu.swimmerIds[Math.min(S.familyActiveIdx, fu.swimmerIds.length-1)]||fu.swimmerIds[0];
@@ -22423,7 +22472,26 @@ class Component extends DCLogic {
       famTabDocsBg:S.famTab==='docs'?'#0A0F1A':'#fff', famTabDocsFg:S.famTab==='docs'?'#fff':'#3A4152',
       famTabFeesBg:S.famTab==='fees'?'#0A0F1A':'#fff', famTabFeesFg:S.famTab==='fees'?'#fff':'#3A4152',
       famTabMsgsBg:S.famTab==='msgs'?'#0A0F1A':'#fff', famTabMsgsFg:S.famTab==='msgs'?'#fff':'#3A4152',
-      onFamTabPerf:()=>this.setState({famTab:'perf'}), onFamTabAttend:()=>this.setState({famTab:'attend'}), onFamTabResults:()=>this.setState({famTab:'results'}), onFamTabMeets:()=>this.setState({famTab:'meets'}), onFamTabDocs:()=>this.setState({famTab:'docs'}), onFamTabFees:()=>this.setState({famTab:'fees'}), onFamTabMsgs:()=>{ this.setState({famTab:'msgs'}); try{ this._famMsgFetch(); }catch(e){} },
+      onFamTabPerf:()=>this.setState({famTab:'perf'}), onFamTabAttend:()=>this.setState({famTab:'attend'}), onFamTabResults:()=>this.setState({famTab:'results'}), onFamTabMeets:()=>{ this.setState({famTab:'meets'}); try{ this._plansFetch(); }catch(e){} }, onFamTabDocs:()=>this.setState({famTab:'docs'}), onFamTabFees:()=>this.setState({famTab:'fees'}), onFamTabMsgs:()=>{ this.setState({famTab:'msgs'}); try{ this._famMsgFetch(); }catch(e){} },
+      // The published training plans for the active child's squad, newest first, each with its
+      // full set breakdown — the same plan the coach built, shown to families only once the coach
+      // has published it. Coaches file dates under the squad a swimmer sits in, and _famResolve
+      // already follows a moved swimmer to their real squad, so this reads that squad's sessions.
+      ...(()=>{ const fu=S.familyUser; if(!fu||!fu.swimmerIds||!fu.swimmerIds.length) return {famPlans:[], famHasPlans:false};
+        const uid=fu.swimmerIds[Math.min(S.familyActiveIdx, fu.swimmerIds.length-1)]||fu.swimmerIds[0];
+        const h=this._famResolve(uid); if(!h) return {famPlans:[], famHasPlans:false};
+        const list=((this.savedPlans&&this.savedPlans[h.sqid])||[]).filter(r=>r.pub);
+        const plans=list.slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))).map(r=>{
+          const d=r.date? new Date(r.date+'T00:00:00'):null;
+          const sections=((r.plan&&r.plan.sections)||[]).map(sec=>({ title:sec.title||'', sets:((sec.sets)||[]).map(s=>{
+            const line=[(s.dist?String(s.dist):''), (s.txt||'')].filter(Boolean).join('  ');
+            const extra=[(s.rest?('Rest '+s.rest):''), ((s.equip&&s.equip.length)?s.equip.join(', '):''), ((s.types&&s.types.length)?s.types.join(', '):'')].filter(Boolean).join(' · ');
+            return {line:line||'—', sub:extra, hasSub:!!extra}; }) }));
+          return { id:r.id, day:d?String(d.getDate()):'', mon:d?d.toLocaleDateString('en-US',{month:'short'}):'',
+            dateLabel:d?d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'}):'Date to be confirmed',
+            title:r.title||'Session', slot:((r.slot==='PM')?'Evening':((r.slot==='AM')?'Morning':''))+(r.time?(' · '+r.time):''),
+            zone:r.zone||'', totalM:(r.totalM||0).toLocaleString(), sections:sections }; });
+        return { famPlans:plans, famHasPlans:plans.length>0 }; })(),
       famShowPerf:(S.famTab||'perf')==='perf', famShowAttend:S.famTab==='attend', famShowResults:S.famTab==='results', famShowMeets:S.famTab==='meets', famShowDocs:S.famTab==='docs', famShowFees:S.famTab==='fees', famShowMsgs:S.famTab==='msgs',
       // ---- what this family owes -----------------------------------------------------
       ...(()=>{
