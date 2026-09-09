@@ -2741,6 +2741,7 @@ if ('serviceWorker' in navigator) {
                       <button onclick="{{ onFamTabAttend }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabAttendBg }};color:{{ famTabAttendFg }}">{{ tx.tabAttend }}</button>
                       <button onclick="{{ onFamTabResults }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabResultsBg }};color:{{ famTabResultsFg }}">{{ tx.tabResults }}</button>
                       <button onclick="{{ onFamTabMeets }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabMeetsBg }};color:{{ famTabMeetsFg }}">{{ tx.tabMeets }}</button>
+                      <button onclick="{{ onFamTabPlans }}" style="display:flex;align-items:center;justify-content:center;gap:4px;padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabPlansBg }};color:{{ famTabPlansFg }}"><i data-lucide="clipboard-list" style="width:12px;height:12px"></i>{{ tx.tabPlans }}</button>
                       <button onclick="{{ onFamTabDocs }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabDocsBg }};color:{{ famTabDocsFg }}">{{ tx.tabDocs }}</button>
                       <button onclick="{{ onFamTabFees }}" style="position:relative;padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabFeesBg }};color:{{ famTabFeesFg }}">{{ tx.tabFees }}<span style="position:absolute;top:5px;right:7px;width:6px;height:6px;border-radius:50%;background:{{ famFeesDotColor }}"></span></button>
                       <button onclick="{{ onFamTabMsgs }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabMsgsBg }};color:{{ famTabMsgsFg }}">{{ tx.tabCoach }}</button>
@@ -2903,11 +2904,36 @@ if ('serviceWorker' in navigator) {
                         </div>
                       </sc-if>
 
+                      <sc-if value="{{ famHasTpace }}" hint-placeholder-val="{{ false }}">
+                        <p style="margin:16px 2px 8px;font-size:11.5px;font-weight:700;color:#7A8296;text-transform:uppercase;letter-spacing:.04em">Threshold pace tests</p>
+                        <div style="display:flex;flex-direction:column;gap:8px">
+                          <sc-for list="{{ famTpaceRows }}" as="t" hint-placeholder-count="2">
+                            <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:12px 13px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
+                              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                                <span style="flex:1;min-width:0"><span style="display:block;font-size:13px;font-weight:700;color:#0C1116">{{ t.typeLabel }} · {{ t.value }}</span><span style="display:block;font-size:11px;color:#9AA2B4;margin-top:1px">{{ t.dateLabel }}</span></span>
+                                <span style="flex:none;text-align:right"><span style="display:block;font-family:var(--font-mono);font-size:14px;font-weight:800;color:{{ famAccent }}">{{ t.tpace }}</span><span style="display:block;font-size:9px;font-weight:700;text-transform:uppercase;color:#9AA2B4">T-pace</span></span>
+                              </div>
+                              <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:9px">
+                                <sc-for list="{{ t.paces }}" as="p" hint-placeholder-count="6"><span style="text-align:center;background:#F4F7FB;border:1px solid #E5E9F0;border-radius:8px;padding:5px 2px"><span style="display:block;font-size:9.5px;color:#7A8296;font-weight:700">{{ p.label }}</span><span style="display:block;font-family:var(--font-mono);font-size:11.5px;color:#0C1116;font-weight:700;margin-top:1px">{{ p.time }}</span></span></sc-for>
+                              </div>
+                            </div>
+                          </sc-for>
+                        </div>
+                      </sc-if>
+
                       <sc-if value="{{ famHasInbody }}" hint-placeholder-val="{{ false }}">
                         <p style="margin:16px 2px 8px;font-size:11.5px;font-weight:700;color:#7A8296;text-transform:uppercase;letter-spacing:.04em">{{ tx.inbodyScans }}</p>
-                        <div style="display:flex;flex-direction:column;gap:7px">
+                        <div style="display:flex;flex-direction:column;gap:8px">
                           <sc-for list="{{ famInbodyRows }}" as="ib" hint-placeholder-count="2">
-                            <div style="background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:10px 13px;box-shadow:0 1px 4px rgba(11,20,40,.04)"><span style="display:block;font-size:11px;color:#9AA2B4;font-weight:600">{{ ib.dateLabel }}</span><span style="display:block;font-size:12.5px;color:#3A4152;margin-top:2px">{{ ib.summary }}</span></div>
+                            <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:12px 13px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
+                              <span style="display:block;font-size:11px;color:#9AA2B4;font-weight:600">{{ ib.dateLabel }}</span>
+                              <span style="display:block;font-size:12.5px;color:#3A4152;margin-top:2px;font-weight:600">{{ ib.summary }}</span>
+                              <sc-if value="{{ ib.hasDetail }}" hint-placeholder-val="{{ false }}">
+                                <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:9px">
+                                  <sc-for list="{{ ib.detail }}" as="d" hint-placeholder-count="6"><span style="display:flex;align-items:center;justify-content:space-between;gap:6px;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:8px;padding:6px 9px"><span style="font-size:10.5px;color:#7A8296">{{ d.label }}</span><span style="font-family:var(--font-mono);font-size:11.5px;font-weight:700;color:#0C1116">{{ d.value }}</span></span></sc-for>
+                                </div>
+                              </sc-if>
+                            </div>
                           </sc-for>
                         </div>
                       </sc-if>
@@ -3150,10 +3176,10 @@ if ('serviceWorker' in navigator) {
                       </sc-if>
                     </sc-if>
 
-                    <sc-if value="{{ famShowMeets }}" hint-placeholder-val="{{ false }}">
-                      <!-- Training plans the coach has published to this squad. Full session, as
-                           the coach built it; published sessions only. -->
-                      <sc-if value="{{ famHasPlans }}" hint-placeholder-val="{{ false }}">
+                    <sc-if value="{{ famShowPlans }}" hint-placeholder-val="{{ false }}">
+                      <!-- Training plans the coach has published to this squad, on their own tab
+                           (kept out of Meets). Full session, as the coach built it; published only. -->
+                      <sc-if value="{{ famHasPlans }}" hint-placeholder-val="{{ true }}">
                         <div style="margin-bottom:16px">
                           <div style="display:flex;align-items:center;gap:8px;margin:0 2px 9px"><i data-lucide="clipboard-list" style="width:16px;height:16px;color:#067EEA"></i><p style="margin:0;font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">Training plans</p></div>
                           <div style="display:flex;flex-direction:column;gap:10px">
@@ -3181,6 +3207,12 @@ if ('serviceWorker' in navigator) {
                           </div>
                         </div>
                       </sc-if>
+                      <sc-if value="{{ famNoPlans }}" hint-placeholder-val="{{ true }}">
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:16px;box-shadow:0 1px 4px rgba(11,20,40,.04);display:flex;align-items:center;gap:10px"><i data-lucide="clipboard-list" style="width:18px;height:18px;color:#9AA2B4"></i><span style="font-size:12.5px;color:#7A8296;line-height:1.5">No training plans shared yet. When your coach publishes a session, it appears here.</span></div>
+                      </sc-if>
+                    </sc-if>
+
+                    <sc-if value="{{ famShowMeets }}" hint-placeholder-val="{{ false }}">
                       <!-- The separate "Club calendar" block that used to sit here is gone. It
                            listed the same meets a second time, from the second calendar, with
                            less on each one — a parent scrolled past a bare name and a place to
@@ -11406,6 +11438,7 @@ class Component extends DCLogic {
       tabAttend:['Attendance','الحضور'],
       tabResults:['Results','النتائج'],
       tabMeets:['Meets','البطولات'],
+      tabPlans:['Plans','الخطط'],
       tabDocs:['Documents','المستندات'],
       tabFees:['Fees','الرسوم'],
       tabCoach:['Coach','المدرب'],
@@ -13980,6 +14013,15 @@ class Component extends DCLogic {
       .sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
   }
   _ibRowId(swId, date){ return swId+'::'+date; }
+  // The full InBody breakdown for one scan, numbers only — every field the sheet carries that is
+  // actually present. Shared by the coach profile and the family view; the family view shows the
+  // same figures a coach sees but never the derived warning text (a parent gets numbers, not a
+  // clinical-sounding flag on their child). 'smm' is what the form calls muscle.
+  _ibDetailRows(r){
+    const F=[['weight','Weight',' kg'],['smm','SMM',' kg'],['bodyFatMass','Body fat mass',' kg'],['fat','PBF',' %'],['bmi','BMI',''],['score','InBody score','/100'],['height','Height',' cm'],['visceralFat','Visceral fat area',''],['tbw','Total body water',' L'],['icw','Intracellular water',' L'],['ecw','Extracellular water',' L'],['ecwRatio','ECW ratio',''],['protein','Protein',' kg'],['minerals','Minerals',' kg'],['ffm','Fat free mass',' kg'],['slm','Soft lean mass',' kg'],['boneMineral','Bone mineral',' kg'],['bodyCellMass','Body cell mass',' kg'],['bmr','BMR',' kcal'],['whr','Waist-hip ratio',''],['obesityDegree','Obesity degree',' %'],['smi','SMI',' kg/m²'],['phaseAngle','Phase angle','°']];
+    const val=(k)=> k==='smm' ? (r.smm!=null?r.smm:r.muscle) : r[k];
+    return F.filter(f=>val(f[0])!=null).map(f=>({label:f[1], value:String(val(f[0]))+f[2]}));
+  }
   // A row as the table holds it, and as the app reads it. IB_FIELDS keys stay exactly as they
   // are everywhere else in the app; only weight/fat/muscle are lifted out into columns.
   _ibToRow(swId, rec){
@@ -22436,11 +22478,18 @@ class Component extends DCLogic {
             : { hasData:scmSeries.hasData, noData:!scmSeries.hasData, best:scmSeries.best||'—', linePts:scmSeries.linePts, lineArea:scmSeries.lineArea, dots:scmSeries.dots, caption:scmSeries.caption||'', drop:scmSeries.drop||'', swims:scmSeries.swims||[] },
           famAiSugg: (()=>{ const a=this.swimmerAiSuggestion(sw); return {...a, hasWeak: !!(a.hasData && a.weakStroke)}; })(),
           famKpis, famFitRows, famHasFit:famFitRows.length>0,
-          famInbodyRows: this._swInbody(sw.id).slice(0,4).map(r=>({
+          famInbodyRows: this._swInbody(sw.id).slice(0,4).map(r=>{ const detail=this._ibDetailRows(r); return {
             dateLabel:this.shortDateISO(r.date),
-            summary:[r.weight!=null?(r.weight+'kg'):null, r.muscle!=null?(r.muscle+'kg muscle'):null, r.fat!=null?(r.fat+'% fat'):null].filter(Boolean).join(' · ')||'Scan on file'
-          })),
+            summary:[r.weight!=null?(r.weight+'kg'):null, (r.smm!=null?r.smm:r.muscle)!=null?((r.smm!=null?r.smm:r.muscle)+'kg muscle'):null, r.fat!=null?(r.fat+'% fat'):null].filter(Boolean).join(' · ')||'Scan on file',
+            detail, hasDetail: detail.length>0 }; }),
           famHasInbody: this._swInbody(sw.id).length>0,
+          // The T-pace tests (T30, T20, 1000 m, 400 m) exactly as the coach's fitness tool shows
+          // them: the trial, the threshold pace per 100, and the pace ladder every training zone
+          // is built from — for the parent's own child.
+          famTpaceRows: (this.tpaceTests[sw.id]||[]).slice(0,4).map(t=>{ const L=this.tpaceTestLabels(t); return {
+            dateLabel:this.shortDateISO(t.date), typeLabel:L.typeLabel, value:L.valueLabel,
+            tpace:this.fmt(t.tpace100)+' /100', paces:this.tpaceLadder(t.tpace100) }; }),
+          famHasTpace: (this.tpaceTests[sw.id]||[]).length>0,
           famDocsRows: [
             {label:'Birth certificate', doc: meta.docs.birth, kind:'birth', icon:'file-badge'},
             {label:'ID / passport copy', doc: meta.docs.id, kind:'id', icon:'contact'},
@@ -22469,17 +22518,18 @@ class Component extends DCLogic {
       famTabAttendBg:S.famTab==='attend'?'#0A0F1A':'#fff', famTabAttendFg:S.famTab==='attend'?'#fff':'#3A4152',
       famTabResultsBg:S.famTab==='results'?'#0A0F1A':'#fff', famTabResultsFg:S.famTab==='results'?'#fff':'#3A4152',
       famTabMeetsBg:S.famTab==='meets'?'#0A0F1A':'#fff', famTabMeetsFg:S.famTab==='meets'?'#fff':'#3A4152',
+      famTabPlansBg:S.famTab==='plans'?'#0A0F1A':'#fff', famTabPlansFg:S.famTab==='plans'?'#fff':'#3A4152',
       famTabDocsBg:S.famTab==='docs'?'#0A0F1A':'#fff', famTabDocsFg:S.famTab==='docs'?'#fff':'#3A4152',
       famTabFeesBg:S.famTab==='fees'?'#0A0F1A':'#fff', famTabFeesFg:S.famTab==='fees'?'#fff':'#3A4152',
       famTabMsgsBg:S.famTab==='msgs'?'#0A0F1A':'#fff', famTabMsgsFg:S.famTab==='msgs'?'#fff':'#3A4152',
-      onFamTabPerf:()=>this.setState({famTab:'perf'}), onFamTabAttend:()=>this.setState({famTab:'attend'}), onFamTabResults:()=>this.setState({famTab:'results'}), onFamTabMeets:()=>{ this.setState({famTab:'meets'}); try{ this._plansFetch(); }catch(e){} }, onFamTabDocs:()=>this.setState({famTab:'docs'}), onFamTabFees:()=>this.setState({famTab:'fees'}), onFamTabMsgs:()=>{ this.setState({famTab:'msgs'}); try{ this._famMsgFetch(); }catch(e){} },
+      onFamTabPerf:()=>this.setState({famTab:'perf'}), onFamTabAttend:()=>this.setState({famTab:'attend'}), onFamTabResults:()=>this.setState({famTab:'results'}), onFamTabMeets:()=>this.setState({famTab:'meets'}), onFamTabPlans:()=>{ this.setState({famTab:'plans'}); try{ this._plansFetch(); }catch(e){} }, onFamTabDocs:()=>this.setState({famTab:'docs'}), onFamTabFees:()=>this.setState({famTab:'fees'}), onFamTabMsgs:()=>{ this.setState({famTab:'msgs'}); try{ this._famMsgFetch(); }catch(e){} },
       // The published training plans for the active child's squad, newest first, each with its
       // full set breakdown — the same plan the coach built, shown to families only once the coach
       // has published it. Coaches file dates under the squad a swimmer sits in, and _famResolve
       // already follows a moved swimmer to their real squad, so this reads that squad's sessions.
-      ...(()=>{ const fu=S.familyUser; if(!fu||!fu.swimmerIds||!fu.swimmerIds.length) return {famPlans:[], famHasPlans:false};
+      ...(()=>{ const fu=S.familyUser; if(!fu||!fu.swimmerIds||!fu.swimmerIds.length) return {famPlans:[], famHasPlans:false, famNoPlans:true};
         const uid=fu.swimmerIds[Math.min(S.familyActiveIdx, fu.swimmerIds.length-1)]||fu.swimmerIds[0];
-        const h=this._famResolve(uid); if(!h) return {famPlans:[], famHasPlans:false};
+        const h=this._famResolve(uid); if(!h) return {famPlans:[], famHasPlans:false, famNoPlans:true};
         const list=((this.savedPlans&&this.savedPlans[h.sqid])||[]).filter(r=>r.pub);
         const plans=list.slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))).map(r=>{
           const d=r.date? new Date(r.date+'T00:00:00'):null;
@@ -22491,8 +22541,8 @@ class Component extends DCLogic {
             dateLabel:d?d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'}):'Date to be confirmed',
             title:r.title||'Session', slot:((r.slot==='PM')?'Evening':((r.slot==='AM')?'Morning':''))+(r.time?(' · '+r.time):''),
             zone:r.zone||'', totalM:(r.totalM||0).toLocaleString(), sections:sections }; });
-        return { famPlans:plans, famHasPlans:plans.length>0 }; })(),
-      famShowPerf:(S.famTab||'perf')==='perf', famShowAttend:S.famTab==='attend', famShowResults:S.famTab==='results', famShowMeets:S.famTab==='meets', famShowDocs:S.famTab==='docs', famShowFees:S.famTab==='fees', famShowMsgs:S.famTab==='msgs',
+        return { famPlans:plans, famHasPlans:plans.length>0, famNoPlans:plans.length===0 }; })(),
+      famShowPerf:(S.famTab||'perf')==='perf', famShowAttend:S.famTab==='attend', famShowResults:S.famTab==='results', famShowMeets:S.famTab==='meets', famShowPlans:S.famTab==='plans', famShowDocs:S.famTab==='docs', famShowFees:S.famTab==='fees', famShowMsgs:S.famTab==='msgs',
       // ---- what this family owes -----------------------------------------------------
       ...(()=>{
         const fu=S.familyUser;
@@ -22614,7 +22664,13 @@ class Component extends DCLogic {
       // Neither bar belongs on the sign-in screen. Nobody there has done anything yet, nothing
       // of theirs is at risk, and the one action both bars ask for — retry, or sign in — is the
       // screen they are already looking at. Everything held goes in by itself the moment they do.
-      blockedShow: S.screen==='app' && (S.saveBlocked||[]).length>0 && !S.saveBlockedHidden && !((S.saveFailCount>0 || S.authDead) && !S.saveFailHidden),
+      // A parent must never see this. It is a coach's diagnostic about the database not taking a
+      // staff write, and a parent can neither act on it nor is it about anything of theirs. Hidden
+      // for a family session, and also whenever every refused row is family_accounts — the table
+      // only the family flow writes — which catches a parent whose device the app has, wrongly,
+      // put in the staff view (the account that produced the screenshot: staff view, family_accounts refused).
+      blockedShow: S.screen==='app' && (S.saveBlocked||[]).length>0 && !S.saveBlockedHidden && !((S.saveFailCount>0 || S.authDead) && !S.saveFailHidden)
+        && !(this._isFamilySession() || (S.saveBlocked||[]).every(x=>x&&x.table==='family_accounts')),
       blockedTitle: ((S.saveBlocked||[]).length===1 ? '1 record cannot go into the database' : (S.saveBlocked||[]).length+' records cannot go into the database'),
       blockedDetail: (()=>{
         const b=(S.saveBlocked||[]);
@@ -22675,7 +22731,11 @@ class Component extends DCLogic {
         return 'The database is refusing the rows themselves, so retrying cannot help. Show this to whoever looks after the database: '+said;
       })(),
       onBlockedDismiss: ()=>{ try{ if(window.__vxClearBlocked) window.__vxClearBlocked(); }catch(e){} this.setState({saveBlocked:[], saveBlockedHidden:true}); },
-      saveFailShow: S.screen==='app' && (S.saveFailCount>0 || S.authDead || S.sendingAnon) && !S.saveFailHidden,
+      // Same reasoning as blockedShow: this "changes have not been saved" bar is a coach's
+      // database-sync diagnostic and names tables (club_state, notifications) that are never a
+      // parent's to write. A parent cannot act on it and it heals itself, so a family session
+      // never sees it.
+      saveFailShow: S.screen==='app' && (S.saveFailCount>0 || S.authDead || S.sendingAnon) && !S.saveFailHidden && !this._isFamilySession(),
       saveFailTitle: this._saveNeedsSignIn(S)
         ? (S.saveFailCount>0
             ? ('Sign in again — ' + (S.saveFailCount===1 ? '1 change is waiting' : S.saveFailCount+' changes are waiting'))
