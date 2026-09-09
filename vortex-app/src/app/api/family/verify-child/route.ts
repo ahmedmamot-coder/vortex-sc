@@ -98,17 +98,56 @@ async function overlay(): Promise<Edits | null> {
  * The date the club holds for one swimmer, read the way the app reads it: the roster that ships
  * with the page, with the overlay on top. The overlay wins, because that is where every date
  * typed into the admin screen goes.
+ *
+ * The swimmer's current squad is asked first — a date typed for them where they are now is the
+ * one to trust. But a move is a removal from one squad and an addition to another, and a date
+ * typed before the move stays filed under the squad they left. Worse, the parent's page names
+ * the squad it last saw, which can be the squad the swimmer has since moved out of. So if the
+ * named squad holds no date, the date is looked up by id across every squad — exactly as the
+ * page's own roster build does (_patchAnywhere), and safe because a swimmer id is unique across
+ * the whole club, so a date filed under any squad is this swimmer's date and no one else's.
  */
 export function dobOf(base: Record<string, Swimmer[]> | null, ed: Edits | null, squad: string, id: string): string {
-  const patch = ed?.edits?.[squad]?.[id];
-  if (patch && typeof patch.dob === "string" && patch.dob.trim()) return patch.dob.trim();
+  // The squad the parent's page named, first: a date typed for them where they are now wins.
+  const here = ed?.edits?.[squad]?.[id];
+  if (here && typeof here.dob === "string" && here.dob.trim()) return here.dob.trim();
   for (const sw of ed?.added?.[squad] || []) {
     if (sw && sw.id === id && typeof sw.dob === "string" && sw.dob.trim()) return String(sw.dob).trim();
   }
   for (const sw of base?.[squad] || []) {
     if (sw && sw.id === id && typeof sw.dob === "string" && sw.dob.trim()) return sw.dob.trim();
   }
+  // Then anywhere, by id — a date filed under a squad the swimmer has since left is still theirs.
+  for (const sq of Object.keys(ed?.edits || {})) {
+    const p = ed?.edits?.[sq]?.[id];
+    if (p && typeof p.dob === "string" && p.dob.trim()) return p.dob.trim();
+  }
+  for (const sq of Object.keys(ed?.added || {})) {
+    for (const sw of ed?.added?.[sq] || []) {
+      if (sw && sw.id === id && typeof sw.dob === "string" && sw.dob.trim()) return String(sw.dob).trim();
+    }
+  }
+  for (const sq of Object.keys(base || {})) {
+    for (const sw of base?.[sq] || []) {
+      if (sw && sw.id === id && typeof sw.dob === "string" && sw.dob.trim()) return sw.dob.trim();
+    }
+  }
   return "";
+}
+
+/**
+ * Is this swimmer anywhere in the club's roster? A move deletes them from the squad they left
+ * and adds them to the squad they joined, so a `deleted` entry under one squad is not a deletion
+ * — the swimmer is still added elsewhere. Only an id that is added nowhere, and present in the
+ * shipped roster only where a deletion stands against it, is genuinely gone. Keyed on id alone,
+ * because ids are unique across the club and the squad the parent's page names may be stale.
+ */
+export function swimmerExists(base: Record<string, Swimmer[]> | null, ed: Edits | null, id: string): boolean {
+  for (const sq of Object.keys(ed?.added || {}))
+    for (const sw of ed?.added?.[sq] || []) if (sw && sw.id === id) return true;
+  for (const sq of Object.keys(base || {}))
+    for (const sw of base?.[sq] || []) if (sw && sw.id === id && !ed?.deleted?.[sq]?.[id]) return true;
+  return false;
 }
 
 export async function POST(request: Request) {
@@ -134,7 +173,11 @@ export async function POST(request: Request) {
   if (!base && !ed)
     return Response.json({ ok: false, reason: "We could not check that just now. Please try again in a moment." }, { status: 503 });
 
-  if (ed?.deleted?.[squad]?.[id])
+  // Gone means gone from the whole club, not merely from the squad the parent's page happens to
+  // name. A swimmer who moved squad carries a `deleted` entry under the squad they left; reading
+  // that as "could not be found" turned every parent whose page loaded before their child moved
+  // away from an empty screen. The move re-adds them elsewhere, so ask by id across the club.
+  if (!swimmerExists(base, ed, id))
     return Response.json({ ok: false, reason: "that swimmer could not be found" }, { status: 404 });
 
   const dob = dobOf(base, ed, squad, id);

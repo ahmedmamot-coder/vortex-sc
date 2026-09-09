@@ -6096,6 +6096,54 @@ describe("InBody sheet", () => {
          "a blank date is no date, not a date of blank");
     });
 
+    // A swimmer moves squad. The move deletes them from the squad they left and re-adds them,
+    // with their date, to the squad they joined. But the parent's page may still show — and so
+    // name — the squad they came from. Yousof Keshk moved Vortex A → Legend; the parent's page
+    // sent "vortexa::r196", and the server, reading only that squad, told them their own child
+    // could not be found. The date and the swimmer are looked up by id across every squad now.
+    it("finds a swimmer, and their date, after they have moved squad", () => {
+      const dobOf = fn("dobOf");
+      const swimmerExists = fn("swimmerExists");
+      const base = { vortexa: [{ id: "r196", name: "Yousof Keshk" }], legend: [] };
+      // The move: deleted where they left, added — with the date — where they joined.
+      const ed = {
+        edits: {},
+        deleted: { vortexa: { r196: true } },
+        added: { legend: [{ id: "r196", name: "Yousof Keshk", dob: "14/09/2009", movedAt: 1 }] },
+      };
+      eq(swimmerExists(base, ed, "r196"), true,
+         "a swimmer deleted from the squad they left is not gone — they were re-added elsewhere");
+      eq(dobOf(base, ed, "vortexa", "r196"), "14/09/2009",
+         "the squad the parent's page names is stale; the date is filed under the squad joined");
+      eq(dobOf(base, ed, "legend", "r196"), "14/09/2009",
+         "and it is found whichever squad the page happens to name");
+    });
+
+    // The other half of a move: a date typed before the move stays filed under the old squad's
+    // edits, while the swimmer now lives under the new squad. Read by id, it is still found.
+    it("finds a date filed under the squad a swimmer has since left", () => {
+      const dobOf = fn("dobOf");
+      const base = { junior: [{ id: "r5", name: "A B" }], seniorb: [] };
+      const ed = {
+        edits: { junior: { r5: { dob: "01/02/2011" } } },
+        deleted: { junior: { r5: true } },
+        added: { seniorb: [{ id: "r5", name: "A B", movedAt: 2 }] },
+      };
+      eq(dobOf(base, ed, "seniorb", "r5"), "01/02/2011",
+         "the swimmer is in Senior B now but their date was typed while in Junior");
+    });
+
+    // A real deletion is still a real deletion: an id added nowhere, deleted where the roster
+    // holds it, is genuinely gone and must still answer "could not be found".
+    it("still reports a genuinely removed swimmer as not found", () => {
+      const swimmerExists = fn("swimmerExists");
+      const base = { legend: [{ id: "r1", name: "Omar Abu Rezeq" }] };
+      eq(swimmerExists(base, { deleted: { legend: { r1: true } }, added: {}, edits: {} }, "r1"), false,
+         "deleted where the roster holds them and added nowhere means gone");
+      eq(swimmerExists(base, null, "r1"), true, "present in the shipped roster, no overlay against them");
+      eq(swimmerExists(base, null, "r999"), false, "an id the club has never held is not found");
+    });
+
     // Everything below is what stops an unauthenticated route being a way to read a child's
     // date of birth. It has no sign-in because the person asking has no account yet.
     it("never sends a date of birth back, in any answer it can give", () => {
