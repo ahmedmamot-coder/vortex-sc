@@ -2953,10 +2953,11 @@ if ('serviceWorker' in navigator) {
                               <div style="display:flex;flex-direction:column;gap:6px">
                                 <sc-for list="{{ famAiSugg.eventTargets }}" as="e" hint-placeholder-count="6">
                                   <div style="display:flex;align-items:center;gap:8px">
-                                    <span style="flex:1;min-width:0;font-size:12px;font-weight:600;color:#fff">{{ e.event }}</span>
+                                    <span style="flex:1;min-width:0;font-size:12px;font-weight:600;color:#fff">{{ e.event }} <span style="font-size:9.5px;font-weight:700;color:rgba(255,255,255,.4)">{{ e.course }}</span></span>
                                     <span style="font-family:var(--font-mono);font-size:11px;color:rgba(255,255,255,.55)">{{ e.current }}</span>
                                     <span style="font-size:11px;color:rgba(255,255,255,.4)">→</span>
                                     <span style="font-family:var(--font-mono);font-size:11.5px;font-weight:700;color:#22D7D7">{{ e.target }}</span>
+                                    <sc-if value="{{ e.hasPoints }}" hint-placeholder-val="{{ false }}"><span style="flex:none;font-size:10px;font-weight:700;color:rgba(255,255,255,.5);min-width:52px;text-align:right">{{ e.points }} pts</span></sc-if>
                                   </div>
                                 </sc-for>
                               </div>
@@ -14499,6 +14500,69 @@ class Component extends DCLogic {
   saveAiSuggOverride(swId, fields){ this.aiSuggOverrides={...this.aiSuggOverrides, [swId]:{...(this.aiSuggOverrides[swId]||{}), ...fields}}; this._saveJSON('vx_ai_sugg_ovr', this.aiSuggOverrides); this.setState({aiEditOpen:false}); }
   resetAiSuggOverride(swId){ const o={...this.aiSuggOverrides}; delete o[swId]; this.aiSuggOverrides=o; this._saveJSON('vx_ai_sugg_ovr', o); this.setState({aiEditOpen:false}); }
   strokeOf(event){ const m=String(event||'').match(/Free|Back|Breast|Fly|IM/); return m?m[0]:'Other'; }
+  // ---- World Aquatics Points base times -------------------------------------------------------
+  // The official reference time for each event, gender and course — the time that scores 1000
+  // World Aquatics points. A swimmer's PB is scored against it (points below), and it is shown as
+  // the target on each of their events in the Focus & targets card.
+  //
+  // POPULATE THIS from the official World Aquatics "Points Base times" file for the current period
+  // (one per event, per gender, per course). Times are strings EXACTLY as published — "20.91",
+  // "1:42.00", "8:04.79" — and parseTimeStr turns them into seconds, so nothing is re-typed as a
+  // number here. It is deliberately empty to start: an event with no base time on file shows the
+  // swimmer's own next-step target instead of a wrong "official" one, so a half-filled table is
+  // safe. Keys are the app's event names ("50 Free", "100 Back", "200 IM", …). L = long course
+  // (50 m), S = short course (25 m); M = men/boys, F = women/girls.
+  _waBaseTimes(){
+    // World Aquatics Points base times (the swim worth 1000 pts ≈ the world record).
+    // Keyed gender (M/F) → course (L = long/50m, S = short/25m) → app event name.
+    // Times are strings exactly as published and parsed by parseTimeStr — edit here to update.
+    return {
+      M: {
+        L: {
+          '50 Free':'20.91','100 Free':'46.40','200 Free':'1:42.00','400 Free':'3:40.07','800 Free':'7:32.12','1500 Free':'14:31.02',
+          '50 Back':'23.55','100 Back':'51.60','200 Back':'1:51.92',
+          '50 Breast':'25.95','100 Breast':'56.88','200 Breast':'2:05.48',
+          '50 Fly':'22.27','100 Fly':'49.45','200 Fly':'1:50.34',
+          '200 IM':'1:54.00','400 IM':'4:02.50',
+        },
+        S: {
+          '50 Free':'20.16','100 Free':'44.84','200 Free':'1:38.61','400 Free':'3:32.25','800 Free':'7:20.46','1500 Free':'14:06.88',
+          '50 Back':'22.11','100 Back':'48.33','200 Back':'1:45.63',
+          '50 Breast':'24.95','100 Breast':'55.28','200 Breast':'2:00.16',
+          '50 Fly':'21.32','100 Fly':'47.71','200 Fly':'1:46.85',
+          '100 IM':'49.28','200 IM':'1:48.88','400 IM':'3:54.81',
+        },
+      },
+      F: {
+        L: {
+          '50 Free':'23.61','100 Free':'51.71','200 Free':'1:52.23','400 Free':'3:55.38','800 Free':'8:04.79','1500 Free':'15:20.48',
+          '50 Back':'26.86','100 Back':'57.13','200 Back':'2:03.14',
+          '50 Breast':'29.16','100 Breast':'1:04.13','200 Breast':'2:17.55',
+          '50 Fly':'24.43','100 Fly':'55.48','200 Fly':'2:01.81',
+          '200 IM':'2:06.12','400 IM':'4:24.38',
+        },
+        S: {
+          '50 Free':'22.83','100 Free':'50.25','200 Free':'1:50.31','400 Free':'3:50.25','800 Free':'7:57.42','1500 Free':'15:08.24',
+          '50 Back':'25.23','100 Back':'54.02','200 Back':'1:57.87',
+          '50 Breast':'28.37','100 Breast':'1:02.36','200 Breast':'2:14.57',
+          '50 Fly':'24.38','100 Fly':'54.05','200 Fly':'1:59.61',
+          '100 IM':'56.51','200 IM':'2:01.86','400 IM':'4:15.48',
+        },
+      },
+    };
+  }
+  // The base time in seconds for one event/gender/course, or null when none is on file.
+  _waBase(event, gender, course){
+    const G = /girl|female|women|^f/i.test(String(gender||'')) ? 'F' : 'M';
+    const C = /^s|scm|short|25/i.test(String(course||'')) ? 'S' : 'L';
+    const tbl = this._waBaseTimes();
+    const t = tbl[G] && tbl[G][C] ? tbl[G][C][event] : null;
+    if(!t) return null;
+    const sec = this.parseTimeStr(t);
+    return (sec!=null && sec>0) ? sec : null;
+  }
+  // World Aquatics points for a swim: 1000 × (base ÷ time)³, rounded. 0 without a base time.
+  _waPoints(baseSec, timeSec){ if(!(baseSec>0) || !(timeSec>0)) return 0; return Math.round(1000 * Math.pow(baseSec/timeSec, 3)); }
   swimmerAiSuggestion(swObj){
     const pbs=swObj.pbs||[];
     const ov=this.aiSuggOverrides[swObj.id]||{};
@@ -14536,12 +14600,24 @@ class Component extends DCLogic {
     const targetSec = topPb ? topPb.sec*(1-improvePct) : null;
     const targetTime = targetSec!=null ? this.fmt(targetSec) : null;
     const competeEvent = topPb ? topPb.event : null;
-    // A target for EVERY event and distance the swimmer has a time in \u2014 scaled by distance
-    // (sprints improve in smaller relative steps than middle-distance and distance) so a parent
-    // sees a concrete next number to chase on each of their races, not just the headline event.
+    // A target for EVERY event and distance the swimmer has a time in. The target is the World
+    // Aquatics Points base time for that event, matched to the swimmer's GENDER and to the COURSE
+    // of the PB (long vs short), and the PB's World Aquatics points are shown beside it. Where the
+    // club has not supplied a base time for an event/course yet (see _waBaseTimes), it falls back
+    // to a distance-scaled personal target rather than showing a wrong "official" figure \u2014 sprints
+    // improve in smaller relative steps than middle-distance and distance.
     const targetPct=(ev)=>{ const d=distOf(ev); return d<=100?0.012:(d<=200?0.017:0.02); };
     const eventTargets = pbs.slice().sort((a,b)=> strokeRank(a.event)-strokeRank(b.event) || distOf(a.event)-distOf(b.event) )
-      .map(p=>{ const tSec=p.sec*(1-targetPct(p.event)); return { event:p.event, current:p.time, target:this.fmt(tSec), drop:'\u2212'+(p.sec-tSec).toFixed(2)+'s' }; });
+      .map(p=>{
+        const courseTag = (String(p.course||'').toUpperCase().charAt(0)==='S') ? 'SC' : 'LC';
+        const baseSec = this._waBase(p.event, swObj.gender, p.course);
+        if(baseSec>0 && p.sec>0){
+          return { event:p.event, course:courseTag, current:p.time, target:this.fmt(baseSec),
+            points:String(this._waPoints(baseSec, p.sec)), hasPoints:true, wa:true };
+        }
+        const tSec=p.sec*(1-targetPct(p.event));
+        return { event:p.event, course:courseTag, current:p.time, target:this.fmt(tSec), points:'', hasPoints:false, wa:false };
+      });
     // secondary / IM recommendation
     const hasIm = !!byStroke['IM'];
     const secondaryEvent = !hasIm && present.length>=3 ? '200 IM' : (missing.length ? '50 '+missing[0] : null);
