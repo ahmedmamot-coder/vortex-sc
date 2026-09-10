@@ -126,16 +126,41 @@ async function fetchMeets(): Promise<MeetRow[] | null> {
   }
 }
 
+type SharePlan = {
+  _slot?: string;
+  _time?: string;
+  _pub?: boolean;
+  _shareAll?: boolean;
+  _shareIds?: unknown[];
+} & Record<string, unknown>;
+
 type PlanRow = {
   id?: string;
   squad_id?: string;
   title?: string;
   zone?: string;
   total_m?: number;
+  total_exs?: number;
   sday?: string;
-  plan?: { _slot?: string; _time?: string; _pub?: boolean } & Record<string, unknown>;
+  plan?: SharePlan;
   ts?: number;
 };
+
+/**
+ * Is a published session visible to THIS family's children?
+ *
+ * A coach shares a session with the whole squad (`_shareAll`) or with specific swimmers
+ * (`_shareIds`). A session published before selective sharing existed carries neither field and
+ * stays visible to the whole squad — the same grandfathering the client's `_shareVisible` applies.
+ * Unpublished drafts (`_pub` falsy) never reach a family.
+ */
+export function sharedWithFamily(plan: SharePlan | undefined, mine: Set<string>): boolean {
+  if (!plan || !plan._pub) return false;
+  if (plan._shareAll) return true;
+  const ids = plan._shareIds;
+  if (!Array.isArray(ids) || !ids.length) return true; // legacy published = whole squad
+  return ids.some((id) => mine.has(bareId(id)));
+}
 
 /** The club's saved training sessions, one row each. Null when the table cannot be read, so the
  *  caller can leave the key out rather than send an empty document that would wipe the portal. */
@@ -157,19 +182,18 @@ async function fetchPlans(): Promise<PlanRow[] | null> {
  * Back into the shape the app reads at `savedPlans` (and re-hydrates from the `vx_saved_plans`
  * key): a map of squad id → its sessions, matching the client's own `_plansFetch` grouping.
  *
- * ONLY PUBLISHED sessions are returned. A coach's unpublished draft (`plan._pub` falsy) is their
- * private scheduling and must never reach a family — publishing is the deliberate act that shares
- * it, exactly as the coach's "Publish to families" button intends. Published sessions carry no
- * personal data — distances, sets, rest, equipment, a zone — so, like the club's meets, they are
- * returned across squads and the portal shows each family only their own child's squad.
+ * Only sessions SHARED WITH THIS FAMILY'S CHILDREN are returned — published, and either shared
+ * with the whole squad or with a swimmer of theirs (see sharedWithFamily). A coach's unpublished
+ * draft, or a session shared only with other swimmers, never reaches them. Sessions carry no
+ * personal data (distances, sets, rest, equipment, a zone).
  */
-export function plansAsClubStateRow(rows: PlanRow[]) {
+export function plansAsClubStateRow(rows: PlanRow[], mine: Set<string>) {
   const at = rows.reduce((a, r) => (r.ts && r.ts > a ? r.ts : a), 0);
   const updated_at = at ? new Date(at).toISOString() : new Date().toISOString();
   const grouped: Record<string, unknown[]> = {};
   for (const r of rows) {
     const plan = r.plan || {};
-    if (!plan._pub) continue; // published only
+    if (!sharedWithFamily(plan, mine)) continue;
     const sq = r.squad_id || "?";
     (grouped[sq] = grouped[sq] || []).push({
       id: r.id,
@@ -184,6 +208,48 @@ export function plansAsClubStateRow(rows: PlanRow[]) {
     });
   }
   return { key: "vx_saved_plans", value: grouped, updated_at };
+}
+
+/** The club's fitness/dryland sessions, one row each. Null when the table cannot be read. */
+async function fetchFitPlans(): Promise<PlanRow[] | null> {
+  try {
+    const r = await fetch(SB_URL + "/rest/v1/fitness_sessions?select=*&order=ts.desc&limit=500", {
+      headers: svc(),
+      cache: "no-store",
+    });
+    if (!r.ok) return null;
+    const rows = (await r.json().catch(() => null)) as PlanRow[] | null;
+    return Array.isArray(rows) ? rows : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fitness sessions in the shape the app re-hydrates from `vx_fit_saved` (a map of squad id → its
+ * sessions, matching the client's `_fitSessFetch` grouping). Same sharing rule as swim plans:
+ * shared with this family's children only.
+ */
+export function fitPlansAsClubStateRow(rows: PlanRow[], mine: Set<string>) {
+  const at = rows.reduce((a, r) => (r.ts && r.ts > a ? r.ts : a), 0);
+  const updated_at = at ? new Date(at).toISOString() : new Date().toISOString();
+  const grouped: Record<string, unknown[]> = {};
+  for (const r of rows) {
+    const plan = r.plan || {};
+    if (!sharedWithFamily(plan, mine)) continue;
+    const sq = r.squad_id || "?";
+    (grouped[sq] = grouped[sq] || []).push({
+      id: r.id,
+      date: r.sday || "",
+      title: r.title || "Session",
+      totalEx: r.total_exs || 0,
+      slot: plan._slot || "",
+      time: plan._time || "",
+      pub: true,
+      plan,
+    });
+  }
+  return { key: "vx_fit_saved", value: grouped, updated_at };
 }
 
 /** Back into the two shapes the app has always read: the array of the club's own meets, and the
@@ -340,7 +406,7 @@ export async function GET(request: Request) {
   // stale calendar back over a corrected date. A family still reads them the way it always has:
   // the two keys are rebuilt here from the table, so the portal needs no change and no parent
   // gets a direct read of the club's meets.
-  const [meetRows, planRows] = await Promise.all([fetchMeets(), fetchPlans()]);
+  const [meetRows, planRows, fitRows] = await Promise.all([fetchMeets(), fetchPlans(), fetchFitPlans()]);
   const out = rows
     .map((r) => {
       if (CLUB_KEYS.includes(r.key)) return r;
@@ -354,7 +420,8 @@ export async function GET(request: Request) {
     .filter(Boolean);
 
   if (meetRows) out.push(...meetsAsClubStateRows(meetRows));
-  if (planRows) out.push(plansAsClubStateRow(planRows));
+  if (planRows) out.push(plansAsClubStateRow(planRows, mine));
+  if (fitRows) out.push(fitPlansAsClubStateRow(fitRows, mine));
 
   return Response.json(
     { rows: out, swimmers: [...mine] },
