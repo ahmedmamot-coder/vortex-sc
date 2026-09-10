@@ -14513,9 +14513,42 @@ class Component extends DCLogic {
   // safe. Keys are the app's event names ("50 Free", "100 Back", "200 IM", …). L = long course
   // (50 m), S = short course (25 m); M = men/boys, F = women/girls.
   _waBaseTimes(){
+    // World Aquatics Points base times (the swim worth 1000 pts ≈ the world record).
+    // Keyed gender (M/F) → course (L = long/50m, S = short/25m) → app event name.
+    // Times are strings exactly as published and parsed by parseTimeStr — edit here to update.
     return {
-      M: { L: {}, S: {} },
-      F: { L: {}, S: {} },
+      M: {
+        L: {
+          '50 Free':'20.91','100 Free':'46.40','200 Free':'1:42.00','400 Free':'3:40.07','800 Free':'7:32.12','1500 Free':'14:31.02',
+          '50 Back':'23.55','100 Back':'51.60','200 Back':'1:51.92',
+          '50 Breast':'25.95','100 Breast':'56.88','200 Breast':'2:05.48',
+          '50 Fly':'22.27','100 Fly':'49.45','200 Fly':'1:50.34',
+          '200 IM':'1:54.00','400 IM':'4:02.50',
+        },
+        S: {
+          '50 Free':'20.16','100 Free':'44.84','200 Free':'1:38.61','400 Free':'3:32.25','800 Free':'7:20.46','1500 Free':'14:06.88',
+          '50 Back':'22.11','100 Back':'48.33','200 Back':'1:45.63',
+          '50 Breast':'24.95','100 Breast':'55.28','200 Breast':'2:00.16',
+          '50 Fly':'21.32','100 Fly':'47.71','200 Fly':'1:46.85',
+          '100 IM':'49.28','200 IM':'1:48.88','400 IM':'3:54.81',
+        },
+      },
+      F: {
+        L: {
+          '50 Free':'23.61','100 Free':'51.71','200 Free':'1:52.23','400 Free':'3:55.38','800 Free':'8:04.79','1500 Free':'15:20.48',
+          '50 Back':'26.86','100 Back':'57.13','200 Back':'2:03.14',
+          '50 Breast':'29.16','100 Breast':'1:04.13','200 Breast':'2:17.55',
+          '50 Fly':'24.43','100 Fly':'55.48','200 Fly':'2:01.81',
+          '200 IM':'2:06.12','400 IM':'4:24.38',
+        },
+        S: {
+          '50 Free':'22.83','100 Free':'50.25','200 Free':'1:50.31','400 Free':'3:50.25','800 Free':'7:57.42','1500 Free':'15:08.24',
+          '50 Back':'25.23','100 Back':'54.02','200 Back':'1:57.87',
+          '50 Breast':'28.37','100 Breast':'1:02.36','200 Breast':'2:14.57',
+          '50 Fly':'24.38','100 Fly':'54.05','200 Fly':'1:59.61',
+          '100 IM':'56.51','200 IM':'2:01.86','400 IM':'4:15.48',
+        },
+      },
     };
   }
   // The base time in seconds for one event/gender/course, or null when none is on file.
