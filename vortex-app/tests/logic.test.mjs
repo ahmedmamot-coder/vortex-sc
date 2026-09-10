@@ -4618,6 +4618,35 @@ describe("InBody sheet", () => {
       eq(JSON.stringify(M.pickFlatArrayBySwId({ notAnArray: true }, mine)), "[]");
     });
 
+    it("published training plans reach families; unpublished drafts never do", async () => {
+      // Plans live in the plan_sessions TABLE, not club_state, so the allowlist alone never sent
+      // them to a family — a coach published a session and the parent's Plans tab stayed empty.
+      // The route now fetches the table (like it does club_meets) and returns it in the shape the
+      // app re-hydrates from `vx_saved_plans`: a map of squad id → its sessions.
+      const M = await import("../src/app/api/family/state/route.ts");
+      const row = M.plansAsClubStateRow([
+        { id: "p1", squad_id: "vortexa", title: "Sp3/en1", zone: "EN2", total_m: 7000, sday: "2026-09-10",
+          ts: 30, plan: { _slot: "AM", _time: "05:30", _pub: true, sections: [{ title: "Main" }] } },
+        { id: "p2", squad_id: "vortexa", title: "Recovery", zone: "EN1", total_m: 3000, sday: "2026-09-09",
+          ts: 20, plan: { _slot: "PM", _pub: false, sections: [] } }, // a coach's private draft
+        { id: "p3", squad_id: "junior", title: "Test set", zone: "SP1", total_m: 2500, sday: "2026-09-08",
+          ts: 10, plan: { _slot: "AM", _pub: true, sections: [] } },
+      ]);
+      eq(row.key, "vx_saved_plans", "the client re-hydrates savedPlans from this key");
+      // Published only: the vortexa draft (p2) must not be in the family's copy.
+      eq(row.value.vortexa.length, 1, "an unpublished draft leaked to families");
+      eq(row.value.vortexa[0].id, "p1");
+      eq(row.value.vortexa[0].pub, true);
+      // The client reader keys sessions the same way _plansFetch does, so the fields must match.
+      eq(row.value.vortexa[0].date, "2026-09-10", "sday must map to date");
+      eq(row.value.vortexa[0].totalM, 7000, "total_m must map to totalM");
+      eq(row.value.vortexa[0].slot, "AM");
+      eq(row.value.vortexa[0].time, "05:30");
+      eq(row.value.junior[0].id, "p3", "another squad's published session was dropped");
+      // An empty table is a real answer, not a crash.
+      eq(JSON.stringify(M.plansAsClubStateRow([]).value), "{}");
+    });
+
     it("the roster document is cut to this family's children, not withheld", async () => {
       // rebuildRoster() is base + overlay. The base is window.VX_ROSTER, assigned by
       // public/assets/roster.js (272 swimmers, shipped with the app); this document is the
