@@ -2947,6 +2947,21 @@ if ('serviceWorker' in navigator) {
                             <p style="margin:3px 0 0;font-size:15px;font-weight:700">{{ famAiSugg.competeEvent }}</p>
                             <p style="margin:2px 0 0;font-size:11.5px;color:rgba(255,255,255,.65)">Current best {{ famAiSugg.currentBest }} · target <span style="color:#22D7D7;font-weight:700">{{ famAiSugg.targetTime }}</span></p>
                           </div>
+                          <sc-if value="{{ famAiSugg.hasEventTargets }}" hint-placeholder-val="{{ false }}">
+                            <div style="border-top:1px solid rgba(255,255,255,.12);padding-top:10px">
+                              <p style="margin:0 0 7px;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">{{ tx.eventTargets }}</p>
+                              <div style="display:flex;flex-direction:column;gap:6px">
+                                <sc-for list="{{ famAiSugg.eventTargets }}" as="e" hint-placeholder-count="6">
+                                  <div style="display:flex;align-items:center;gap:8px">
+                                    <span style="flex:1;min-width:0;font-size:12px;font-weight:600;color:#fff">{{ e.event }}</span>
+                                    <span style="font-family:var(--font-mono);font-size:11px;color:rgba(255,255,255,.55)">{{ e.current }}</span>
+                                    <span style="font-size:11px;color:rgba(255,255,255,.4)">→</span>
+                                    <span style="font-family:var(--font-mono);font-size:11.5px;font-weight:700;color:#22D7D7">{{ e.target }}</span>
+                                  </div>
+                                </sc-for>
+                              </div>
+                            </div>
+                          </sc-if>
                           <div style="border-top:1px solid rgba(255,255,255,.12);padding-top:10px">
                             <p style="margin:0;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">{{ tx.doubleDownOn }}</p>
                             <p style="margin:3px 0 0;font-size:13px;font-weight:700">{{ famAiSugg.focusStroke }}</p>
@@ -11498,6 +11513,7 @@ class Component extends DCLogic {
       competeIn:['Compete in','المنافسة في'],
       considerEntering:['Consider entering','يُنصح بالمشاركة في'],
       doubleDownOn:['Double down on','التركيز أكثر على'],
+      eventTargets:['Event targets','أهداف السباقات'],
       needsAttention:['Needs attention','يحتاج إلى اهتمام'],
       fitnessDryland:['Fitness & dryland','اللياقة والتدريب الأرضي'],
       nutrition:['Nutrition','التغذية'],
@@ -14489,30 +14505,48 @@ class Component extends DCLogic {
     if(!pbs.length) return { hasData:false };
     const byStroke={};
     pbs.forEach(p=>{ const s=this.strokeOf(p.event); (byStroke[s]=byStroke[s]||[]).push(p); });
-    const parseDrop=(d)=>{ const m=String(d||'').match(/([\d.]+)/); return m?parseFloat(m[1]):0; };
-    const strokeScores=Object.keys(byStroke).map(s=>{
-      const list=byStroke[s]; const totalDrop=list.reduce((a,p)=>a+parseDrop(p.drop),0);
-      const avgDrop=totalDrop/list.length;
-      return {stroke:s, count:list.length, totalDrop, avgDrop};
-    });
-    strokeScores.sort((a,b)=>b.avgDrop-a.avgDrop);
-    const best=strokeScores[0];
-    const worst=strokeScores[strokeScores.length-1];
+    const distOf=(ev)=>{ const m=String(ev||'').match(/(\d+)/); return m?+m[1]:0; };
+    const strokeRank=(ev)=>{ const o={Free:0,Back:1,Breast:2,Fly:3,IM:4}; const v=o[this.strokeOf(ev)]; return v===undefined?9:v; };
+    // Real improvement, from the race history rather than the roster's (usually blank) drop field.
+    // For each event: the earliest recorded time minus the best time ever swum \u2014 the seconds the
+    // swimmer has actually taken off it. Summed per stroke, this is what "double down on" rides on,
+    // so the card can no longer say "avg 0.00s dropped" when there is genuine progress to name.
+    const evImp={};
+    (swObj.results||[]).forEach(r=>{ if(!r || r.sec==null || !r.event) return; const iso=this._resultISO(r)||'';
+      const e=evImp[r.event]=evImp[r.event]||{first:null, firstIso:null, best:Infinity};
+      if(e.firstIso===null || (iso && iso<e.firstIso)){ e.firstIso=iso; e.first=r.sec; }
+      if(r.sec<e.best) e.best=r.sec; });
+    const strokeImp={};
+    Object.keys(evImp).forEach(ev=>{ const s=this.strokeOf(ev); const e=evImp[ev];
+      const drop=(e.first!=null && e.best<e.first)?(e.first-e.best):0;
+      const t=strokeImp[s]=strokeImp[s]||{drop:0, events:0};
+      if(drop>0){ t.drop+=drop; t.events++; } });
+    const impOf=(s)=>strokeImp[s]||{drop:0, events:0};
     const allStrokes=['Free','Back','Breast','Fly'];
     const missing=allStrokes.filter(s=>!byStroke[s]);
-    const focusStroke = best ? best.stroke : null;
-    const weakStroke = missing.length ? missing[0] : (worst && worst.stroke!==focusStroke ? worst.stroke : null);
+    const present=Object.keys(byStroke);
+    // Where the real gains are; ties and no-history broken by strength (most PBs).
+    const focusStroke = present.slice().sort((a,b)=>{
+      const d=impOf(b).drop-impOf(a).drop; if(d) return d; return byStroke[b].length-byStroke[a].length; })[0] || null;
+    const weakStroke = missing.length ? missing[0] : present.slice().sort((a,b)=>impOf(a).drop-impOf(b).drop)[0];
+    const focusImp = impOf(focusStroke);
     const topPb = pbs.slice().sort((a,b)=>a.sec-b.sec)[0];
     const isSprintEvent = topPb && /^(50|100)\s/.test(topPb.event);
     const improvePct = isSprintEvent ? 0.012 : 0.02;
     const targetSec = topPb ? topPb.sec*(1-improvePct) : null;
     const targetTime = targetSec!=null ? this.fmt(targetSec) : null;
     const competeEvent = topPb ? topPb.event : null;
+    // A target for EVERY event and distance the swimmer has a time in \u2014 scaled by distance
+    // (sprints improve in smaller relative steps than middle-distance and distance) so a parent
+    // sees a concrete next number to chase on each of their races, not just the headline event.
+    const targetPct=(ev)=>{ const d=distOf(ev); return d<=100?0.012:(d<=200?0.017:0.02); };
+    const eventTargets = pbs.slice().sort((a,b)=> strokeRank(a.event)-strokeRank(b.event) || distOf(a.event)-distOf(b.event) )
+      .map(p=>{ const tSec=p.sec*(1-targetPct(p.event)); return { event:p.event, current:p.time, target:this.fmt(tSec), drop:'\u2212'+(p.sec-tSec).toFixed(2)+'s' }; });
     // secondary / IM recommendation
     const hasIm = !!byStroke['IM'];
-    const secondaryEvent = !hasIm && Object.keys(byStroke).length>=3 ? '200 IM' : (missing.length ? '50 '+missing[0] : null);
-    const secondaryReason = !hasIm && Object.keys(byStroke).length>=3
-      ? 'Solid base across '+Object.keys(byStroke).length+' strokes \u2014 an IM entry builds versatility and gives extra meet points.'
+    const secondaryEvent = !hasIm && present.length>=3 ? '200 IM' : (missing.length ? '50 '+missing[0] : null);
+    const secondaryReason = !hasIm && present.length>=3
+      ? 'Solid base across '+present.length+' strokes \u2014 an IM entry builds versatility and gives extra meet points.'
       : (missing.length ? 'No logged times in '+missing[0]+' yet \u2014 a low-stakes 50 is a good first entry.' : null);
     // fitness insight (age-scaled benchmarks: pushups, plank sec, vertical jump cm)
     const age = swObj.age||12;
@@ -14535,8 +14569,11 @@ class Component extends DCLogic {
       ? 'Multi-session training load \u2014 prioritize a carb+protein snack within 30 min post-swim, and steady hydration (500ml+ per session) to support recovery between sessions.'
       : 'At this age, focus on regular balanced meals and water bottle at every session \u2014 heavy supplementation isn\u2019t needed, consistency matters more than intensity.';
     return { hasData:true, focusStroke, weakStroke, competeEvent, currentBest: topPb?topPb.time:null, targetTime,
-      focusReason: ov.focusReason!=null ? ov.focusReason : (best ? ('Fastest recent improvement in '+best.stroke+' \u2014 avg '+best.avgDrop.toFixed(2)+'s/PB dropped.') : ''),
-      weakReason: ov.weakReason!=null ? ov.weakReason : (missing.length ? (weakStroke+' has no logged PB \u2014 add dedicated technique & race-pace sets.') : (worst? ('Slowest recent progress in '+worst.stroke+'.') : '')),
+      eventTargets, hasEventTargets: eventTargets.length>0,
+      focusReason: ov.focusReason!=null ? ov.focusReason
+        : (focusImp.drop>0 ? ('Biggest real gains in '+focusStroke+' \u2014 '+focusImp.drop.toFixed(2)+'s taken off across '+focusImp.events+' event'+(focusImp.events===1?'':'s')+'. Keep the race-pace work here.')
+          : (focusStroke ? (focusStroke+' is their strongest group \u2014 '+(byStroke[focusStroke]||[]).length+' logged event'+(((byStroke[focusStroke]||[]).length)===1?'':'s')+'. Build on it with race-pace sets.') : '')),
+      weakReason: ov.weakReason!=null ? ov.weakReason : (missing.length ? (weakStroke+' has no logged PB \u2014 add dedicated technique & race-pace sets.') : (weakStroke ? ('Least recent progress in '+weakStroke+' \u2014 worth targeted technique work.') : '')),
       secondaryEvent, secondaryReason: ov.secondaryReason!=null ? ov.secondaryReason : secondaryReason,
       fitnessInsight: ov.fitnessInsight!=null ? ov.fitnessInsight : fitnessInsight,
       nutritionTip: ov.nutritionTip!=null ? ov.nutritionTip : nutritionTip,
