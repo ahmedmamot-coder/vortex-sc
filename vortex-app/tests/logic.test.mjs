@@ -4618,33 +4618,52 @@ describe("InBody sheet", () => {
       eq(JSON.stringify(M.pickFlatArrayBySwId({ notAnArray: true }, mine)), "[]");
     });
 
-    it("published training plans reach families; unpublished drafts never do", async () => {
+    it("plans reach only the families they were shared with; drafts never do", async () => {
       // Plans live in the plan_sessions TABLE, not club_state, so the allowlist alone never sent
-      // them to a family — a coach published a session and the parent's Plans tab stayed empty.
-      // The route now fetches the table (like it does club_meets) and returns it in the shape the
-      // app re-hydrates from `vx_saved_plans`: a map of squad id → its sessions.
+      // them to a family. The route now fetches the table (like it does club_meets) and returns it
+      // in the shape the app re-hydrates from `vx_saved_plans`, filtered to THIS family's children.
       const M = await import("../src/app/api/family/state/route.ts");
+      const mine = new Set(["r196"]);
+
+      // sharedWithFamily is the whole gate: published + (whole squad OR one of my children).
+      eq(M.sharedWithFamily({ _pub: true, _shareAll: true }, mine), true, "whole-squad share must reach me");
+      eq(M.sharedWithFamily({ _pub: true, _shareIds: ["r196"] }, mine), true, "a share to my child must reach me");
+      eq(M.sharedWithFamily({ _pub: true, _shareIds: ["r999"] }, mine), false, "a share to another child must NOT reach me");
+      eq(M.sharedWithFamily({ _pub: true }, mine), true, "a legacy published plan (no share fields) is whole-squad");
+      eq(M.sharedWithFamily({ _pub: false, _shareAll: true }, mine), false, "an unpublished draft never reaches a family");
+      eq(M.sharedWithFamily({ _pub: true, _shareIds: ["preteam::r196"] }, mine), true, "a squad-prefixed id still matches my child");
+
       const row = M.plansAsClubStateRow([
-        { id: "p1", squad_id: "vortexa", title: "Sp3/en1", zone: "EN2", total_m: 7000, sday: "2026-09-10",
-          ts: 30, plan: { _slot: "AM", _time: "05:30", _pub: true, sections: [{ title: "Main" }] } },
-        { id: "p2", squad_id: "vortexa", title: "Recovery", zone: "EN1", total_m: 3000, sday: "2026-09-09",
+        { id: "p1", squad_id: "vortexa", title: "Sp3/en1", total_m: 7000, sday: "2026-09-10",
+          ts: 30, plan: { _slot: "AM", _time: "05:30", _pub: true, _shareIds: ["r196"], sections: [{ title: "Main" }] } },
+        { id: "p2", squad_id: "vortexa", title: "Recovery", total_m: 3000, sday: "2026-09-09",
           ts: 20, plan: { _slot: "PM", _pub: false, sections: [] } }, // a coach's private draft
-        { id: "p3", squad_id: "junior", title: "Test set", zone: "SP1", total_m: 2500, sday: "2026-09-08",
-          ts: 10, plan: { _slot: "AM", _pub: true, sections: [] } },
-      ]);
+        { id: "p3", squad_id: "vortexa", title: "Only-others", total_m: 2500, sday: "2026-09-08",
+          ts: 10, plan: { _pub: true, _shareIds: ["r999"], sections: [] } }, // shared with another swimmer
+      ], mine);
       eq(row.key, "vx_saved_plans", "the client re-hydrates savedPlans from this key");
-      // Published only: the vortexa draft (p2) must not be in the family's copy.
-      eq(row.value.vortexa.length, 1, "an unpublished draft leaked to families");
+      eq(row.value.vortexa.length, 1, "only the session shared with my child should be present");
       eq(row.value.vortexa[0].id, "p1");
-      eq(row.value.vortexa[0].pub, true);
-      // The client reader keys sessions the same way _plansFetch does, so the fields must match.
-      eq(row.value.vortexa[0].date, "2026-09-10", "sday must map to date");
       eq(row.value.vortexa[0].totalM, 7000, "total_m must map to totalM");
       eq(row.value.vortexa[0].slot, "AM");
-      eq(row.value.vortexa[0].time, "05:30");
-      eq(row.value.junior[0].id, "p3", "another squad's published session was dropped");
-      // An empty table is a real answer, not a crash.
-      eq(JSON.stringify(M.plansAsClubStateRow([]).value), "{}");
+      eq(JSON.stringify(M.plansAsClubStateRow([], mine).value), "{}", "an empty table is a real answer, not a crash");
+    });
+
+    it("fitness sessions reach families the same way, in their own key", async () => {
+      const M = await import("../src/app/api/family/state/route.ts");
+      const mine = new Set(["r196"]);
+      const row = M.fitPlansAsClubStateRow([
+        { id: "f1", squad_id: "vortexa", title: "Dryland A", total_exs: 12, sday: "2026-09-10",
+          ts: 30, plan: { _slot: "AM", _pub: true, _shareAll: true, sections: [{ title: "Strength", exs: [{ name: "Squat" }] }] } },
+        { id: "f2", squad_id: "vortexa", title: "Draft", total_exs: 8, sday: "2026-09-09",
+          ts: 20, plan: { _pub: false, sections: [] } },
+        { id: "f3", squad_id: "vortexa", title: "Others only", total_exs: 5, sday: "2026-09-08",
+          ts: 10, plan: { _pub: true, _shareIds: ["r999"], sections: [] } },
+      ], mine);
+      eq(row.key, "vx_fit_saved", "the client re-hydrates fitSaved from this key");
+      eq(row.value.vortexa.length, 1, "only the whole-squad fitness session should reach me");
+      eq(row.value.vortexa[0].id, "f1");
+      eq(row.value.vortexa[0].totalEx, 12, "total_exs must map to totalEx");
     });
 
     it("the roster document is cut to this family's children, not withheld", async () => {
@@ -6538,6 +6557,7 @@ describe("InBody sheet", () => {
       vx_plans: "squad_plans",
       vx_season: "season_plans",
       vx_saved_plans: "plan_sessions",
+      vx_fit_saved: "fitness_sessions",
       vx_docs_cache: "swimmer_docs",
       vx_photos_cache: "swimmer_docs",
       vx_hrsets_cache: "hr_sets",

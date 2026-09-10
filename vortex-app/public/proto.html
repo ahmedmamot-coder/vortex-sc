@@ -2742,6 +2742,7 @@ if ('serviceWorker' in navigator) {
                       <button onclick="{{ onFamTabResults }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabResultsBg }};color:{{ famTabResultsFg }}">{{ tx.tabResults }}</button>
                       <button onclick="{{ onFamTabMeets }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabMeetsBg }};color:{{ famTabMeetsFg }}">{{ tx.tabMeets }}</button>
                       <button onclick="{{ onFamTabPlans }}" style="display:flex;align-items:center;justify-content:center;gap:4px;padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabPlansBg }};color:{{ famTabPlansFg }}"><i data-lucide="clipboard-list" style="width:12px;height:12px"></i>{{ tx.tabPlans }}</button>
+                      <button onclick="{{ onFamTabFit }}" style="display:flex;align-items:center;justify-content:center;gap:4px;padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabFitBg }};color:{{ famTabFitFg }}"><i data-lucide="dumbbell" style="width:12px;height:12px"></i>{{ tx.tabFit }}</button>
                       <button onclick="{{ onFamTabDocs }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabDocsBg }};color:{{ famTabDocsFg }}">{{ tx.tabDocs }}</button>
                       <button onclick="{{ onFamTabFees }}" style="position:relative;padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabFeesBg }};color:{{ famTabFeesFg }}">{{ tx.tabFees }}<span style="position:absolute;top:5px;right:7px;width:6px;height:6px;border-radius:50%;background:{{ famFeesDotColor }}"></span></button>
                       <button onclick="{{ onFamTabMsgs }}" style="padding:9px 3px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:10px;background:{{ famTabMsgsBg }};color:{{ famTabMsgsFg }}">{{ tx.tabCoach }}</button>
@@ -3225,6 +3226,41 @@ if ('serviceWorker' in navigator) {
                       </sc-if>
                       <sc-if value="{{ famNoPlans }}" hint-placeholder-val="{{ true }}">
                         <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:16px;box-shadow:0 1px 4px rgba(11,20,40,.04);display:flex;align-items:center;gap:10px"><i data-lucide="clipboard-list" style="width:18px;height:18px;color:#9AA2B4"></i><span style="font-size:12.5px;color:#7A8296;line-height:1.5">No training plans shared yet. When your coach publishes a session, it appears here.</span></div>
+                      </sc-if>
+                    </sc-if>
+
+                    <sc-if value="{{ famShowFit }}" hint-placeholder-val="{{ false }}">
+                      <!-- Fitness / dryland sessions the coach shared, on their own tab. -->
+                      <sc-if value="{{ famHasFit }}" hint-placeholder-val="{{ true }}">
+                        <div style="margin-bottom:16px">
+                          <div style="display:flex;align-items:center;gap:8px;margin:0 2px 9px"><i data-lucide="dumbbell" style="width:16px;height:16px;color:#6D28D9"></i><p style="margin:0;font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">Fitness plans</p></div>
+                          <div style="display:flex;flex-direction:column;gap:10px">
+                            <sc-for list="{{ famFit }}" as="pl" hint-placeholder-count="2">
+                              <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;box-shadow:0 2px 7px rgba(11,20,40,.05);overflow:hidden">
+                                <div style="display:flex;align-items:center;gap:12px;padding:13px 15px 11px">
+                                  <span style="flex:none;width:46px;height:46px;border-radius:13px;background:linear-gradient(140deg,#A78BFA,#6D28D9);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;box-shadow:0 6px 14px rgba(109,40,217,.28)"><span style="font-size:16px;font-weight:800">{{ pl.day }}</span><span style="font-size:9px;font-weight:700;letter-spacing:.4px">{{ pl.mon }}</span></span>
+                                  <span style="flex:1;min-width:0"><span style="display:block;font-size:14px;font-weight:700;color:#0C1116">{{ pl.title }}</span><span style="display:block;font-size:11.5px;color:#7A8296;margin-top:2px">{{ pl.dateLabel }}</span><span style="display:block;font-size:11px;color:#7A8296;margin-top:1px">{{ pl.slot }}</span></span>
+                                  <span style="flex:none;text-align:center"><span style="display:block;font-family:var(--font-mono);font-size:14px;font-weight:800;color:#6D28D9">{{ pl.totalEx }}</span><span style="display:block;font-size:9px;font-weight:700;text-transform:uppercase;color:#9AA2B4">exercises</span></span>
+                                </div>
+                                <div style="padding:0 15px 14px;display:flex;flex-direction:column;gap:10px">
+                                  <sc-for list="{{ pl.sections }}" as="sec" hint-placeholder-count="3">
+                                    <div>
+                                      <p style="margin:0 0 5px;font-size:11px;font-weight:700;color:#0C1116">{{ sec.title }}</p>
+                                      <div style="display:flex;flex-direction:column;gap:5px">
+                                        <sc-for list="{{ sec.sets }}" as="st" hint-placeholder-count="3">
+                                          <div style="background:#F8FAFC;border:1px solid #EEF1F5;border-radius:9px;padding:8px 10px"><span style="display:block;font-size:12.5px;color:#0C1116;font-weight:600">{{ st.line }}</span><sc-if value="{{ st.hasSub }}" hint-placeholder-val="{{ false }}"><span style="display:block;font-size:10.5px;color:#7A8296;margin-top:2px">{{ st.sub }}</span></sc-if></div>
+                                        </sc-for>
+                                      </div>
+                                    </div>
+                                  </sc-for>
+                                </div>
+                              </div>
+                            </sc-for>
+                          </div>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ famNoFit }}" hint-placeholder-val="{{ true }}">
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:16px;box-shadow:0 1px 4px rgba(11,20,40,.04);display:flex;align-items:center;gap:10px"><i data-lucide="dumbbell" style="width:18px;height:18px;color:#9AA2B4"></i><span style="font-size:12.5px;color:#7A8296;line-height:1.5">No fitness plans shared yet. When your coach shares a dryland session, it appears here.</span></div>
                       </sc-if>
                     </sc-if>
 
@@ -3838,7 +3874,7 @@ if ('serviceWorker' in navigator) {
                           <sc-for list="{{ savedPlanRows }}" as="sp" hint-placeholder-count="0">
                             <div style="display:flex;align-items:center;gap:11px;background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:10px 12px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
                               <span style="flex:none;text-align:center;min-width:52px"><span style="display:block;font-family:var(--font-mono);font-size:14px;font-weight:800;color:{{ squad.accent }}">{{ sp.totalM }}</span><span style="display:block;font-size:9px;font-weight:700;text-transform:uppercase;color:#9AA2B4">metres</span></span>
-                              <span style="flex:1;min-width:0"><span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:13px;font-weight:700;color:#0C1116">{{ sp.title }}</span><span style="background:{{ sp.slotBg }};color:{{ sp.slotFg }};border-radius:6px;padding:2px 7px;font-size:9.5px;font-weight:800">{{ sp.slotLabel }}</span><sc-if value="{{ sp.pub }}" hint-placeholder-val="{{ false }}"><span style="background:#DCF5EA;color:#0C7A4F;border-radius:6px;padding:2px 7px;font-size:9.5px;font-weight:800">Shared</span></sc-if></span><span style="display:block;font-size:11px;color:#7A8296;margin-top:2px">{{ sp.dateLabel }} · Zone {{ sp.zone }}</span></span>
+                              <span style="flex:1;min-width:0"><span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:13px;font-weight:700;color:#0C1116">{{ sp.title }}</span><span style="background:{{ sp.slotBg }};color:{{ sp.slotFg }};border-radius:6px;padding:2px 7px;font-size:9.5px;font-weight:800">{{ sp.slotLabel }}</span><sc-if value="{{ sp.shareLabelShow }}" hint-placeholder-val="{{ false }}"><span style="background:#DCF5EA;color:#0C7A4F;border-radius:6px;padding:2px 7px;font-size:9.5px;font-weight:800">Shared · {{ sp.shareLabel }}</span></sc-if></span><span style="display:block;font-size:11px;color:#7A8296;margin-top:2px">{{ sp.dateLabel }} · Zone {{ sp.zone }}</span></span>
                               <button onclick="{{ sp.onPublish }}" style="flex:none;width:32px;height:32px;border-radius:9px;border:none;background:{{ sp.pubBg }};color:{{ sp.pubFg }};cursor:pointer;display:flex;align-items:center;justify-content:center" title="{{ sp.pubTitle }}"><i data-lucide="send" style="width:14px;height:14px"></i></button>
                               <button onclick="{{ sp.onView }}" style="flex:none;width:32px;height:32px;border-radius:9px;border:none;background:var(--vx-blue-tint);color:var(--vx-blue-dark);cursor:pointer;display:flex;align-items:center;justify-content:center" title="View as PDF"><i data-lucide="file-text" style="width:14px;height:14px"></i></button>
                               <button onclick="{{ sp.onEdit }}" style="flex:none;width:32px;height:32px;border-radius:9px;border:none;background:#F4F6F8;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center" title="Load &amp; edit"><i data-lucide="pencil" style="width:14px;height:14px"></i></button>
@@ -5787,7 +5823,8 @@ if ('serviceWorker' in navigator) {
                         <sc-for list="{{ fitSavedRows }}" as="sp" hint-placeholder-count="0">
                           <div style="display:flex;align-items:center;gap:11px;background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:10px 12px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
                             <span style="flex:none;text-align:center;min-width:46px"><span style="display:block;font-family:var(--font-mono);font-size:16px;font-weight:800;color:{{ squad.accent }}">{{ sp.totalEx }}</span><span style="display:block;font-size:9px;font-weight:700;text-transform:uppercase;color:#9AA2B4">exercises</span></span>
-                            <span style="flex:1;min-width:0"><span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:13px;font-weight:700;color:#0C1116">{{ sp.title }}</span><span style="background:{{ sp.slotBg }};color:{{ sp.slotFg }};border-radius:6px;padding:2px 7px;font-size:9.5px;font-weight:800">{{ sp.slotLabel }}</span></span><span style="display:block;font-size:11px;color:#7A8296;margin-top:2px">{{ sp.dateLabel }}</span></span>
+                            <span style="flex:1;min-width:0"><span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:13px;font-weight:700;color:#0C1116">{{ sp.title }}</span><span style="background:{{ sp.slotBg }};color:{{ sp.slotFg }};border-radius:6px;padding:2px 7px;font-size:9.5px;font-weight:800">{{ sp.slotLabel }}</span><sc-if value="{{ sp.shareLabelShow }}" hint-placeholder-val="{{ false }}"><span style="background:#DCF5EA;color:#0C7A4F;border-radius:6px;padding:2px 7px;font-size:9.5px;font-weight:800">Shared · {{ sp.shareLabel }}</span></sc-if></span><span style="display:block;font-size:11px;color:#7A8296;margin-top:2px">{{ sp.dateLabel }}</span></span>
+                            <button onclick="{{ sp.onPublish }}" style="flex:none;width:32px;height:32px;border-radius:9px;border:none;background:{{ sp.pubBg }};color:{{ sp.pubFg }};cursor:pointer;display:flex;align-items:center;justify-content:center" title="{{ sp.pubTitle }}"><i data-lucide="send" style="width:14px;height:14px"></i></button>
                             <button onclick="{{ sp.onView }}" style="flex:none;width:32px;height:32px;border-radius:9px;border:none;background:var(--vx-blue-tint);color:var(--vx-blue-dark);cursor:pointer;display:flex;align-items:center;justify-content:center" title="View as PDF"><i data-lucide="file-text" style="width:14px;height:14px"></i></button>
                             <button onclick="{{ sp.onEdit }}" style="flex:none;width:32px;height:32px;border-radius:9px;border:none;background:#F4F6F8;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center" title="Load &amp; edit"><i data-lucide="pencil" style="width:14px;height:14px"></i></button>
                             <button onclick="{{ sp.onDelete }}" style="flex:none;width:32px;height:32px;border-radius:9px;border:none;background:#FDECEC;color:#E5484D;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="trash-2" style="width:14px;height:14px"></i></button>
@@ -8168,6 +8205,25 @@ if ('serviceWorker' in navigator) {
                 </div>
               </div>
             </sc-if>
+            <sc-if value="{{ shrOpen }}" hint-placeholder-val="{{ false }}">
+              <div class="vx-screen" style="position:absolute;inset:0;z-index:60;background:rgba(10,15,26,.55);display:flex;flex-direction:column;justify-content:flex-end">
+                <div class="vx-sheet" style="background:#fff;border-radius:20px 20px 0 0;padding:18px 16px calc(env(safe-area-inset-bottom) + 18px);max-height:82%;display:flex;flex-direction:column">
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><span style="font-size:16px;font-weight:700;color:#0C1116">{{ shrTitle }}</span><button onclick="{{ onShareCancel }}" style="width:32px;height:32px;border-radius:9px;background:#F4F6F8;border:none;color:#7A8296;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:15px;height:15px"></i></button></div>
+                  <p style="margin:0 0 12px;font-size:12px;color:#7A8296;line-height:1.5">Choose who can see this session in their portal. Pick the whole squad, or tick only certain swimmers — their parents see it too.</p>
+                  <button onclick="{{ onShareAll }}" style="display:flex;align-items:center;gap:10px;background:{{ shrAllBg }};border:1px solid {{ shrAllBorder }};border-radius:12px;padding:11px 13px;cursor:pointer;font-family:inherit;text-align:left;margin-bottom:9px"><span style="width:30px;height:30px;border-radius:8px;background:{{ shrAllIconBg }};color:{{ shrAllIconFg }};display:flex;align-items:center;justify-content:center;flex:none"><i data-lucide="users" style="width:16px;height:16px"></i></span><span style="flex:1;min-width:0"><span style="display:block;font-size:13px;font-weight:700;color:#0C1116">Whole squad</span><span style="display:block;font-size:11px;color:#7A8296">Everyone in {{ shrSquadName }}</span></span><i data-lucide="check" style="width:18px;height:18px;flex:none;color:{{ shrAllTick }}"></i></button>
+                  <p style="margin:2px 2px 7px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4">Or pick swimmers</p>
+                  <div class="vx-scroll" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
+                    <sc-for list="{{ shrRows }}" as="sw" hint-placeholder-count="4">
+                      <button onclick="{{ sw.onToggle }}" style="display:flex;align-items:center;gap:10px;background:{{ sw.bg }};border:1px solid {{ sw.border }};border-radius:11px;padding:9px 11px;cursor:pointer;font-family:inherit;text-align:left"><span style="width:28px;height:28px;border-radius:50%;background:{{ shrAccent }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex:none">{{ sw.initials }}</span><span style="flex:1;min-width:0;font-size:12.5px;font-weight:600;color:#0C1116">{{ sw.name }}</span><i data-lucide="check" style="width:17px;height:17px;flex:none;color:{{ sw.tickColor }}"></i></button>
+                    </sc-for>
+                  </div>
+                  <div style="display:flex;gap:8px">
+                    <sc-if value="{{ shrHasPub }}" hint-placeholder-val="{{ false }}"><button onclick="{{ onShareStop }}" style="flex:none;background:#FDECEC;color:#E5484D;border:none;border-radius:13px;padding:13px 15px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer">Stop sharing</button></sc-if>
+                    <button onclick="{{ onShareApply }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:#0A0F1A;color:#fff;border:none;border-radius:13px;padding:13px;font-family:inherit;font-weight:700;font-size:14px;cursor:pointer"><i data-lucide="send" style="width:16px;height:16px"></i>{{ shrApplyLabel }}</button>
+                  </div>
+                </div>
+              </div>
+            </sc-if>
             <sc-if value="{{ showVortexId }}" hint-placeholder-val="{{ false }}">
               <div class="vx-screen" style="position:absolute;inset:0;z-index:47;background:#0A0F1A;display:flex;flex-direction:column">
                 <div style="flex:none;height:44px"></div>
@@ -8779,7 +8835,7 @@ class Component extends DCLogic {
     this._fpid=0;
     this.fitnessPlans=this._loadJSON('vx_fitness_plans', {});
     this.fitnessMedia=this._loadJSON('vx_fitness_media', {});
-    this.fitSaved={};
+    this.fitSaved=this._loadJSON('vx_fit_saved', {});
     this.famMessages={};
     this.signupAlerts=[];
     this.announcements=[];
@@ -8847,6 +8903,7 @@ class Component extends DCLogic {
       seasonOpenWeek:null,
       planSessDate:null, planSessSlot:'AM', planSessTime:'', planCalY:null, planCalM:null, planCalDay:null,
       fitSessDate:null, fitSessSlot:'AM', fitSessTime:'', fitCalY:null, fitCalM:null, fitCalDay:null, fitSavedMsg:'',
+      shrOpen:false, shrKind:null, shrSquad:null, shrId:null, shrAll:true, shrSel:{},
       videoActiveId:null, videoUrlDraft:'', videoTitleDraft:'', videoTagDraft:'', videoAddOpen:false, videoRate:1, videoNoteDraft:'', videoCurT:0, videoDur:0,
       videoCompareIds:[], videoCompareMsg:'', videoFolderOpen:true, videoFolderQ:'',
       videoStartBusy:false, videoStartMsg:'', videoStartCands:[], videoStartPick:0,
@@ -11455,6 +11512,7 @@ class Component extends DCLogic {
       tabResults:['Results','النتائج'],
       tabMeets:['Meets','البطولات'],
       tabPlans:['Plans','الخطط'],
+      tabFit:['Fitness','اللياقة'],
       tabDocs:['Documents','المستندات'],
       tabFees:['Fees','الرسوم'],
       tabCoach:['Coach','المدرب'],
@@ -16813,8 +16871,8 @@ class Component extends DCLogic {
     const rows=await window.__vxSelect('fitness_sessions', 'select=*&order=ts.desc&limit=500');
     if(rows==null) return; // table missing / offline → keep current
     if(rows.length===0 && this.fitSaved && Object.keys(this.fitSaved).some(k=>(this.fitSaved[k]||[]).length)) return;
-    const grouped={}; rows.forEach(r=>{ const sq=r.squad_id||'?'; (grouped[sq]=grouped[sq]||[]).push({ id:r.id, date:r.sday||'', title:r.title||'Session', totalEx:r.total_exs||0, slot:(r.plan&&r.plan._slot)||'', time:(r.plan&&r.plan._time)||'', plan:r.plan||{} }); });
-    this.fitSaved=grouped; this.forceUpdate();
+    const grouped={}; rows.forEach(r=>{ const sq=r.squad_id||'?'; (grouped[sq]=grouped[sq]||[]).push({ id:r.id, date:r.sday||'', title:r.title||'Session', totalEx:r.total_exs||0, slot:(r.plan&&r.plan._slot)||'', time:(r.plan&&r.plan._time)||'', pub:!!(r.plan&&r.plan._pub), plan:r.plan||{} }); });
+    this.fitSaved=grouped; try{ this._saveJSON('vx_fit_saved', grouped); }catch(e){} this.forceUpdate();
   }
   async saveFitSession(squadId){ const S=this.state; const plan=this.getFitPlan(squadId); const id=this._uid('fsn')+'_'+Math.random().toString(36).slice(2,6);
     const date=S.fitSessDate||this.todayISO(); const slot=S.fitSessSlot||'AM'; const time=S.fitSessTime||'';
@@ -18476,6 +18534,78 @@ class Component extends DCLogic {
     const row={ id:rec.id, squad_id:squadId, title:rec.title||'Session', zone:rec.zone||'', total_m:rec.totalM||0, plan:planCopy, sday:rec.date||'', ts:Date.now() };
     try{ if(window.__vxUpsert){ const ok=await window.__vxUpsert('plan_sessions', [row]); if(ok) await this._plansFetch(); } }catch(e){}
     if(next){ try{ this._pushSend({swimmerIds:(this.roster[squadId]||[]).map(s=>s.id)}, 'Session plan published'+(sqName?(' · '+sqName):''), (rec.title||'Session')+' · '+this.shortDateISO(rec.date||this.todayISO()), '/'); }catch(e){} } }
+  // ---- Share a session with SPECIFIC swimmers, not the whole squad -------------------------
+  // The recipient list rides in the plan JSON beside _pub/_slot/_time, so no column migration:
+  //   _shareAll:true       → everyone in the squad (the "Whole squad" shortcut, and how a plan
+  //                          published before this feature is read — see _shareVisible).
+  //   _shareIds:[ids]      → exactly these swimmers.
+  // Used by both the swim Plans builder (plan_sessions) and the Fitness builder (fitness_sessions).
+  _bareId(x){ return String(x==null?'':x).split('::').pop(); }
+  // Is a session visible to one child? A published session with no recipient fields is a plan
+  // shared before selective sharing existed, and stays visible to the whole squad (grandfathered).
+  _shareVisible(plan, childId){
+    if(!plan || !plan._pub) return false;
+    if(plan._shareAll) return true;
+    const ids=plan._shareIds;
+    if(!Array.isArray(ids) || !ids.length) return true;
+    const c=this._bareId(childId);
+    return ids.some(id=>this._bareId(id)===c);
+  }
+  // A short "who can see it" label for a saved-session row (coach view).
+  _shareLabelFor(r){
+    const plan=(r&&r.plan)||{};
+    if(!plan._pub) return '';
+    if(plan._shareAll || !Array.isArray(plan._shareIds) || !plan._shareIds.length) return 'Whole squad';
+    const n=plan._shareIds.length; return n+' swimmer'+(n===1?'':'s');
+  }
+  _shareStore(kind){ return kind==='fit' ? 'fitSaved' : 'savedPlans'; }
+  openShare(kind, squadId, id){
+    const rec=((this[this._shareStore(kind)]&&this[this._shareStore(kind)][squadId])||[]).find(r=>r.id===id); if(!rec) return;
+    const plan=rec.plan||{};
+    const ids=Array.isArray(plan._shareIds)?plan._shareIds:[];
+    const sel={}; ids.forEach(x=>{ sel[this._bareId(x)]=true; });
+    // A published legacy plan (no share fields) opens as "Whole squad"; a specific-swimmer plan
+    // opens with those swimmers ticked; an unshared one opens on Whole squad by default.
+    const all = plan._pub ? (plan._shareAll===true || !ids.length) : true;
+    this.setState({ shrOpen:true, shrKind:kind, shrSquad:squadId, shrId:id, shrAll:all, shrSel:sel });
+  }
+  onShareAll(){ this.setState({ shrAll:true, shrSel:{} }); }
+  toggleShareSwimmer(swId){ const b=this._bareId(swId); const sel={...(this.state.shrSel||{})}; if(sel[b]) delete sel[b]; else sel[b]=true; this.setState({ shrSel:sel, shrAll:false }); }
+  closeShare(){ this.setState({ shrOpen:false }); }
+  applyShare(){
+    const S=this.state; const kind=S.shrKind, squadId=S.shrSquad, id=S.shrId;
+    const selIds=Object.keys(S.shrSel||{});
+    const shareAll=!!S.shrAll;
+    const pub = shareAll || selIds.length>0;
+    this._writeShare(kind, squadId, id, { _pub:pub, _shareAll:pub && shareAll, _shareIds:(pub && !shareAll)?selIds:[] });
+    this.setState({ shrOpen:false });
+  }
+  stopShare(){ const S=this.state; this._writeShare(S.shrKind, S.shrSquad, S.shrId, { _pub:false, _shareAll:false, _shareIds:[] }); this.setState({ shrOpen:false }); }
+  _writeShare(kind, squadId, id, info){
+    const storeKey=this._shareStore(kind);
+    const table = kind==='fit' ? 'fitness_sessions' : 'plan_sessions';
+    const localKey = kind==='fit' ? 'vx_fit_saved' : 'vx_saved_plans';
+    const list=((this[storeKey]&&this[storeKey][squadId])||[]);
+    const rec=list.find(r=>r.id===id); if(!rec) return;
+    const planCopy=Object.assign({}, rec.plan||{}, { _pub:info._pub, _shareAll:info._shareAll, _shareIds:info._shareIds });
+    const nlist=list.map(r=> r.id===id ? {...r, pub:info._pub, plan:planCopy} : r);
+    this[storeKey]={...(this[storeKey]||{}), [squadId]:nlist}; try{ this._saveJSON(localKey, this[storeKey]); }catch(e){}
+    const sqName=(this.squadById[squadId]&&this.squadById[squadId].name)||'';
+    const count = info._shareAll ? (this.roster[squadId]||[]).length : (info._shareIds||[]).length;
+    this.setState({ savedPlanMsg: info._pub
+      ? ('Shared '+(kind==='fit'?'fitness ':'')+'session with '+(info._shareAll?('all of '+(sqName||'the squad')):(count+' swimmer'+(count===1?'':'s')))+' ✓')
+      : 'Sharing stopped — hidden from families.' });
+    try{ this.audit('plan.share', (sqName||squadId)+' · '+(rec.title||'Session'), {squad:squadId, kind, published:info._pub, shareAll:info._shareAll, swimmers:count}); }catch(e){}
+    const row = kind==='fit'
+      ? { id:rec.id, squad_id:squadId, title:rec.title||'Dryland', total_exs:rec.totalEx||0, plan:planCopy, sday:rec.date||'', ts:Date.now() }
+      : { id:rec.id, squad_id:squadId, title:rec.title||'Session', zone:rec.zone||'', total_m:rec.totalM||0, plan:planCopy, sday:rec.date||'', ts:Date.now() };
+    try{ if(window.__vxUpsert){ window.__vxUpsert(table, [row]).then((ok)=>{ if(ok){ if(kind==='fit') this._fitSessFetch(); else this._plansFetch(); } }); } }catch(e){}
+    if(info._pub){ try{
+      const targets = info._shareAll ? (this.roster[squadId]||[]).map(s=>s.id) : (info._shareIds||[]);
+      this._pushSend({swimmerIds:targets}, (kind==='fit'?'Fitness plan':'Session plan')+' published'+(sqName?(' · '+sqName):''), (rec.title||'Session')+' · '+this.shortDateISO(rec.date||this.todayISO()), '/');
+    }catch(e){} }
+    this.forceUpdate();
+  }
   loadPlanSnapshot(squadId, id){ const rec=((this.savedPlans&&this.savedPlans[squadId])||[]).find(r=>r.id===id); if(!rec) return; this.mutatePlan(squadId, p=>{ p.title=rec.plan.title; p.zone=rec.plan.zone; p.sections=JSON.parse(JSON.stringify(rec.plan.sections)); }); this.setState({savedPlanMsg:'Loaded into the editor — change date/time and Save again to reschedule.', planSessDate:rec.date||this.todayISO(), planSessSlot:rec.slot||'AM', planSessTime:rec.time||''}); }
   async deletePlanSnapshot(squadId, id){ const list=((this.savedPlans&&this.savedPlans[squadId])||[]).filter(r=>r.id!==id); this.savedPlans={...(this.savedPlans||{}), [squadId]:list}; this.setState({});
     try{ if(window.__vxDelete){ await window.__vxDelete('plan_sessions', 'id=eq.'+encodeURIComponent(id)); await this._plansFetch(); } }catch(e){} }
@@ -19042,6 +19172,7 @@ class Component extends DCLogic {
     this.family=g('vx_family', this.family);
     this.meetsCal=g('vx_meets_cal', this.meetsCal);
     this.savedPlans=g('vx_saved_plans', this.savedPlans);
+    this.fitSaved=g('vx_fit_saved', this.fitSaved);
     this.attendLog=g('vx_attend_log', this.attendLog); this._attendVer=(this._attendVer||0)+1; try{ this._attendFetchStaged(); }catch(e){}
     this.swimmerGoals=g('vx_swimmer_goals', this.swimmerGoals);
     this.squadGoals=g('vx_squad_goals', this.squadGoals);
@@ -21723,6 +21854,23 @@ class Component extends DCLogic {
           shareOpen:!!S.shareOpen, onCloseShare:()=>this.setState({shareOpen:false}), shareMsg:S.shareMsg||'', shareMsgShow:!!S.shareMsg,
           shareTargets:waList, shareHasTargets:waList.length>0, onShareNative:()=>this.sharePlan(S.squadId, null),
         }; })(),
+      // Share-with-swimmers picker (swim Plans + Fitness). Top-level so it renders over any view.
+      ...(()=>{
+        const open=!!S.shrOpen; const sq=S.shrSquad; const sqName=(this.squadById[sq]&&this.squadById[sq].name)||'this squad';
+        const sel=S.shrSel||{}; const all=!!S.shrAll;
+        const list=(this.roster[sq]||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+        const rows=list.map(sw=>{ const on = all || !!sel[this._bareId(sw.id)]; return {
+          id:sw.id, name:sw.name||'Swimmer', initials:sw.initials||String(sw.name||'?').slice(0,2).toUpperCase(),
+          on, tickColor:on?'#0C7A4F':'transparent', bg:on?'#EAF7F0':'#F8FAFC', border:on?'#BFE6D2':'#EEF1F5', onToggle:()=>this.toggleShareSwimmer(sw.id) }; });
+        const nSel=Object.keys(sel).length;
+        return {
+          shrOpen:open, shrTitle:(S.shrKind==='fit'?'Share fitness session':'Share training plan'),
+          shrSquadName:sqName, shrAll:all, shrRows:rows, shrAccent:(this.squadById[sq]&&this.squadById[sq].accent)||'#0768D6',
+          shrAllBg:all?'#EAF7F0':'#F8FAFC', shrAllBorder:all?'#BFE6D2':'#EEF1F5', shrAllIconBg:all?'#DCF5EA':'#EEF1F5', shrAllIconFg:all?'#0C7A4F':'#7A8296', shrAllTick:all?'#0C7A4F':'transparent',
+          shrHasPub:(()=>{ const rec=((this[this._shareStore(S.shrKind)]&&this[this._shareStore(S.shrKind)][sq])||[]).find(r=>r.id===S.shrId); return !!(rec&&rec.plan&&rec.plan._pub); })(),
+          shrApplyLabel: all? 'Share with whole squad' : (nSel>0? ('Share with '+nSel+' swimmer'+(nSel===1?'':'s')) : 'Choose swimmers'),
+          onShareAll:()=>this.onShareAll(), onShareApply:()=>this.applyShare(), onShareStop:()=>this.stopShare(), onShareCancel:()=>this.closeShare(),
+        }; })(),
       appTopColor: (S.view==='hub'||S.view==='tools'||S.view==='handbook'||S.view==='family'||S.view==='academy') ? '#0A0F1A' : '#EEF1F5',
       statusInk: (S.view==='hub'||S.view==='tools'||S.view==='handbook'||S.view==='family'||S.view==='academy') ? '#fff' : '#0C1116',
       liveClock: S.liveClock || (()=>{ const n=new Date(); let h=n.getHours(); const m=n.getMinutes(); h=h%12; if(h===0)h=12; return h+':'+(m<10?'0':'')+m; })(),
@@ -21965,7 +22113,8 @@ class Component extends DCLogic {
         const rows=visible.slice().sort((a,b)=>((b.date||'').localeCompare(a.date||''))|| ((a.slot==='PM'?1:0)-(b.slot==='PM'?1:0))).map(r=>{ const sm=slotMeta(r.slot); return { id:r.id, title:r.title||'Session', zone:r.zone||'', totalM:(r.totalM||0).toLocaleString(),
           dateLabel:new Date(r.date+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}),
           slotLabel:sm.label+(r.time?(' · '+r.time):''), slotBg:sm.bg, slotFg:sm.fg,
-          pub:!!r.pub, onPublish:()=>this.togglePlanPublish(S.squadId, r.id), pubBg:r.pub?'#DCF5EA':'#F4F6F8', pubFg:r.pub?'#0C7A4F':'#7A8296', pubTitle:r.pub?'Shared with families — tap to unpublish':'Publish to families',
+          pub:!!r.pub, onPublish:()=>this.openShare('swim', S.squadId, r.id), pubBg:r.pub?'#DCF5EA':'#F4F6F8', pubFg:r.pub?'#0C7A4F':'#7A8296', pubTitle:r.pub?'Shared — tap to change who sees it':'Share with swimmers & families',
+          shareLabel: this._shareLabelFor(r), shareLabelShow: !!r.pub,
           onView:()=>this.viewPlanSnapshotPdf(S.squadId, r.id), onEdit:()=>this.loadPlanSnapshot(S.squadId, r.id), onDelete:()=>this.deletePlanSnapshot(S.squadId, r.id) }; });
         const calObj = daySel? new Date(daySel+'T00:00:00') : (S.planSessDate? new Date(S.planSessDate+'T00:00:00') : now);
         const calY=S.planCalY!=null?S.planCalY:calObj.getFullYear(); const calM=S.planCalM!=null?S.planCalM:calObj.getMonth();
@@ -22632,10 +22781,11 @@ class Component extends DCLogic {
       famTabResultsBg:S.famTab==='results'?'#0A0F1A':'#fff', famTabResultsFg:S.famTab==='results'?'#fff':'#3A4152',
       famTabMeetsBg:S.famTab==='meets'?'#0A0F1A':'#fff', famTabMeetsFg:S.famTab==='meets'?'#fff':'#3A4152',
       famTabPlansBg:S.famTab==='plans'?'#0A0F1A':'#fff', famTabPlansFg:S.famTab==='plans'?'#fff':'#3A4152',
+      famTabFitBg:S.famTab==='fit'?'#0A0F1A':'#fff', famTabFitFg:S.famTab==='fit'?'#fff':'#3A4152',
       famTabDocsBg:S.famTab==='docs'?'#0A0F1A':'#fff', famTabDocsFg:S.famTab==='docs'?'#fff':'#3A4152',
       famTabFeesBg:S.famTab==='fees'?'#0A0F1A':'#fff', famTabFeesFg:S.famTab==='fees'?'#fff':'#3A4152',
       famTabMsgsBg:S.famTab==='msgs'?'#0A0F1A':'#fff', famTabMsgsFg:S.famTab==='msgs'?'#fff':'#3A4152',
-      onFamTabPerf:()=>this.setState({famTab:'perf'}), onFamTabAttend:()=>this.setState({famTab:'attend'}), onFamTabResults:()=>this.setState({famTab:'results'}), onFamTabMeets:()=>this.setState({famTab:'meets'}), onFamTabPlans:()=>{ this.setState({famTab:'plans'}); try{ this._plansFetch(); }catch(e){} }, onFamTabDocs:()=>this.setState({famTab:'docs'}), onFamTabFees:()=>this.setState({famTab:'fees'}), onFamTabMsgs:()=>{ this.setState({famTab:'msgs'}); try{ this._famMsgFetch(); }catch(e){} },
+      onFamTabPerf:()=>this.setState({famTab:'perf'}), onFamTabAttend:()=>this.setState({famTab:'attend'}), onFamTabResults:()=>this.setState({famTab:'results'}), onFamTabMeets:()=>this.setState({famTab:'meets'}), onFamTabPlans:()=>{ this.setState({famTab:'plans'}); try{ this._plansFetch(); }catch(e){} }, onFamTabFit:()=>{ this.setState({famTab:'fit'}); try{ this._fitSessFetch(); }catch(e){} }, onFamTabDocs:()=>this.setState({famTab:'docs'}), onFamTabFees:()=>this.setState({famTab:'fees'}), onFamTabMsgs:()=>{ this.setState({famTab:'msgs'}); try{ this._famMsgFetch(); }catch(e){} },
       // The published training plans for the active child's squad, newest first, each with its
       // full set breakdown — the same plan the coach built, shown to families only once the coach
       // has published it. Coaches file dates under the squad a swimmer sits in, and _famResolve
@@ -22643,7 +22793,9 @@ class Component extends DCLogic {
       ...(()=>{ const fu=S.familyUser; if(!fu||!fu.swimmerIds||!fu.swimmerIds.length) return {famPlans:[], famHasPlans:false, famNoPlans:true};
         const uid=fu.swimmerIds[Math.min(S.familyActiveIdx, fu.swimmerIds.length-1)]||fu.swimmerIds[0];
         const h=this._famResolve(uid); if(!h) return {famPlans:[], famHasPlans:false, famNoPlans:true};
-        const list=((this.savedPlans&&this.savedPlans[h.sqid])||[]).filter(r=>r.pub);
+        // Only sessions shared with THIS child — a session shared with other swimmers never shows,
+        // even if the device happens to hold it (the server already filters, this enforces it too).
+        const list=((this.savedPlans&&this.savedPlans[h.sqid])||[]).filter(r=>this._shareVisible(r.plan, h.sw.id));
         const plans=list.slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))).map(r=>{
           const d=r.date? new Date(r.date+'T00:00:00'):null;
           const sections=((r.plan&&r.plan.sections)||[]).map(sec=>({ title:sec.title||'', sets:((sec.sets)||[]).map(s=>{
@@ -22655,7 +22807,23 @@ class Component extends DCLogic {
             title:r.title||'Session', slot:((r.slot==='PM')?'Evening':((r.slot==='AM')?'Morning':''))+(r.time?(' · '+r.time):''),
             zone:r.zone||'', totalM:(r.totalM||0).toLocaleString(), sections:sections }; });
         return { famPlans:plans, famHasPlans:plans.length>0, famNoPlans:plans.length===0 }; })(),
-      famShowPerf:(S.famTab||'perf')==='perf', famShowAttend:S.famTab==='attend', famShowResults:S.famTab==='results', famShowMeets:S.famTab==='meets', famShowPlans:S.famTab==='plans', famShowDocs:S.famTab==='docs', famShowFees:S.famTab==='fees', famShowMsgs:S.famTab==='msgs',
+      // Fitness / dryland sessions the coach shared, on their own tab. Same sharing rule as swim.
+      ...(()=>{ const fu=S.familyUser; if(!fu||!fu.swimmerIds||!fu.swimmerIds.length) return {famFit:[], famHasFit:false, famNoFit:true};
+        const uid=fu.swimmerIds[Math.min(S.familyActiveIdx, fu.swimmerIds.length-1)]||fu.swimmerIds[0];
+        const h=this._famResolve(uid); if(!h) return {famFit:[], famHasFit:false, famNoFit:true};
+        const list=((this.fitSaved&&this.fitSaved[h.sqid])||[]).filter(r=>this._shareVisible(r.plan, h.sw.id));
+        const fit=list.slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))).map(r=>{
+          const d=r.date? new Date(r.date+'T00:00:00'):null;
+          const sections=((r.plan&&r.plan.sections)||[]).map(sec=>({ title:sec.title||'', sets:((sec.exs)||[]).map(x=>{
+            const bits=[(x.name||x.title||''), (x.sets?((x.sets)+'×'+(x.reps!=null?x.reps:'')):''), (x.load?String(x.load):''), (x.rest?('Rest '+x.rest):''), (x.note||x.txt||'')].filter(Boolean);
+            const line=bits.shift()||'—'; const sub=bits.join(' · ');
+            return {line:line, sub:sub, hasSub:!!sub}; }) }));
+          return { id:r.id, day:d?String(d.getDate()):'', mon:d?d.toLocaleDateString('en-US',{month:'short'}):'',
+            dateLabel:d?d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'}):'Date to be confirmed',
+            title:r.title||'Dryland', slot:((r.slot==='PM')?'Evening':((r.slot==='AM')?'Morning':''))+(r.time?(' · '+r.time):''),
+            totalEx:(r.totalEx||0), sections:sections }; });
+        return { famFit:fit, famHasFit:fit.length>0, famNoFit:fit.length===0 }; })(),
+      famShowPerf:(S.famTab||'perf')==='perf', famShowAttend:S.famTab==='attend', famShowResults:S.famTab==='results', famShowMeets:S.famTab==='meets', famShowPlans:S.famTab==='plans', famShowFit:S.famTab==='fit', famShowDocs:S.famTab==='docs', famShowFees:S.famTab==='fees', famShowMsgs:S.famTab==='msgs',
       // ---- what this family owes -----------------------------------------------------
       ...(()=>{
         const fu=S.familyUser;
@@ -23456,6 +23624,8 @@ class Component extends DCLogic {
         const rows=fs.slice().sort((a,b)=>((b.date||'').localeCompare(a.date||''))||((a.slot==='PM'?1:0)-(b.slot==='PM'?1:0))).map(r=>{ const sm=slotMeta(r.slot); return { id:r.id, title:r.title||'Dryland', totalEx:r.totalEx||0,
           dateLabel:new Date(r.date+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}),
           slotLabel:sm.label+(r.time?(' · '+r.time):''), slotBg:sm.bg, slotFg:sm.fg,
+          pub:!!r.pub, onPublish:()=>this.openShare('fit', S.squadId, r.id), pubBg:r.pub?'#DCF5EA':'#F4F6F8', pubFg:r.pub?'#0C7A4F':'#7A8296', pubTitle:r.pub?'Shared — tap to change who sees it':'Share with swimmers & families',
+          shareLabel:this._shareLabelFor(r), shareLabelShow:!!r.pub,
           onView:()=>this.viewFitSessionPdf(S.squadId, r.id), onEdit:()=>this.loadFitSession(S.squadId, r.id), onDelete:()=>this.deleteFitSession(S.squadId, r.id) }; });
         const calObj = daySel? new Date(daySel+'T00:00:00') : (S.fitSessDate? new Date(S.fitSessDate+'T00:00:00') : new Date());
         const calY=S.fitCalY!=null?S.fitCalY:calObj.getFullYear(); const calM=S.fitCalM!=null?S.fitCalM:calObj.getMonth();
