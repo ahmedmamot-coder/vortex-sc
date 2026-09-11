@@ -1182,8 +1182,46 @@ if ('serviceWorker' in navigator) {
       })
       .catch(function(){ return v; });   // unreadable: send what we have, which is today's behaviour
   }
+  // The T-pace log is added to by every coach, from their own phone, and it was going up whole.
+  //
+  // Coach Chafik tested Senior B and logged every one on his device. They saved there and he could
+  // see them. They are not in the club's copy, because vx_tpace is a last-writer-wins document:
+  // another phone holding six trials pushed its whole copy afterwards and the rest stopped
+  // existing. One of his did survive — the 8 September trial that happened to be the newest push.
+  //
+  // This is the same fault vx_event_requests had and the same remedy: a trial the database holds
+  // and this device has never seen is KEPT, and a trial this device has is written as this device
+  // has it. Two coaches adding to one log then cost each other nothing.
+  function _tpaceMergedWith(v){
+    return fetch(REST + "?select=value&key=eq.vx_tpace", { headers: dyn(), cache: "no-store" })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(rows){
+        var theirs=(rows && rows[0] && rows[0].value);
+        if(!theirs || typeof theirs!=="object" || Array.isArray(theirs)) return v;
+        var mine=null; try{ mine=JSON.parse(v); }catch(e){ return v; }
+        if(!mine || typeof mine!=="object" || Array.isArray(mine)) return v;
+        // Trials carry no id, so two are the same record when every measured field matches.
+        var sig=function(t){ return [t&&t.date, t&&t.type, t&&t.sec, t&&t.dist, t&&t.tpace100].join("|"); };
+        var out={}, kept=0;
+        Object.keys(mine).forEach(function(sw){ out[sw]=(mine[sw]||[]).slice(); });
+        Object.keys(theirs).forEach(function(sw){
+          var t=theirs[sw]||[], m=out[sw]||[];
+          if(!Array.isArray(t)) return;
+          var have={}; m.forEach(function(r){ have[sig(r)]=true; });
+          var unseen=t.filter(function(r){ return r && !have[sig(r)]; });
+          if(unseen.length){ kept+=unseen.length;
+            out[sw]=m.concat(unseen).sort(function(a,b){
+              return String((b||{}).date||"").localeCompare(String((a||{}).date||"")); }); }
+        });
+        if(!kept) return v;
+        try{ console.info("vx vx_tpace: keeping "+kept+" trial(s) this device had not heard about"); }catch(e){}
+        return JSON.stringify(out);
+      })
+      .catch(function(){ return v; });   // unreadable: send what we have, which is today's behaviour
+  }
   function _mergedForSend(k, v){
     if(k==="vx_roster_edits") return _rosterMergedWith(v);
+    if(k==="vx_tpace") return _tpaceMergedWith(v);
     if(ADD_ONLY_KEYS.indexOf(k)>=0) return _famDevice() ? _addOnlyMergedWith(k, v) : _rowListMergedWith(k, v);
     return Promise.resolve(v);
   }
