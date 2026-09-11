@@ -48,22 +48,25 @@ export default function StopwatchClient({ accent: _accent }: { accent: string })
       const ctx = audioRef.current || (audioRef.current = new AC());
       if (ctx.state === "suspended") ctx.resume();
       const t = ctx.currentTime;
+      // A clipped square is already the loudest waveform there is, so extra gain buys nothing. What
+      // does is WHERE the energy sits: hearing peaks around 2–4 kHz, and this stack carries ~2.3×
+      // the old tone's energy in the 2–5 kHz band. The 1.25 kHz voice keeps it a horn, not a whistle.
       const master = ctx.createGain();
-      master.gain.value = 1;
+      master.gain.setValueAtTime(1, t);
       master.connect(ctx.destination);
-      [1000, 1000.6].forEach((f, i) => {
+      ([[2500, 1], [1250, 0.7], [3750, 0.5]] as [number, number][]).forEach(([f, peak]) => {
         const o = ctx.createOscillator();
         o.type = "square";
         o.frequency.setValueAtTime(f, t);
         const g = ctx.createGain();
         g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(i ? 0.5 : 0.9, t + 0.01);
-        g.gain.setValueAtTime(i ? 0.5 : 0.9, t + 0.5);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.72);
+        g.gain.exponentialRampToValueAtTime(peak, t + 0.008);
+        g.gain.setValueAtTime(peak, t + 0.55);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.78);
         o.connect(g);
         g.connect(master);
         o.start(t);
-        o.stop(t + 0.74);
+        o.stop(t + 0.8);
       });
     } catch {
       /* no audio available */

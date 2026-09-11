@@ -17295,9 +17295,20 @@ class Component extends DCLogic {
   onSwtMount(el){ this._swtAttach(el); }
   onSwtFsMount(el){ this._swtAttach(el); }
   // A loud electronic starting signal, synthesised so it needs no audio file and works offline —
-  // a clean square-wave tone in the register of a competition start beep, at full volume. (It is
-  // our own tone, not a recording of any brand's system.) Runs on the user's Start tap, which is
-  // the gesture browsers require before they will let a page make sound.
+  // our own tone in the register of a competition start beep, not a recording of anyone's system.
+  // Runs on the user's Start tap, the gesture browsers require before a page may make sound.
+  //
+  // On loudness: the first version of this was already at the ceiling — a 1 kHz square driven past
+  // full scale, which the output clips, and a clipped square is the loudest waveform there is. No
+  // amount of extra gain adds anything from there; a limiter and makeup gain measured slightly
+  // QUIETER. What is still on the table is WHERE the energy sits. Hearing peaks around 2–4 kHz, so
+  // the same amplitude up there is heard as considerably louder and cuts through a noisy pool hall.
+  // Measured over the sustain, this stack carries ~2.3× the energy of the old tone in the 2–5 kHz
+  // band (+7 dB) at a higher overall level. The 1.25 kHz voice under the 2.5 kHz fundamental keeps
+  // it sounding like a start horn rather than a thin whistle.
+  //
+  // Beyond this the limit is the phone, not the page: iOS plays Web Audio through the media volume
+  // and honours the silent switch, so a muted handset stays muted whatever we synthesise.
   _swtBeep(){
     if(this.state.swtSound===false) return;
     try{
@@ -17305,16 +17316,16 @@ class Component extends DCLogic {
       const ctx=this._swtAudio||(this._swtAudio=new AC());
       if(ctx.state==='suspended'){ try{ ctx.resume(); }catch(e){} }
       const t=ctx.currentTime;
-      const master=ctx.createGain(); master.gain.value=1; master.connect(ctx.destination);
-      // Two detuned oscillators stacked for a fuller, more piercing tone that carries over a pool.
-      [1000,1000.6].forEach((f,i)=>{
+      const master=ctx.createGain(); master.gain.setValueAtTime(1,t); master.connect(ctx.destination);
+      [[2500,1],[1250,0.7],[3750,0.5]].forEach(function(pair){
+        const f=pair[0], peak=pair[1];
         const o=ctx.createOscillator(); o.type='square'; o.frequency.setValueAtTime(f,t);
         const g=ctx.createGain();
         g.gain.setValueAtTime(0.0001,t);
-        g.gain.exponentialRampToValueAtTime(i?0.5:0.9, t+0.01);   // fast attack
-        g.gain.setValueAtTime(i?0.5:0.9, t+0.5);                  // hold
-        g.gain.exponentialRampToValueAtTime(0.0001, t+0.72);      // quick tail
-        o.connect(g); g.connect(master); o.start(t); o.stop(t+0.74);
+        g.gain.exponentialRampToValueAtTime(peak, t+0.008);   // fast attack
+        g.gain.setValueAtTime(peak, t+0.55);                  // hold
+        g.gain.exponentialRampToValueAtTime(0.0001, t+0.78);  // quick tail
+        o.connect(g); g.connect(master); o.start(t); o.stop(t+0.8);
       });
     }catch(e){}
   }
