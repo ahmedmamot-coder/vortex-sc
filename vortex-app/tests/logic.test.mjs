@@ -6545,6 +6545,11 @@ describe("InBody sheet", () => {
       // the tablet decide the laptop's unsent work is stale. The roster itself is in vx_roster
       // and in vx_roster_edits, both accounted for already.
       vx_roster_sent: "which of this device's roster rows the database has taken",
+      // Where each split line sits in the frame for auto-split. It is a property of THIS camera
+      // in THIS position, not of the swim: the same clip filmed from the other end of the pool
+      // has different lines. Sharing it would put one poolside phone's angle onto another's, so it
+      // stays on the device that placed it — and a device without it simply calibrates again.
+      vx_vidcal: "where this device placed each auto-split marker line, per clip",
     };
     // 2. A local copy of a database table, so the screen can draw before the read comes back.
     //    The table is the truth; losing the copy costs nothing.
@@ -6632,8 +6637,14 @@ describe("InBody sheet", () => {
     // the club later DELETED from the meets would be recreated from the old calendar on the next
     // boot — a meet the club has cancelled coming back by itself, every morning. It is also the
     // shortest-lived key here: it goes when vx_meets_cal does.
+    //
+    // 15, for vx_vidcal, the auto-split marker lines. The argument is that it is not data about
+    // the swim but about the camera: where the 25m line falls in the frame is a fact of where the
+    // phone was standing, and the same race filmed from the other end has different lines. Syncing
+    // it would push one poolside angle onto every other device; a device without it just taps the
+    // lines again, in seconds, against the frame it is looking at.
     it("the device-only list stays small enough to read", () =>
-      eq(Object.keys(DEVICE_ONLY).length <= 14, true, "if this needs to grow, the reason needs an argument"));
+      eq(Object.keys(DEVICE_ONLY).length <= 15, true, "if this needs to grow, the reason needs an argument"));
   });
 
   // Before any of that: the file has to parse. A stray brace anywhere in 16,000 lines takes the
@@ -7991,6 +8002,8 @@ describe("InBody sheet", () => {
       ["the in-clip head to head", "{{ videoClipCompareHas }}", "{{ videoClipCompareFoot }}"],
       ["the assistant card", "Coach's read", "{{ videoAiFoot }}"],
       ["the folder search", "Find a swim —", "{{ videoFolderNoHitsMsg }}"],
+      ["the auto-split card", "Auto-split · fixed camera", "{{ videoScanMsg }}"],
+      ["the calibration overlay", "{{ onVideoCalPlace }}", "{{ videoCalHint }}"],
     ];
     for (const [what, from, to] of REGIONS) {
       it(what + " carries no colour of its own", () => {
@@ -8024,7 +8037,7 @@ describe("InBody sheet", () => {
       const css = (SOURCE.match(/\.vx-toolcard\{[\s\S]*?\.vx-toolcard-note\{[^}]*\}/) || [""])[0];
       eq(/pattern-transparent\.png/.test(css), true, "the watermark");
       eq(/var\(--brand-gradient\)/.test(css), true, "and the brand rule down the left");
-      eq(videoSection.split('class="vx-toolcard"').length - 1, 3,
+      eq(videoSection.split('class="vx-toolcard"').length - 1, 4,
          "every new card uses it rather than each inventing a card");
     });
     // The split table's headings did not sit over their own numbers on a phone, because the
@@ -12660,6 +12673,57 @@ describe("the T-pace screen tells the truth about a save", () => {
     eq(/bad \? \{tpaceErr:bad\} : \{tpaceDist:'', tpaceErr:''\}/.test(fn), true);
     eq(/bad \? \{tpaceErr:bad\} : \{tpaceTime:'', tpaceErr:''\}/.test(fn), true,
        "the 1000 and 400 trials have exactly the same exposure");
+  });
+});
+
+/* --------------------------------------------------- video auto-split (proto)
+   Fixed-camera auto-split sequences the swimmer's wave crossing each marker's
+   pixel column. A split on the wrong wave is worse than a hand tap, so the real
+   method that ships in proto.html — not a copy — must stay in race order, land on
+   the peak (not the leading edge), and stop rather than guess when a mark is
+   missing. */
+describe("video auto-split crossing detection", () => {
+  const detect = bind("_detectCrossings", {}, []);
+  const DT = 1 / 30;
+  const bump = (t, c) => (c == null ? 0 : 0.6 * Math.exp(-((t - c) ** 2) / (2 * 0.15 ** 2)));
+  const labels = (n) => Array.from({ length: n }, (_, i) => "m" + i);
+  function frames(bumpTimes) {
+    const out = [];
+    for (let t = 0; t <= 9; t += DT) {
+      const m = {};
+      bumpTimes.forEach((c, i) => {
+        m["m" + i] = bump(t, c) + 0.004 * Math.abs(Math.sin(t * 53 + i));
+      });
+      out.push({ t: +t.toFixed(4), m });
+    }
+    return out;
+  }
+
+  it("finds each crossing in race order at its peak", () => {
+    const r = detect(frames([2.0, 5.0]), labels(2), {});
+    eq(r.length, 2);
+    eq(r[0].label, "m0");
+    eq(r[1].label, "m1");
+    eq(Math.abs(r[0].t - 2.0) < 0.12, true, `got ${r[0].t}`);
+    eq(Math.abs(r[1].t - 5.0) < 0.12, true, `got ${r[1].t}`);
+  });
+
+  it("stops at the first mark it cannot find, rather than guessing", () => {
+    const r = detect(frames([2.0, null]), labels(2), {});
+    eq(r.length, 1);
+    eq(r[0].label, "m0");
+  });
+
+  it("ignores a steady, turbulent column", () => {
+    const out = [];
+    for (let t = 0; t <= 6; t += DT) out.push({ t: +t.toFixed(4), m: { m0: 0.3 + 0.003 * Math.sin(t * 20) } });
+    eq(detect(out, ["m0"], {}).length, 0);
+  });
+
+  it("lands on the motion peak, not the leading edge", () => {
+    const r = detect(frames([3.0]), ["m0"], {});
+    eq(r.length, 1);
+    eq(Math.abs(r[0].t - 3.0) < 0.08, true, `peak off at ${r[0].t}`);
   });
 });
 
