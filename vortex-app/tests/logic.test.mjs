@@ -12919,4 +12919,41 @@ describe("whole-lane stopwatch", () => {
   });
 });
 
+/* ------------------------------------------------ send-off set timer (proto.html)
+   "20 x 50m on 1:00" run by the clock: a signal every send-off, counting 1/20 to 20/20. The
+   arithmetic that matters is which repetition is live and how long until the next send-off —
+   get either wrong and a lane goes early. Bound to the real methods in proto.html. */
+describe("send-off set timer", () => {
+  const ctx = {};
+  const repAt  = bind("_setRepAt", ctx, []);
+  const leftAt = bind("_setLeftAt", ctx, []);
+  const CYCLE = 60000, REPS = 20;            // 20 x 50m on 1:00
+
+  it("starts on rep 1", () => eq(repAt(0, CYCLE, REPS), 1));
+  it("stays on rep 1 until the first send-off", () => eq(repAt(59999, CYCLE, REPS), 1));
+  it("turns over to rep 2 exactly on the send-off", () => eq(repAt(60000, CYCLE, REPS), 2));
+  it("counts the rep the coach would call", () => eq(repAt(210000, CYCLE, REPS), 4, "3:30 into a 1:00 set"));
+  it("never counts past the last rep", () => {
+    eq(repAt(CYCLE * REPS, CYCLE, REPS), REPS);
+    eq(repAt(CYCLE * REPS * 3, CYCLE, REPS), REPS);
+  });
+
+  it("a full interval remains at the start", () => eq(leftAt(0, CYCLE, REPS), CYCLE));
+  it("counts down inside the interval", () => eq(leftAt(210000, CYCLE, REPS), 30000));
+  it("resets to a full interval the moment one goes", () => eq(leftAt(60000, CYCLE, REPS), CYCLE));
+  it("reads zero once the whole set has run", () => {
+    eq(leftAt(CYCLE * REPS, CYCLE, REPS), 0);
+    eq(leftAt(CYCLE * REPS + 5000, CYCLE, REPS), 0);
+  });
+  it("a rest added to the send-off lengthens the cycle", () => {
+    const withRest = 75000;                   // 1:00 send-off + 15s rest
+    eq(repAt(75000, withRest, REPS), 2);
+    eq(leftAt(70000, withRest, REPS), 5000);
+  });
+  it("a zero cycle cannot divide by zero", () => {
+    eq(repAt(1000, 0, REPS), 1);
+    eq(leftAt(1000, 0, REPS), 0);
+  });
+});
+
 await report();

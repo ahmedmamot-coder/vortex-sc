@@ -5252,8 +5252,9 @@ if ('serviceWorker' in navigator) {
                     <div style="display:flex;flex-direction:column;gap:13px">
                       <!-- One swimmer, or a whole lane sent off in intervals. -->
                       <div style="display:flex;gap:6px;background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:4px">
-                        <button onclick="{{ onSwModeOne }}" style="flex:1;padding:9px;border-radius:9px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;background:{{ modeOneBg }};color:{{ modeOneFg }}">One swimmer</button>
-                        <button onclick="{{ onSwModeMany }}" style="flex:1;padding:9px;border-radius:9px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;background:{{ modeManyBg }};color:{{ modeManyFg }}">Whole lane</button>
+                        <button onclick="{{ onSwModeOne }}" style="flex:1;padding:9px 4px;border-radius:9px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:11.5px;background:{{ modeOneBg }};color:{{ modeOneFg }}">One swimmer</button>
+                        <button onclick="{{ onSwModeMany }}" style="flex:1;padding:9px 4px;border-radius:9px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:11.5px;background:{{ modeManyBg }};color:{{ modeManyFg }}">Whole lane</button>
+                        <button onclick="{{ onSwModeSet }}" style="flex:1;padding:9px 4px;border-radius:9px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:11.5px;background:{{ modeSetBg }};color:{{ modeSetFg }}">Send-off set</button>
                       </div>
                     <sc-if value="{{ swModeOne }}" hint-placeholder-val="{{ true }}">
                       <!-- Clock face, painted straight onto the ref element. Tapping it, or the
@@ -5357,6 +5358,77 @@ if ('serviceWorker' in navigator) {
                             </sc-if>
                           </div>
                         </sc-for>
+                      </div>
+                    </sc-if>
+
+                    <sc-if value="{{ swModeSet }}" hint-placeholder-val="{{ false }}">
+                      <div ref="{{ onSetMount }}" style="display:flex;flex-direction:column;gap:11px">
+                        <!-- The set, running itself: a signal on every send-off and a rep count. -->
+                        <div style="position:relative;overflow:hidden;background:radial-gradient(135% 130% at 88% -12%, rgba(6,126,234,.5) 0%, rgba(34,33,215,.22) 40%, transparent 70%), #0A0F1A;color:#fff;border-radius:20px;padding:18px 16px 15px;text-align:center">
+                          <div style="position:absolute;inset:0;background:url('assets/pattern-transparent.png') right top/170px auto no-repeat;opacity:.2;pointer-events:none"></div>
+                          <p style="position:relative;z-index:1;margin:0;font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:rgba(255,255,255,.55);font-weight:700">{{ setSummary }}</p>
+                          <div style="position:relative;z-index:1;display:flex;align-items:baseline;justify-content:center;gap:5px;margin:8px 0 2px">
+                            <span data-setrep="1" style="font-family:var(--font-mono);font-size:30px;font-weight:800;color:#fff">{{ setRepInit }}</span>
+                            <span style="font-size:12px;color:rgba(255,255,255,.5);font-weight:700">reps</span>
+                          </div>
+                          <p style="position:relative;z-index:1;margin:6px 0 0;font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:rgba(255,255,255,.45);font-weight:700">Next send-off in</p>
+                          <div data-setcount="1" style="position:relative;z-index:1;font-family:var(--font-mono);font-size:clamp(56px,17vw,88px);line-height:1.02;font-weight:800;letter-spacing:-.03em;margin:2px 0 6px">{{ setCountInit }}</div>
+                          <div style="position:relative;z-index:1;height:6px;border-radius:3px;background:rgba(255,255,255,.14);overflow:hidden"><div data-setbar="1" style="height:100%;width:0%;background:#22D7D7;border-radius:3px"></div></div>
+                          <p style="position:relative;z-index:1;margin:9px 0 0;font-size:11.5px;color:rgba(255,255,255,.6)">{{ setStatus }} &#183; <span data-settotal="1">{{ setTotalInit }}</span> elapsed &#183; {{ setMetres }}</p>
+                        </div>
+                        <div style="display:flex;gap:10px">
+                          <button onclick="{{ onSetToggle }}" style="flex:1;height:62px;border-radius:16px;background:linear-gradient(135deg,#067EEA 0%,#2221D7 100%);border:none;cursor:pointer;color:#fff;font-family:inherit;font-weight:800;font-size:17px;display:flex;align-items:center;justify-content:center;gap:9px;box-shadow:0 10px 24px rgba(34,33,215,.28)"><i data-vx-icon="{{ setBtnIcon }}" style="width:21px;height:21px"></i>{{ setBtnLabel }}</button>
+                          <button onclick="{{ onSetReset }}" style="flex:none;width:62px;height:62px;border-radius:16px;background:#fff;border:1px solid #E5E9F0;cursor:pointer;color:#0C1116;display:flex;align-items:center;justify-content:center"><i data-lucide="rotate-ccw" style="width:20px;height:20px"></i></button>
+                        </div>
+                        <!-- The set itself -->
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:12px;box-shadow:0 1px 4px rgba(11,20,40,.04);display:flex;flex-direction:column;gap:11px">
+                          <div style="display:flex;align-items:center;gap:10px">
+                            <span style="flex:none;width:74px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4">Reps</span>
+                            <button onclick="{{ onSetRepsDec }}" style="width:34px;height:34px;border-radius:9px;border:1px solid #E5E9F0;background:#fff;color:#0C1116;font-size:18px;font-weight:700;line-height:1;cursor:pointer;padding:0">&#8722;</button>
+                            <input value="{{ setRepsLabel }}" oninput="{{ onSetRepsInput }}" inputmode="numeric" style="flex:1;min-width:0;text-align:center;border:1px solid #E5E9F0;border-radius:9px;padding:7px;font-family:var(--font-mono);font-size:16px;font-weight:800;color:#0C1116;outline:none">
+                            <button onclick="{{ onSetRepsInc }}" style="width:34px;height:34px;border-radius:9px;border:none;background:#067EEA;color:#fff;font-size:18px;font-weight:700;line-height:1;cursor:pointer;padding:0">+</button>
+                          </div>
+                          <div>
+                            <span style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4;margin-bottom:6px">Distance</span>
+                            <div style="display:flex;flex-wrap:wrap;gap:6px">
+                              <sc-for list="{{ setDistChips }}" as="d" hint-placeholder-count="6">
+                                <button onclick="{{ d.onClick }}" style="flex:1;min-width:56px;padding:8px 4px;border-radius:9px;border:1px solid #E5E9F0;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;background:{{ d.bg }};color:{{ d.fg }}">{{ d.label }}</button>
+                              </sc-for>
+                            </div>
+                          </div>
+                          <div style="display:flex;align-items:center;gap:10px">
+                            <span style="flex:none;width:74px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4">Send-off</span>
+                            <button onclick="{{ onSetSendDec }}" style="width:34px;height:34px;border-radius:9px;border:1px solid #E5E9F0;background:#fff;color:#0C1116;font-size:18px;font-weight:700;line-height:1;cursor:pointer;padding:0">&#8722;</button>
+                            <span style="flex:1;text-align:center;font-family:var(--font-mono);font-size:17px;font-weight:800;color:#0C1116">{{ setSendLabel }}</span>
+                            <button onclick="{{ onSetSendInc }}" style="width:34px;height:34px;border-radius:9px;border:none;background:#067EEA;color:#fff;font-size:18px;font-weight:700;line-height:1;cursor:pointer;padding:0">+</button>
+                          </div>
+                          <div style="display:flex;align-items:center;gap:10px">
+                            <span style="flex:none;width:74px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4">Extra rest</span>
+                            <button onclick="{{ onSetRestDec }}" style="width:34px;height:34px;border-radius:9px;border:1px solid #E5E9F0;background:#fff;color:#0C1116;font-size:18px;font-weight:700;line-height:1;cursor:pointer;padding:0">&#8722;</button>
+                            <span style="flex:1;text-align:center;font-family:var(--font-mono);font-size:17px;font-weight:800;color:#0C1116">{{ setRestLabel }}</span>
+                            <button onclick="{{ onSetRestInc }}" style="width:34px;height:34px;border-radius:9px;border:none;background:#067EEA;color:#fff;font-size:18px;font-weight:700;line-height:1;cursor:pointer;padding:0">+</button>
+                          </div>
+                        </div>
+                        <!-- Signal -->
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:12px;box-shadow:0 1px 4px rgba(11,20,40,.04);display:flex;flex-direction:column;gap:10px">
+                          <div>
+                            <span style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4;margin-bottom:6px">Signal</span>
+                            <div style="display:flex;gap:6px">
+                              <sc-for list="{{ setToneChips }}" as="t" hint-placeholder-count="3">
+                                <button onclick="{{ t.onClick }}" style="flex:1;padding:8px 4px;border-radius:9px;border:1px solid #E5E9F0;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;background:{{ t.bg }};color:{{ t.fg }}">{{ t.label }}</button>
+                              </sc-for>
+                            </div>
+                          </div>
+                          <div>
+                            <span style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4;margin-bottom:6px">Volume</span>
+                            <div style="display:flex;gap:6px">
+                              <sc-for list="{{ setVolChips }}" as="v" hint-placeholder-count="4">
+                                <button onclick="{{ v.onClick }}" style="flex:1;padding:8px 4px;border-radius:9px;border:1px solid #E5E9F0;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;background:{{ v.bg }};color:{{ v.fg }}">{{ v.label }}</button>
+                              </sc-for>
+                            </div>
+                          </div>
+                          <p style="margin:0;font-size:11px;color:#9AA2B4;line-height:1.45">Every send-off for the whole set is scheduled the moment you start it, so the signals stay exact even if the screen dims. Keep the phone off silent and the volume up.</p>
+                        </div>
                       </div>
                     </sc-if>
                     </div>
@@ -17367,23 +17439,48 @@ class Component extends DCLogic {
   // and honours the silent switch, so a muted handset stays muted whatever we synthesise.
   _swtBeep(){
     if(this.state.swtSound===false) return;
-    try{
-      const AC=window.AudioContext||window.webkitAudioContext; if(!AC) return;
-      const ctx=this._swtAudio||(this._swtAudio=new AC());
-      if(ctx.state==='suspended'){ try{ ctx.resume(); }catch(e){} }
-      const t=ctx.currentTime;
-      const master=ctx.createGain(); master.gain.setValueAtTime(1,t); master.connect(ctx.destination);
-      [[2500,1],[1250,0.7],[3750,0.5]].forEach(function(pair){
-        const f=pair[0], peak=pair[1];
-        const o=ctx.createOscillator(); o.type='square'; o.frequency.setValueAtTime(f,t);
+    const ctx=this._swtAudioCtx(); if(!ctx) return;
+    try{ this._swtSignal(ctx.currentTime+0.02, this._swtTone(), this._swtVol()); }catch(e){}
+  }
+  _swtAudioCtx(){
+    const AC=window.AudioContext||window.webkitAudioContext; if(!AC) return null;
+    const ctx=this._swtAudio||(this._swtAudio=new AC());
+    if(ctx.state==='suspended'){ try{ ctx.resume(); }catch(e){} }
+    return ctx;
+  }
+  _swtTone(){ return this.state.swtTone||'horn'; }
+  _swtVol(){ const v=this.state.swtVol; return (v==null?1:v); }
+  // Shape of each signal: one long blast, one short beep, or three short ones.
+  _swtPattern(tone){
+    if(tone==='beep')   return [{o:0, d:0.20}];
+    if(tone==='triple') return [{o:0, d:0.12},{o:0.20, d:0.12},{o:0.40, d:0.12}];
+    return [{o:0, d:0.55}];
+  }
+  // Build one start signal at an ABSOLUTE AudioContext time and hand back its oscillators.
+  // Scheduling ahead of time rather than firing from a frame callback is what lets the send-off
+  // timer stay exact: the audio clock keeps its own time even when the screen dims and animation
+  // frames stop. The caller keeps the nodes so a pause can silence what was already scheduled.
+  _swtSignal(at, tone, vol){
+    const ctx=this._swtAudioCtx(); if(!ctx) return [];
+    const nodes=[];
+    const master=ctx.createGain();
+    master.gain.setValueAtTime(Math.max(0.02, Math.min(1, vol==null?1:vol)), at);
+    master.connect(ctx.destination);
+    const pat=this._swtPattern(tone);
+    for(let i=0;i<pat.length;i++){
+      const seg=pat[i], t0=at+seg.o;
+      [[2500,1],[1250,0.7],[3750,0.5]].forEach(function(p){
+        const o=ctx.createOscillator(); o.type='square'; o.frequency.setValueAtTime(p[0],t0);
         const g=ctx.createGain();
-        g.gain.setValueAtTime(0.0001,t);
-        g.gain.exponentialRampToValueAtTime(peak, t+0.008);   // fast attack
-        g.gain.setValueAtTime(peak, t+0.55);                  // hold
-        g.gain.exponentialRampToValueAtTime(0.0001, t+0.78);  // quick tail
-        o.connect(g); g.connect(master); o.start(t); o.stop(t+0.8);
+        g.gain.setValueAtTime(0.0001,t0);
+        g.gain.exponentialRampToValueAtTime(p[1], t0+0.008);
+        g.gain.setValueAtTime(p[1], t0+Math.max(0.03, seg.d-0.06));
+        g.gain.exponentialRampToValueAtTime(0.0001, t0+seg.d);
+        o.connect(g); g.connect(master); o.start(t0); o.stop(t0+seg.d+0.02);
+        nodes.push(o);
       });
-    }catch(e){}
+    }
+    return nodes;
   }
   swtToggle(){
     if(this._swtRunning){
@@ -17512,6 +17609,115 @@ class Component extends DCLogic {
     this._swmRunning=false; this._swmBase=0;
     this.setState({swmLanes:this._swmLanes().map(l=>({...l, startMs:null, endMs:null, laps:[]}))});
     this._swmPaint();
+  }
+  // ---- Send-off set timer: "20 x 50m on 1:00", run automatically ----
+  //
+  // The coach enters the set once and the clock runs it: a start signal on every send-off and a
+  // rep counter, so nobody has to watch a pace clock and shout "go". Every send-off for the whole
+  // set is SCHEDULED INTO THE AUDIO CLOCK the moment the set starts, not fired from a frame
+  // callback — animation frames are throttled the moment the screen dims, and a send-off that
+  // arrives late is worse than useless. Pausing silences whatever was already scheduled.
+  _setReps(){ const v=this.state.setReps; return Math.max(1, Math.min(99, v==null?20:v)); }
+  _setDist(){ const v=this.state.setDist; return (v==null?50:v); }
+  _setSend(){ const v=this.state.setSend; return Math.max(5, v==null?60:v); }   // seconds
+  _setRest(){ const v=this.state.setRest; return Math.max(0, v==null?0:v); }    // extra seconds
+  _setCycleMs(){ return (this._setSend()+this._setRest())*1000; }
+  _setMs(){ return (this._setBase||0) + (this._setRunning ? performance.now()-this._setT0 : 0); }
+  // Which repetition is live at a given elapsed time (1-based, never past the last one).
+  _setRepAt(ms, cycleMs, reps){
+    if(!(cycleMs>0)) return 1;
+    return Math.max(1, Math.min(reps, Math.floor(ms/cycleMs)+1));
+  }
+  // Milliseconds until the next send-off; zero once the whole set has run.
+  _setLeftAt(ms, cycleMs, reps){
+    if(!(cycleMs>0)) return 0;
+    if(ms>=cycleMs*reps) return 0;
+    return cycleMs - (ms%cycleMs);
+  }
+  _setCancel(){
+    const n=this._setNodes||[];
+    for(let i=0;i<n.length;i++){ try{ n[i].stop(0); }catch(e){} try{ n[i].disconnect(); }catch(e){} }
+    this._setNodes=[];
+  }
+  // Lay every remaining send-off onto the audio clock, plus a triple at the end of the set.
+  _setSchedule(){
+    this._setCancel();
+    if(this.state.swtSound===false) return;
+    const ctx=this._swtAudioCtx(); if(!ctx) return;
+    const cycle=this._setCycleMs()/1000, reps=this._setReps(), tone=this._swtTone(), vol=this._swtVol();
+    const done=this._setMs()/1000;                    // already elapsed when (re)scheduling
+    const base=ctx.currentTime+0.03;
+    let nodes=[];
+    for(let k=0;k<reps;k++){
+      let at=base+(k*cycle-done);
+      // A quarter-second of slack, because a few milliseconds always pass between marking the
+      // start and getting here — without it the very first send-off looks a hair late and was
+      // dropped, so the set started in silence. Anything genuinely behind us is skipped; anything
+      // that is essentially now fires now.
+      if(at<base-0.25) continue;
+      if(at<base) at=base;
+      nodes=nodes.concat(this._swtSignal(at, tone, vol));
+    }
+    const endAt=base+(reps*cycle-done);
+    if(endAt>=base-0.25) nodes=nodes.concat(this._swtSignal(Math.max(endAt,base),'triple',vol));
+    this._setNodes=nodes;
+  }
+  _setEnsureRaf(){
+    if(this._setRaf) return;
+    const loop=()=>{ if(!this._setPaint()){ this._setRaf=null; return; } this._setRaf=requestAnimationFrame(loop); };
+    this._setRaf=requestAnimationFrame(loop);
+  }
+  onSetMount(el){ this._setRoot=el||null; if(el) this._setEnsureRaf(); }
+  _setPaint(){
+    const root=this._setRoot;
+    if(!root || !document.body.contains(root)){ this._setRoot=null; return false; }
+    const cycle=this._setCycleMs(), reps=this._setReps(), ms=this._setMs(), total=cycle*reps;
+    const cd=root.querySelector('[data-setcount]');
+    if(cd) cd.textContent=this._fmtMinSec(this._setLeftAt(ms,cycle,reps));
+    const rp=root.querySelector('[data-setrep]');
+    if(rp) rp.textContent=this._setRepAt(ms,cycle,reps)+' / '+reps;
+    const tot=root.querySelector('[data-settotal]');
+    if(tot) tot.textContent=this._fmtMinSec(Math.min(ms,total), true);
+    const bar=root.querySelector('[data-setbar]');
+    if(bar) bar.style.width=(cycle>0 ? Math.max(0,Math.min(100,((ms%cycle)/cycle)*100)) : 0)+'%';
+    // The set has run its course: stop the clock once, and let the screen say so.
+    if(this._setRunning && ms>=total){
+      this._setRunning=false; this._setBase=total;
+      this.setState({setOn:false, setDone:true});
+    }
+    return true;
+  }
+  _fmtMinSec(ms, down){
+    const s=Math.max(0, down ? Math.floor(ms/1000) : Math.ceil(ms/1000));
+    const m=Math.floor(s/60), r=s-m*60;
+    return m+':'+(r<10?'0':'')+r;
+  }
+  setToggle(){
+    if(this._setRunning){
+      this._setBase=(this._setBase||0)+(performance.now()-this._setT0);
+      this._setRunning=false; this._setCancel();
+      this.setState({setOn:false});
+      return;
+    }
+    if(this.state.setDone){ this._setBase=0; }
+    this._setT0=performance.now(); this._setRunning=true;
+    this._setSchedule();
+    this.setState({setOn:true, setDone:false});
+    this._setEnsureRaf();
+  }
+  setReset(){
+    this._setRunning=false; this._setBase=0; this._setCancel();
+    this.setState({setOn:false, setDone:false});
+    this._setPaint();
+  }
+  // Changing the set while it runs re-lays the remaining send-offs on the audio clock.
+  setField(k,v){
+    const patch={}; patch[k]=v;
+    this.setState(patch, ()=>{ if(this._setRunning) this._setSchedule(); });
+  }
+  setStep(k,d,lo,hi){
+    const cur=(k==='setReps')?this._setReps():(k==='setSend'?this._setSend():this._setRest());
+    this.setField(k, Math.max(lo, Math.min(hi, cur+d)));
   }
   videoSetRate(rate){
     this.setState({videoRate:rate});
@@ -24353,7 +24559,8 @@ class Component extends DCLogic {
           toolStopwatch:S.tool==='stopwatch',
           ...((()=>{
             // ---- whole-lane mode: a timer per swimmer off one master clock ----
-            const many=S.swMode==='many';
+            const _mode=S.swMode||'one';
+            const many=_mode==='many';
             const lanes=(S.swmLanes && S.swmLanes.length) ? S.swmLanes : self._swmMake(6);
             const mNow=self._swmMs();
             const startedN=lanes.filter(l=>l.startMs!=null).length;
@@ -24361,10 +24568,43 @@ class Component extends DCLogic {
             const next=lanes.filter(l=>l.startMs==null)[0];
             const nextIdx=next ? lanes.indexOf(next)+1 : 0;
             return {
-              swModeOne:!many, swModeMany:many,
+              swModeOne:_mode==='one', swModeMany:many, swModeSet:_mode==='set',
               onSwModeOne:()=>self.setState({swMode:'one'}), onSwModeMany:()=>self.setState({swMode:'many'}),
-              modeOneBg: many?'#fff':'#0A0F1A', modeOneFg: many?'#7A8296':'#fff',
+              onSwModeSet:()=>self.setState({swMode:'set'}),
+              modeOneBg: _mode==='one'?'#0A0F1A':'#fff', modeOneFg: _mode==='one'?'#fff':'#7A8296',
               modeManyBg: many?'#0A0F1A':'#fff', modeManyFg: many?'#fff':'#7A8296',
+              modeSetBg: _mode==='set'?'#0A0F1A':'#fff', modeSetFg: _mode==='set'?'#fff':'#7A8296',
+              ...((()=>{
+                // ---- send-off set: "20 x 50m on 1:00", run automatically ----
+                const reps=self._setReps(), dist=self._setDist(), cyc=self._setCycleMs(), ms=self._setMs();
+                const rest=self._setRest(), tone=self._swtTone(), vol=self._swtVol();
+                const metres=reps*dist;
+                const chip=(on,accent)=>({bg:on?(accent||'#067EEA'):'#fff', fg:on?'#fff':'#7A8296'});
+                return {
+                  onSetMount: self._setMountRef || (self._setMountRef=(el)=>self.onSetMount(el)),
+                  onSetToggle:()=>self.setToggle(), onSetReset:()=>self.setReset(),
+                  setBtnLabel: S.setOn?'Pause set':(S.setDone?'Run again':'Start set'),
+                  setBtnIcon: S.setOn?'pause':'play',
+                  setCountInit: self._fmtMinSec(self._setLeftAt(ms,cyc,reps)),
+                  setRepInit: self._setRepAt(ms,cyc,reps)+' / '+reps,
+                  setTotalInit: self._fmtMinSec(Math.min(ms,cyc*reps), true),
+                  setSummary: reps+' \u00d7 '+dist+'m on '+self._fmtMinSec(self._setSend()*1000)
+                              +(rest?(' + '+rest+'s rest'):''),
+                  setMetres: (metres>=1000 ? (metres/1000).toFixed(metres%1000?1:0)+' km' : metres+' m'),
+                  setStatus: S.setDone?'Set complete':(S.setOn?'Running':(ms>0?'Paused':'Ready')),
+                  setDoneShow: !!S.setDone,
+                  setRepsLabel: String(reps),
+                  onSetRepsDec:()=>self.setStep('setReps',-1,1,99), onSetRepsInc:()=>self.setStep('setReps',1,1,99),
+                  onSetRepsInput:(e)=>self.setField('setReps', Math.max(1,Math.min(99,parseInt(e.target.value||'1',10)||1))),
+                  setSendLabel: self._fmtMinSec(self._setSend()*1000),
+                  onSetSendDec:()=>self.setStep('setSend',-5,5,1800), onSetSendInc:()=>self.setStep('setSend',5,5,1800),
+                  setRestLabel: rest?('+'+rest+'s'):'none',
+                  onSetRestDec:()=>self.setStep('setRest',-5,0,600), onSetRestInc:()=>self.setStep('setRest',5,0,600),
+                  setDistChips: [25,50,75,100,200,400].map(d=>({label:d+'m', ...chip(dist===d), onClick:()=>self.setField('setDist',d)})),
+                  setToneChips: [['horn','Horn'],['beep','Beep'],['triple','Triple']].map(t=>({label:t[1], ...chip(tone===t[0],'#0A0F1A'), onClick:()=>self.setField('swtTone',t[0])})),
+                  setVolChips: [[0.25,'Low'],[0.5,'Mid'],[0.75,'High'],[1,'Max']].map(v=>({label:v[1], ...chip(Math.abs(vol-v[0])<0.01), onClick:()=>self.setField('swtVol',v[0])})),
+                };
+              })()),
               onSwmMount: self._swmMountRef || (self._swmMountRef=(el)=>self.onSwmMount(el)),
               onSwmStartNext:()=>self.swmStartNext(), onSwmReset:()=>self.swmReset(),
               onSwmCountDec:()=>self.swmSetCount(-1), onSwmCountInc:()=>self.swmSetCount(1),
