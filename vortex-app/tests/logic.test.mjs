@@ -5,6 +5,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { bind, methodSource, describe, it, itAsync, eq, report, SOURCE, sourceBetween, runInSandbox } from "./harness.mjs";
 import { computeRaceMetrics, markerMetres, raceDistance } from "@/lib/race";
 import { OnsetDetector } from "@/lib/audio-onset";
+import { CrossingSequencer } from "@/lib/motion-split";
 // The real route module. Node strips the types, so these tests run the filter that ships
 // rather than a regex-mangled copy of it.
 const AI_ROUTE = await import("../src/app/api/ai/coach/route.ts");
@@ -12824,6 +12825,72 @@ describe("auto-start onset detection", () => {
       if (d.push(spectrum) && firedAt < 0) firedAt = i;
     }
     eq(firedAt < 0 || firedAt >= 8, true, "must not fire before the baseline settles");
+  });
+});
+
+/* ------------------------------------------------------- fixed-camera splits
+   Auto-split watches one marker's pixel column at a time and finalises a split
+   when the swimmer's wave peaks there. A split placed on the wrong wave is worse
+   than a hand tap, so the sequencing must stay in order, land on the peak (not
+   the leading edge), and never score one wave twice. */
+describe("motion crossing sequencer", () => {
+  const DT = 1 / 30;
+  // A wave passing a column: a short Gaussian bump of motion around `centre`.
+  const bump = (t, centre) =>
+    centre == null ? 0 : 0.6 * Math.exp(-((t - centre) ** 2) / (2 * 0.15 ** 2));
+
+  // Scan a clip where each marker's wave peaks at bumpTimes[i]. The sequencer
+  // only ever watches the current marker, so we feed that marker's column.
+  function scan(bumpTimes, motionFor, opts) {
+    const markers = bumpTimes.map((_, i) => ({ label: `${15 + i * 10}m`, metres: 15 + i * 10 }));
+    const seq = new CrossingSequencer(markers, opts);
+    const out = [];
+    let i = 0;
+    for (let t = 0; t <= 9 && !seq.done; t += DT, i++) {
+      const cur = out.length; // index of the marker currently watched
+      const c = seq.push(motionFor(t, cur, i), t);
+      if (c) out.push(c);
+    }
+    return out;
+  }
+
+  it("captures crossings in race order", () => {
+    const times = [2.0, 5.0];
+    const noise = (i) => 0.004 * Math.abs(Math.sin(i * 2.3));
+    const crossings = scan(times, (t, cur, i) => bump(t, times[cur]) + noise(i));
+    eq(crossings.length, 2);
+    eq(crossings[0].label, "15m");
+    eq(crossings[1].label, "25m");
+    eq(Math.abs(crossings[0].seconds - 2.0) < 0.12, true, `got ${crossings[0].seconds}`);
+    eq(Math.abs(crossings[1].seconds - 5.0) < 0.12, true, `got ${crossings[1].seconds}`);
+  });
+
+  it("lands on the motion peak, not the leading edge", () => {
+    const crossings = scan([3.0], (t) => bump(t, 3.0));
+    eq(crossings.length, 1);
+    eq(Math.abs(crossings[0].seconds - 3.0) < 0.08, true, `peak off at ${crossings[0].seconds}`);
+  });
+
+  it("ignores a steady turbulent column", () => {
+    const crossings = scan([null, null], (_t, _cur, i) => 0.3 + 0.003 * Math.sin(i));
+    eq(crossings.length, 0);
+  });
+
+  it("scores one sustained wave only once", () => {
+    // Motion jumps up at t=1 and stays high — a single event, not two marks.
+    const crossings = scan([null, null], (t) => (t >= 1 ? 0.6 : 0.02));
+    eq(crossings.length, 1, "a plateau must not cascade into the next marker");
+  });
+
+  it("reports done only after every marker is crossed", () => {
+    const seq = new CrossingSequencer([{ label: "15m", metres: 15 }]);
+    eq(seq.done, false);
+    let done = false;
+    for (let t = 0, i = 0; t <= 5; t += DT, i++) {
+      seq.push(bump(t, 2.0) + 0.004 * Math.abs(Math.sin(i * 2.3)), t);
+      if (seq.done) { done = true; break; }
+    }
+    eq(done, true);
   });
 });
 

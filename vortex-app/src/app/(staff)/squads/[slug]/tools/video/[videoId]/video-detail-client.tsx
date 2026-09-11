@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { Video, VideoSplit, VideoNote } from "@/lib/data/videos";
-import { RACE_MARKERS, computeRaceMetrics, type SplitInput } from "@/lib/race";
+import { RACE_MARKERS, markerMetres, computeRaceMetrics, type SplitInput } from "@/lib/race";
 import { OnsetDetector } from "@/lib/audio-onset";
+import { CrossingSequencer } from "@/lib/motion-split";
 import { formatTime } from "@/lib/format";
 import { saveSplits, addNote, deleteNote } from "../actions";
 
@@ -18,6 +19,9 @@ function vimeoId(url: string): string | null {
 
 type Split = { label: string; seconds: number; strokes: number | null };
 type Audio = { ctx: AudioContext; analyser: AnalyserNode; src: MediaElementAudioSourceNode };
+type VideoWithRVFC = HTMLVideoElement & {
+  requestVideoFrameCallback?: (cb: (now: number, meta: { mediaTime: number }) => void) => number;
+};
 
 export default function VideoDetailClient({
   slug,
@@ -30,18 +34,36 @@ export default function VideoDetailClient({
   const raceType = video.race_type ?? "50";
   const markers = RACE_MARKERS[raceType] ?? RACE_MARKERS["50"];
   const isMp4 = video.kind === "mp4";
+  // The markers a fixed camera can auto-detect: those at a real distance (not the
+  // gun, not the variable breakout).
+  const numberedMarkers = markers.filter((m) => {
+    const d = markerMetres(m);
+    return d != null && d > 0;
+  });
+
+  const orderOf = (label: string) => {
+    const i = markers.indexOf(label);
+    return i < 0 ? 999 : i;
+  };
+  const sortSplits = (list: Split[]) => [...list].sort((a, b) => orderOf(a.label) - orderOf(b.label));
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [rate, setRate] = useState(1);
-  const [splits, setSplits] = useState<Split[]>(
-    detail.splits.map((s) => ({ label: s.label, seconds: s.seconds, strokes: s.strokes })),
+  const [splits, setSplitsRaw] = useState<Split[]>(
+    sortSplits(detail.splits.map((s) => ({ label: s.label, seconds: s.seconds, strokes: s.strokes }))),
   );
-  // The gun. For mp4 it is a timestamp inside the clip; for an embed it is a
-  // wall-clock moment. Every split time is measured from here, so out/back,
-  // reaction and average speed are all relative to the start — not the footage.
+  const setSplits = (list: Split[]) => setSplitsRaw(sortSplits(list));
+
   const [startAt, setStartAt] = useState<number | null>(null);
   const [autoListening, setAutoListening] = useState(false);
   const [autoStatus, setAutoStatus] = useState<string | null>(null);
+
+  // Fixed-camera auto-split: a tapped pixel line per marker (x as a 0..1 fraction).
+  const [lines, setLines] = useState<Record<string, number>>({});
+  const [calMode, setCalMode] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [scanStatus, setScanStatus] = useState<string | null>(null);
+
   const [notes, setNotes] = useState(detail.notes);
   const [noteText, setNoteText] = useState("");
   const [, startTransition] = useTransition();
@@ -49,9 +71,12 @@ export default function VideoDetailClient({
   const audioRef = useRef<Audio | null>(null);
   const detectorRef = useRef<OnsetDetector | null>(null);
   const rafRef = useRef<number | null>(null);
+  const scanStopRef = useRef(false);
 
-  const nextMarker = markers[splits.length];
-  const allDone = splits.length >= markers.length;
+  const captured = new Set(splits.map((s) => s.label));
+  const remaining = markers.filter((m) => !captured.has(m));
+  const nextMarker = remaining[0] ?? null;
+  const allDone = remaining.length === 0;
   const started = startAt != null;
 
   const metrics = computeRaceMetrics(
@@ -59,7 +84,27 @@ export default function VideoDetailClient({
     splits.map<SplitInput>((s) => ({ label: s.label, seconds: s.seconds, strokes: s.strokes })),
   );
 
-  // A raw clock in seconds, in the same frame as startAt.
+  // Load any saved calibration for this clip (per-device convenience). Runs after
+  // hydration only, so the initial {} matches on both sides — no SSR mismatch.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(`vx_vidcal_${video.id}`);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (raw) setLines(JSON.parse(raw));
+    } catch {
+      /* private mode / blocked storage — calibrate fresh */
+    }
+  }, [video.id]);
+
+  useEffect(() => {
+    return () => {
+      scanStopRef.current = true;
+      stopAuto();
+      audioRef.current?.ctx.close().catch(() => {});
+      audioRef.current = null;
+    };
+  }, []);
+
   function rawTime(): number {
     if (isMp4) return videoRef.current?.currentTime ?? 0;
     return Date.now() / 1000;
@@ -70,7 +115,17 @@ export default function VideoDetailClient({
   }
 
   function persist(next: Split[]) {
-    startTransition(() => saveSplits(slug, video.id, next));
+    const ordered = sortSplits(next);
+    startTransition(() => saveSplits(slug, video.id, ordered));
+  }
+
+  function saveLines(next: Record<string, number>) {
+    setLines(next);
+    try {
+      localStorage.setItem(`vx_vidcal_${video.id}`, JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
   }
 
   function stopAuto() {
@@ -81,15 +136,6 @@ export default function VideoDetailClient({
       rafRef.current = null;
     }
   }
-
-  // Tear the audio graph down when leaving the page.
-  useEffect(() => {
-    return () => {
-      stopAuto();
-      audioRef.current?.ctx.close().catch(() => {});
-      audioRef.current = null;
-    };
-  }, []);
 
   function setStartHere() {
     stopAuto();
@@ -103,7 +149,6 @@ export default function VideoDetailClient({
     setAutoStatus(null);
   }
 
-  // Lock the clock to the starter's beep by listening to the clip's audio.
   function armAuto() {
     const el = videoRef.current;
     if (!el) return;
@@ -114,13 +159,12 @@ export default function VideoDetailClient({
           window.AudioContext ||
           (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
         const ctx = new Ctx();
-        // createMediaElementSource may be called only once per element.
         const src = ctx.createMediaElementSource(el);
         const analyser = ctx.createAnalyser();
         analyser.fftSize = 1024;
         analyser.smoothingTimeConstant = 0;
         src.connect(analyser);
-        analyser.connect(ctx.destination); // keep the sound audible
+        analyser.connect(ctx.destination);
         a = { ctx, analyser, src };
         audioRef.current = a;
       }
@@ -156,7 +200,7 @@ export default function VideoDetailClient({
   }
 
   function tapSplit() {
-    if (allDone || !started) return;
+    if (allDone || !started || !nextMarker) return;
     const updated = [...splits, { label: nextMarker, seconds: elapsed(), strokes: null }];
     setSplits(updated);
     persist(updated);
@@ -165,6 +209,7 @@ export default function VideoDetailClient({
   function resetSplits() {
     setSplits([]);
     clearStart();
+    setScanStatus(null);
     persist([]);
   }
 
@@ -186,12 +231,184 @@ export default function VideoDetailClient({
     return elapsed();
   }
 
+  // --- Fixed-camera auto-split ------------------------------------------------
+
+  function placeLine(e: React.MouseEvent<HTMLDivElement>) {
+    const next = numberedMarkers.find((m) => lines[m] == null);
+    if (!next) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const frac = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    saveLines({ ...lines, [next]: frac });
+  }
+
+  const calDone = numberedMarkers.every((m) => lines[m] != null);
+  const nextCalMarker = numberedMarkers.find((m) => lines[m] == null) ?? null;
+
+  async function autoDetect() {
+    const el = videoRef.current;
+    if (!el || startAt == null || !calDone) return;
+
+    const canvas = document.createElement("canvas");
+    const cw = 320;
+    const ratio = (el.videoHeight || 9) / (el.videoWidth || 16);
+    const ch = Math.max(2, Math.round(cw * ratio));
+    canvas.width = cw;
+    canvas.height = ch;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) {
+      setScanStatus("Canvas unavailable in this browser.");
+      return;
+    }
+
+    const seq = new CrossingSequencer(
+      numberedMarkers.map((m) => ({ label: m, metres: markerMetres(m)! })),
+    );
+    const found: { label: string; seconds: number }[] = [];
+    const bandW = Math.max(4, Math.round(cw * 0.03));
+    let prev: Uint8ClampedArray | null = null;
+    let prevLabel: string | null = null;
+    let tainted = false;
+
+    scanStopRef.current = false;
+    setScanning(true);
+    setScanStatus("Scanning the clip…");
+    const restoreRate = rate;
+    el.muted = true;
+    el.playbackRate = 2;
+
+    await new Promise<void>((res) => {
+      const on = () => {
+        el.removeEventListener("seeked", on);
+        res();
+      };
+      el.addEventListener("seeked", on);
+      try {
+        el.currentTime = startAt;
+      } catch {
+        res();
+      }
+    });
+    await el.play().catch(() => {});
+
+    let stopped = false;
+    const finish = () => {
+      if (stopped) return;
+      stopped = true;
+      el.pause();
+      el.playbackRate = restoreRate;
+      el.muted = false;
+      setScanning(false);
+      if (tainted) {
+        setScanStatus(
+          "This clip's host blocks frame reading — auto-split needs a same-origin/CORS video. Splits stay manual.",
+        );
+        return;
+      }
+      if (found.length) {
+        const nonNumbered = splits.filter((s) => {
+          const d = markerMetres(s.label);
+          return d == null || d === 0;
+        });
+        const merged = [
+          ...nonNumbered,
+          ...found.map((f) => ({ label: f.label, seconds: +f.seconds.toFixed(2), strokes: null })),
+        ];
+        setSplits(merged);
+        persist(merged);
+        setScanStatus(
+          `Auto-detected ${found.length} of ${numberedMarkers.length} splits — check each against the video and nudge if a wave fooled it.`,
+        );
+      } else {
+        setScanStatus(
+          "No crossings found — this works only on a still camera with each line on the swimmer's own lane.",
+        );
+      }
+    };
+
+    const process = (mediaTime: number): boolean => {
+      if (scanStopRef.current) {
+        finish();
+        return true;
+      }
+      const cur = seq.current;
+      if (!cur) {
+        finish();
+        return true;
+      }
+      const curLabel = cur.label;
+      try {
+        ctx.drawImage(el, 0, 0, cw, ch);
+      } catch {
+        tainted = true;
+        finish();
+        return true;
+      }
+      const x = Math.min(cw - bandW, Math.max(0, Math.round((lines[curLabel] || 0) * cw - bandW / 2)));
+      let data: Uint8ClampedArray;
+      try {
+        data = ctx.getImageData(x, 0, bandW, ch).data;
+      } catch {
+        tainted = true;
+        finish();
+        return true;
+      }
+      let motion = 0;
+      if (prev && prevLabel === curLabel && prev.length === data.length) {
+        let s = 0;
+        for (let i = 0; i < data.length; i++) {
+          if ((i & 3) === 3) continue; // skip alpha
+          s += Math.abs(data[i] - prev[i]);
+        }
+        motion = s / (data.length * 0.75) / 255;
+      }
+      prev = data;
+      prevLabel = curLabel;
+
+      const crossing = seq.push(motion, mediaTime - startAt);
+      if (crossing) {
+        found.push({ label: crossing.label, seconds: crossing.seconds });
+        prev = null;
+      }
+      if (seq.done) {
+        finish();
+        return true;
+      }
+      return false;
+    };
+
+    const v = el as VideoWithRVFC;
+    if (typeof v.requestVideoFrameCallback === "function") {
+      const cb = (_now: number, meta: { mediaTime: number }) => {
+        if (stopped) return;
+        if (process(meta.mediaTime)) return;
+        if (el.ended) {
+          finish();
+          return;
+        }
+        v.requestVideoFrameCallback!(cb);
+      };
+      v.requestVideoFrameCallback(cb);
+    } else {
+      const loop = () => {
+        if (stopped) return;
+        if (process(el.currentTime)) return;
+        if (el.ended) {
+          finish();
+          return;
+        }
+        requestAnimationFrame(loop);
+      };
+      requestAnimationFrame(loop);
+    }
+    el.onended = () => finish();
+  }
+
   const ytId = video.kind === "youtube" ? youtubeId(video.url) : null;
   const vmId = video.kind === "vimeo" ? vimeoId(video.url) : null;
 
   return (
     <div>
-      <div className="rounded-[var(--radius-lg)] overflow-hidden bg-black mb-3 aspect-video">
+      <div className="relative rounded-[var(--radius-lg)] overflow-hidden bg-black mb-3 aspect-video">
         {isMp4 && <video ref={videoRef} src={video.url} controls className="w-full h-full" />}
         {ytId && (
           <iframe
@@ -203,6 +420,26 @@ export default function VideoDetailClient({
         )}
         {vmId && (
           <iframe src={`https://player.vimeo.com/video/${vmId}`} className="w-full h-full" allowFullScreen />
+        )}
+
+        {/* Calibration overlay — tap where each marker line sits in the frame. */}
+        {isMp4 && calMode && (
+          <div className="absolute inset-0 z-10 cursor-crosshair" onClick={placeLine}>
+            {Object.entries(lines).map(([label, frac]) => (
+              <div
+                key={label}
+                className="absolute top-0 bottom-0 w-0.5 bg-[var(--vx-warning)]"
+                style={{ left: `${frac * 100}%` }}
+              >
+                <span className="absolute top-1 -translate-x-1/2 text-[10px] font-bold text-white bg-[var(--vx-warning)] px-1 rounded">
+                  {label}
+                </span>
+              </div>
+            ))}
+            <div className="absolute inset-x-0 bottom-0 bg-black/60 text-white text-xs text-center py-1.5">
+              {nextCalMarker ? `Tap the ${nextCalMarker} line` : "All lines placed ✓ — tap “Done”"}
+            </div>
+          </div>
         )}
       </div>
 
@@ -229,7 +466,6 @@ export default function VideoDetailClient({
         </div>
       )}
 
-      {/* Race summary — the headline numbers */}
       {(metrics.total != null || metrics.reaction != null || metrics.out != null) && (
         <RaceSummary metrics={metrics} raceType={raceType} />
       )}
@@ -245,7 +481,6 @@ export default function VideoDetailClient({
           )}
         </div>
 
-        {/* Set the gun first, then the tap flow unlocks. */}
         {!started ? (
           <div className="mb-1">
             <button
@@ -318,8 +553,27 @@ export default function VideoDetailClient({
         )}
       </div>
 
+      {/* Fixed-camera auto-split */}
+      {isMp4 && (
+        <AutoSplitPanel
+          calMode={calMode}
+          onToggleCal={() => setCalMode((v) => !v)}
+          calDone={calDone}
+          placed={Object.keys(lines).length}
+          total={numberedMarkers.length}
+          started={started}
+          scanning={scanning}
+          scanStatus={scanStatus}
+          onClearLines={() => saveLines({})}
+          onScan={autoDetect}
+          onStopScan={() => {
+            scanStopRef.current = true;
+          }}
+        />
+      )}
+
       {/* Notes */}
-      <div className="rounded-[var(--radius-lg)] bg-white border border-[#E5E9F0] p-4">
+      <div className="rounded-[var(--radius-lg)] bg-white border border-[#E5E9F0] p-4 mt-4">
         <p className="text-[#0C1116] font-semibold text-sm mb-3">Notes</p>
         <div className="flex gap-2 mb-3">
           <input
@@ -372,6 +626,94 @@ export default function VideoDetailClient({
           {notes.length === 0 && <p className="text-xs text-[#7A8296]">No notes yet.</p>}
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------ auto-split panel */
+
+function AutoSplitPanel({
+  calMode,
+  onToggleCal,
+  calDone,
+  placed,
+  total,
+  started,
+  scanning,
+  scanStatus,
+  onClearLines,
+  onScan,
+  onStopScan,
+}: {
+  calMode: boolean;
+  onToggleCal: () => void;
+  calDone: boolean;
+  placed: number;
+  total: number;
+  started: boolean;
+  scanning: boolean;
+  scanStatus: string | null;
+  onClearLines: () => void;
+  onScan: () => void;
+  onStopScan: () => void;
+}) {
+  return (
+    <div className="rounded-[var(--radius-lg)] bg-white border border-[#E5E9F0] p-4 mt-4">
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-[#0C1116] font-semibold text-sm">
+          Auto-split <span className="text-[10px] font-bold text-[var(--vx-warning)] align-top">BETA</span>
+        </p>
+        <span className="text-[11px] text-[#7A8296]">
+          {placed}/{total} lines
+        </span>
+      </div>
+      <p className="text-[11px] text-[#7A8296] mb-3 leading-relaxed">
+        For a <span className="font-semibold">still camera</span> only. Mark where each split line sits in
+        the frame, then let it read the swimmer’s wave crossing each one. Panning or broadcast clips move the
+        marker every frame — tap those by hand.
+      </p>
+
+      <div className="flex gap-2 flex-wrap">
+        <button
+          onClick={onToggleCal}
+          className="px-3 py-2 rounded-[var(--radius-md)] text-sm font-semibold text-white"
+          style={{ background: calMode ? "var(--vx-success)" : "var(--vx-blue)" }}
+        >
+          {calMode ? "Done placing lines" : placed > 0 ? "Edit lines" : "Calibrate lines"}
+        </button>
+        {placed > 0 && !calMode && (
+          <button
+            onClick={onClearLines}
+            className="px-3 py-2 rounded-[var(--radius-md)] text-sm font-semibold text-[var(--vx-danger)] border border-[#E5E9F0]"
+          >
+            Clear
+          </button>
+        )}
+        {!scanning ? (
+          <button
+            onClick={onScan}
+            disabled={!calDone || !started}
+            className="px-3 py-2 rounded-[var(--radius-md)] text-sm font-bold text-white disabled:opacity-40 ml-auto"
+            style={{ background: "#0A0F1A" }}
+          >
+            Auto-detect splits
+          </button>
+        ) : (
+          <button
+            onClick={onStopScan}
+            className="px-3 py-2 rounded-[var(--radius-md)] text-sm font-semibold text-white ml-auto flex items-center gap-2"
+            style={{ background: "var(--vx-danger)" }}
+          >
+            <span className="inline-block w-2 h-2 rounded-full bg-white animate-pulse" />
+            Stop
+          </button>
+        )}
+      </div>
+
+      {!started && calDone && (
+        <p className="text-[11px] text-[var(--vx-warning)] mt-2">Set the start (the gun) first, above.</p>
+      )}
+      {scanStatus && <p className="text-[11px] text-[var(--vx-blue)] mt-2 leading-relaxed">{scanStatus}</p>}
     </div>
   );
 }
