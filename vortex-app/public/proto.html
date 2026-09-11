@@ -14778,19 +14778,28 @@ class Component extends DCLogic {
             stdLabel:(goalOv.source==='coach'?'coach target':'set target'), gap:gapLabel(p.sec, goalOv.sec), gapColor:(p.sec<=goalOv.sec)?'#34D399':'#FCD34D', hasStd:true,
             points:pts, hasPoints:!!pts };
         }
-        // Otherwise the target is the swimmer's age-group standard (World Aquatics / regional age
-        // benchmark), converted to the PB's course (the standard is short-course basis).
+        // A target must always be FASTER than the current PB — never a slower time.
+        // The age-group standard is the target only while the swimmer is still chasing it (PB
+        // slower than the standard). Once they have beaten it, the target becomes a genuine
+        // improvement on their PB, and we note that they are already past the age standard.
+        const improveSec = p.sec*(1-targetPct(p.event));   // always faster than the PB
         const std = this._ageStd(p.event, swObj.gender, swObj.age);
         if(std && p.sec>0){
           const tgt = this._ageStdForCourse(std.sec, p.event, swObj.gender, p.course);
-          return { event:p.event, course:courseTag, current:p.time, target:this.fmt(tgt.sec),
-            stdLabel:std.ageLabel+' std'+(tgt.converted?' · LC-adj':''), gap:gapLabel(p.sec, tgt.sec), gapColor:(p.sec<=tgt.sec)?'#34D399':'#FCD34D', hasStd:true,
+          if(p.sec > tgt.sec){
+            // Not there yet — chase the age standard (it is faster than the PB).
+            return { event:p.event, course:courseTag, current:p.time, target:this.fmt(tgt.sec),
+              stdLabel:std.ageLabel+' std'+(tgt.converted?' · LC-adj':''), gap:'−'+(p.sec-tgt.sec).toFixed(2)+'s to go', gapColor:'#FCD34D', hasStd:true,
+              points:pts, hasPoints:!!pts };
+          }
+          // Already faster than the age standard — set a stretch improvement on their own PB.
+          return { event:p.event, course:courseTag, current:p.time, target:this.fmt(improveSec),
+            stdLabel:'beat '+std.ageLabel+' std ✓', gap:'−'+(p.sec-improveSec).toFixed(2)+'s next', gapColor:'#34D399', hasStd:true,
             points:pts, hasPoints:!!pts };
         }
-        // No age-group cut for this event/age → fall back to a distance-scaled personal target.
-        const tSec=p.sec*(1-targetPct(p.event));
-        return { event:p.event, course:courseTag, current:p.time, target:this.fmt(tSec),
-          stdLabel:'personal target', gap:'', gapColor:'transparent', hasStd:false, points:pts, hasPoints:!!pts };
+        // No age-group cut for this event/age → a distance-scaled personal improvement target.
+        return { event:p.event, course:courseTag, current:p.time, target:this.fmt(improveSec),
+          stdLabel:'personal target', gap:'−'+(p.sec-improveSec).toFixed(2)+'s next', gapColor:'#34D399', hasStd:false, points:pts, hasPoints:!!pts };
       });
     // secondary / IM recommendation
     const hasIm = !!byStroke['IM'];
