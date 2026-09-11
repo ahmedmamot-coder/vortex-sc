@@ -16994,7 +16994,15 @@ class Component extends DCLogic {
       const bandW=Math.max(4, Math.round(cw*0.03));
       const dur=hidden.duration||0, span=Math.max(0.1, dur-zero);
       const frames=[]; const prevBands={}; let lastPct=-1;
-      await new Promise((ok)=>{ hidden.onseeked=()=>ok(); try{ hidden.currentTime=zero; }catch(e){ ok(); } });
+      // Seek to the gun before scanning. Seeking to where the video already sits (a start at 0
+      // on a just-loaded clip) fires no 'seeked', so this resolves at once in that case and never
+      // waits past a fallback in any other — the scan must not hang on a clip it cannot seek.
+      await new Promise((ok)=>{
+        if(Math.abs((hidden.currentTime||0)-zero) < 0.01) return ok();
+        let settled=false; const fin=()=>{ if(!settled){ settled=true; ok(); } };
+        hidden.onseeked=fin; setTimeout(fin, 1500);
+        try{ hidden.currentTime=zero; }catch(e){ fin(); }
+      });
       hidden.playbackRate=2;
       this.setState({videoScanMsg:'Reading the swimmer across each line…'});
       await hidden.play().catch(()=>{});
