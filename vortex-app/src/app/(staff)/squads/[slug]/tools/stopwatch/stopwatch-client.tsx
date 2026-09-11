@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   type Lap,
   formatStopwatch,
@@ -34,6 +34,7 @@ export default function StopwatchClient({ accent: _accent }: { accent: string })
   const baseRef = useRef(0);
   const startRef = useRef(0);
   const audioRef = useRef<AudioContext | null>(null);
+  const fsClockRef = useRef<HTMLDivElement>(null);
 
   // A loud electronic starting signal, synthesised (no audio file, works offline)
   // in the register of a competition start beep — our own tone, not a recording of
@@ -47,22 +48,25 @@ export default function StopwatchClient({ accent: _accent }: { accent: string })
       const ctx = audioRef.current || (audioRef.current = new AC());
       if (ctx.state === "suspended") ctx.resume();
       const t = ctx.currentTime;
+      // A clipped square is already the loudest waveform there is, so extra gain buys nothing. What
+      // does is WHERE the energy sits: hearing peaks around 2–4 kHz, and this stack carries ~2.3×
+      // the old tone's energy in the 2–5 kHz band. The 1.25 kHz voice keeps it a horn, not a whistle.
       const master = ctx.createGain();
-      master.gain.value = 1;
+      master.gain.setValueAtTime(1, t);
       master.connect(ctx.destination);
-      [1000, 1000.6].forEach((f, i) => {
+      ([[2500, 1], [1250, 0.7], [3750, 0.5]] as [number, number][]).forEach(([f, peak]) => {
         const o = ctx.createOscillator();
         o.type = "square";
         o.frequency.setValueAtTime(f, t);
         const g = ctx.createGain();
         g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(i ? 0.5 : 0.9, t + 0.01);
-        g.gain.setValueAtTime(i ? 0.5 : 0.9, t + 0.5);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.72);
+        g.gain.exponentialRampToValueAtTime(peak, t + 0.008);
+        g.gain.setValueAtTime(peak, t + 0.55);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.78);
         o.connect(g);
         g.connect(master);
         o.start(t);
-        o.stop(t + 0.74);
+        o.stop(t + 0.8);
       });
     } catch {
       /* no audio available */
@@ -84,6 +88,30 @@ export default function StopwatchClient({ accent: _accent }: { accent: string })
       setElapsedMs(baseRef.current);
     };
   }, [running]);
+
+  // Keep the full-screen time on screen once it grows a minutes field. The font is sized off the
+  // viewport for a big readout, but "1:24.72" is much wider than "24.72" and ran off both edges;
+  // shrink to fit the width. Keyed on the character count and the fs state (and window resize), so
+  // it only measures on the rare rollover, not every frame.
+  const fmtLen = formatStopwatch(elapsedMs).length;
+  useLayoutEffect(() => {
+    if (!fs) return;
+    const fit = () => {
+      const el = fsClockRef.current;
+      const parent = el?.parentElement;
+      if (!el || !parent) return;
+      // Intended big size mirrors the CSS min(40vw,60vh); computed here rather than read back from
+      // the inline style (clearing that to read it would drop the clock to the 16px default).
+      const base = Math.min(0.4 * window.innerWidth, 0.6 * window.innerHeight);
+      const cs = getComputedStyle(parent);
+      const avail = (parent.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0)) * 0.98;
+      const widthFit = avail / ((el.textContent?.length || 1) * 0.62); // monospace ≈ 0.62em/glyph
+      el.style.fontSize = Math.floor(Math.max(14, Math.min(base, widthFit))) + "px";
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, [fs, fmtLen]);
 
   // The exact elapsed time right now, whether or not a frame has ticked yet.
   function nowMs() {
@@ -248,8 +276,9 @@ export default function StopwatchClient({ accent: _accent }: { accent: string })
             {running ? `Running · lap ${laps.length + 1}` : started ? "Paused" : "Ready"}
           </p>
           <div
-            className="font-bold tabular-nums leading-none"
-            style={{ fontSize: "min(38vw, 52vh)", letterSpacing: "-0.02em" }}
+            ref={fsClockRef}
+            className="font-bold tabular-nums leading-none inline-block whitespace-nowrap max-w-full"
+            style={{ fontSize: "min(40vw, 60vh)", letterSpacing: "-0.02em" }}
           >
             {formatStopwatch(elapsedMs)}
           </div>
