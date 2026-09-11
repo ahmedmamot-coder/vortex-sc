@@ -12867,4 +12867,93 @@ describe("a T-pace push keeps what the club already has", () => {
   });
 });
 
+/* --------------------------------------------------- whole-lane stopwatch (proto.html)
+   A lane is sent off in intervals: swimmer 1 goes, five seconds later swimmer 2, and so on.
+   Every swimmer is read off ONE master clock, so the thing that must hold is that a stagger
+   never leaks between them — one swimmer's split is measured from their own previous lap, and
+   finishing one freezes only that one. Bound to the real methods in proto.html. */
+describe("whole-lane stopwatch", () => {
+  const ctx = {};
+  const laneMs = bind("_swmLaneMs", ctx, []);
+  const lapOf  = bind("_swmLapOf", ctx, ["_swmLaneMs"]);
+  const lane = (o) => ({ id: "L1", name: "", startMs: null, endMs: null, laps: [], ...o });
+
+  it("a swimmer not sent off yet reads zero", () => eq(laneMs(lane({}), 40000), 0));
+  it("elapsed counts from their own send-off, not the master clock", () =>
+    eq(laneMs(lane({ startMs: 5000 }), 12000), 7000));
+  it("a finished swimmer is frozen at their finish", () =>
+    eq(laneMs(lane({ startMs: 5000, endMs: 30000 }), 999999), 25000));
+  it("never reads negative before their send-off", () =>
+    eq(laneMs(lane({ startMs: 9000 }), 4000), 0));
+
+  it("staggered swimmers each read their own time off the one clock", () => {
+    const m = 40000;
+    eq(laneMs(lane({ startMs: 0 }), m), 40000);
+    eq(laneMs(lane({ startMs: 5000 }), m), 35000);
+    eq(laneMs(lane({ startMs: 10000 }), m), 30000);
+  });
+
+  it("the first lap equals that swimmer's own elapsed", () =>
+    eq(lapOf(lane({ startMs: 5000 }), 35000).splitMs, 30000));
+  it("a later split is measured from their previous lap", () => {
+    const l = lane({ startMs: 5000, laps: [{ n: 1, splitMs: 30000, totalMs: 30000 }] });
+    const nxt = lapOf(l, 48000);
+    eq(nxt.n, 2);
+    eq(nxt.totalMs, 43000);
+    eq(nxt.splitMs, 13000, "43s of their own minus the 30s already logged");
+  });
+  it("the stagger does not change anyone's split", () => {
+    // two swimmers 5s apart, each 20s into their own swim: identical splits.
+    const a = lapOf(lane({ startMs: 0 }), 20000);
+    const b = lapOf(lane({ startMs: 5000 }), 25000);
+    eq(a.splitMs, b.splitMs);
+    eq(a.splitMs, 20000);
+  });
+  it("a finished swimmer's lap stops advancing with the master clock", () => {
+    const l = lane({ startMs: 0, endMs: 25000 });
+    eq(lapOf(l, 90000).totalMs, 25000);
+  });
+  it("laps are numbered per swimmer", () => {
+    const l = lane({ startMs: 0, laps: [{ n: 1, splitMs: 1, totalMs: 1 }, { n: 2, splitMs: 1, totalMs: 2 }] });
+    eq(lapOf(l, 5000).n, 3);
+  });
+});
+
+/* ------------------------------------------------ send-off set timer (proto.html)
+   "20 x 50m on 1:00" run by the clock: a signal every send-off, counting 1/20 to 20/20. The
+   arithmetic that matters is which repetition is live and how long until the next send-off —
+   get either wrong and a lane goes early. Bound to the real methods in proto.html. */
+describe("send-off set timer", () => {
+  const ctx = {};
+  const repAt  = bind("_setRepAt", ctx, []);
+  const leftAt = bind("_setLeftAt", ctx, []);
+  const CYCLE = 60000, REPS = 20;            // 20 x 50m on 1:00
+
+  it("starts on rep 1", () => eq(repAt(0, CYCLE, REPS), 1));
+  it("stays on rep 1 until the first send-off", () => eq(repAt(59999, CYCLE, REPS), 1));
+  it("turns over to rep 2 exactly on the send-off", () => eq(repAt(60000, CYCLE, REPS), 2));
+  it("counts the rep the coach would call", () => eq(repAt(210000, CYCLE, REPS), 4, "3:30 into a 1:00 set"));
+  it("never counts past the last rep", () => {
+    eq(repAt(CYCLE * REPS, CYCLE, REPS), REPS);
+    eq(repAt(CYCLE * REPS * 3, CYCLE, REPS), REPS);
+  });
+
+  it("a full interval remains at the start", () => eq(leftAt(0, CYCLE, REPS), CYCLE));
+  it("counts down inside the interval", () => eq(leftAt(210000, CYCLE, REPS), 30000));
+  it("resets to a full interval the moment one goes", () => eq(leftAt(60000, CYCLE, REPS), CYCLE));
+  it("reads zero once the whole set has run", () => {
+    eq(leftAt(CYCLE * REPS, CYCLE, REPS), 0);
+    eq(leftAt(CYCLE * REPS + 5000, CYCLE, REPS), 0);
+  });
+  it("a rest added to the send-off lengthens the cycle", () => {
+    const withRest = 75000;                   // 1:00 send-off + 15s rest
+    eq(repAt(75000, withRest, REPS), 2);
+    eq(leftAt(70000, withRest, REPS), 5000);
+  });
+  it("a zero cycle cannot divide by zero", () => {
+    eq(repAt(1000, 0, REPS), 1);
+    eq(leftAt(1000, 0, REPS), 0);
+  });
+});
+
 await report();
