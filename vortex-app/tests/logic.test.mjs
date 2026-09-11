@@ -7561,7 +7561,7 @@ describe("InBody sheet", () => {
       c._vidSwimmers = bind("_vidSwimmers", c);
       c._vidTrack = bind("_vidTrack", c, ["_vidSwimmers"]);
       c.videoRaceMetrics = bind("videoRaceMetrics", c, ["_splitMetres", "_vidTrack", "_vidSwimmers"]);
-      c._compareTable = bind("_compareTable", c);
+      c._compareTable = bind("_compareTable", c, ["_fmtStopwatch"]);
       c.videoCompareTable = bind("videoCompareTable", c, ["videoRaceMetrics", "_compareTable"]);
       c.videoCompareToggle = bind("videoCompareToggle", c);
       return c;
@@ -7701,7 +7701,7 @@ describe("InBody sheet", () => {
       c._vidPatchTrack = bind("_vidPatchTrack", c, ["_vidSwimmers"]);
       c._vidApply = bind("_vidApply", c, ["_vidPatchTrack", "_vidSwimmers"]);
       c.videoRaceMetrics = bind("videoRaceMetrics", c, ["_splitMetres", "_vidTrack", "_vidSwimmers"]);
-      c._compareTable = bind("_compareTable", c);
+      c._compareTable = bind("_compareTable", c, ["_fmtStopwatch"]);
       c.videoClipCompare = bind("videoClipCompare", c, ["_vidSwimmers", "videoRaceMetrics", "_compareTable"]);
       c.videoStartZero = bind("videoStartZero", c, ["_activeVideo", "_vidTrack"]);
       c._videoStartLimit = bind("_videoStartLimit", c, ["_vidSwimmers"]);
@@ -7864,13 +7864,13 @@ describe("InBody sheet", () => {
       c._vidPatchTrack = bind("_vidPatchTrack", c, ["_vidSwimmers"]);
       c._vidApply = bind("_vidApply", c, ["_vidPatchTrack", "_vidSwimmers"]);
       c.videoRaceMetrics = bind("videoRaceMetrics", c, ["_splitMetres", "_vidTrack", "_vidSwimmers"]);
-      c._compareTable = bind("_compareTable", c);
+      c._compareTable = bind("_compareTable", c, ["_fmtStopwatch"]);
       c.videoClipCompare = bind("videoClipCompare", c, ["_vidSwimmers", "videoRaceMetrics", "_compareTable"]);
       c.videoSwimmerLink = bind("videoSwimmerLink", c, ["_activeVideo", "allSwimmersFlat", "_vidApply"]);
       c.videoSwimmerOutside = bind("videoSwimmerOutside", c, ["_activeVideo", "_vidApply"]);
       c.videoSwimmerUnlink = bind("videoSwimmerUnlink", c, ["_activeVideo", "_vidApply"]);
       c._videoSavedAt = bind("_videoSavedAt", c);
-      c.swimmerVideos = bind("swimmerVideos", c, ["_vidSwimmers", "videoRaceMetrics", "_videoSavedAt"]);
+      c.swimmerVideos = bind("swimmerVideos", c, ["_vidSwimmers", "videoRaceMetrics", "_videoSavedAt", "_raceTimeS", "_fmtStopwatch"]);
       return c;
     };
     const laps = (t) => [{ label: "Start", t: 0 }, { label: "15m", t: 6.6 }, { label: "50m", t }];
@@ -8157,6 +8157,7 @@ describe("InBody sheet", () => {
       c._goertzel = bind("_goertzel", c);
       c._findStartTone = bind("_findStartTone", c, ["_audioEnvelope", "_percentile", "_goertzel"]);
       c._fmtStopwatch = bind("_fmtStopwatch", c);
+      c._raceTimeS = bind("_raceTimeS", c, ["_fmtStopwatch"]);
       return c;
     };
 
@@ -8257,6 +8258,17 @@ describe("InBody sheet", () => {
       eq(c._fmtStopwatch(26.63), "26.63");
       eq(c._fmtStopwatch(63.4), "1:03.40", "a 100 is a minute and change, not 63 seconds");
       eq(c._fmtStopwatch(-0.42), "−0.42", "before the gun it counts down");
+    });
+
+    // The race-analysis headline read "63.21s" for a 100 that took 1:03.21 — a total is a race
+    // time, and a race time past a minute is minutes and seconds. The 's' belongs on the seconds
+    // form only; "1:03.21s" is not a time anyone writes.
+    it("a total past a minute reads as m:ss, not raw seconds", () => {
+      const c = ctx();
+      eq(c._raceTimeS(58.58), "58.58s", "a sub-minute swim keeps the seconds unit");
+      eq(c._raceTimeS(63.21), "1:03.21", "a 100 over the minute is 1:03.21, and carries no trailing s");
+      eq(c._raceTimeS(123.45), "2:03.45");
+      eq(c._raceTimeS(9.9), "9.90s");
     });
   });
 
