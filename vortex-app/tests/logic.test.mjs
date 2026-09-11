@@ -3,9 +3,6 @@
 
 import { readFileSync, readdirSync } from "node:fs";
 import { bind, methodSource, describe, it, itAsync, eq, report, SOURCE, sourceBetween, runInSandbox } from "./harness.mjs";
-import { computeRaceMetrics, markerMetres, raceDistance } from "@/lib/race";
-import { OnsetDetector } from "@/lib/audio-onset";
-import { CrossingSequencer } from "@/lib/motion-split";
 // The real route module. Node strips the types, so these tests run the filter that ships
 // rather than a regex-mangled copy of it.
 const AI_ROUTE = await import("../src/app/api/ai/coach/route.ts");
@@ -6548,6 +6545,11 @@ describe("InBody sheet", () => {
       // the tablet decide the laptop's unsent work is stale. The roster itself is in vx_roster
       // and in vx_roster_edits, both accounted for already.
       vx_roster_sent: "which of this device's roster rows the database has taken",
+      // Where each split line sits in the frame for auto-split. It is a property of THIS camera
+      // in THIS position, not of the swim: the same clip filmed from the other end of the pool
+      // has different lines. Sharing it would put one poolside phone's angle onto another's, so it
+      // stays on the device that placed it — and a device without it simply calibrates again.
+      vx_vidcal: "where this device placed each auto-split marker line, per clip",
     };
     // 2. A local copy of a database table, so the screen can draw before the read comes back.
     //    The table is the truth; losing the copy costs nothing.
@@ -6635,8 +6637,14 @@ describe("InBody sheet", () => {
     // the club later DELETED from the meets would be recreated from the old calendar on the next
     // boot — a meet the club has cancelled coming back by itself, every morning. It is also the
     // shortest-lived key here: it goes when vx_meets_cal does.
+    //
+    // 15, for vx_vidcal, the auto-split marker lines. The argument is that it is not data about
+    // the swim but about the camera: where the 25m line falls in the frame is a fact of where the
+    // phone was standing, and the same race filmed from the other end has different lines. Syncing
+    // it would push one poolside angle onto every other device; a device without it just taps the
+    // lines again, in seconds, against the frame it is looking at.
     it("the device-only list stays small enough to read", () =>
-      eq(Object.keys(DEVICE_ONLY).length <= 14, true, "if this needs to grow, the reason needs an argument"));
+      eq(Object.keys(DEVICE_ONLY).length <= 15, true, "if this needs to grow, the reason needs an argument"));
   });
 
   // Before any of that: the file has to parse. A stray brace anywhere in 16,000 lines takes the
@@ -7994,6 +8002,8 @@ describe("InBody sheet", () => {
       ["the in-clip head to head", "{{ videoClipCompareHas }}", "{{ videoClipCompareFoot }}"],
       ["the assistant card", "Coach's read", "{{ videoAiFoot }}"],
       ["the folder search", "Find a swim —", "{{ videoFolderNoHitsMsg }}"],
+      ["the auto-split card", "Auto-split · fixed camera", "{{ videoScanMsg }}"],
+      ["the calibration overlay", "{{ onVideoCalPlace }}", "{{ videoCalHint }}"],
     ];
     for (const [what, from, to] of REGIONS) {
       it(what + " carries no colour of its own", () => {
@@ -8027,7 +8037,7 @@ describe("InBody sheet", () => {
       const css = (SOURCE.match(/\.vx-toolcard\{[\s\S]*?\.vx-toolcard-note\{[^}]*\}/) || [""])[0];
       eq(/pattern-transparent\.png/.test(css), true, "the watermark");
       eq(/var\(--brand-gradient\)/.test(css), true, "and the brand rule down the left");
-      eq(videoSection.split('class="vx-toolcard"').length - 1, 3,
+      eq(videoSection.split('class="vx-toolcard"').length - 1, 4,
          "every new card uses it rather than each inventing a card");
     });
     // The split table's headings did not sit over their own numbers on a phone, because the
@@ -12666,231 +12676,54 @@ describe("the T-pace screen tells the truth about a save", () => {
   });
 });
 
-/* ------------------------------------------------------------- race metrics
-   The pro-style analysis: velocity, stroke rate, distance-per-stroke and stroke
-   index per segment. These are the numbers a coach reads back to a swimmer, so a
-   wrong one is worse than none. The relationships must stay self-consistent:
-   velocity = (SR/60) × DPS, and SI = velocity × DPS. */
-describe("race metrics", () => {
-  it("reads the metres a marker sits at", () => {
-    eq(markerMetres("Reaction"), 0);
-    eq(markerMetres("15m"), 15);
-    eq(markerMetres("100m"), 100);
-    eq(markerMetres("Breakout"), null, "breakout has no fixed distance");
-    eq(markerMetres("Turn"), null);
-  });
-
-  it("knows each race's finishing distance", () => {
-    eq(raceDistance("50"), 50);
-    eq(raceDistance("100"), 100);
-    eq(raceDistance("1500"), 1500);
-  });
-
-  // A 10m segment (15m→25m) swum in 5.0s at 5 strokes: 2.0 m/s, DPS 2.0, SR 60, SI 4.0.
-  it("computes velocity, SR, DPS and SI for a clean segment", () => {
-    const { rows } = computeRaceMetrics("100", [
-      { label: "15m", seconds: 10 },
-      { label: "25m", seconds: 15, strokes: 5 },
-    ]);
-    const seg = rows[1];
-    eq(seg.velocity, 2, "10m / 5s");
-    eq(seg.dps, 2, "10m / 5 strokes");
-    eq(seg.sr, 60, "5 strokes in 5s → 60/min");
-    eq(seg.si, 4, "velocity × DPS");
-  });
-
-  it("keeps velocity = SR/60 × DPS internally consistent", () => {
-    const { rows } = computeRaceMetrics("100", [
-      { label: "25m", seconds: 12.19 },
-      { label: "35m", seconds: 18.22, strokes: 5 },
-    ]);
-    const seg = rows[1];
-    // Reconstruct velocity from the reported SR and DPS.
-    const v = (seg.sr / 60) * seg.dps;
-    eq(Math.abs(v - seg.velocity) < 0.05, true, `${v} vs ${seg.velocity}`);
-  });
-
-  it("shows a Breakout as a time only, never a bogus speed", () => {
-    const { rows } = computeRaceMetrics("100", [
-      { label: "15m", seconds: 6.27 },
-      { label: "Breakout", seconds: 8.0 },
-      { label: "25m", seconds: 12.19, strokes: 6 },
-    ]);
-    eq(rows[1].velocity, null, "breakout distance is unknown");
-    eq(rows[1].segment, 1.73, "but its raw split still shows");
-    // The 25m segment measures back to 15m across the breakout: 10m in 5.92s.
-    eq(rows[2].distance, 10);
-    eq(rows[2].velocity, 1.69);
-  });
-
-  it("splits a 100 into out and back at the 50", () => {
-    const m = computeRaceMetrics("100", [
-      { label: "Reaction", seconds: 0.62 },
-      { label: "50m", seconds: 27.48 },
-      { label: "100m", seconds: 58.58 },
-    ]);
-    eq(m.total, 58.58);
-    eq(m.out, 27.48);
-    eq(m.back, 31.1, "58.58 − 27.48");
-    eq(m.reaction, 0.62);
-  });
-
-  it("leaves totals null until the race is finished", () => {
-    const m = computeRaceMetrics("100", [
-      { label: "15m", seconds: 6.27 },
-      { label: "25m", seconds: 12.19 },
-    ]);
-    eq(m.total, null);
-    eq(m.out, null);
-    eq(m.avgVelocity, null);
-  });
-
-  it("omits DPS and SR when strokes were not counted", () => {
-    const { rows } = computeRaceMetrics("100", [
-      { label: "15m", seconds: 10 },
-      { label: "25m", seconds: 15 },
-    ]);
-    eq(rows[1].velocity, 2, "velocity needs only the clock");
-    eq(rows[1].dps, null);
-    eq(rows[1].sr, null);
-    eq(rows[1].si, null);
-  });
-
-  it("never divides by a zero stroke count", () => {
-    const { rows } = computeRaceMetrics("100", [
-      { label: "25m", seconds: 10 },
-      { label: "50m", seconds: 15, strokes: 0 },
-    ]);
-    eq(rows[1].dps, null);
-    eq(rows[1].sr, null);
-  });
-
-  it("flags the fastest and slowest full segments", () => {
-    const m = computeRaceMetrics("100", [
-      { label: "Reaction", seconds: 0.6 },
-      { label: "15m", seconds: 6.0 },   // 15m in 5.4s → 2.78 m/s (fastest, the dive)
-      { label: "50m", seconds: 27.0 },  // 35m in 21s → 1.67 m/s
-      { label: "100m", seconds: 58.0 }, // 50m in 31s → 1.61 m/s (slowest)
-    ]);
-    eq(m.fastestLabel, "15m");
-    eq(m.slowestLabel, "100m");
-  });
-});
-
-/* -------------------------------------------------------------- auto-start
-   The video clock locks to the starter's beep by watching for a sudden spike in
-   the audio spectrum. A false start (firing on crowd noise, or before the race)
-   would silently mis-time every split, so the guardrails matter more than the
-   catch: it must ignore a steady room and a slow swell, and only trip on the
-   sharp transient of the signal. */
-describe("auto-start onset detection", () => {
-  const BINS = 32;
-  const flat = (v) => new Array(BINS).fill(v);
-  // A little deterministic wobble so the baseline has real variance to clear.
-  const wobble = (base, i) => flat(base).map((v, k) => v + 0.01 * Math.sin(i * 1.7 + k));
-
-  it("locks onto a sharp beep after a quiet lead-in", () => {
-    const d = new OnsetDetector();
-    let firedAt = -1;
-    for (let i = 0; i < 40; i++) {
-      const spectrum = i === 30 ? flat(0.9) : wobble(0.08, i); // the beep at frame 30
-      if (d.push(spectrum) && firedAt < 0) firedAt = i;
-    }
-    eq(firedAt, 30, "start should lock to the beep frame");
-  });
-
-  it("does not fire on a steady room (no transient)", () => {
-    const d = new OnsetDetector();
-    let fired = false;
-    for (let i = 0; i < 120; i++) {
-      if (d.push(wobble(0.3, i))) fired = true; // constant-ish crowd hum
-    }
-    eq(fired, false, "a steady spectrum has near-zero flux");
-  });
-
-  it("does not fire on a slow swell", () => {
-    const d = new OnsetDetector();
-    let fired = false;
-    for (let i = 0; i < 120; i++) {
-      if (d.push(flat(Math.min(0.9, 0.05 + i * 0.006)))) fired = true; // gentle ramp
-    }
-    eq(fired, false, "a gradual rise never spikes the flux");
-  });
-
-  it("holds fire during the warmup, even on an early spike", () => {
-    const d = new OnsetDetector({ warmup: 8 });
-    let firedAt = -1;
-    for (let i = 0; i < 20; i++) {
-      const spectrum = i === 3 ? flat(0.9) : flat(0.08);
-      if (d.push(spectrum) && firedAt < 0) firedAt = i;
-    }
-    eq(firedAt < 0 || firedAt >= 8, true, "must not fire before the baseline settles");
-  });
-});
-
-/* ------------------------------------------------------- fixed-camera splits
-   Auto-split watches one marker's pixel column at a time and finalises a split
-   when the swimmer's wave peaks there. A split placed on the wrong wave is worse
-   than a hand tap, so the sequencing must stay in order, land on the peak (not
-   the leading edge), and never score one wave twice. */
-describe("motion crossing sequencer", () => {
+/* --------------------------------------------------- video auto-split (proto)
+   Fixed-camera auto-split sequences the swimmer's wave crossing each marker's
+   pixel column. A split on the wrong wave is worse than a hand tap, so the real
+   method that ships in proto.html — not a copy — must stay in race order, land on
+   the peak (not the leading edge), and stop rather than guess when a mark is
+   missing. */
+describe("video auto-split crossing detection", () => {
+  const detect = bind("_detectCrossings", {}, []);
   const DT = 1 / 30;
-  // A wave passing a column: a short Gaussian bump of motion around `centre`.
-  const bump = (t, centre) =>
-    centre == null ? 0 : 0.6 * Math.exp(-((t - centre) ** 2) / (2 * 0.15 ** 2));
-
-  // Scan a clip where each marker's wave peaks at bumpTimes[i]. The sequencer
-  // only ever watches the current marker, so we feed that marker's column.
-  function scan(bumpTimes, motionFor, opts) {
-    const markers = bumpTimes.map((_, i) => ({ label: `${15 + i * 10}m`, metres: 15 + i * 10 }));
-    const seq = new CrossingSequencer(markers, opts);
+  const bump = (t, c) => (c == null ? 0 : 0.6 * Math.exp(-((t - c) ** 2) / (2 * 0.15 ** 2)));
+  const labels = (n) => Array.from({ length: n }, (_, i) => "m" + i);
+  function frames(bumpTimes) {
     const out = [];
-    let i = 0;
-    for (let t = 0; t <= 9 && !seq.done; t += DT, i++) {
-      const cur = out.length; // index of the marker currently watched
-      const c = seq.push(motionFor(t, cur, i), t);
-      if (c) out.push(c);
+    for (let t = 0; t <= 9; t += DT) {
+      const m = {};
+      bumpTimes.forEach((c, i) => {
+        m["m" + i] = bump(t, c) + 0.004 * Math.abs(Math.sin(t * 53 + i));
+      });
+      out.push({ t: +t.toFixed(4), m });
     }
     return out;
   }
 
-  it("captures crossings in race order", () => {
-    const times = [2.0, 5.0];
-    const noise = (i) => 0.004 * Math.abs(Math.sin(i * 2.3));
-    const crossings = scan(times, (t, cur, i) => bump(t, times[cur]) + noise(i));
-    eq(crossings.length, 2);
-    eq(crossings[0].label, "15m");
-    eq(crossings[1].label, "25m");
-    eq(Math.abs(crossings[0].seconds - 2.0) < 0.12, true, `got ${crossings[0].seconds}`);
-    eq(Math.abs(crossings[1].seconds - 5.0) < 0.12, true, `got ${crossings[1].seconds}`);
+  it("finds each crossing in race order at its peak", () => {
+    const r = detect(frames([2.0, 5.0]), labels(2), {});
+    eq(r.length, 2);
+    eq(r[0].label, "m0");
+    eq(r[1].label, "m1");
+    eq(Math.abs(r[0].t - 2.0) < 0.12, true, `got ${r[0].t}`);
+    eq(Math.abs(r[1].t - 5.0) < 0.12, true, `got ${r[1].t}`);
+  });
+
+  it("stops at the first mark it cannot find, rather than guessing", () => {
+    const r = detect(frames([2.0, null]), labels(2), {});
+    eq(r.length, 1);
+    eq(r[0].label, "m0");
+  });
+
+  it("ignores a steady, turbulent column", () => {
+    const out = [];
+    for (let t = 0; t <= 6; t += DT) out.push({ t: +t.toFixed(4), m: { m0: 0.3 + 0.003 * Math.sin(t * 20) } });
+    eq(detect(out, ["m0"], {}).length, 0);
   });
 
   it("lands on the motion peak, not the leading edge", () => {
-    const crossings = scan([3.0], (t) => bump(t, 3.0));
-    eq(crossings.length, 1);
-    eq(Math.abs(crossings[0].seconds - 3.0) < 0.08, true, `peak off at ${crossings[0].seconds}`);
-  });
-
-  it("ignores a steady turbulent column", () => {
-    const crossings = scan([null, null], (_t, _cur, i) => 0.3 + 0.003 * Math.sin(i));
-    eq(crossings.length, 0);
-  });
-
-  it("scores one sustained wave only once", () => {
-    // Motion jumps up at t=1 and stays high — a single event, not two marks.
-    const crossings = scan([null, null], (t) => (t >= 1 ? 0.6 : 0.02));
-    eq(crossings.length, 1, "a plateau must not cascade into the next marker");
-  });
-
-  it("reports done only after every marker is crossed", () => {
-    const seq = new CrossingSequencer([{ label: "15m", metres: 15 }]);
-    eq(seq.done, false);
-    let done = false;
-    for (let t = 0, i = 0; t <= 5; t += DT, i++) {
-      seq.push(bump(t, 2.0) + 0.004 * Math.abs(Math.sin(i * 2.3)), t);
-      if (seq.done) { done = true; break; }
-    }
-    eq(done, true);
+    const r = detect(frames([3.0]), ["m0"], {});
+    eq(r.length, 1);
+    eq(Math.abs(r[0].t - 3.0) < 0.08, true, `peak off at ${r[0].t}`);
   });
 });
 

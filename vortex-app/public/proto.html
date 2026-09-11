@@ -5309,7 +5309,19 @@ if ('serviceWorker' in navigator) {
                       </sc-if>
 
                       <sc-if value="{{ videoHasActive }}" hint-placeholder-val="{{ false }}">
-                        <div style="position:relative;border-radius:16px;overflow:hidden;aspect-ratio:16/9;background:#000;box-shadow:0 8px 22px rgba(11,20,40,.14)" ref="{{ onPlayerMount }}"></div>
+                        <div style="position:relative">
+                          <div style="position:relative;border-radius:16px;overflow:hidden;aspect-ratio:16/9;background:#000;box-shadow:0 8px 22px rgba(11,20,40,.14)" ref="{{ onPlayerMount }}"></div>
+                          <sc-if value="{{ videoCalOn }}" hint-placeholder-val="{{ false }}">
+                            <div onclick="{{ onVideoCalPlace }}" style="position:absolute;inset:0;cursor:crosshair;z-index:6;border-radius:16px;overflow:hidden">
+                              <sc-for list="{{ videoCalMarks }}" as="cm" hint-placeholder-count="3">
+                                <div style="position:absolute;top:0;bottom:0;width:2px;background:var(--vx-warning);left:{{ cm.left }}">
+                                  <span style="position:absolute;top:4px;left:50%;transform:translateX(-50%);font-size:9px;font-weight:800;color:var(--vx-ink);background:var(--vx-warning);padding:1px 4px;border-radius:4px;white-space:nowrap">{{ cm.label }}</span>
+                                </div>
+                              </sc-for>
+                              <div style="position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.62);color:var(--on-brand);font-size:11.5px;font-weight:700;text-align:center;padding:7px">{{ videoCalHint }}</div>
+                            </div>
+                          </sc-if>
+                        </div>
                         <div style="display:flex;align-items:center;justify-content:space-between;margin:0 2px">
                           <span><span style="display:block;font-weight:700;font-size:13.5px;color:#0C1116">{{ activeVideoTitle }}</span><span style="display:block;font-size:11px;color:#7A8296">{{ activeVideoTag }}</span></span>
                           <span style="display:flex;gap:6px">
@@ -5369,6 +5381,28 @@ if ('serviceWorker' in navigator) {
                           </sc-if>
                           <p style="margin:9px 0 0;font-size:10.5px;color:rgba(255,255,255,.4);line-height:1.5">The clock counts from the start signal, so it reads the swimmer's time and not the clip's. Hear the start finds the beep after "take your marks" in the recording itself — check the frame it stops on before you trust it.</p>
                         </div>
+
+                        <sc-if value="{{ videoAutoSplitShow }}" hint-placeholder-val="{{ false }}">
+                          <div class="vx-toolcard">
+                            <div class="vx-toolcard-head">
+                              <span class="vx-toolcard-chip"><i data-lucide="scan-line" style="width:14px;height:14px"></i></span>
+                              <p class="vx-toolcard-title">Auto-split · fixed camera</p>
+                              <span style="margin-left:auto;font-size:9px;font-weight:800;letter-spacing:.08em;color:var(--on-brand);background:var(--vx-warning);padding:2px 6px;border-radius:6px">BETA</span>
+                            </div>
+                            <p style="margin:0 0 10px;font-size:11.5px;color:var(--vx-slate-500);line-height:1.5">Only for a still camera with the lane in frame. Mark where each split line is, then let it read the swimmer's wave crossing each one. A panning or broadcast clip moves the marker every frame — tap those by hand.</p>
+                            <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center">
+                              <button onclick="{{ onVideoCalToggle }}" style="flex:none;background:var(--color-brand);color:var(--on-brand);border:none;border-radius:10px;padding:9px 12px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer">{{ videoCalBtnLabel }}</button>
+                              <span style="font-size:11px;color:var(--vx-slate-300)">{{ videoCalPlacedLabel }}</span>
+                              <sc-if value="{{ videoCalHasLines }}" hint-placeholder-val="{{ false }}">
+                                <button onclick="{{ onVideoCalClear }}" style="flex:none;background:var(--vx-slate-50);color:var(--vx-danger);border:1px solid var(--border-subtle);border-radius:10px;padding:9px 12px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer">Clear</button>
+                              </sc-if>
+                              <button onclick="{{ onVideoAutoSplit }}" style="margin-left:auto;flex:none;background:var(--surface-ink);color:var(--on-brand);border:none;border-radius:10px;padding:9px 13px;font-family:inherit;font-weight:800;font-size:12.5px;cursor:pointer">{{ videoScanBtnLabel }}</button>
+                            </div>
+                            <sc-if value="{{ videoScanMsgShow }}" hint-placeholder-val="{{ false }}">
+                              <p style="margin:9px 0 0;background:var(--vx-slate-50);border-radius:10px;padding:9px 11px;font-size:11.5px;color:var(--vx-slate-700);line-height:1.5">{{ videoScanMsg }}</p>
+                            </sc-if>
+                          </div>
+                        </sc-if>
 
                         <div class="vx-toolcard">
                           <div class="vx-toolcard-head">
@@ -9028,6 +9062,7 @@ class Component extends DCLogic {
       videoActiveId:null, videoUrlDraft:'', videoTitleDraft:'', videoTagDraft:'', videoAddOpen:false, videoRate:1, videoNoteDraft:'', videoCurT:0, videoDur:0,
       videoCompareIds:[], videoCompareMsg:'', videoFolderOpen:true, videoFolderQ:'',
       videoStartBusy:false, videoStartMsg:'', videoStartCands:[], videoStartPick:0,
+      videoCalMode:false, videoScanBusy:false, videoScanMsg:'', videoScanPct:0,
       videoSwIdx:0, videoSwMsg:'', videoCountMark:null, videoSwPickOpen:false, videoSwQuery:'',
       videoAiOut:null, videoAiLoading:false, videoAiErr:'',
       fitAddOpen:false, fitBusy:null, fitMediaMsg:'', inbodyMode:'pdf', inbodySwId:'', inbodyQuery:'', inbodyPdfBusy:false, inbodyPdfMsg:'', inbodyQrOpen:false, inbodyQrMsg:'', inbodyDraft:null,
@@ -16866,6 +16901,145 @@ class Component extends DCLogic {
     const usable=marks.filter(x=>isFinite(x));
     return usable.length ? Math.min.apply(null, usable) : null;
   }
+
+  // ---- Auto-split on a fixed camera ----
+  //
+  // "Hear the start" fixes the gun to the millisecond off the clip's own sound. The splits are
+  // still a coach's thumb. On a still camera — a phone on a tripod with the whole lane in frame —
+  // each distance mark sits at one unmoving column of pixels, and the swimmer's bow wave sweeps
+  // through that column once. So the coach marks where each line is, and the app reads the wave
+  // crossing it. A panning or broadcast clip moves the mark every frame and cannot be read this
+  // way; that is a fact of the footage, said plainly, not a thing to fake.
+
+  // The marks that sit at a real distance — the ones a crossing can be found for. Start has no
+  // distance, so it is never one of them.
+  _vidNumberedLabels(raceType){
+    return this.videoSplitLabels(raceType).filter(l=>this._splitMetres(l,50)!=null);
+  }
+  // Calibration is a convenience of this device and this camera position, so it is kept in the
+  // browser and never pushed to the club's record.
+  _vidCalAll(){ try{ return JSON.parse(localStorage.getItem('vx_vidcal')||'{}')||{}; }catch(e){ return {}; } }
+  _vidCalLines(id){ const a=this._vidCalAll(); return (a&&a[id])||{}; }
+  _vidCalSave(id, lines){ const a=this._vidCalAll(); a[id]=lines; try{ localStorage.setItem('vx_vidcal', JSON.stringify(a)); }catch(e){} this.forceUpdate(); }
+  videoCalToggle(){ this.setState({videoCalMode:!this.state.videoCalMode, videoScanMsg:''}); }
+  videoCalClear(){ const v=this._activeVideo(); if(!v) return; const a=this._vidCalAll(); delete a[v.id]; try{ localStorage.setItem('vx_vidcal', JSON.stringify(a)); }catch(e){} this.forceUpdate(); }
+  // A tap on the frame drops the next un-placed line where the finger landed, as a fraction of
+  // the width so it survives the video being any size on any phone.
+  videoCalPlace(ev){
+    const v=this._activeVideo(); if(!v || !ev || !ev.currentTarget) return;
+    const rect=ev.currentTarget.getBoundingClientRect(); if(!rect.width) return;
+    const frac=Math.min(1, Math.max(0, (ev.clientX-rect.left)/rect.width));
+    const labels=this._vidNumberedLabels(v.raceType||'100');
+    const lines={...this._vidCalLines(v.id)};
+    const next=labels.find(l=>lines[l]==null);
+    if(!next) return;
+    lines[next]=+frac.toFixed(4);
+    this._vidCalSave(v.id, lines);
+  }
+
+  // Sequence the crossings out of the recorded motion. Each numbered mark owns one pixel column;
+  // its motion rises to a peak as the wave passes and falls again. Taken in race order, each mark
+  // is the peak of its column after the previous mark's time (plus a cooldown, so the start splash
+  // or a turn's wash cannot score as the next mark). The peak, not the leading edge, because the
+  // leading edge runs a touch early — the wave reaches the line before its middle does. Pure, so
+  // it is tested against motion we build with the answer known.
+  _detectCrossings(frames, labels, opts){
+    opts=opts||{};
+    const cooldown=opts.cooldownS!=null?opts.cooldownS:1.2;
+    const sensitivity=opts.sensitivity!=null?opts.sensitivity:3;
+    const minFloor=opts.minFloor!=null?opts.minFloor:0.015;
+    const out=[]; let fromT=-Infinity;
+    for(let li=0; li<labels.length; li++){
+      const label=labels[li];
+      const seg=frames.filter(f=> f && f.t>=(isFinite(fromT)?fromT+cooldown:-Infinity));
+      if(seg.length<3) break;
+      const vals=seg.map(f=> (f.m&&f.m[label])||0);
+      const mean=vals.reduce((a,b)=>a+b,0)/vals.length;
+      const variance=vals.reduce((a,b)=>a+(b-mean)*(b-mean),0)/vals.length;
+      const thr=Math.max(minFloor, mean+sensitivity*Math.sqrt(variance));
+      let bestV=-1, bestT=null;
+      for(let k=0;k<seg.length;k++){ if(vals[k]>bestV){ bestV=vals[k]; bestT=seg[k].t; } }
+      if(bestT==null || bestV<thr) break;   // a mark not found; the ones after it cannot be ordered
+      out.push({label, t:+bestT.toFixed(3)});
+      fromT=bestT;
+    }
+    return out;
+  }
+
+  async videoAutoSplit(){
+    const v=this._activeVideo(); if(!v) return;
+    if(v.kind!=='mp4'){ return this.setState({videoScanMsg:'Only uploaded clips can be scanned — a YouTube or Vimeo player will not hand over its frames.'}); }
+    const zero=this.videoStartZero();
+    if(zero==null){ return this.setState({videoScanMsg:'Set the start first — “Hear the start” or “Set start here” — so the splits have a gun to count from.'}); }
+    const labels=this._vidNumberedLabels(v.raceType||'100');
+    const lines=this._vidCalLines(v.id);
+    const useLabels=labels.filter(l=>lines[l]!=null);
+    if(!useLabels.length){ return this.setState({videoScanMsg:'Place at least one marker line first — tap “Calibrate lines”.'}); }
+    const vidId=v.id, swIdx=this._vidSwIdx(v);
+    this.setState({videoScanBusy:true, videoScanPct:0, videoScanMsg:'Fetching the clip…'});
+    let url=null, hidden=null;
+    try{
+      const res=await fetch(this._mediaSrc(v.url));
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      const blob=await res.blob();
+      url=URL.createObjectURL(blob);   // a same-origin blob, so the canvas is never tainted
+      hidden=document.createElement('video');
+      hidden.muted=true; hidden.playsInline=true; hidden.preload='auto'; hidden.src=url;
+      hidden.style.cssText='position:fixed;left:-10000px;top:0;width:2px;height:2px;opacity:0';
+      document.body.appendChild(hidden);
+      await new Promise((ok,no)=>{ hidden.onloadedmetadata=()=>ok(); hidden.onerror=()=>no(new Error('the clip would not load')); });
+      const cw=320, ch=Math.max(2, Math.round(cw*(hidden.videoHeight||9)/(hidden.videoWidth||16)));
+      const canvas=document.createElement('canvas'); canvas.width=cw; canvas.height=ch;
+      const cx=canvas.getContext('2d', {willReadFrequently:true});
+      const bandW=Math.max(4, Math.round(cw*0.03));
+      const dur=hidden.duration||0, span=Math.max(0.1, dur-zero);
+      const frames=[]; const prevBands={}; let lastPct=-1;
+      await new Promise((ok)=>{ hidden.onseeked=()=>ok(); try{ hidden.currentTime=zero; }catch(e){ ok(); } });
+      hidden.playbackRate=2;
+      this.setState({videoScanMsg:'Reading the swimmer across each line…'});
+      await hidden.play().catch(()=>{});
+      await new Promise((done)=>{
+        const step=(_now, meta)=>{
+          if(this._activeVideo()==null || this._activeVideo().id!==vidId){ return done(); }
+          const t=meta?meta.mediaTime:hidden.currentTime;
+          try{ cx.drawImage(hidden,0,0,cw,ch); }catch(e){ this._scanTainted=true; return done(); }
+          const m={};
+          for(let i=0;i<useLabels.length;i++){
+            const label=useLabels[i];
+            const x=Math.min(cw-bandW, Math.max(0, Math.round(lines[label]*cw - bandW/2)));
+            let data; try{ data=cx.getImageData(x,0,bandW,ch).data; }catch(e){ this._scanTainted=true; return done(); }
+            const prev=prevBands[label]; let mo=0;
+            if(prev && prev.length===data.length){ let s=0; for(let j=0;j<data.length;j++){ if((j&3)===3) continue; s+=Math.abs(data[j]-prev[j]); } mo=s/(data.length*0.75)/255; }
+            prevBands[label]=data; m[label]=mo;
+          }
+          frames.push({t, m});
+          const pct=Math.min(99, Math.round(((t-zero)/span)*100));
+          if(pct>=lastPct+4){ lastPct=pct; this.setState({videoScanPct:pct}); }
+          if(hidden.ended || (dur && t>=dur-0.05)){ return done(); }
+          if(hidden.requestVideoFrameCallback) hidden.requestVideoFrameCallback(step);
+          else requestAnimationFrame(()=>step(0,null));
+        };
+        if(hidden.requestVideoFrameCallback) hidden.requestVideoFrameCallback(step);
+        else requestAnimationFrame(()=>step(0,null));
+      });
+      try{ hidden.pause(); }catch(e){}
+      if(this._scanTainted){ this._scanTainted=false; return this.setState({videoScanBusy:false, videoScanMsg:'This clip’s frames could not be read. Mark the splits by hand.'}); }
+      const crossings=this._detectCrossings(frames, useLabels, {});
+      const startLabel=(this.videoSplitLabels(v.raceType||'100')[0])||'Start';
+      const laps=[{label:startLabel, t:+zero.toFixed(3)}, ...crossings.map(c=>({label:c.label, t:+(+c.t).toFixed(2)}))];
+      this._vidApply(vidId, swIdx, {laps});
+      this.setState({videoScanBusy:false, videoScanPct:100,
+        videoScanMsg: crossings.length
+          ? ('Read '+crossings.length+' of '+useLabels.length+' splits. Check each against the video — nudge any a wave or a neighbouring lane fooled.')
+          : 'No clean crossings found. This works on a still camera with each line on the swimmer’s own lane; otherwise mark the splits by hand.'});
+    }catch(err){
+      const why=(err&&err.message)||'';
+      this.setState({videoScanBusy:false, videoScanMsg:'Could not scan the clip'+(why?(' — '+why):'')+'. Mark the splits by hand.'});
+    }finally{
+      try{ if(hidden) hidden.remove(); }catch(e){}
+      try{ if(url) URL.revokeObjectURL(url); }catch(e){}
+    }
+  }
   // The gun is the gun. Setting it re-bases every split already marked — the marks keep their
   // own place in the clip and only their distance from the start changes — and it is written to
   // every lane, because two swimmers in one heat did not start at two different moments. That
@@ -21153,6 +21327,19 @@ class Component extends DCLogic {
     const raceTypeOptions = activeVid ? ['50','100','200','400','800','1500'].map(rt=>({label:rt, onClick:()=>this.videoSetRaceType(rt), on:(activeVid.raceType||'100')===rt, bg:(activeVid.raceType||'100')===rt?squad.accent:'#fff', fg:(activeVid.raceType||'100')===rt?'#fff':'#3A4152'})) : [];
     const nextSplitLabel = activeVid ? (()=>{ const labels=this.videoSplitLabels(activeVid.raceType||'100'); const done=(vidTrack.laps||[]).length; return done<labels.length ? labels[done] : null; })() : null;
     const videoSplitsTotal = activeVid ? this.videoSplitLabels(activeVid.raceType||'100').length : 0;
+    // Auto-split (fixed camera): the marker lines placed on this clip, and what to prompt next.
+    const videoAutoSplitShow = !!activeVid && activeVid.kind==='mp4';
+    const videoNumberedLabels = activeVid ? this._vidNumberedLabels(activeVid.raceType||'100') : [];
+    const videoCalLines = activeVid ? this._vidCalLines(activeVid.id) : {};
+    const videoCalPlaced = videoNumberedLabels.filter(l=>videoCalLines[l]!=null);
+    const videoCalNext = videoNumberedLabels.find(l=>videoCalLines[l]==null) || null;
+    const videoCalOn = !!S.videoCalMode && videoAutoSplitShow;
+    const videoCalMarks = videoCalPlaced.map(l=>({label:l, left:(videoCalLines[l]*100).toFixed(1)+'%'}));
+    const videoCalHint = videoCalNext ? ('Tap where the '+videoCalNext+' line is') : 'All lines placed — tap “Done placing lines”';
+    const videoScanBusy = !!S.videoScanBusy;
+    const videoScanBtnLabel = videoScanBusy ? ('Scanning… '+(S.videoScanPct||0)+'%') : 'Auto-detect splits';
+    const videoCalBtnLabel = S.videoCalMode ? 'Done placing lines' : (videoCalPlaced.length? 'Edit lines' : 'Calibrate lines');
+    const videoScanCanRun = videoCalPlaced.length>0 && videoStartZero!=null && !videoScanBusy;
     // An analysis captured under the old marks holds more of them than the club now taps, and
     // "8/6 captured" reads as a fault rather than as an older swim.
     const videoSplitsDone = activeVid ? Math.min((vidTrack.laps||[]).length, videoSplitsTotal) : 0;
@@ -24132,6 +24319,16 @@ class Component extends DCLogic {
       videoStartAltLabel: videoStartCands.length>1
         ? ('Not it? Try the next of '+videoStartCands.length+' sounds') : '',
       onVideoNextStartCand:()=>this.videoNextStartCandidate(),
+      // ---- Auto-split on a fixed camera ----
+      videoAutoSplitShow, videoCalOn, videoCalMarks, videoCalHint,
+      videoCalBtnLabel, videoCalHasLines: videoCalPlaced.length>0,
+      videoCalPlacedLabel: videoCalPlaced.length+'/'+videoNumberedLabels.length+' lines',
+      videoScanBtnLabel, videoScanCanRun, videoScanBusy,
+      videoScanMsg: S.videoScanMsg||'', videoScanMsgShow: !!S.videoScanMsg,
+      onVideoCalToggle: activeVid ? ()=>this.videoCalToggle() : null,
+      onVideoCalPlace: activeVid ? (e)=>this.videoCalPlace(e) : null,
+      onVideoCalClear: activeVid ? ()=>this.videoCalClear() : null,
+      onVideoAutoSplit: activeVid ? ()=>this.videoAutoSplit() : null,
       ...(()=>{
         const M=this.videoRaceMetrics(activeVid, vidSwIdx);
         // Nothing marked yet. Every key the sheet reads is still handed over, because a binding
