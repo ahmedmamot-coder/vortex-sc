@@ -5256,7 +5256,7 @@ if ('serviceWorker' in navigator) {
                         <div style="position:absolute;inset:0;background:url('assets/pattern-transparent.png') right top/180px auto no-repeat;opacity:.22;pointer-events:none"></div>
                         <button onclick="{{ onSwtFsEnter }}" style="position:absolute;top:12px;right:12px;z-index:2;width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.14);border:none;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer" title="Full screen for poolside"><i data-lucide="maximize-2" style="width:16px;height:16px"></i></button>
                         <p style="position:relative;z-index:1;margin:0;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.55);font-weight:700">{{ swtStatusLabel }}</p>
-                        <div onclick="{{ onSwtFsEnter }}" ref="{{ onSwtMount }}" style="position:relative;z-index:1;font-family:var(--font-mono);font-size:clamp(58px, 18vw, 92px);line-height:1.02;font-weight:800;letter-spacing:-.03em;margin:12px 0 4px;cursor:pointer">0.00</div>
+                        <div onclick="{{ onSwtFsEnter }}" ref="{{ onSwtMount }}" data-swtclock="tool" style="position:relative;z-index:1;display:inline-block;white-space:nowrap;max-width:100%;font-family:var(--font-mono);font-size:clamp(58px, 18vw, 92px);line-height:1.02;font-weight:800;letter-spacing:-.03em;margin:12px 0 4px;cursor:pointer">0.00</div>
                         <p style="position:relative;z-index:1;margin:0;font-size:10.5px;color:rgba(255,255,255,.45)">min : sec . hundredths</p>
                       </div>
                       <!-- Primary controls: Start/Pause + Sound + Reset on top, then a big full-width
@@ -8172,7 +8172,7 @@ if ('serviceWorker' in navigator) {
                 <button onclick="{{ onSwtFsExit }}" style="position:absolute;top:calc(env(safe-area-inset-top) + 12px);right:16px;width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,.14);border:none;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2"><i data-lucide="minimize-2" style="width:20px;height:20px"></i></button>
                 <button onclick="{{ onSwtSoundToggle }}" style="position:absolute;top:calc(env(safe-area-inset-top) + 12px);left:16px;width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,.14);border:none;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2" title="Start beep on/off"><i data-vx-icon="{{ swtSoundIcon }}" style="width:20px;height:20px"></i></button>
                 <p style="position:relative;z-index:1;margin:0 0 2px;font-size:clamp(12px,2vh,16px);letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.55);font-weight:700;text-align:center">{{ swtStatusLabel }}</p>
-                <div ref="{{ onSwtFsMount }}" style="position:relative;z-index:1;font-family:var(--font-mono);font-size:min(38vw,52vh);line-height:.9;font-weight:800;color:#fff;letter-spacing:-.02em">0.00</div>
+                <div ref="{{ onSwtFsMount }}" data-swtclock="fs" style="position:relative;z-index:1;display:inline-block;white-space:nowrap;max-width:100%;font-family:var(--font-mono);font-size:min(40vw,60vh);line-height:.9;font-weight:800;color:#fff;letter-spacing:-.02em">0.00</div>
                 <p style="position:relative;z-index:1;margin:8px 0 0;font-size:clamp(13px,2.2vh,20px);color:rgba(255,255,255,.7);font-weight:600;text-align:center">{{ swtFsSub }}</p>
                 <div style="position:relative;z-index:1;display:flex;gap:clamp(10px,2vw,20px);margin-top:clamp(16px,4vh,40px);align-items:center;flex-wrap:wrap;justify-content:center">
                   <button onclick="{{ onSwtToggle }}" style="min-width:clamp(112px,16vw,190px);height:clamp(50px,8vh,78px);padding:0 clamp(18px,2.5vw,30px);border-radius:16px;background:#111826;border:1px solid rgba(255,255,255,.16);cursor:pointer;color:#fff;font-family:inherit;font-weight:700;font-size:clamp(15px,2.2vh,20px);display:flex;align-items:center;justify-content:center;gap:9px"><i data-vx-icon="{{ swtBtnIcon }}" style="width:clamp(20px,2.6vh,26px);height:clamp(20px,2.6vh,26px)"></i>{{ swtBtnLabel }}</button>
@@ -17256,8 +17256,29 @@ class Component extends DCLogic {
     this._swtEls=(this._swtEls||[]).filter(el=>el && document.body.contains(el));
     if(!this._swtEls.length) return false;
     const txt=this._fmtStopwatch(this._swtElapsedMs()/1000);
-    for(let i=0;i<this._swtEls.length;i++) this._swtEls[i].textContent=txt;
+    for(let i=0;i<this._swtEls.length;i++){ const el=this._swtEls[i]; el.textContent=txt; this._swtFit(el, txt); }
     return true;
+  }
+  // Keep the whole time on screen once it grows a minutes field: sized off the viewport for a big
+  // readout, "1:24.72" is far wider than "24.72" and ran off both edges. The font is monospace, so
+  // a string needs about (chars × 0.62em); size the font from the container width and cap it at the
+  // element's intended big size (computed here from the viewport, NOT read back from the style —
+  // the size lives in the inline style, so clearing it to "read" it drops the clock to 16px). Set
+  // explicitly every time the character count, container width or viewport changes, not every frame.
+  _swtFit(el, txt){
+    const parent=el.parentElement; if(!parent) return;
+    const vw=window.innerWidth||360, vh=window.innerHeight||640, cw=parent.clientWidth;
+    const key=txt.length+'|'+Math.round(cw)+'|'+vw+'x'+vh;
+    if(el.__swtFitKey===key) return;
+    el.__swtFitKey=key;
+    // The element's intended size, mirroring its CSS: full-screen min(40vw,60vh); card clamp(58,18vw,92).
+    const base = el.getAttribute('data-swtclock')==='fs'
+      ? Math.min(0.40*vw, 0.60*vh)
+      : Math.max(58, Math.min(0.18*vw, 92));
+    const cs=getComputedStyle(parent);
+    const avail=(cw - (parseFloat(cs.paddingLeft)||0) - (parseFloat(cs.paddingRight)||0)) * 0.98;
+    const widthFit=avail/((txt.length||1)*0.62);           // monospace: each glyph ≈ 0.62em wide
+    el.style.fontSize=Math.floor(Math.max(14, Math.min(base, widthFit)))+'px';
   }
   _swtEnsureRaf(){
     if(this._swtRaf) return;

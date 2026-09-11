@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   type Lap,
   formatStopwatch,
@@ -34,6 +34,7 @@ export default function StopwatchClient({ accent: _accent }: { accent: string })
   const baseRef = useRef(0);
   const startRef = useRef(0);
   const audioRef = useRef<AudioContext | null>(null);
+  const fsClockRef = useRef<HTMLDivElement>(null);
 
   // A loud electronic starting signal, synthesised (no audio file, works offline)
   // in the register of a competition start beep — our own tone, not a recording of
@@ -84,6 +85,30 @@ export default function StopwatchClient({ accent: _accent }: { accent: string })
       setElapsedMs(baseRef.current);
     };
   }, [running]);
+
+  // Keep the full-screen time on screen once it grows a minutes field. The font is sized off the
+  // viewport for a big readout, but "1:24.72" is much wider than "24.72" and ran off both edges;
+  // shrink to fit the width. Keyed on the character count and the fs state (and window resize), so
+  // it only measures on the rare rollover, not every frame.
+  const fmtLen = formatStopwatch(elapsedMs).length;
+  useLayoutEffect(() => {
+    if (!fs) return;
+    const fit = () => {
+      const el = fsClockRef.current;
+      const parent = el?.parentElement;
+      if (!el || !parent) return;
+      // Intended big size mirrors the CSS min(40vw,60vh); computed here rather than read back from
+      // the inline style (clearing that to read it would drop the clock to the 16px default).
+      const base = Math.min(0.4 * window.innerWidth, 0.6 * window.innerHeight);
+      const cs = getComputedStyle(parent);
+      const avail = (parent.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0)) * 0.98;
+      const widthFit = avail / ((el.textContent?.length || 1) * 0.62); // monospace ≈ 0.62em/glyph
+      el.style.fontSize = Math.floor(Math.max(14, Math.min(base, widthFit))) + "px";
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, [fs, fmtLen]);
 
   // The exact elapsed time right now, whether or not a frame has ticked yet.
   function nowMs() {
@@ -248,8 +273,9 @@ export default function StopwatchClient({ accent: _accent }: { accent: string })
             {running ? `Running · lap ${laps.length + 1}` : started ? "Paused" : "Ready"}
           </p>
           <div
-            className="font-bold tabular-nums leading-none"
-            style={{ fontSize: "min(38vw, 52vh)", letterSpacing: "-0.02em" }}
+            ref={fsClockRef}
+            className="font-bold tabular-nums leading-none inline-block whitespace-nowrap max-w-full"
+            style={{ fontSize: "min(40vw, 60vh)", letterSpacing: "-0.02em" }}
           >
             {formatStopwatch(elapsedMs)}
           </div>
