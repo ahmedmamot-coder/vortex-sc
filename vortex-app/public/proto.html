@@ -5250,17 +5250,26 @@ if ('serviceWorker' in navigator) {
 
                   <sc-if value="{{ toolStopwatch }}" hint-placeholder-val="{{ false }}">
                     <div style="display:flex;flex-direction:column;gap:13px">
-                      <!-- Clock face, painted straight onto the ref element -->
-                      <div style="background:#0A0F1A;color:#fff;border-radius:20px;padding:22px 18px;text-align:center">
-                        <p style="margin:0;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">{{ swtStatusLabel }}</p>
-                        <div ref="{{ onSwtMount }}" style="font-family:var(--font-mono);font-size:52px;line-height:1.05;font-weight:800;letter-spacing:-.03em;margin:12px 0 4px">0.00</div>
-                        <p style="margin:0;font-size:10.5px;color:rgba(255,255,255,.45)">min : sec . hundredths</p>
+                      <!-- Clock face, painted straight onto the ref element. Tapping it, or the
+                           expand button, opens the poolside full-screen display. -->
+                      <div style="position:relative;overflow:hidden;background:radial-gradient(135% 120% at 88% -12%, rgba(6,126,234,.5) 0%, rgba(34,33,215,.22) 40%, transparent 70%), #0A0F1A;color:#fff;border-radius:20px;padding:26px 18px;text-align:center">
+                        <div style="position:absolute;inset:0;background:url('assets/pattern-transparent.png') right top/180px auto no-repeat;opacity:.22;pointer-events:none"></div>
+                        <button onclick="{{ onSwtFsEnter }}" style="position:absolute;top:12px;right:12px;z-index:2;width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.14);border:none;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer" title="Full screen for poolside"><i data-lucide="maximize-2" style="width:16px;height:16px"></i></button>
+                        <p style="position:relative;z-index:1;margin:0;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.55);font-weight:700">{{ swtStatusLabel }}</p>
+                        <div onclick="{{ onSwtFsEnter }}" ref="{{ onSwtMount }}" style="position:relative;z-index:1;font-family:var(--font-mono);font-size:clamp(58px, 18vw, 92px);line-height:1.02;font-weight:800;letter-spacing:-.03em;margin:12px 0 4px;cursor:pointer">0.00</div>
+                        <p style="position:relative;z-index:1;margin:0;font-size:10.5px;color:rgba(255,255,255,.45)">min : sec . hundredths</p>
                       </div>
-                      <!-- Primary controls -->
-                      <div style="display:flex;gap:10px">
-                        <button onclick="{{ onSwtLap }}" style="flex:none;width:64px;height:52px;border-radius:15px;background:#fff;border:1px solid #E5E9F0;cursor:pointer;color:#0C1116;font-family:inherit;font-weight:700;font-size:13.5px;display:flex;align-items:center;justify-content:center;gap:6px"><i data-lucide="flag" style="width:17px;height:17px"></i>Lap</button>
-                        <button onclick="{{ onSwtToggle }}" style="flex:1;height:52px;border-radius:15px;background:#0E7490;border:none;cursor:pointer;color:#fff;font-family:inherit;font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px"><i data-vx-icon="{{ swtBtnIcon }}" style="width:20px;height:20px"></i>{{ swtBtnLabel }}</button>
-                        <button onclick="{{ onSwtReset }}" style="flex:none;width:52px;height:52px;border-radius:15px;background:#fff;border:1px solid #E5E9F0;cursor:pointer;color:#0C1116;display:flex;align-items:center;justify-content:center"><i data-lucide="rotate-ccw" style="width:20px;height:20px"></i></button>
+                      <!-- Primary controls: Start/Pause + Sound + Reset on top, then a big full-width
+                           Lap. Lap is the tap made at every wall, over and over, so it is by far the
+                           largest target — hard to miss with a wet thumb poolside. -->
+                      <div style="display:flex;flex-direction:column;gap:10px">
+                        <div style="display:flex;gap:10px">
+                          <button onclick="{{ onSwtToggle }}" style="flex:1;height:54px;border-radius:15px;background:#0A0F1A;border:none;cursor:pointer;color:#fff;font-family:inherit;font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px"><i data-vx-icon="{{ swtBtnIcon }}" style="width:20px;height:20px"></i>{{ swtBtnLabel }}</button>
+                          <button onclick="{{ onSwtSoundToggle }}" style="flex:none;width:54px;height:54px;border-radius:15px;background:#fff;border:1px solid #E5E9F0;cursor:pointer;color:#0C1116;display:flex;align-items:center;justify-content:center" title="Start beep on/off"><i data-vx-icon="{{ swtSoundIcon }}" style="width:20px;height:20px"></i></button>
+                          <button onclick="{{ onSwtReset }}" style="flex:none;width:54px;height:54px;border-radius:15px;background:#fff;border:1px solid #E5E9F0;cursor:pointer;color:#0C1116;display:flex;align-items:center;justify-content:center"><i data-lucide="rotate-ccw" style="width:20px;height:20px"></i></button>
+                        </div>
+                        <button onclick="{{ onSwtLap }}" style="width:100%;height:88px;border-radius:18px;background:linear-gradient(135deg,#067EEA 0%,#2221D7 100%);border:none;cursor:pointer;color:#fff;font-family:inherit;font-weight:800;font-size:24px;display:flex;align-items:center;justify-content:center;gap:12px;box-shadow:0 10px 24px rgba(34,33,215,.32)"><i data-lucide="flag" style="width:28px;height:28px"></i>Lap</button>
+                        <button onclick="{{ onSwtFsEnter }}" style="width:100%;height:46px;border-radius:14px;background:#fff;border:1px solid #E5E9F0;cursor:pointer;color:#0C1116;font-family:inherit;font-weight:700;font-size:13.5px;display:flex;align-items:center;justify-content:center;gap:8px"><i data-lucide="maximize-2" style="width:17px;height:17px"></i>Full screen for poolside</button>
                       </div>
                       <!-- Stroke counter for the current length -->
                       <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:12px 14px;box-shadow:0 1px 4px rgba(11,20,40,.04);display:flex;align-items:center;justify-content:space-between">
@@ -5268,7 +5277,7 @@ if ('serviceWorker' in navigator) {
                         <span style="display:flex;align-items:center;gap:12px">
                           <button onclick="{{ onSwtStrokeMinus }}" style="width:36px;height:36px;border-radius:999px;border:1px solid #E5E9F0;background:#fff;color:#0C1116;font-size:20px;font-weight:700;line-height:1;cursor:pointer;padding:0">−</button>
                           <span style="font-family:var(--font-mono);font-size:24px;font-weight:800;color:#0C1116;min-width:30px;text-align:center">{{ swtStrokes }}</span>
-                          <button onclick="{{ onSwtStrokePlus }}" style="width:36px;height:36px;border-radius:999px;border:none;background:#0E7490;color:#fff;font-size:20px;font-weight:700;line-height:1;cursor:pointer;padding:0">+</button>
+                          <button onclick="{{ onSwtStrokePlus }}" style="width:36px;height:36px;border-radius:999px;border:none;background:#067EEA;color:#fff;font-size:20px;font-weight:700;line-height:1;cursor:pointer;padding:0">+</button>
                         </span>
                       </div>
                       <sc-if value="{{ swtHasLaps }}" hint-placeholder-val="{{ false }}">
@@ -8154,6 +8163,21 @@ if ('serviceWorker' in navigator) {
                   <button onclick="{{ onClockToggle }}" style="min-width:150px;height:62px;padding:0 26px;border-radius:16px;background:var(--vx-blue);border:none;cursor:pointer;color:#fff;font-family:inherit;font-weight:700;font-size:17px;display:flex;align-items:center;justify-content:center;gap:9px"><i data-vx-icon="{{ clockBtnIcon }}" style="width:22px;height:22px"></i>{{ clockBtnLabel }}</button>
                   <button onclick="{{ onClockReset }}" style="width:62px;height:62px;border-radius:16px;background:rgba(255,255,255,.1);border:none;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center"><i data-lucide="rotate-ccw" style="width:24px;height:24px"></i></button>
                   <button onclick="{{ onClockNext }}" style="width:62px;height:62px;border-radius:16px;background:rgba(255,255,255,.1);border:none;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center"><i data-lucide="skip-forward" style="width:24px;height:24px"></i></button>
+                </div>
+              </div>
+            </sc-if>
+            <sc-if value="{{ swtFs }}" hint-placeholder-val="{{ false }}">
+              <div class="vx-screen" style="position:absolute;inset:0;z-index:60;overflow:hidden;background:radial-gradient(120% 90% at 85% -8%, rgba(6,126,234,.45) 0%, rgba(34,33,215,.2) 38%, transparent 66%), #0A0F1A;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 16px">
+                <div style="position:absolute;inset:0;background:url('assets/pattern-transparent.png') right top/360px auto no-repeat;opacity:.18;pointer-events:none"></div>
+                <button onclick="{{ onSwtFsExit }}" style="position:absolute;top:calc(env(safe-area-inset-top) + 12px);right:16px;width:42px;height:42px;border-radius:12px;background:rgba(255,255,255,.14);border:none;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2"><i data-lucide="minimize-2" style="width:19px;height:19px"></i></button>
+                <button onclick="{{ onSwtSoundToggle }}" style="position:absolute;top:calc(env(safe-area-inset-top) + 12px);left:16px;width:42px;height:42px;border-radius:12px;background:rgba(255,255,255,.14);border:none;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2" title="Start beep on/off"><i data-vx-icon="{{ swtSoundIcon }}" style="width:19px;height:19px"></i></button>
+                <p style="position:relative;z-index:1;margin:0 0 4px;font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.55);font-weight:700;text-align:center">{{ swtStatusLabel }}</p>
+                <div ref="{{ onSwtFsMount }}" style="position:relative;z-index:1;font-family:var(--font-mono);font-size:clamp(110px, 34vw, 340px);line-height:.92;font-weight:800;color:#fff;letter-spacing:-.02em">0.00</div>
+                <p style="position:relative;z-index:1;margin:12px 0 0;font-size:17px;color:rgba(255,255,255,.7);font-weight:600;text-align:center">{{ swtFsSub }}</p>
+                <div style="position:relative;z-index:1;display:flex;gap:14px;margin-top:30px;align-items:center">
+                  <button onclick="{{ onSwtToggle }}" style="min-width:150px;height:70px;padding:0 28px;border-radius:18px;background:#111826;border:1px solid rgba(255,255,255,.16);cursor:pointer;color:#fff;font-family:inherit;font-weight:700;font-size:18px;display:flex;align-items:center;justify-content:center;gap:10px"><i data-vx-icon="{{ swtBtnIcon }}" style="width:24px;height:24px"></i>{{ swtBtnLabel }}</button>
+                  <button onclick="{{ onSwtLap }}" style="min-width:220px;height:70px;padding:0 40px;border-radius:18px;background:linear-gradient(135deg,#067EEA 0%,#2221D7 100%);border:none;cursor:pointer;color:#fff;font-family:inherit;font-weight:800;font-size:26px;display:flex;align-items:center;justify-content:center;gap:12px;box-shadow:0 10px 28px rgba(34,33,215,.42)"><i data-lucide="flag" style="width:30px;height:30px"></i>Lap</button>
+                  <button onclick="{{ onSwtReset }}" style="width:70px;height:70px;border-radius:18px;background:rgba(255,255,255,.1);border:none;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center"><i data-lucide="rotate-ccw" style="width:26px;height:26px"></i></button>
                 </div>
               </div>
             </sc-if>
@@ -17224,30 +17248,71 @@ class Component extends DCLogic {
     const base=this._swtBase||0;
     return this._swtRunning ? base + (performance.now()-this._swtStart) : base;
   }
-  onSwtMount(el){
-    this._swtEl=el||null;
-    if(this._swtRaf){ cancelAnimationFrame(this._swtRaf); this._swtRaf=null; }
+  // The clock shows in two places at once — the tool card and the poolside full-screen — so the
+  // paint loop drives a LIST of elements, not one. An element drops out of the list on its own the
+  // frame after it leaves the DOM, so a null ref needs no bookkeeping. One rAF runs while any clock
+  // is mounted; painting a static value while paused is cheap and keeps resume glitch-free.
+  _swtPaint(){
+    this._swtEls=(this._swtEls||[]).filter(el=>el && document.body.contains(el));
+    if(!this._swtEls.length) return false;
+    const txt=this._fmtStopwatch(this._swtElapsedMs()/1000);
+    for(let i=0;i<this._swtEls.length;i++) this._swtEls[i].textContent=txt;
+    return true;
+  }
+  _swtEnsureRaf(){
+    if(this._swtRaf) return;
+    const loop=()=>{ if(!this._swtPaint()){ this._swtRaf=null; return; } this._swtRaf=requestAnimationFrame(loop); };
+    this._swtRaf=requestAnimationFrame(loop);
+  }
+  _swtAttach(el){
     if(!el) return;
-    const paint=()=>{
-      if(!this._swtEl || !document.body.contains(this._swtEl)){ this._swtRaf=null; return; }
-      this._swtEl.textContent=this._fmtStopwatch(this._swtElapsedMs()/1000);
-      this._swtRaf=requestAnimationFrame(paint);
-    };
-    this._swtRaf=requestAnimationFrame(paint);
+    this._swtEls=this._swtEls||[];
+    if(this._swtEls.indexOf(el)<0) this._swtEls.push(el);
+    el.textContent=this._fmtStopwatch(this._swtElapsedMs()/1000);
+    this._swtEnsureRaf();
+  }
+  onSwtMount(el){ this._swtAttach(el); }
+  onSwtFsMount(el){ this._swtAttach(el); }
+  // A loud electronic starting signal, synthesised so it needs no audio file and works offline —
+  // a clean square-wave tone in the register of a competition start beep, at full volume. (It is
+  // our own tone, not a recording of any brand's system.) Runs on the user's Start tap, which is
+  // the gesture browsers require before they will let a page make sound.
+  _swtBeep(){
+    if(this.state.swtSound===false) return;
+    try{
+      const AC=window.AudioContext||window.webkitAudioContext; if(!AC) return;
+      const ctx=this._swtAudio||(this._swtAudio=new AC());
+      if(ctx.state==='suspended'){ try{ ctx.resume(); }catch(e){} }
+      const t=ctx.currentTime;
+      const master=ctx.createGain(); master.gain.value=1; master.connect(ctx.destination);
+      // Two detuned oscillators stacked for a fuller, more piercing tone that carries over a pool.
+      [1000,1000.6].forEach((f,i)=>{
+        const o=ctx.createOscillator(); o.type='square'; o.frequency.setValueAtTime(f,t);
+        const g=ctx.createGain();
+        g.gain.setValueAtTime(0.0001,t);
+        g.gain.exponentialRampToValueAtTime(i?0.5:0.9, t+0.01);   // fast attack
+        g.gain.setValueAtTime(i?0.5:0.9, t+0.5);                  // hold
+        g.gain.exponentialRampToValueAtTime(0.0001, t+0.72);      // quick tail
+        o.connect(g); g.connect(master); o.start(t); o.stop(t+0.74);
+      });
+    }catch(e){}
   }
   swtToggle(){
     if(this._swtRunning){
       this._swtBase=(this._swtBase||0)+(performance.now()-this._swtStart);
       this._swtRunning=false;
     }else{
+      const fresh=!(this._swtBase>0);      // a true start, not a resume after pause
       this._swtStart=performance.now();
       this._swtRunning=true;
+      if(fresh) this._swtBeep();           // the start signal fires on the gun, not on every resume
     }
     this.setState({swtRunning:this._swtRunning});
+    this._swtEnsureRaf();
   }
   swtReset(){
     this._swtRunning=false; this._swtBase=0;
-    if(this._swtEl) this._swtEl.textContent=this._fmtStopwatch(0);
+    this._swtPaint();
     this.setState({swtRunning:false, swtLaps:[], swtStrokes:0});
   }
   swtLap(){
@@ -17259,6 +17324,9 @@ class Component extends DCLogic {
     this.setState({swtLaps:laps, swtStrokes:0});           // strokes reset for the next length
   }
   swtStroke(d){ this.setState({swtStrokes:Math.max(0,(this.state.swtStrokes||0)+d)}); }
+  swtSoundToggle(){ this.setState({swtSound:this.state.swtSound===false}); }
+  swtFsEnter(){ this.setState({swtFs:true}); this._enterNativeFs(); }
+  swtFsExit(){ this.setState({swtFs:false}); this._exitNativeFs(); }
   videoSetRate(rate){
     this.setState({videoRate:rate});
     const v=this._activeVideo(); if(!v) return;
@@ -20216,7 +20284,7 @@ class Component extends DCLogic {
       {id:'ai', icon:'sparkles', title:'AI Assistants', sub:'Season · dryland · nutrition', tint:'rgba(39,51,214,.1)', color:'#2733D6'},
       {id:'review', icon:'shield-check', title:'AI Plan Review', sub:'Check plan vs zone rules', tint:'rgba(39,51,214,.1)', color:'#2733D6'},
       {id:'clock', icon:'timer', title:'Pace Clock', sub:'Run the session poolside', tint:'rgba(200,30,91,.1)', color:'#C81E5B'},
-      {id:'stopwatch', icon:'stopwatch', title:'Stopwatch', sub:'Laps · splits · stroke count', tint:'rgba(14,116,144,.12)', color:'#0E7490'},
+      {id:'stopwatch', icon:'stopwatch', title:'Stopwatch', sub:'Laps · splits · stroke count', tint:'rgba(6,126,234,.1)', color:'#067EEA'},
       {id:'zoneeng', icon:'activity', title:'Zone Engine', sub:'6-zone rules & squad limits', tint:'rgba(12,122,79,.1)', color:'#0C7A4F'},
       {id:'tpace', icon:'gauge', title:'T-Pace Tests', sub:'Log 1000/400/T30/T20 · retest due', tint:'rgba(6,126,234,.1)', color:'#067EEA'},
       {id:'promo', icon:'trending-up', title:'Level-Up Review', sub:'Promotion candidates & reviews', tint:'rgba(12,122,79,.1)', color:'#0C7A4F'},
@@ -24093,14 +24161,22 @@ class Component extends DCLogic {
         const counted=laps.filter(l=>l.strokes>0);
         const avg=counted.length ? Math.round(strokeSum/counted.length*10)/10 : 0;
         const started=!!(S.swtRunning || laps.length || self._swtBase);
+        const soundOn=S.swtSound!==false;
+        const lastLap=laps.length?laps[laps.length-1]:null;
         return {
           toolStopwatch:S.tool==='stopwatch',
           onSwtMount: self._swtMountRef || (self._swtMountRef=(el)=>self.onSwtMount(el)),
+          onSwtFsMount: self._swtFsMountRef || (self._swtFsMountRef=(el)=>self.onSwtFsMount(el)),
           onSwtToggle:()=>self.swtToggle(), onSwtReset:()=>self.swtReset(), onSwtLap:()=>self.swtLap(),
           onSwtStrokeMinus:()=>self.swtStroke(-1), onSwtStrokePlus:()=>self.swtStroke(1),
+          onSwtSoundToggle:()=>self.swtSoundToggle(),
+          onSwtFsEnter:()=>self.swtFsEnter(), onSwtFsExit:()=>self.swtFsExit(),
+          swtFs:!!S.swtFs,
+          swtSoundOn:soundOn, swtSoundIcon: soundOn?'volume-2':'volume-x',
           swtBtnLabel: S.swtRunning?'Pause':(started?'Resume':'Start'),
           swtBtnIcon: S.swtRunning?'pause':'play',
           swtStatusLabel: S.swtRunning?('Running · lap '+(laps.length+1)):(started?'Paused':'Ready'),
+          swtFsSub: lastLap ? ('Last lap '+self._fmtStopwatch(lastLap.splitMs/1000)+' · '+laps.length+(laps.length===1?' lap':' laps')) : 'Tap Lap at each wall',
           swtStrokes: String(S.swtStrokes||0),
           swtHasLaps: laps.length>0,
           swtNoLaps: laps.length===0,

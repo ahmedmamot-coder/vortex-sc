@@ -11,17 +11,63 @@ import {
 } from "@/lib/stopwatch";
 import StopwatchIcon from "./stopwatch-icon";
 
-export default function StopwatchClient({ accent }: { accent: string }) {
+// The club's logo blues (the azure→indigo of the Vortex "X") and the pale wave
+// pattern behind the dark surfaces, so the tool wears the brand rather than an
+// arbitrary accent.
+const BRAND = "linear-gradient(135deg,#067EEA 0%,#2221D7 100%)";
+const PATTERN =
+  "radial-gradient(120% 90% at 85% -8%, rgba(6,126,234,.45) 0%, rgba(34,33,215,.2) 38%, transparent 66%), " +
+  "url('/assets/pattern-transparent.png') right top/360px auto no-repeat, #0A0F1A";
+
+export default function StopwatchClient({ accent: _accent }: { accent: string }) {
+  const accent = "#067EEA"; // solid brand blue (valid as an SVG stroke); Lap buttons use BRAND
   const [elapsedMs, setElapsedMs] = useState(0);
   const [running, setRunning] = useState(false);
   const [laps, setLaps] = useState<Lap[]>([]);
   const [strokes, setStrokes] = useState(0);
+  const [soundOn, setSoundOn] = useState(true);
+  const [fs, setFs] = useState(false);
 
   // Accumulated time before the current run, and the timestamp the current run
   // began. Kept in refs so ticking never goes stale between renders and the
   // clock stays accurate across pause/resume.
   const baseRef = useRef(0);
   const startRef = useRef(0);
+  const audioRef = useRef<AudioContext | null>(null);
+
+  // A loud electronic starting signal, synthesised (no audio file, works offline)
+  // in the register of a competition start beep — our own tone, not a recording of
+  // any brand's system. Fired on the user's Start tap, the gesture browsers require
+  // before a page may play sound.
+  function beep() {
+    if (!soundOn) return;
+    try {
+      const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!AC) return;
+      const ctx = audioRef.current || (audioRef.current = new AC());
+      if (ctx.state === "suspended") ctx.resume();
+      const t = ctx.currentTime;
+      const master = ctx.createGain();
+      master.gain.value = 1;
+      master.connect(ctx.destination);
+      [1000, 1000.6].forEach((f, i) => {
+        const o = ctx.createOscillator();
+        o.type = "square";
+        o.frequency.setValueAtTime(f, t);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(i ? 0.5 : 0.9, t + 0.01);
+        g.gain.setValueAtTime(i ? 0.5 : 0.9, t + 0.5);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.72);
+        o.connect(g);
+        g.connect(master);
+        o.start(t);
+        o.stop(t + 0.74);
+      });
+    } catch {
+      /* no audio available */
+    }
+  }
 
   useEffect(() => {
     if (!running) return;
@@ -45,6 +91,9 @@ export default function StopwatchClient({ accent }: { accent: string }) {
   }
 
   function toggle() {
+    // The start signal fires on the gun (a fresh start from zero), not on every
+    // resume after a pause.
+    if (!running && baseRef.current === 0) beep();
     setRunning((v) => !v);
   }
 
@@ -93,7 +142,7 @@ export default function StopwatchClient({ accent }: { accent: string }) {
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
             <StopwatchIcon size={22} color="#7A8296" className="mb-1" />
-            <span className="text-4xl font-bold text-[#0C1116] tabular-nums tracking-tight">
+            <span className="text-5xl font-bold text-[#0C1116] tabular-nums tracking-tight">
               {formatStopwatch(elapsedMs)}
             </span>
             <span className="text-xs text-[#7A8296] mt-1">
@@ -102,32 +151,104 @@ export default function StopwatchClient({ accent }: { accent: string }) {
           </div>
         </div>
 
-        {/* Primary controls */}
-        <div className="flex gap-2">
-          <button
-            onClick={toggle}
-            className="px-6 py-2 rounded-[var(--radius-pill)] font-semibold text-white"
-            style={{ background: running ? "var(--vx-warning)" : "var(--vx-success)" }}
-          >
-            {running ? "Pause" : started ? "Resume" : "Start"}
-          </button>
+        {/* Primary controls: Start/Pause + Sound + Reset on top, then a big full-width Lap. Lap is
+            the tap made at every wall, over and over, so it is by far the largest target. */}
+        <div className="w-full flex flex-col gap-2.5">
+          <div className="flex gap-2.5">
+            <button
+              onClick={toggle}
+              className="flex-1 h-[52px] rounded-[var(--radius-md)] font-semibold text-white"
+              style={{ background: running ? "var(--vx-warning)" : "#0A0F1A" }}
+            >
+              {running ? "Pause" : started ? "Resume" : "Start"}
+            </button>
+            <button
+              onClick={() => setSoundOn((v) => !v)}
+              title="Start beep on/off"
+              className="w-[52px] h-[52px] rounded-[var(--radius-md)] font-semibold text-[#0C1116] border border-[#E5E9F0]"
+            >
+              {soundOn ? "🔊" : "🔇"}
+            </button>
+            <button
+              onClick={reset}
+              disabled={!started}
+              className="w-[52px] h-[52px] rounded-[var(--radius-md)] font-semibold text-[#0C1116] border border-[#E5E9F0] disabled:opacity-40"
+            >
+              ↺
+            </button>
+          </div>
           <button
             onClick={lap}
             disabled={!started}
-            className="px-6 py-2 rounded-[var(--radius-pill)] font-semibold text-white disabled:opacity-40"
-            style={{ background: accent }}
+            className="w-full h-[84px] rounded-[var(--radius-lg)] font-bold text-white text-2xl disabled:opacity-40"
+            style={{ background: BRAND }}
           >
             Lap
           </button>
           <button
-            onClick={reset}
-            disabled={!started}
-            className="px-6 py-2 rounded-[var(--radius-pill)] font-semibold text-[#0C1116] border border-[#E5E9F0] disabled:opacity-40"
+            onClick={() => setFs(true)}
+            className="w-full h-[46px] rounded-[var(--radius-md)] font-semibold text-[#0C1116] border border-[#E5E9F0] flex items-center justify-center gap-2 text-sm"
           >
-            Reset
+            ⛶ Full screen for poolside
           </button>
         </div>
       </div>
+
+      {/* Poolside full-screen display: a huge timer visible across the pool. */}
+      {fs && (
+        <div
+          className="fixed inset-0 z-50 text-white flex flex-col items-center justify-center px-4 overflow-hidden"
+          style={{ background: PATTERN }}
+        >
+          <button
+            onClick={() => setFs(false)}
+            className="absolute top-4 right-4 w-11 h-11 rounded-xl bg-white/10"
+            aria-label="Exit full screen"
+          >
+            ✕
+          </button>
+          <button
+            onClick={() => setSoundOn((v) => !v)}
+            className="absolute top-4 left-4 w-11 h-11 rounded-xl bg-white/10"
+            title="Start beep on/off"
+          >
+            {soundOn ? "🔊" : "🔇"}
+          </button>
+          <p className="uppercase tracking-[0.16em] text-white/50 font-bold text-sm mb-1">
+            {running ? `Running · lap ${laps.length + 1}` : started ? "Paused" : "Ready"}
+          </p>
+          <div
+            className="font-bold tabular-nums leading-none"
+            style={{ fontSize: "clamp(110px, 34vw, 340px)", letterSpacing: "-0.02em" }}
+          >
+            {formatStopwatch(elapsedMs)}
+          </div>
+          <p className="mt-3 text-white/70 font-semibold">
+            {laps.length > 0
+              ? `Last lap ${formatStopwatch(laps[laps.length - 1].splitMs)} · ${laps.length} ${laps.length === 1 ? "lap" : "laps"}`
+              : "Tap Lap at each wall"}
+          </p>
+          <div className="flex gap-3.5 mt-8 items-center">
+            <button
+              onClick={toggle}
+              className="min-w-[150px] h-[70px] px-7 rounded-2xl bg-[#111826] border border-white/15 font-bold text-lg"
+            >
+              {running ? "Pause" : started ? "Resume" : "Start"}
+            </button>
+            <button
+              onClick={lap}
+              disabled={!started}
+              className="min-w-[220px] h-[70px] px-10 rounded-2xl font-extrabold text-2xl disabled:opacity-40"
+              style={{ background: BRAND }}
+            >
+              Lap
+            </button>
+            <button onClick={reset} disabled={!started} className="w-[70px] h-[70px] rounded-2xl bg-white/10 disabled:opacity-40">
+              ↺
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Stroke counter for the current (in-progress) lap */}
       <div className="rounded-[var(--radius-md)] bg-white border border-[#E5E9F0] p-3 mb-4">
