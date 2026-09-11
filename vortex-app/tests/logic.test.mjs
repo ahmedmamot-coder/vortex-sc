@@ -4,6 +4,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { bind, methodSource, describe, it, itAsync, eq, report, SOURCE, sourceBetween, runInSandbox } from "./harness.mjs";
 import { computeRaceMetrics, markerMetres, raceDistance } from "@/lib/race";
+import { OnsetDetector } from "@/lib/audio-onset";
 // The real route module. Node strips the types, so these tests run the filter that ships
 // rather than a regex-mangled copy of it.
 const AI_ROUTE = await import("../src/app/api/ai/coach/route.ts");
@@ -12772,6 +12773,57 @@ describe("race metrics", () => {
     ]);
     eq(m.fastestLabel, "15m");
     eq(m.slowestLabel, "100m");
+  });
+});
+
+/* -------------------------------------------------------------- auto-start
+   The video clock locks to the starter's beep by watching for a sudden spike in
+   the audio spectrum. A false start (firing on crowd noise, or before the race)
+   would silently mis-time every split, so the guardrails matter more than the
+   catch: it must ignore a steady room and a slow swell, and only trip on the
+   sharp transient of the signal. */
+describe("auto-start onset detection", () => {
+  const BINS = 32;
+  const flat = (v) => new Array(BINS).fill(v);
+  // A little deterministic wobble so the baseline has real variance to clear.
+  const wobble = (base, i) => flat(base).map((v, k) => v + 0.01 * Math.sin(i * 1.7 + k));
+
+  it("locks onto a sharp beep after a quiet lead-in", () => {
+    const d = new OnsetDetector();
+    let firedAt = -1;
+    for (let i = 0; i < 40; i++) {
+      const spectrum = i === 30 ? flat(0.9) : wobble(0.08, i); // the beep at frame 30
+      if (d.push(spectrum) && firedAt < 0) firedAt = i;
+    }
+    eq(firedAt, 30, "start should lock to the beep frame");
+  });
+
+  it("does not fire on a steady room (no transient)", () => {
+    const d = new OnsetDetector();
+    let fired = false;
+    for (let i = 0; i < 120; i++) {
+      if (d.push(wobble(0.3, i))) fired = true; // constant-ish crowd hum
+    }
+    eq(fired, false, "a steady spectrum has near-zero flux");
+  });
+
+  it("does not fire on a slow swell", () => {
+    const d = new OnsetDetector();
+    let fired = false;
+    for (let i = 0; i < 120; i++) {
+      if (d.push(flat(Math.min(0.9, 0.05 + i * 0.006)))) fired = true; // gentle ramp
+    }
+    eq(fired, false, "a gradual rise never spikes the flux");
+  });
+
+  it("holds fire during the warmup, even on an early spike", () => {
+    const d = new OnsetDetector({ warmup: 8 });
+    let firedAt = -1;
+    for (let i = 0; i < 20; i++) {
+      const spectrum = i === 3 ? flat(0.9) : flat(0.08);
+      if (d.push(spectrum) && firedAt < 0) firedAt = i;
+    }
+    eq(firedAt < 0 || firedAt >= 8, true, "must not fire before the baseline settles");
   });
 });
 

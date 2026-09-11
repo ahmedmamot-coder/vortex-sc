@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import type { Video, VideoSplit, VideoNote } from "@/lib/data/videos";
 import { RACE_MARKERS, computeRaceMetrics, type SplitInput } from "@/lib/race";
+import { OnsetDetector } from "@/lib/audio-onset";
 import { formatTime } from "@/lib/format";
 import { saveSplits, addNote, deleteNote } from "../actions";
 
@@ -16,6 +17,7 @@ function vimeoId(url: string): string | null {
 }
 
 type Split = { label: string; seconds: number; strokes: number | null };
+type Audio = { ctx: AudioContext; analyser: AnalyserNode; src: MediaElementAudioSourceNode };
 
 export default function VideoDetailClient({
   slug,
@@ -27,47 +29,142 @@ export default function VideoDetailClient({
   const { video } = detail;
   const raceType = video.race_type ?? "50";
   const markers = RACE_MARKERS[raceType] ?? RACE_MARKERS["50"];
+  const isMp4 = video.kind === "mp4";
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [rate, setRate] = useState(1);
   const [splits, setSplits] = useState<Split[]>(
     detail.splits.map((s) => ({ label: s.label, seconds: s.seconds, strokes: s.strokes })),
   );
-  const [manualStart, setManualStart] = useState<number | null>(null);
+  // The gun. For mp4 it is a timestamp inside the clip; for an embed it is a
+  // wall-clock moment. Every split time is measured from here, so out/back,
+  // reaction and average speed are all relative to the start — not the footage.
+  const [startAt, setStartAt] = useState<number | null>(null);
+  const [autoListening, setAutoListening] = useState(false);
+  const [autoStatus, setAutoStatus] = useState<string | null>(null);
   const [notes, setNotes] = useState(detail.notes);
   const [noteText, setNoteText] = useState("");
   const [, startTransition] = useTransition();
 
+  const audioRef = useRef<Audio | null>(null);
+  const detectorRef = useRef<OnsetDetector | null>(null);
+  const rafRef = useRef<number | null>(null);
+
   const nextMarker = markers[splits.length];
   const allDone = splits.length >= markers.length;
+  const started = startAt != null;
 
   const metrics = computeRaceMetrics(
     raceType,
     splits.map<SplitInput>((s) => ({ label: s.label, seconds: s.seconds, strokes: s.strokes })),
   );
 
-  // Current playback time: from the <video> element for mp4, or a wall-clock
-  // stopwatch for embedded YouTube/Vimeo (whose currentTime we can't read).
-  function currentTime(): number {
-    if (video.kind === "mp4" && videoRef.current) return videoRef.current.currentTime;
-    if (manualStart != null) return (Date.now() - manualStart) / 1000;
-    return 0;
+  // A raw clock in seconds, in the same frame as startAt.
+  function rawTime(): number {
+    if (isMp4) return videoRef.current?.currentTime ?? 0;
+    return Date.now() / 1000;
+  }
+  function elapsed(): number {
+    if (startAt == null) return 0;
+    return Math.max(0, rawTime() - startAt);
   }
 
   function persist(next: Split[]) {
     startTransition(() => saveSplits(slug, video.id, next));
   }
 
+  function stopAuto() {
+    setAutoListening(false);
+    detectorRef.current = null;
+    if (rafRef.current != null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+  }
+
+  // Tear the audio graph down when leaving the page.
+  useEffect(() => {
+    return () => {
+      stopAuto();
+      audioRef.current?.ctx.close().catch(() => {});
+      audioRef.current = null;
+    };
+  }, []);
+
+  function setStartHere() {
+    stopAuto();
+    setStartAt(rawTime());
+    setAutoStatus(null);
+  }
+
+  function clearStart() {
+    stopAuto();
+    setStartAt(null);
+    setAutoStatus(null);
+  }
+
+  // Lock the clock to the starter's beep by listening to the clip's audio.
+  function armAuto() {
+    const el = videoRef.current;
+    if (!el) return;
+    try {
+      let a = audioRef.current;
+      if (!a) {
+        const Ctx =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        const ctx = new Ctx();
+        // createMediaElementSource may be called only once per element.
+        const src = ctx.createMediaElementSource(el);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 1024;
+        analyser.smoothingTimeConstant = 0;
+        src.connect(analyser);
+        analyser.connect(ctx.destination); // keep the sound audible
+        a = { ctx, analyser, src };
+        audioRef.current = a;
+      }
+      a.ctx.resume().catch(() => {});
+      detectorRef.current = new OnsetDetector();
+      setStartAt(null);
+      setAutoListening(true);
+      setAutoStatus("Listening for the start signal — press play from before the beep.");
+
+      const bins = new Uint8Array(a.analyser.frequencyBinCount);
+      const spec = new Array<number>(bins.length);
+      const tick = () => {
+        const aa = audioRef.current;
+        const det = detectorRef.current;
+        const v = videoRef.current;
+        if (!aa || !det || !v) return;
+        aa.analyser.getByteFrequencyData(bins);
+        for (let i = 0; i < bins.length; i++) spec[i] = bins[i] / 255;
+        if (!v.paused && det.push(spec)) {
+          const t = v.currentTime;
+          setStartAt(t);
+          setAutoStatus(`Start locked to the beep at ${formatTime(t)} in the clip.`);
+          stopAuto();
+          return;
+        }
+        rafRef.current = requestAnimationFrame(tick);
+      };
+      rafRef.current = requestAnimationFrame(tick);
+    } catch {
+      stopAuto();
+      setAutoStatus("Couldn't read this clip's audio — tap “Set start” on the gun frame instead.");
+    }
+  }
+
   function tapSplit() {
-    if (allDone) return;
-    const updated = [...splits, { label: nextMarker, seconds: currentTime(), strokes: null }];
+    if (allDone || !started) return;
+    const updated = [...splits, { label: nextMarker, seconds: elapsed(), strokes: null }];
     setSplits(updated);
     persist(updated);
   }
 
   function resetSplits() {
     setSplits([]);
-    setManualStart(null);
+    clearStart();
     persist([]);
   }
 
@@ -84,15 +181,18 @@ export default function VideoDetailClient({
     if (videoRef.current) videoRef.current.playbackRate = r;
   }
 
+  function noteTime(): number {
+    if (isMp4) return videoRef.current?.currentTime ?? 0;
+    return elapsed();
+  }
+
   const ytId = video.kind === "youtube" ? youtubeId(video.url) : null;
   const vmId = video.kind === "vimeo" ? vimeoId(video.url) : null;
 
   return (
     <div>
       <div className="rounded-[var(--radius-lg)] overflow-hidden bg-black mb-3 aspect-video">
-        {video.kind === "mp4" && (
-          <video ref={videoRef} src={video.url} controls className="w-full h-full" />
-        )}
+        {isMp4 && <video ref={videoRef} src={video.url} controls className="w-full h-full" />}
         {ytId && (
           <iframe
             src={`https://www.youtube.com/embed/${ytId}`}
@@ -106,7 +206,7 @@ export default function VideoDetailClient({
         )}
       </div>
 
-      {video.kind === "mp4" && (
+      {isMp4 && (
         <div className="flex gap-1.5 mb-3">
           <span className="text-xs text-[#7A8296] self-center mr-1">Speed:</span>
           {[0.25, 0.5, 0.75, 1].map((r) => (
@@ -138,35 +238,75 @@ export default function VideoDetailClient({
       <div className="rounded-[var(--radius-lg)] bg-white border border-[#E5E9F0] p-4 mb-4">
         <div className="flex items-center justify-between mb-3">
           <p className="text-[#0C1116] font-semibold text-sm">Race splits · {raceType}m</p>
-          {splits.length > 0 && (
+          {(splits.length > 0 || started) && (
             <button onClick={resetSplits} className="text-xs text-[var(--vx-danger)]">
               Reset
             </button>
           )}
         </div>
 
-        {video.kind !== "mp4" && manualStart == null && !allDone && (
-          <button
-            onClick={() => setManualStart(Date.now())}
-            className="w-full rounded-[var(--radius-md)] py-2 text-sm font-semibold text-white mb-3"
-            style={{ background: "var(--vx-success)" }}
-          >
-            Start stopwatch (at the beep/dive)
-          </button>
+        {/* Set the gun first, then the tap flow unlocks. */}
+        {!started ? (
+          <div className="mb-1">
+            <button
+              onClick={setStartHere}
+              className="w-full rounded-[var(--radius-md)] py-3 text-sm font-bold text-white"
+              style={{ background: "var(--vx-success)" }}
+            >
+              {isMp4 ? "Set start — on the gun frame" : "Start stopwatch (at the beep/dive)"}
+            </button>
+
+            {isMp4 &&
+              (autoListening ? (
+                <button
+                  onClick={stopAuto}
+                  className="w-full mt-2 rounded-[var(--radius-md)] py-2.5 text-sm font-semibold border border-[var(--vx-blue)] text-[var(--vx-blue)] flex items-center justify-center gap-2"
+                >
+                  <span className="inline-block w-2 h-2 rounded-full bg-[var(--vx-danger)] animate-pulse" />
+                  Listening for the beep… tap to cancel
+                </button>
+              ) : (
+                <button
+                  onClick={armAuto}
+                  className="w-full mt-2 rounded-[var(--radius-md)] py-2.5 text-sm font-semibold border border-[#E5E9F0] text-[#0C1116]"
+                >
+                  🔊 Auto-start on the beep
+                </button>
+              ))}
+
+            <p className="text-[11px] text-[#7A8296] mt-2 leading-relaxed">
+              {isMp4
+                ? "Pause on the flash/gun and “Set start” for a frame-exact zero, or arm the beep detector and play from before the start."
+                : "Embedded clips have no readable audio — start the stopwatch by hand on the beep."}
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center justify-between text-[11px] text-[#7A8296] mb-2">
+              <span>
+                Gun set{isMp4 && startAt != null ? ` · ${formatTime(startAt)} in clip` : ""} — all splits
+                measured from here.
+              </span>
+              <button onClick={clearStart} className="text-[var(--vx-blue)] font-semibold">
+                Change
+              </button>
+            </div>
+
+            {!allDone ? (
+              <button
+                onClick={tapSplit}
+                className="w-full rounded-[var(--radius-md)] py-3 text-sm font-bold text-white"
+                style={{ background: "var(--vx-blue)" }}
+              >
+                Tap: {nextMarker}
+              </button>
+            ) : (
+              <p className="text-sm text-[var(--vx-success)] text-center py-2">All splits captured ✓</p>
+            )}
+          </>
         )}
 
-        {!allDone ? (
-          <button
-            onClick={tapSplit}
-            disabled={video.kind !== "mp4" && manualStart == null}
-            className="w-full rounded-[var(--radius-md)] py-3 text-sm font-bold text-white disabled:opacity-40"
-            style={{ background: "var(--vx-blue)" }}
-          >
-            Tap: {nextMarker}
-          </button>
-        ) : (
-          <p className="text-sm text-[var(--vx-success)] text-center py-2">All splits captured ✓</p>
-        )}
+        {autoStatus && <p className="text-[11px] text-[var(--vx-blue)] mt-2">{autoStatus}</p>}
 
         {splits.length > 0 && (
           <RaceBreakdown
@@ -191,7 +331,7 @@ export default function VideoDetailClient({
           <button
             onClick={() => {
               if (!noteText.trim()) return;
-              const t = currentTime();
+              const t = noteTime();
               startTransition(async () => {
                 await addNote(slug, video.id, t, noteText.trim());
               });
