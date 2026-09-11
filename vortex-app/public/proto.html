@@ -2970,6 +2970,21 @@ if ('serviceWorker' in navigator) {
                               </div>
                             </div>
                           </sc-if>
+                          <sc-if value="{{ famWaStdHas }}" hint-placeholder-val="{{ false }}">
+                            <div style="border-top:1px solid rgba(255,255,255,.12);padding-top:10px">
+                              <p style="margin:0 0 7px;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">World Aquatics qualifying</p>
+                              <div style="display:flex;flex-direction:column;gap:6px">
+                                <sc-for list="{{ famWaStdRows }}" as="q" hint-placeholder-count="4">
+                                  <div style="display:flex;align-items:center;gap:8px">
+                                    <span style="flex:1;min-width:0;font-size:12px;font-weight:600;color:#fff">{{ q.event }} <span style="font-size:9.5px;font-weight:700;color:rgba(255,255,255,.4)">{{ q.course }}</span></span>
+                                    <span style="font-family:var(--font-mono);font-size:11px;color:rgba(255,255,255,.55)">{{ q.current }}</span>
+                                    <span style="font-family:var(--font-mono);font-size:10px;color:rgba(255,255,255,.4)">B {{ q.bStr }} · A {{ q.aStr }}</span>
+                                    <span style="flex:none;font-size:10px;font-weight:700;color:{{ q.statusColor }};min-width:74px;text-align:right">{{ q.status }}</span>
+                                  </div>
+                                </sc-for>
+                              </div>
+                            </div>
+                          </sc-if>
                           <div style="border-top:1px solid rgba(255,255,255,.12);padding-top:10px">
                             <p style="margin:0;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">{{ tx.doubleDownOn }}</p>
                             <p style="margin:3px 0 0;font-size:13px;font-weight:700">{{ famAiSugg.focusStroke }}</p>
@@ -4594,6 +4609,21 @@ if ('serviceWorker' in navigator) {
                                       <span style="font-size:9.5px;font-weight:700;letter-spacing:.02em;color:rgba(255,255,255,.4)">{{ e.stdLabel }}</span>
                                       <span style="font-size:10px;font-weight:700;color:{{ e.gapColor }}">{{ e.gap }}</span>
                                     </div>
+                                  </div>
+                                </sc-for>
+                              </div>
+                            </div>
+                          </sc-if>
+                          <sc-if value="{{ waStdHas }}" hint-placeholder-val="{{ false }}">
+                            <div style="border-top:1px solid rgba(255,255,255,.12);padding-top:10px">
+                              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px"><p style="margin:0;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">World Aquatics qualifying</p><button onclick="{{ onOpenWaStd }}" style="background:rgba(255,255,255,.1);color:rgba(255,255,255,.8);border:none;border-radius:8px;padding:4px 9px;font-family:inherit;font-size:10px;font-weight:700;cursor:pointer">Full table</button></div>
+                              <div style="display:flex;flex-direction:column;gap:6px">
+                                <sc-for list="{{ waStdRows }}" as="q" hint-placeholder-count="4">
+                                  <div style="display:flex;align-items:center;gap:8px">
+                                    <span style="flex:1;min-width:0;font-size:12px;font-weight:600;color:#fff">{{ q.event }} <span style="font-size:9.5px;font-weight:700;color:rgba(255,255,255,.4)">{{ q.course }}</span></span>
+                                    <span style="font-family:var(--font-mono);font-size:11px;color:rgba(255,255,255,.55)">{{ q.current }}</span>
+                                    <span style="font-family:var(--font-mono);font-size:10px;color:rgba(255,255,255,.4)">B {{ q.bStr }} · A {{ q.aStr }}</span>
+                                    <span style="flex:none;font-size:10px;font-weight:700;color:{{ q.statusColor }};min-width:74px;text-align:right">{{ q.status }}</span>
                                   </div>
                                 </sc-for>
                               </div>
@@ -8266,6 +8296,53 @@ if ('serviceWorker' in navigator) {
                 </div>
               </div>
             </sc-if>
+            <sc-if value="{{ waqOpen }}" hint-placeholder-val="{{ false }}">
+              <div class="vx-screen" style="position:absolute;inset:0;z-index:61;background:#EEF1F5;display:flex;flex-direction:column">
+                <div style="flex:none;display:flex;align-items:center;justify-content:space-between;padding:calc(env(safe-area-inset-top) + 12px) 16px 12px;background:#fff;border-bottom:1px solid #E5E9F0">
+                  <span style="font-size:16px;font-weight:700;color:#0C1116">World Aquatics standards</span>
+                  <button onclick="{{ onWaqClose }}" style="width:34px;height:34px;border-radius:10px;background:#F4F6F8;border:none;color:#7A8296;display:flex;align-items:center;justify-content:center;cursor:pointer"><i data-lucide="x" style="width:16px;height:16px"></i></button>
+                </div>
+                <div class="vx-scroll" style="flex:1;overflow-y:auto;padding:14px 15px 30px">
+                  <div style="display:flex;gap:6px;background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:5px;margin-bottom:14px">
+                    <button onclick="{{ onWaqMen }}" style="flex:1;padding:9px;border-radius:9px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:12px;background:{{ waqMenBg }};color:{{ waqMenFg }}">Men</button>
+                    <button onclick="{{ onWaqWomen }}" style="flex:1;padding:9px;border-radius:9px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:12px;background:{{ waqWomenBg }};color:{{ waqWomenFg }}">Women</button>
+                  </div>
+                  <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;margin-bottom:14px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
+                    <p style="margin:0 0 3px;font-size:13px;font-weight:700;color:#0C1116">Age-group standard</p>
+                    <p style="margin:0 0 10px;font-size:11px;color:#7A8296">Single-year benchmark · short course (25m) · by age at 31 Dec</p>
+                    <div style="overflow-x:auto">
+                      <table style="width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap">
+                        <thead><tr style="color:#9AA2B4;text-align:right"><th style="text-align:left;padding:5px 6px;font-weight:700">Event</th><th style="padding:5px 6px;font-weight:700">13</th><th style="padding:5px 6px;font-weight:700">14</th><th style="padding:5px 6px;font-weight:700">15</th><th style="padding:5px 6px;font-weight:700">16</th></tr></thead>
+                        <tbody>
+                          <sc-for list="{{ waqAgeRows }}" as="r" hint-placeholder-count="8">
+                            <tr style="border-top:1px solid #F0F2F6;text-align:right"><td style="text-align:left;padding:6px;font-weight:700;color:#0C1116">{{ r.event }}</td><td style="padding:6px;font-family:var(--font-mono);color:#3A4152">{{ r.c13 }}</td><td style="padding:6px;font-family:var(--font-mono);color:#3A4152">{{ r.c14 }}</td><td style="padding:6px;font-family:var(--font-mono);color:#3A4152">{{ r.c15 }}</td><td style="padding:6px;font-family:var(--font-mono);color:#3A4152">{{ r.c16 }}</td></tr>
+                          </sc-for>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:3px"><p style="margin:0;font-size:13px;font-weight:700;color:#0C1116">Senior Worlds qualifying</p>
+                      <div style="display:flex;gap:5px;background:#F4F6F8;border-radius:9px;padding:4px">
+                        <button onclick="{{ onWaqLcm }}" style="padding:6px 10px;border-radius:7px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:11px;background:{{ waqLcmBg }};color:{{ waqLcmFg }}">LCM</button>
+                        <button onclick="{{ onWaqScm }}" style="padding:6px 10px;border-radius:7px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:11px;background:{{ waqScmBg }};color:{{ waqScmFg }}">SCM</button>
+                      </div>
+                    </div>
+                    <p style="margin:0 0 10px;font-size:11px;color:#7A8296">{{ waqCourseLabel }} · A = standard entry · B = A + 3.5%</p>
+                    <div style="overflow-x:auto">
+                      <table style="width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap">
+                        <thead><tr style="color:#9AA2B4;text-align:right"><th style="text-align:left;padding:5px 6px;font-weight:700">Event</th><th style="padding:5px 6px;font-weight:700">A</th><th style="padding:5px 6px;font-weight:700">B</th></tr></thead>
+                        <tbody>
+                          <sc-for list="{{ waqQualRows }}" as="r" hint-placeholder-count="8">
+                            <tr style="border-top:1px solid #F0F2F6;text-align:right"><td style="text-align:left;padding:6px;font-weight:700;color:#0C1116">{{ r.event }}</td><td style="padding:6px;font-family:var(--font-mono);font-weight:700;color:#067EEA">{{ r.a }}</td><td style="padding:6px;font-family:var(--font-mono);color:#3A4152">{{ r.b }}</td></tr>
+                          </sc-for>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </sc-if>
             <sc-if value="{{ showVortexId }}" hint-placeholder-val="{{ false }}">
               <div class="vx-screen" style="position:absolute;inset:0;z-index:47;background:#0A0F1A;display:flex;flex-direction:column">
                 <div style="flex:none;height:44px"></div>
@@ -8947,6 +9024,7 @@ class Component extends DCLogic {
       fitSessDate:null, fitSessSlot:'AM', fitSessTime:'', fitCalY:null, fitCalM:null, fitCalDay:null, fitSavedMsg:'',
       shrOpen:false, shrKind:null, shrSquad:null, shrId:null, shrAll:true, shrSel:{},
       tgtEditOpen:false, tgtEditSw:null, tgtEditEvent:null, tgtEditVal:'',
+      waqOpen:false, waqGender:'M', waqCourse:'L',
       videoActiveId:null, videoUrlDraft:'', videoTitleDraft:'', videoTagDraft:'', videoAddOpen:false, videoRate:1, videoNoteDraft:'', videoCurT:0, videoDur:0,
       videoCompareIds:[], videoCompareMsg:'', videoFolderOpen:true, videoFolderQ:'',
       videoStartBusy:false, videoStartMsg:'', videoStartCands:[], videoStartPick:0,
@@ -14718,6 +14796,70 @@ class Component extends DCLogic {
     const bl=this._waBase(event, gender, 'L'), bs=this._waBase(event, gender, 'S');
     if(bl>0 && bs>0) return { sec: stdScSec*(bl/bs), converted:true };
     return { sec:stdScSec, converted:false };
+  }
+  // World Aquatics Senior World Championships entry standards, gender (M/F) -> course (L/S) ->
+  // event -> {a,b}. A = the standard entry time; B = A + 3.5%. LCM = Singapore 2025 basis;
+  // SCM = Beijing 2026. Stored as strings, parsed with parseTimeStr. Edit here to update.
+  _waQualTimes(){
+    return {
+      M: {
+        L: {
+          '50 Free':{a:'22.05',b:'22.82'},'100 Free':{a:'48.34',b:'50.03'},'200 Free':{a:'1:46.70',b:'1:50.43'},'400 Free':{a:'3:48.15',b:'3:56.14'},'800 Free':{a:'7:48.66',b:'8:05.06'},'1500 Free':{a:'15:01.89',b:'15:33.46'},
+          '50 Back':{a:'25.11',b:'25.99'},'100 Back':{a:'53.94',b:'55.83'},'200 Back':{a:'1:58.07',b:'2:02.20'},
+          '50 Breast':{a:'27.33',b:'28.29'},'100 Breast':{a:'59.75',b:'1:01.84'},'200 Breast':{a:'2:10.32',b:'2:14.88'},
+          '50 Fly':{a:'23.36',b:'24.18'},'100 Fly':{a:'51.77',b:'53.58'},'200 Fly':{a:'1:56.51',b:'2:00.59'},
+          '200 IM':{a:'1:59.05',b:'2:03.22'},'400 IM':{a:'4:17.48',b:'4:26.49'},
+        },
+        S: {
+          '50 Free':{a:'21.19',b:'21.93'},'100 Free':{a:'46.89',b:'48.53'},'200 Free':{a:'1:43.48',b:'1:47.10'},'400 Free':{a:'3:42.18',b:'3:49.96'},'800 Free':{a:'7:42.39',b:'7:58.57'},'1500 Free':{a:'14:49.29',b:'15:20.42'},
+          '50 Back':{a:'23.37',b:'24.19'},'100 Back':{a:'50.81',b:'52.59'},'200 Back':{a:'1:52.11',b:'1:56.03'},
+          '50 Breast':{a:'26.25',b:'27.17'},'100 Breast':{a:'57.38',b:'59.39'},'200 Breast':{a:'2:06.23',b:'2:10.65'},
+          '50 Fly':{a:'22.43',b:'23.22'},'100 Fly':{a:'50.15',b:'51.91'},'200 Fly':{a:'1:53.19',b:'1:57.15'},
+          '100 IM':{a:'52.98',b:'54.83'},'200 IM':{a:'1:55.25',b:'1:59.28'},'400 IM':{a:'4:08.87',b:'4:17.58'},
+        },
+      },
+      F: {
+        L: {
+          '50 Free':{a:'24.86',b:'25.73'},'100 Free':{a:'54.25',b:'56.15'},'200 Free':{a:'1:58.23',b:'2:02.37'},'400 Free':{a:'4:10.23',b:'4:18.99'},'800 Free':{a:'8:34.62',b:'8:52.63'},'1500 Free':{a:'16:24.56',b:'16:59.02'},
+          '50 Back':{a:'28.22',b:'29.21'},'100 Back':{a:'1:00.46',b:'1:02.58'},'200 Back':{a:'2:11.08',b:'2:15.67'},
+          '50 Breast':{a:'30.75',b:'31.83'},'100 Breast':{a:'1:06.87',b:'1:09.21'},'200 Breast':{a:'2:25.91',b:'2:31.02'},
+          '50 Fly':{a:'26.23',b:'27.15'},'100 Fly':{a:'58.33',b:'1:00.37'},'200 Fly':{a:'2:09.21',b:'2:13.73'},
+          '200 IM':{a:'2:12.83',b:'2:17.48'},'400 IM':{a:'4:43.06',b:'4:52.97'},
+        },
+        S: {
+          '50 Free':{a:'24.33',b:'25.18'},'100 Free':{a:'53.02',b:'54.88'},'200 Free':{a:'1:55.60',b:'1:59.65'},'400 Free':{a:'4:06.27',b:'4:14.89'},'800 Free':{a:'8:27.23',b:'8:44.98'},'1500 Free':{a:'16:03.59',b:'16:37.32'},
+          '50 Back':{a:'26.54',b:'27.47'},'100 Back':{a:'57.52',b:'59.53'},'200 Back':{a:'2:05.54',b:'2:09.93'},
+          '50 Breast':{a:'30.21',b:'31.27'},'100 Breast':{a:'1:04.97',b:'1:07.24'},'200 Breast':{a:'2:21.91',b:'2:26.88'},
+          '50 Fly':{a:'25.72',b:'26.62'},'100 Fly':{a:'57.40',b:'59.41'},'200 Fly':{a:'2:08.85',b:'2:13.36'},
+          '100 IM':{a:'59.65',b:'1:01.74'},'200 IM':{a:'2:09.37',b:'2:13.90'},'400 IM':{a:'4:37.46',b:'4:47.17'},
+        },
+      },
+    };
+  }
+  _waQual(event, gender, course){
+    const G = /girl|female|women|^f/i.test(String(gender||'')) ? 'F' : 'M';
+    const C = /^s|scm|short|25/i.test(String(course||'')) ? 'S' : 'L';
+    const tbl=this._waQualTimes(); const row = tbl[G] && tbl[G][C] ? tbl[G][C][event] : null;
+    if(!row) return null;
+    const a=this.parseTimeStr(row.a), b=this.parseTimeStr(row.b);
+    return (a>0 && b>0) ? { a, b, aStr:row.a, bStr:row.b } : null;
+  }
+  // Per-swimmer World Aquatics qualifying rows: for each PB event, the A/B cut matched to the PB's
+  // course, whether the PB meets each, and the gap to the nearest cut still to reach.
+  _swimmerQual(swObj){
+    const pbs=(swObj&&swObj.pbs)||[];
+    const rows=pbs.slice().sort((a,b)=> this.strokeOf(a.event).localeCompare(this.strokeOf(b.event)) )
+      .map(p=>{
+        const q=this._waQual(p.event, swObj.gender, p.course); if(!q || !(p.sec>0)) return null;
+        const courseTag = (String(p.course||'').toUpperCase().charAt(0)==='S') ? 'SC' : 'LC';
+        const metA = p.sec<=q.a, metB = p.sec<=q.b;
+        let status, statusColor;
+        if(metA){ status='A ✓'; statusColor='#34D399'; }
+        else if(metB){ status='B ✓ · −'+(p.sec-q.a).toFixed(2)+' to A'; statusColor='#34D399'; }
+        else { status='−'+(p.sec-q.b).toFixed(2)+' to B'; statusColor='#FCD34D'; }
+        return { event:p.event, course:courseTag, current:p.time, aStr:this.fmt(q.a), bStr:this.fmt(q.b), status, statusColor };
+      }).filter(Boolean);
+    return rows;
   }
   swimmerAiSuggestion(swObj){
     const pbs=swObj.pbs||[];
@@ -22000,6 +22142,22 @@ class Component extends DCLogic {
       tgtEditOpen: !!S.tgtEditOpen, tgtEditEvent: S.tgtEditEvent||'', tgtEditVal: S.tgtEditVal||'',
       tgtHasOverride: !!((this.swimmerGoals[S.tgtEditSw]||{})[S.tgtEditEvent]),
       onTgtEditVal:(e)=>this.setState({tgtEditVal:e.target.value}), onTgtSave:()=>this.saveTgtEdit(), onTgtReset:()=>this.resetTgtEdit(), onTgtCancel:()=>this.closeTgtEdit(),
+      // Full World Aquatics standards table (overlay): age-group benchmark (SC) + senior A/B (LCM/SCM).
+      ...(()=>{
+        const G=S.waqGender==='F'?'F':'M'; const C=S.waqCourse==='S'?'S':'L';
+        const order=['50 Free','100 Free','200 Free','400 Free','800 Free','1500 Free','50 Back','100 Back','200 Back','50 Breast','100 Breast','200 Breast','50 Fly','100 Fly','200 Fly','100 IM','200 IM','400 IM'];
+        const ageT=this._ageStdTimes()[G]||{}; const qualT=(this._waQualTimes()[G]||{})[C]||{};
+        const ageRows=order.filter(ev=>ageT[ev]).map(ev=>({ event:ev, c13:ageT[ev][0], c14:ageT[ev][1], c15:ageT[ev][2], c16:ageT[ev][3] }));
+        const qualRows=order.filter(ev=>qualT[ev]).map(ev=>({ event:ev, a:qualT[ev].a, b:qualT[ev].b }));
+        const on='#0A0F1A', onF='#fff', off='#fff', offF='#3A4152';
+        return {
+          waqOpen:!!S.waqOpen, onWaqClose:()=>this.setState({waqOpen:false}),
+          waqAgeRows:ageRows, waqQualRows:qualRows, waqCourseLabel: C==='S'?'Short course (25m)':'Long course (50m)',
+          waqMenBg:G==='M'?on:off, waqMenFg:G==='M'?onF:offF, waqWomenBg:G==='F'?on:off, waqWomenFg:G==='F'?onF:offF,
+          waqLcmBg:C==='L'?on:off, waqLcmFg:C==='L'?onF:offF, waqScmBg:C==='S'?on:off, waqScmFg:C==='S'?onF:offF,
+          onWaqMen:()=>this.setState({waqGender:'M'}), onWaqWomen:()=>this.setState({waqGender:'F'}),
+          onWaqLcm:()=>this.setState({waqCourse:'L'}), onWaqScm:()=>this.setState({waqCourse:'S'}),
+        }; })(),
       appTopColor: (S.view==='hub'||S.view==='tools'||S.view==='handbook'||S.view==='family'||S.view==='academy') ? '#0A0F1A' : '#EEF1F5',
       statusInk: (S.view==='hub'||S.view==='tools'||S.view==='handbook'||S.view==='family'||S.view==='academy') ? '#fff' : '#0C1116',
       liveClock: S.liveClock || (()=>{ const n=new Date(); let h=n.getHours(); const m=n.getMinutes(); h=h%12; if(h===0)h=12; return h+':'+(m<10?'0':'')+m; })(),
@@ -22603,6 +22761,7 @@ class Component extends DCLogic {
           onFitSitreach:(e)=>this.setState({fitForm:{...S2.fitForm, sitreach:e.target.value}}),
           onFitAdd:()=>this.addFitTest(swObj.id),
           aiSugg: (()=>{ const a=this.swimmerAiSuggestion(swObj); const ets=(a.eventTargets||[]).map(e=>({...e, onEdit:()=>this.openTgtEdit(swObj.id, e.event, e.target)})); return {...a, eventTargets:ets, noData: !a.hasData, hasWeak: !!(a.hasData && a.weakStroke), hasEventTargets: !!(ets && ets.length)}; })(),
+          ...(()=>{ const q=this._swimmerQual(swObj); return { waStdRows:q, waStdHas:q.length>0, onOpenWaStd:()=>this.setState({waqOpen:true}) }; })(),
           aiEditOpen:!!S.aiEditOpen, aiEditLabel: S.aiEditOpen?'Close':'Edit',
           onSwAiAsk:()=>this.swimmerAiAsk(swObj),
           swAiBtnLabel: S.swAiLoading ? 'Reading their numbers…' : (S.swAiOut ? 'Ask again' : 'Ask Claude about this swimmer'),
@@ -22868,6 +23027,7 @@ class Component extends DCLogic {
             ? { hasData:lcmSeries.hasData, noData:!lcmSeries.hasData, best:lcmSeries.best||'—', linePts:lcmSeries.linePts, lineArea:lcmSeries.lineArea, dots:lcmSeries.dots, caption:lcmSeries.caption||'', drop:lcmSeries.drop||'', swims:lcmSeries.swims||[] }
             : { hasData:scmSeries.hasData, noData:!scmSeries.hasData, best:scmSeries.best||'—', linePts:scmSeries.linePts, lineArea:scmSeries.lineArea, dots:scmSeries.dots, caption:scmSeries.caption||'', drop:scmSeries.drop||'', swims:scmSeries.swims||[] },
           famAiSugg: (()=>{ const a=this.swimmerAiSuggestion(sw); return {...a, hasWeak: !!(a.hasData && a.weakStroke)}; })(),
+          ...(()=>{ const q=this._swimmerQual(sw); return { famWaStdRows:q, famWaStdHas:q.length>0 }; })(),
           famKpis, famFitRows, famHasFit:famFitRows.length>0,
           famInbodyRows: this._swInbody(sw.id).slice(0,4).map(r=>{ const detail=this._ibDetailRows(r); return {
             dateLabel:this.shortDateISO(r.date),
