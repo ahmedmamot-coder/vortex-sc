@@ -4576,6 +4576,28 @@ if ('serviceWorker' in navigator) {
                               <p style="margin:2px 0 0;font-size:11.5px;color:rgba(255,255,255,.65);line-height:1.4">{{ aiSugg.secondaryReason }}</p>
                             </div>
                           </sc-if>
+                          <sc-if value="{{ aiSugg.hasEventTargets }}" hint-placeholder-val="{{ false }}">
+                            <div style="border-top:1px solid rgba(255,255,255,.12);padding-top:10px">
+                              <p style="margin:0 0 7px;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">{{ tx.eventTargets }}</p>
+                              <div style="display:flex;flex-direction:column;gap:6px">
+                                <sc-for list="{{ aiSugg.eventTargets }}" as="e" hint-placeholder-count="6">
+                                  <div style="display:flex;flex-direction:column;gap:2px">
+                                    <div style="display:flex;align-items:center;gap:8px">
+                                      <span style="flex:1;min-width:0;font-size:12px;font-weight:600;color:#fff">{{ e.event }} <span style="font-size:9.5px;font-weight:700;color:rgba(255,255,255,.4)">{{ e.course }}</span></span>
+                                      <span style="font-family:var(--font-mono);font-size:11px;color:rgba(255,255,255,.55)">{{ e.current }}</span>
+                                      <span style="font-size:11px;color:rgba(255,255,255,.4)">→</span>
+                                      <span style="font-family:var(--font-mono);font-size:11.5px;font-weight:700;color:#22D7D7">{{ e.target }}</span>
+                                      <sc-if value="{{ e.hasPoints }}" hint-placeholder-val="{{ false }}"><span style="flex:none;font-size:10px;font-weight:700;color:rgba(255,255,255,.5);min-width:52px;text-align:right">{{ e.points }} pts</span></sc-if>
+                                    </div>
+                                    <div style="display:flex;align-items:center;gap:7px;padding-left:1px">
+                                      <span style="font-size:9.5px;font-weight:700;letter-spacing:.02em;color:rgba(255,255,255,.4)">{{ e.stdLabel }}</span>
+                                      <span style="font-size:10px;font-weight:700;color:{{ e.gapColor }}">{{ e.gap }}</span>
+                                    </div>
+                                  </div>
+                                </sc-for>
+                              </div>
+                            </div>
+                          </sc-if>
                           <div style="border-top:1px solid rgba(255,255,255,.12);padding-top:10px">
                             <p style="margin:0;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">Fitness &amp; dryland</p>
                             <p style="margin:3px 0 0;font-size:11.5px;color:rgba(255,255,255,.75);line-height:1.4">{{ aiSugg.fitnessInsight }}</p>
@@ -22536,7 +22558,7 @@ class Component extends DCLogic {
           onFitVjump:(e)=>this.setState({fitForm:{...S2.fitForm, vjump:e.target.value}}),
           onFitSitreach:(e)=>this.setState({fitForm:{...S2.fitForm, sitreach:e.target.value}}),
           onFitAdd:()=>this.addFitTest(swObj.id),
-          aiSugg: (()=>{ const a=this.swimmerAiSuggestion(swObj); return {...a, hasWeak: !!(a.hasData && a.weakStroke)}; })(),
+          aiSugg: (()=>{ const a=this.swimmerAiSuggestion(swObj); return {...a, hasWeak: !!(a.hasData && a.weakStroke), hasEventTargets: !!(a.eventTargets && a.eventTargets.length)}; })(),
           aiEditOpen:!!S.aiEditOpen, aiEditLabel: S.aiEditOpen?'Close':'Edit',
           onSwAiAsk:()=>this.swimmerAiAsk(swObj),
           swAiBtnLabel: S.swAiLoading ? 'Reading their numbers…' : (S.swAiOut ? 'Ask again' : 'Ask Claude about this swimmer'),
