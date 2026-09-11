@@ -111,6 +111,36 @@ export default function StopwatchClient({ accent: _accent }: { accent: string })
     setStrokes(0);
   }
 
+  // Poolside board: fill the whole screen and, where the browser allows it, turn to landscape.
+  function enterFs() {
+    setFs(true);
+    try {
+      const el = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> };
+      (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el);
+    } catch {
+      /* fullscreen not permitted */
+    }
+    try {
+      (screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> })?.lock?.("landscape").catch(() => {});
+    } catch {
+      /* orientation lock unsupported (e.g. iOS) */
+    }
+  }
+  function exitFs() {
+    setFs(false);
+    try {
+      const d = document as Document & { webkitExitFullscreen?: () => Promise<void> };
+      if (document.fullscreenElement) (d.exitFullscreen || d.webkitExitFullscreen)?.call(d);
+    } catch {
+      /* nothing to exit */
+    }
+    try {
+      (screen.orientation as ScreenOrientation & { unlock?: () => void })?.unlock?.();
+    } catch {
+      /* no-op */
+    }
+  }
+
   const started = elapsedMs > 0 || running || laps.length > 0;
   const { fastest, slowest } = lapExtremes(laps);
   const strokeTotal = totalStrokes(laps) + strokes;
@@ -186,7 +216,7 @@ export default function StopwatchClient({ accent: _accent }: { accent: string })
             Lap
           </button>
           <button
-            onClick={() => setFs(true)}
+            onClick={enterFs}
             className="w-full h-[46px] rounded-[var(--radius-md)] font-semibold text-[#0C1116] border border-[#E5E9F0] flex items-center justify-center gap-2 text-sm"
           >
             ⛶ Full screen for poolside
@@ -201,7 +231,7 @@ export default function StopwatchClient({ accent: _accent }: { accent: string })
           style={{ background: PATTERN }}
         >
           <button
-            onClick={() => setFs(false)}
+            onClick={exitFs}
             className="absolute top-4 right-4 w-11 h-11 rounded-xl bg-white/10"
             aria-label="Exit full screen"
           >
@@ -219,31 +249,37 @@ export default function StopwatchClient({ accent: _accent }: { accent: string })
           </p>
           <div
             className="font-bold tabular-nums leading-none"
-            style={{ fontSize: "clamp(110px, 34vw, 340px)", letterSpacing: "-0.02em" }}
+            style={{ fontSize: "min(38vw, 52vh)", letterSpacing: "-0.02em" }}
           >
             {formatStopwatch(elapsedMs)}
           </div>
-          <p className="mt-3 text-white/70 font-semibold">
+          <p className="mt-2 text-white/70 font-semibold" style={{ fontSize: "clamp(13px,2.2vh,20px)" }}>
             {laps.length > 0
               ? `Last lap ${formatStopwatch(laps[laps.length - 1].splitMs)} · ${laps.length} ${laps.length === 1 ? "lap" : "laps"}`
               : "Tap Lap at each wall"}
           </p>
-          <div className="flex gap-3.5 mt-8 items-center">
+          <div className="flex items-center flex-wrap justify-center" style={{ gap: "clamp(10px,2vw,20px)", marginTop: "clamp(16px,4vh,40px)" }}>
             <button
               onClick={toggle}
-              className="min-w-[150px] h-[70px] px-7 rounded-2xl bg-[#111826] border border-white/15 font-bold text-lg"
+              className="rounded-2xl bg-[#111826] border border-white/15 font-bold"
+              style={{ minWidth: "clamp(112px,16vw,190px)", height: "clamp(50px,8vh,78px)", fontSize: "clamp(15px,2.2vh,20px)", padding: "0 clamp(18px,2.5vw,30px)" }}
             >
               {running ? "Pause" : started ? "Resume" : "Start"}
             </button>
             <button
               onClick={lap}
               disabled={!started}
-              className="min-w-[220px] h-[70px] px-10 rounded-2xl font-extrabold text-2xl disabled:opacity-40"
-              style={{ background: BRAND }}
+              className="rounded-2xl font-extrabold disabled:opacity-40"
+              style={{ background: BRAND, minWidth: "clamp(200px,32vw,380px)", height: "clamp(66px,11vh,108px)", fontSize: "clamp(24px,3.6vh,38px)", padding: "0 clamp(30px,4vw,52px)" }}
             >
               Lap
             </button>
-            <button onClick={reset} disabled={!started} className="w-[70px] h-[70px] rounded-2xl bg-white/10 disabled:opacity-40">
+            <button
+              onClick={reset}
+              disabled={!started}
+              className="rounded-2xl bg-white/10 disabled:opacity-40"
+              style={{ width: "clamp(50px,8vh,78px)", height: "clamp(50px,8vh,78px)" }}
+            >
               ↺
             </button>
           </div>
