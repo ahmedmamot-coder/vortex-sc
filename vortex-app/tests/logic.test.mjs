@@ -7562,7 +7562,7 @@ describe("InBody sheet", () => {
       c._vidSwimmers = bind("_vidSwimmers", c);
       c._vidTrack = bind("_vidTrack", c, ["_vidSwimmers"]);
       c.videoRaceMetrics = bind("videoRaceMetrics", c, ["_splitMetres", "_vidTrack", "_vidSwimmers"]);
-      c._compareTable = bind("_compareTable", c);
+      c._compareTable = bind("_compareTable", c, ["_fmtStopwatch"]);
       c.videoCompareTable = bind("videoCompareTable", c, ["videoRaceMetrics", "_compareTable"]);
       c.videoCompareToggle = bind("videoCompareToggle", c);
       return c;
@@ -7702,7 +7702,7 @@ describe("InBody sheet", () => {
       c._vidPatchTrack = bind("_vidPatchTrack", c, ["_vidSwimmers"]);
       c._vidApply = bind("_vidApply", c, ["_vidPatchTrack", "_vidSwimmers"]);
       c.videoRaceMetrics = bind("videoRaceMetrics", c, ["_splitMetres", "_vidTrack", "_vidSwimmers"]);
-      c._compareTable = bind("_compareTable", c);
+      c._compareTable = bind("_compareTable", c, ["_fmtStopwatch"]);
       c.videoClipCompare = bind("videoClipCompare", c, ["_vidSwimmers", "videoRaceMetrics", "_compareTable"]);
       c.videoStartZero = bind("videoStartZero", c, ["_activeVideo", "_vidTrack"]);
       c._videoStartLimit = bind("_videoStartLimit", c, ["_vidSwimmers"]);
@@ -7865,13 +7865,13 @@ describe("InBody sheet", () => {
       c._vidPatchTrack = bind("_vidPatchTrack", c, ["_vidSwimmers"]);
       c._vidApply = bind("_vidApply", c, ["_vidPatchTrack", "_vidSwimmers"]);
       c.videoRaceMetrics = bind("videoRaceMetrics", c, ["_splitMetres", "_vidTrack", "_vidSwimmers"]);
-      c._compareTable = bind("_compareTable", c);
+      c._compareTable = bind("_compareTable", c, ["_fmtStopwatch"]);
       c.videoClipCompare = bind("videoClipCompare", c, ["_vidSwimmers", "videoRaceMetrics", "_compareTable"]);
       c.videoSwimmerLink = bind("videoSwimmerLink", c, ["_activeVideo", "allSwimmersFlat", "_vidApply"]);
       c.videoSwimmerOutside = bind("videoSwimmerOutside", c, ["_activeVideo", "_vidApply"]);
       c.videoSwimmerUnlink = bind("videoSwimmerUnlink", c, ["_activeVideo", "_vidApply"]);
       c._videoSavedAt = bind("_videoSavedAt", c);
-      c.swimmerVideos = bind("swimmerVideos", c, ["_vidSwimmers", "videoRaceMetrics", "_videoSavedAt"]);
+      c.swimmerVideos = bind("swimmerVideos", c, ["_vidSwimmers", "videoRaceMetrics", "_videoSavedAt", "_raceTimeS", "_fmtStopwatch"]);
       return c;
     };
     const laps = (t) => [{ label: "Start", t: 0 }, { label: "15m", t: 6.6 }, { label: "50m", t }];
@@ -8158,6 +8158,7 @@ describe("InBody sheet", () => {
       c._goertzel = bind("_goertzel", c);
       c._findStartTone = bind("_findStartTone", c, ["_audioEnvelope", "_percentile", "_goertzel"]);
       c._fmtStopwatch = bind("_fmtStopwatch", c);
+      c._raceTimeS = bind("_raceTimeS", c, ["_fmtStopwatch"]);
       return c;
     };
 
@@ -8258,6 +8259,17 @@ describe("InBody sheet", () => {
       eq(c._fmtStopwatch(26.63), "26.63");
       eq(c._fmtStopwatch(63.4), "1:03.40", "a 100 is a minute and change, not 63 seconds");
       eq(c._fmtStopwatch(-0.42), "−0.42", "before the gun it counts down");
+    });
+
+    // The race-analysis headline read "63.21s" for a 100 that took 1:03.21 — a total is a race
+    // time, and a race time past a minute is minutes and seconds. The 's' belongs on the seconds
+    // form only; "1:03.21s" is not a time anyone writes.
+    it("a total past a minute reads as m:ss, not raw seconds", () => {
+      const c = ctx();
+      eq(c._raceTimeS(58.58), "58.58s", "a sub-minute swim keeps the seconds unit");
+      eq(c._raceTimeS(63.21), "1:03.21", "a 100 over the minute is 1:03.21, and carries no trailing s");
+      eq(c._raceTimeS(123.45), "2:03.45");
+      eq(c._raceTimeS(9.9), "9.90s");
     });
   });
 
@@ -12777,6 +12789,81 @@ describe("stopwatch", () => {
   });
   it("averages to one decimal", () => {
     eq(averageStrokes([recordLap([], 1000, 18), recordLap([], 1000, 17), recordLap([], 1000, 18)]), 17.7);
+  });
+});
+
+/* ------------------------- two coaches adding to one T-pace log, from two phones
+   Coach Chafik tested Senior B and logged every one on his phone. They saved
+   there and he could see them. The club's copy held six trials, and one of them
+   was his 8 September test — the newest push at the time. The rest had stopped
+   existing, because vx_tpace went up as a whole document and another phone
+   pushed its own copy afterwards. */
+describe("a T-pace push keeps what the club already has", () => {
+  const SRC = sourceBetween("function _tpaceMergedWith(v){", "\n  function _mergedForSend");
+  const trial = (date, dist) => ({ date, type: "t30", sec: 1800, dist, tpace100: +(180000 / dist).toFixed(2) });
+
+  const send = (theirs, mine, opts = {}) =>
+    runInSandbox(SRC + "\nreturn _tpaceMergedWith(mine);", {
+      REST: "", dyn: () => ({}), console: { info() {} },
+      fetch: () => opts.dead
+        ? Promise.reject(new Error("offline"))
+        : Promise.resolve({ ok: opts.notOk ? false : true,
+                            json: () => Promise.resolve(theirs === undefined ? [] : [{ value: theirs }]) }),
+      mine: JSON.stringify(mine),
+    });
+
+  itAsync("a phone with six trials cannot delete the twenty it never saw", async () => {
+    const chafik = {};
+    for (let i = 0; i < 20; i++) chafik["sb" + i] = [trial("2026-09-08", 1500 + i * 10)];
+    const ahmed = { r52: [trial("2026-09-03", 2200)], r60: [trial("2026-09-03", 2100)] };
+    const out = JSON.parse(await send(chafik, ahmed));
+    eq(Object.keys(out).length, 22, "twenty of Chafik's plus the two this phone holds");
+    eq(out.sb0.length, 1);
+    eq(out.r52.length, 1, "and nothing of this device's is dropped either");
+  });
+
+  itAsync("the same trial on both sides is not duplicated", async () => {
+    const both = { r264: [trial("2026-09-08", 1800)] };
+    const out = JSON.parse(await send(both, JSON.parse(JSON.stringify(both))));
+    eq(out.r264.length, 1);
+  });
+
+  itAsync("two different trials for one swimmer both survive", async () => {
+    const out = JSON.parse(await send(
+      { r264: [trial("2026-09-01", 1700)] },
+      { r264: [trial("2026-09-08", 1800)] }));
+    eq(out.r264.length, 2);
+    eq(out.r264[0].date, "2026-09-08", "newest first, as every reader assumes");
+  });
+
+  itAsync("an empty club copy sends this device's unchanged", async () => {
+    const mine = { r52: [trial("2026-09-03", 2200)] };
+    eq(JSON.parse(await send({}, mine)).r52.length, 1);
+  });
+
+  itAsync("nothing new on their side sends the original string untouched", async () => {
+    // Re-serialising for no reason would rewrite the document on every push.
+    const mine = { r52: [trial("2026-09-03", 2200)] };
+    eq(await send({}, mine), JSON.stringify(mine));
+  });
+
+  itAsync("a database that cannot be read sends what we have", async () => {
+    const mine = { r52: [trial("2026-09-03", 2200)] };
+    eq(await send(undefined, mine, { dead: true }), JSON.stringify(mine));
+    eq(await send(undefined, mine, { notOk: true }), JSON.stringify(mine));
+  });
+
+  itAsync("a club copy of the wrong shape is not trusted into the send", async () => {
+    const mine = { r52: [trial("2026-09-03", 2200)] };
+    for (const junk of [null, "text", [1, 2, 3]]) eq(await send(junk, mine), JSON.stringify(mine));
+  });
+
+  it("and the push actually routes through it", () => {
+    const route = sourceBetween("function _mergedForSend(k, v){", "\n  function pushKey");
+    eq(/k==="vx_tpace"\) return _tpaceMergedWith\(v\)/.test(route), true,
+       "without this the log is still sent as a replacement");
+    eq(/select=value&key=eq\.vx_tpace/.test(SOURCE), true,
+       "merged against what the database holds now, not a mirror up to 20s old");
   });
 });
 
