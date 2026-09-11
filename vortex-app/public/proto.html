@@ -14661,6 +14661,19 @@ class Component extends DCLogic {
     const sec=this.parseTimeStr(t);
     return (sec!=null && sec>0) ? { sec, ageLabel:(a>=16?'16':String(a))+'yr' } : null;
   }
+  // Convert a short-course age-group standard to the course of the swimmer's PB, so the gap is
+  // like-for-like. The age-group table is short-course basis; a long-course PB is slower, so its
+  // target must be the LC-equivalent of the SC standard. The conversion is points-equivalent —
+  // World Aquatics publishes separate LCM/SCM base times and treats equal points as an equal
+  // performance, so equal points give: t_LC = t_SC × (baseLCM ÷ baseSCM) for that event/gender.
+  // Returns { sec, converted }. Falls back to the SC value when base times are unavailable.
+  _ageStdForCourse(stdScSec, event, gender, course){
+    const isSC = String(course||'').toUpperCase().charAt(0)==='S';
+    if(isSC) return { sec:stdScSec, converted:false };
+    const bl=this._waBase(event, gender, 'L'), bs=this._waBase(event, gender, 'S');
+    if(bl>0 && bs>0) return { sec: stdScSec*(bl/bs), converted:true };
+    return { sec:stdScSec, converted:false };
+  }
   swimmerAiSuggestion(swObj){
     const pbs=swObj.pbs||[];
     const ov=this.aiSuggOverrides[swObj.id]||{};
@@ -14712,11 +14725,13 @@ class Component extends DCLogic {
         const courseTag = (String(p.course||'').toUpperCase().charAt(0)==='S') ? 'SC' : 'LC';
         const baseSec = this._waBase(p.event, swObj.gender, p.course);
         const pts = (baseSec>0 && p.sec>0) ? String(this._waPoints(baseSec, p.sec)) : '';
-        // Primary target = the swimmer's age-group standard (World Aquatics / regional age benchmark).
+        // Primary target = the swimmer's age-group standard (World Aquatics / regional age benchmark),
+        // converted to the PB's course (the standard is short-course basis).
         const std = this._ageStd(p.event, swObj.gender, swObj.age);
         if(std && p.sec>0){
-          return { event:p.event, course:courseTag, current:p.time, target:this.fmt(std.sec),
-            stdLabel:std.ageLabel+' std', gap:gapLabel(p.sec, std.sec), gapColor:(p.sec<=std.sec)?'#34D399':'#FCD34D', hasStd:true,
+          const tgt = this._ageStdForCourse(std.sec, p.event, swObj.gender, p.course);
+          return { event:p.event, course:courseTag, current:p.time, target:this.fmt(tgt.sec),
+            stdLabel:std.ageLabel+' std'+(tgt.converted?' · LC-adj':''), gap:gapLabel(p.sec, tgt.sec), gapColor:(p.sec<=tgt.sec)?'#34D399':'#FCD34D', hasStd:true,
             points:pts, hasPoints:!!pts };
         }
         // No age-group cut for this event/age → fall back to a distance-scaled personal target.
