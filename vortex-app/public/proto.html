@@ -5250,6 +5250,12 @@ if ('serviceWorker' in navigator) {
 
                   <sc-if value="{{ toolStopwatch }}" hint-placeholder-val="{{ false }}">
                     <div style="display:flex;flex-direction:column;gap:13px">
+                      <!-- One swimmer, or a whole lane sent off in intervals. -->
+                      <div style="display:flex;gap:6px;background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:4px">
+                        <button onclick="{{ onSwModeOne }}" style="flex:1;padding:9px;border-radius:9px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;background:{{ modeOneBg }};color:{{ modeOneFg }}">One swimmer</button>
+                        <button onclick="{{ onSwModeMany }}" style="flex:1;padding:9px;border-radius:9px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;background:{{ modeManyBg }};color:{{ modeManyFg }}">Whole lane</button>
+                      </div>
+                    <sc-if value="{{ swModeOne }}" hint-placeholder-val="{{ true }}">
                       <!-- Clock face, painted straight onto the ref element. Tapping it, or the
                            expand button, opens the poolside full-screen display. -->
                       <div style="position:relative;overflow:hidden;background:radial-gradient(135% 120% at 88% -12%, rgba(6,126,234,.5) 0%, rgba(34,33,215,.22) 40%, transparent 70%), #0A0F1A;color:#fff;border-radius:20px;padding:26px 18px;text-align:center">
@@ -5303,6 +5309,56 @@ if ('serviceWorker' in navigator) {
                       <sc-if value="{{ swtNoLaps }}" hint-placeholder-val="{{ true }}">
                         <div style="text-align:center;padding:22px;color:#9AA2B4;background:#fff;border:1px dashed #E5E9F0;border-radius:14px"><i data-lucide="flag" style="width:26px;height:26px"></i><p style="font-size:12.5px;margin-top:10px;line-height:1.5">Start the clock, then tap <span style="font-weight:700;color:#0C1116">Lap</span> at each wall to capture splits and stroke counts.</p></div>
                       </sc-if>
+                    </sc-if>
+
+                    <sc-if value="{{ swModeMany }}" hint-placeholder-val="{{ false }}">
+                      <div ref="{{ onSwmMount }}" style="display:flex;flex-direction:column;gap:11px">
+                        <!-- The master clock every swimmer is measured against. -->
+                        <div style="position:relative;overflow:hidden;background:radial-gradient(135% 130% at 88% -12%, rgba(6,126,234,.5) 0%, rgba(34,33,215,.22) 40%, transparent 70%), #0A0F1A;color:#fff;border-radius:18px;padding:16px 16px 14px;text-align:center">
+                          <div style="position:absolute;inset:0;background:url('assets/pattern-transparent.png') right top/150px auto no-repeat;opacity:.2;pointer-events:none"></div>
+                          <p style="position:relative;z-index:1;margin:0;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">Session clock</p>
+                          <div data-swmmaster="1" style="position:relative;z-index:1;font-family:var(--font-mono);font-size:38px;line-height:1.05;font-weight:800;letter-spacing:-.02em;margin:5px 0 3px">{{ swmMasterTime }}</div>
+                          <p style="position:relative;z-index:1;margin:0;font-size:11px;color:rgba(255,255,255,.6)">{{ swmSummary }}</p>
+                        </div>
+                        <!-- Send the next swimmer off. One tap per interval. -->
+                        <button onclick="{{ onSwmStartNext }}" style="width:100%;height:76px;border-radius:18px;background:{{ swmNextBg }};border:none;cursor:pointer;color:#fff;font-family:inherit;font-weight:800;font-size:19px;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 10px 24px rgba(34,33,215,.26)"><i data-lucide="play" style="width:23px;height:23px"></i>{{ swmNextLabel }}</button>
+                        <div style="display:flex;align-items:center;gap:8px">
+                          <div style="flex:1;display:flex;align-items:center;justify-content:space-between;background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:6px 9px">
+                            <button onclick="{{ onSwmCountDec }}" style="width:30px;height:30px;border-radius:8px;border:1px solid #E5E9F0;background:#fff;color:#0C1116;font-size:17px;font-weight:700;line-height:1;cursor:pointer;padding:0">&#8722;</button>
+                            <span style="font-size:12.5px;font-weight:700;color:#0C1116">{{ swmCountLabel }}</span>
+                            <button onclick="{{ onSwmCountInc }}" style="width:30px;height:30px;border-radius:8px;border:none;background:#067EEA;color:#fff;font-size:17px;font-weight:700;line-height:1;cursor:pointer;padding:0">+</button>
+                          </div>
+                          <button onclick="{{ onSwtSoundToggle }}" style="flex:none;width:42px;height:42px;border-radius:12px;background:#fff;border:1px solid #E5E9F0;cursor:pointer;color:#0C1116;display:flex;align-items:center;justify-content:center" title="Start beep on/off"><i data-vx-icon="{{ swtSoundIcon }}" style="width:18px;height:18px"></i></button>
+                          <button onclick="{{ onSwmReset }}" style="flex:none;height:42px;padding:0 13px;border-radius:12px;background:#fff;border:1px solid #E5E9F0;cursor:pointer;color:#0C1116;font-family:inherit;font-weight:700;font-size:12.5px;display:flex;align-items:center;gap:6px"><i data-lucide="rotate-ccw" style="width:15px;height:15px"></i>Reset</button>
+                        </div>
+                        <!-- One row per swimmer: their own clock, their own laps. -->
+                        <sc-for list="{{ swmRows }}" as="r" hint-placeholder-count="6">
+                          <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:10px 12px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
+                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+                              <span style="flex:none;width:25px;height:25px;border-radius:8px;background:#0A0F1A;color:#fff;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:800">{{ r.label }}</span>
+                              <input value="{{ r.name }}" oninput="{{ r.onName }}" placeholder="{{ r.placeholder }}" style="flex:1;min-width:0;border:none;outline:none;background:none;font-family:inherit;font-size:13px;font-weight:700;color:#0C1116;padding:0">
+                              <span style="flex:none;font-size:10px;font-weight:700;border-radius:7px;padding:3px 7px;background:{{ r.statusBg }};color:{{ r.statusFg }}">{{ r.statusText }}</span>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:9px">
+                              <span data-lane="{{ r.id }}" style="flex:1;min-width:0;font-family:var(--font-mono);font-size:31px;font-weight:800;letter-spacing:-.02em;color:{{ r.timeColor }}">{{ r.time }}</span>
+                              <sc-if value="{{ r.showMain }}" hint-placeholder-val="{{ true }}">
+                                <button onclick="{{ r.onMain }}" style="flex:none;min-width:94px;height:54px;border-radius:14px;border:none;cursor:pointer;color:#fff;font-family:inherit;font-weight:800;font-size:16.5px;background:{{ r.mainBg }}">{{ r.mainLabel }}</button>
+                              </sc-if>
+                              <sc-if value="{{ r.showStop }}" hint-placeholder-val="{{ false }}">
+                                <button onclick="{{ r.onStop }}" style="flex:none;width:46px;height:54px;border-radius:14px;background:#fff;border:1px solid #E5E9F0;cursor:pointer;color:#0C1116;display:flex;align-items:center;justify-content:center" title="Finish"><i data-lucide="square" style="width:15px;height:15px"></i></button>
+                              </sc-if>
+                            </div>
+                            <sc-if value="{{ r.hasSplits }}" hint-placeholder-val="{{ false }}">
+                              <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px">
+                                <sc-for list="{{ r.splits }}" as="sp" hint-placeholder-count="3">
+                                  <span style="font-size:11px;font-family:var(--font-mono);font-weight:700;background:#F4F6F8;color:#3A4152;border-radius:7px;padding:3px 7px">{{ sp.n }} {{ sp.t }}</span>
+                                </sc-for>
+                              </div>
+                            </sc-if>
+                          </div>
+                        </sc-for>
+                      </div>
+                    </sc-if>
                     </div>
                   </sc-if>
 
@@ -17364,6 +17420,99 @@ class Component extends DCLogic {
     try{ if(screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(()=>{}); }catch(e){} }
   swtFsExit(){ this.setState({swtFs:false}); this._exitNativeFs();
     try{ if(screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); }catch(e){} }
+  // ---- Whole-lane stopwatch: one clock, one timer per swimmer ----
+  //
+  // In training a lane is sent off in intervals — swimmer 1 goes, five seconds later swimmer 2,
+  // and so on — and the coach needs every one of them timed at once. Rather than run eight
+  // stopwatches, there is ONE master clock and each swimmer stores the master time they were sent
+  // off at. A swimmer's elapsed time is then just (master now − their start), so every lane is
+  // read off the same clock and no two can drift apart. Their laps are stored per swimmer, so a
+  // split taken for one never touches another.
+  _swmMs(){ return (this._swmBase||0) + (this._swmRunning ? performance.now()-this._swmStart : 0); }
+  _swmMake(n){
+    const out=[];
+    for(let i=0;i<n;i++) out.push({id:'L'+(i+1), name:'', startMs:null, endMs:null, laps:[]});
+    return out;
+  }
+  _swmLanes(){ const l=this.state.swmLanes; return (l && l.length) ? l : this._swmMake(6); }
+  // One swimmer's elapsed time at a given master time. A swimmer who has not been sent off yet
+  // reads zero; one who has finished is frozen at the moment they were stopped.
+  _swmLaneMs(lane, masterMs){
+    if(!lane || lane.startMs==null) return 0;
+    const end=(lane.endMs!=null) ? lane.endMs : masterMs;
+    return Math.max(0, end-lane.startMs);
+  }
+  // The lap that swimmer would record now: the split is measured from THEIR previous lap, not
+  // from the master clock, so a stagger of any size leaves the splits unaffected.
+  _swmLapOf(lane, masterMs){
+    const t=Math.round(this._swmLaneMs(lane, masterMs));
+    const laps=(lane && lane.laps)||[];
+    const prev=laps.length ? laps[laps.length-1].totalMs : 0;
+    return { n:laps.length+1, splitMs:Math.max(0,t-prev), totalMs:t };
+  }
+  _swmEnsureRaf(){
+    if(this._swmRaf) return;
+    const loop=()=>{ if(!this._swmPaint()){ this._swmRaf=null; return; } this._swmRaf=requestAnimationFrame(loop); };
+    this._swmRaf=requestAnimationFrame(loop);
+  }
+  onSwmMount(el){ this._swmRoot=el||null; if(el) this._swmEnsureRaf(); }
+  // Every lane's clock is painted straight onto its element, for the same reason as the single
+  // stopwatch: eight clocks through a re-render would redraw the screen sixty times a second.
+  _swmPaint(){
+    const root=this._swmRoot;
+    if(!root || !document.body.contains(root)){ this._swmRoot=null; return false; }
+    const m=this._swmMs(), lanes=this._swmLanes();
+    const els=root.querySelectorAll('[data-lane]');
+    for(let i=0;i<els.length;i++){
+      const el=els[i], id=el.getAttribute('data-lane');
+      let lane=null;
+      for(let j=0;j<lanes.length;j++) if(lanes[j].id===id){ lane=lanes[j]; break; }
+      if(lane) el.textContent=this._fmtStopwatch(this._swmLaneMs(lane,m)/1000);
+    }
+    const mEl=root.querySelector('[data-swmmaster]');
+    if(mEl) mEl.textContent=this._fmtStopwatch(m/1000);
+    return true;
+  }
+  swmSetCount(d){
+    const cur=this._swmLanes(), n=Math.max(1, Math.min(10, cur.length+d));
+    if(n===cur.length) return;
+    let lanes;
+    if(n>cur.length){ lanes=cur.slice(); for(let i=cur.length;i<n;i++) lanes.push({id:'L'+(i+1), name:'', startMs:null, endMs:null, laps:[]}); }
+    else lanes=cur.slice(0,n);
+    this.setState({swmLanes:lanes});
+  }
+  // Sending a swimmer off starts the master clock on the first one, and sounds the start signal
+  // every time — the coach is starting a swimmer, not a session.
+  swmStartLane(id){
+    if(!this._swmRunning){ this._swmStart=performance.now(); this._swmRunning=true; }
+    const at=Math.round(this._swmMs());
+    const lanes=this._swmLanes().map(l=> (l.id===id && l.startMs==null) ? {...l, startMs:at} : l);
+    this._swtBeep();
+    this.setState({swmLanes:lanes});
+    this._swmEnsureRaf();
+  }
+  swmStartNext(){ const n=this._swmLanes().filter(l=>l.startMs==null)[0]; if(n) this.swmStartLane(n.id); }
+  swmLap(id){
+    const m=this._swmMs();
+    const lanes=this._swmLanes().map(l=>
+      (l.id!==id || l.startMs==null || l.endMs!=null) ? l : {...l, laps:l.laps.concat([this._swmLapOf(l,m)])});
+    this.setState({swmLanes:lanes});
+  }
+  // Finishing only freezes the clock. It does NOT invent a last lap: the coach taps Lap on the
+  // finish wall, and adding another here would show that length twice.
+  swmStop(id){
+    const m=Math.round(this._swmMs());
+    const lanes=this._swmLanes().map(l=>
+      (l.id===id && l.startMs!=null && l.endMs==null) ? {...l, endMs:m} : l);
+    this.setState({swmLanes:lanes});
+  }
+  swmName(id,v){ this.setState({swmLanes:this._swmLanes().map(l=> l.id===id ? {...l, name:v} : l)}); }
+  // Clears the times but keeps the names — the same lane usually swims the next set.
+  swmReset(){
+    this._swmRunning=false; this._swmBase=0;
+    this.setState({swmLanes:this._swmLanes().map(l=>({...l, startMs:null, endMs:null, laps:[]}))});
+    this._swmPaint();
+  }
   videoSetRate(rate){
     this.setState({videoRate:rate});
     const v=this._activeVideo(); if(!v) return;
@@ -24202,6 +24351,50 @@ class Component extends DCLogic {
         const lastLap=laps.length?laps[laps.length-1]:null;
         return {
           toolStopwatch:S.tool==='stopwatch',
+          ...((()=>{
+            // ---- whole-lane mode: a timer per swimmer off one master clock ----
+            const many=S.swMode==='many';
+            const lanes=(S.swmLanes && S.swmLanes.length) ? S.swmLanes : self._swmMake(6);
+            const mNow=self._swmMs();
+            const startedN=lanes.filter(l=>l.startMs!=null).length;
+            const doneN=lanes.filter(l=>l.endMs!=null).length;
+            const next=lanes.filter(l=>l.startMs==null)[0];
+            const nextIdx=next ? lanes.indexOf(next)+1 : 0;
+            return {
+              swModeOne:!many, swModeMany:many,
+              onSwModeOne:()=>self.setState({swMode:'one'}), onSwModeMany:()=>self.setState({swMode:'many'}),
+              modeOneBg: many?'#fff':'#0A0F1A', modeOneFg: many?'#7A8296':'#fff',
+              modeManyBg: many?'#0A0F1A':'#fff', modeManyFg: many?'#fff':'#7A8296',
+              onSwmMount: self._swmMountRef || (self._swmMountRef=(el)=>self.onSwmMount(el)),
+              onSwmStartNext:()=>self.swmStartNext(), onSwmReset:()=>self.swmReset(),
+              onSwmCountDec:()=>self.swmSetCount(-1), onSwmCountInc:()=>self.swmSetCount(1),
+              swmMasterTime: self._fmtStopwatch(mNow/1000),
+              swmCountLabel: lanes.length+' swimmers',
+              swmNextLabel: next ? ('Start '+(lanes[nextIdx-1].name || ('Swimmer '+nextIdx))) : 'All swimmers started',
+              swmNextBg: next ? 'linear-gradient(135deg,#067EEA 0%,#2221D7 100%)' : '#9AA2B4',
+              swmSummary: startedN===0 ? 'Tap start to send the first swimmer off'
+                        : (startedN+' of '+lanes.length+' started'+(doneN?(' \u00b7 '+doneN+' finished'):'')),
+              swmRows: lanes.map((l,i)=>{
+                const on=l.startMs!=null, done=l.endMs!=null, run=on&&!done;
+                return {
+                  id:l.id, label:'S'+(i+1), name:l.name||'', placeholder:'Swimmer '+(i+1),
+                  time: self._fmtStopwatch(self._swmLaneMs(l,mNow)/1000),
+                  timeColor: done?'#0C7A4F':(run?'#0C1116':'#9AA2B4'),
+                  statusText: done?'Finished':(run?('Lap '+(l.laps.length+1)):'Ready'),
+                  statusBg: done?'#E6F6EE':(run?'rgba(6,126,234,.1)':'#F4F6F8'),
+                  statusFg: done?'#0C7A4F':(run?'#067EEA':'#9AA2B4'),
+                  showMain: !done, showStop: run,
+                  mainLabel: on?'Lap':'Start',
+                  mainBg: on?'linear-gradient(135deg,#067EEA 0%,#2221D7 100%)':'#0A0F1A',
+                  onMain: on ? (()=>self.swmLap(l.id)) : (()=>self.swmStartLane(l.id)),
+                  onStop: ()=>self.swmStop(l.id),
+                  onName: (e)=>self.swmName(l.id, e.target.value),
+                  hasSplits: l.laps.length>0,
+                  splits: l.laps.map(x=>({ n:'L'+x.n, t:self._fmtStopwatch(x.splitMs/1000) })),
+                };
+              }),
+            };
+          })()),
           onSwtMount: self._swtMountRef || (self._swtMountRef=(el)=>self.onSwtMount(el)),
           onSwtFsMount: self._swtFsMountRef || (self._swtFsMountRef=(el)=>self.onSwtFsMount(el)),
           onSwtToggle:()=>self.swtToggle(), onSwtReset:()=>self.swtReset(), onSwtLap:()=>self.swtLap(),
