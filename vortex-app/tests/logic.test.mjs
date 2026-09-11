@@ -6,6 +6,7 @@ import { bind, methodSource, describe, it, itAsync, eq, report, SOURCE, sourceBe
 // The real route module. Node strips the types, so these tests run the filter that ships
 // rather than a regex-mangled copy of it.
 const AI_ROUTE = await import("../src/app/api/ai/coach/route.ts");
+const SW = await import("../src/lib/stopwatch.ts");
 
 /* ---------------------------------------------------------------- attendance
    A swimmer signed off (traveling / sick / inactive) must count as absent, and a
@@ -12736,6 +12737,58 @@ describe("video auto-split crossing detection", () => {
     const r = detect(frames([3.0]), ["m0"], {});
     eq(r.length, 1);
     eq(Math.abs(r[0].t - 3.0) < 0.08, true, `peak off at ${r[0].t}`);
+  });
+});
+
+/* ---------------------------------------------------------------- stopwatch
+   The poolside stopwatch reads out m:ss.cs and turns cumulative taps into
+   per-lap splits. A split that came out negative, or a clock that rolled the
+   seconds wrong, is a number a coach reads onto a training log — so the split
+   maths and the format are pinned here. */
+describe("stopwatch", () => {
+  const { formatStopwatch, recordLap, lapExtremes, totalStrokes, averageStrokes } = SW;
+
+  it("formats sub-second as 0:00.cs", () => eq(formatStopwatch(900), "0:00.90"));
+  it("pads seconds and centiseconds", () => eq(formatStopwatch(65230), "1:05.23"));
+  it("rolls minutes at 60s", () => eq(formatStopwatch(60000), "1:00.00"));
+  it("truncates rather than rounds centiseconds", () => eq(formatStopwatch(1239), "0:01.23"));
+  it("never shows a negative clock", () => eq(formatStopwatch(-500), "0:00.00"));
+
+  it("first split equals the total", () => eq(recordLap([], 4000, 0).splitMs, 4000));
+  it("later split subtracts the previous total", () => {
+    const first = recordLap([], 4000, 0);
+    eq(recordLap([first], 9500, 0).splitMs, 5500);
+  });
+  it("numbers laps in order", () => {
+    const first = recordLap([], 4000, 0);
+    eq(recordLap([first], 9500, 0).n, 2);
+  });
+  it("clamps an out-of-order tap to a non-negative split", () => {
+    const first = recordLap([], 9500, 0);
+    eq(recordLap([first], 4000, 0).splitMs, 0);
+  });
+  it("carries the strokes counted for the lap", () => eq(recordLap([], 4000, 18).strokes, 18));
+
+  const laps = [
+    recordLap([], 4000, 18),
+    recordLap([recordLap([], 4000, 18)], 7000, 16),
+  ];
+  it("flags fastest and slowest by split", () => {
+    const { fastest, slowest } = lapExtremes(laps);
+    eq(fastest, 1);
+    eq(slowest, 0);
+  });
+  it("does not flag a single lap", () => {
+    const one = lapExtremes([recordLap([], 4000, 18)]);
+    eq(one.fastest, null);
+    eq(one.slowest, null);
+  });
+  it("sums strokes across laps", () => eq(totalStrokes(laps), 34));
+  it("averages only laps that logged strokes", () => {
+    eq(averageStrokes([recordLap([], 4000, 20), recordLap([], 4000, 0)]), 20);
+  });
+  it("averages to one decimal", () => {
+    eq(averageStrokes([recordLap([], 1000, 18), recordLap([], 1000, 17), recordLap([], 1000, 18)]), 17.7);
   });
 });
 
