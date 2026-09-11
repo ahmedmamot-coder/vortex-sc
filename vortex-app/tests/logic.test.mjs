@@ -3,6 +3,7 @@
 
 import { readFileSync, readdirSync } from "node:fs";
 import { bind, methodSource, describe, it, itAsync, eq, report, SOURCE, sourceBetween, runInSandbox } from "./harness.mjs";
+import { computeRaceMetrics, markerMetres, raceDistance } from "@/lib/race";
 // The real route module. Node strips the types, so these tests run the filter that ships
 // rather than a regex-mangled copy of it.
 const AI_ROUTE = await import("../src/app/api/ai/coach/route.ts");
@@ -12660,6 +12661,117 @@ describe("the T-pace screen tells the truth about a save", () => {
     eq(/bad \? \{tpaceErr:bad\} : \{tpaceDist:'', tpaceErr:''\}/.test(fn), true);
     eq(/bad \? \{tpaceErr:bad\} : \{tpaceTime:'', tpaceErr:''\}/.test(fn), true,
        "the 1000 and 400 trials have exactly the same exposure");
+  });
+});
+
+/* ------------------------------------------------------------- race metrics
+   The pro-style analysis: velocity, stroke rate, distance-per-stroke and stroke
+   index per segment. These are the numbers a coach reads back to a swimmer, so a
+   wrong one is worse than none. The relationships must stay self-consistent:
+   velocity = (SR/60) × DPS, and SI = velocity × DPS. */
+describe("race metrics", () => {
+  it("reads the metres a marker sits at", () => {
+    eq(markerMetres("Reaction"), 0);
+    eq(markerMetres("15m"), 15);
+    eq(markerMetres("100m"), 100);
+    eq(markerMetres("Breakout"), null, "breakout has no fixed distance");
+    eq(markerMetres("Turn"), null);
+  });
+
+  it("knows each race's finishing distance", () => {
+    eq(raceDistance("50"), 50);
+    eq(raceDistance("100"), 100);
+    eq(raceDistance("1500"), 1500);
+  });
+
+  // A 10m segment (15m→25m) swum in 5.0s at 5 strokes: 2.0 m/s, DPS 2.0, SR 60, SI 4.0.
+  it("computes velocity, SR, DPS and SI for a clean segment", () => {
+    const { rows } = computeRaceMetrics("100", [
+      { label: "15m", seconds: 10 },
+      { label: "25m", seconds: 15, strokes: 5 },
+    ]);
+    const seg = rows[1];
+    eq(seg.velocity, 2, "10m / 5s");
+    eq(seg.dps, 2, "10m / 5 strokes");
+    eq(seg.sr, 60, "5 strokes in 5s → 60/min");
+    eq(seg.si, 4, "velocity × DPS");
+  });
+
+  it("keeps velocity = SR/60 × DPS internally consistent", () => {
+    const { rows } = computeRaceMetrics("100", [
+      { label: "25m", seconds: 12.19 },
+      { label: "35m", seconds: 18.22, strokes: 5 },
+    ]);
+    const seg = rows[1];
+    // Reconstruct velocity from the reported SR and DPS.
+    const v = (seg.sr / 60) * seg.dps;
+    eq(Math.abs(v - seg.velocity) < 0.05, true, `${v} vs ${seg.velocity}`);
+  });
+
+  it("shows a Breakout as a time only, never a bogus speed", () => {
+    const { rows } = computeRaceMetrics("100", [
+      { label: "15m", seconds: 6.27 },
+      { label: "Breakout", seconds: 8.0 },
+      { label: "25m", seconds: 12.19, strokes: 6 },
+    ]);
+    eq(rows[1].velocity, null, "breakout distance is unknown");
+    eq(rows[1].segment, 1.73, "but its raw split still shows");
+    // The 25m segment measures back to 15m across the breakout: 10m in 5.92s.
+    eq(rows[2].distance, 10);
+    eq(rows[2].velocity, 1.69);
+  });
+
+  it("splits a 100 into out and back at the 50", () => {
+    const m = computeRaceMetrics("100", [
+      { label: "Reaction", seconds: 0.62 },
+      { label: "50m", seconds: 27.48 },
+      { label: "100m", seconds: 58.58 },
+    ]);
+    eq(m.total, 58.58);
+    eq(m.out, 27.48);
+    eq(m.back, 31.1, "58.58 − 27.48");
+    eq(m.reaction, 0.62);
+  });
+
+  it("leaves totals null until the race is finished", () => {
+    const m = computeRaceMetrics("100", [
+      { label: "15m", seconds: 6.27 },
+      { label: "25m", seconds: 12.19 },
+    ]);
+    eq(m.total, null);
+    eq(m.out, null);
+    eq(m.avgVelocity, null);
+  });
+
+  it("omits DPS and SR when strokes were not counted", () => {
+    const { rows } = computeRaceMetrics("100", [
+      { label: "15m", seconds: 10 },
+      { label: "25m", seconds: 15 },
+    ]);
+    eq(rows[1].velocity, 2, "velocity needs only the clock");
+    eq(rows[1].dps, null);
+    eq(rows[1].sr, null);
+    eq(rows[1].si, null);
+  });
+
+  it("never divides by a zero stroke count", () => {
+    const { rows } = computeRaceMetrics("100", [
+      { label: "25m", seconds: 10 },
+      { label: "50m", seconds: 15, strokes: 0 },
+    ]);
+    eq(rows[1].dps, null);
+    eq(rows[1].sr, null);
+  });
+
+  it("flags the fastest and slowest full segments", () => {
+    const m = computeRaceMetrics("100", [
+      { label: "Reaction", seconds: 0.6 },
+      { label: "15m", seconds: 6.0 },   // 15m in 5.4s → 2.78 m/s (fastest, the dive)
+      { label: "50m", seconds: 27.0 },  // 35m in 21s → 1.67 m/s
+      { label: "100m", seconds: 58.0 }, // 50m in 31s → 1.61 m/s (slowest)
+    ]);
+    eq(m.fastestLabel, "15m");
+    eq(m.slowestLabel, "100m");
   });
 });
 
