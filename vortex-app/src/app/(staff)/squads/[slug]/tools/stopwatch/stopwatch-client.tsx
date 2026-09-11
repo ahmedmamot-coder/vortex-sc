@@ -102,29 +102,32 @@ export default function StopwatchClient({ accent }: { accent: string }) {
           </div>
         </div>
 
-        {/* Primary controls */}
-        <div className="flex gap-2">
-          <button
-            onClick={toggle}
-            className="px-6 py-2 rounded-[var(--radius-pill)] font-semibold text-white"
-            style={{ background: running ? "var(--vx-warning)" : "var(--vx-success)" }}
-          >
-            {running ? "Pause" : started ? "Resume" : "Start"}
-          </button>
+        {/* Primary controls: Start/Pause + Reset on top, then a big full-width Lap. Lap is the
+            tap made at every wall, over and over, so it is by far the largest target. */}
+        <div className="w-full flex flex-col gap-2.5">
+          <div className="flex gap-2.5">
+            <button
+              onClick={toggle}
+              className="flex-1 h-[52px] rounded-[var(--radius-md)] font-semibold text-white"
+              style={{ background: running ? "var(--vx-warning)" : "#0A0F1A" }}
+            >
+              {running ? "Pause" : started ? "Resume" : "Start"}
+            </button>
+            <button
+              onClick={reset}
+              disabled={!started}
+              className="w-[52px] h-[52px] rounded-[var(--radius-md)] font-semibold text-[#0C1116] border border-[#E5E9F0] disabled:opacity-40"
+            >
+              ↺
+            </button>
+          </div>
           <button
             onClick={lap}
             disabled={!started}
-            className="px-6 py-2 rounded-[var(--radius-pill)] font-semibold text-white disabled:opacity-40"
+            className="w-full h-[84px] rounded-[var(--radius-lg)] font-bold text-white text-2xl disabled:opacity-40"
             style={{ background: accent }}
           >
             Lap
-          </button>
-          <button
-            onClick={reset}
-            disabled={!started}
-            className="px-6 py-2 rounded-[var(--radius-pill)] font-semibold text-[#0C1116] border border-[#E5E9F0] disabled:opacity-40"
-          >
-            Reset
           </button>
         </div>
       </div>

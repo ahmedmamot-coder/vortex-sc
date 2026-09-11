@@ -5256,11 +5256,15 @@ if ('serviceWorker' in navigator) {
                         <div ref="{{ onSwtMount }}" style="font-family:var(--font-mono);font-size:52px;line-height:1.05;font-weight:800;letter-spacing:-.03em;margin:12px 0 4px">0.00</div>
                         <p style="margin:0;font-size:10.5px;color:rgba(255,255,255,.45)">min : sec . hundredths</p>
                       </div>
-                      <!-- Primary controls -->
-                      <div style="display:flex;gap:10px">
-                        <button onclick="{{ onSwtLap }}" style="flex:none;width:64px;height:52px;border-radius:15px;background:#fff;border:1px solid #E5E9F0;cursor:pointer;color:#0C1116;font-family:inherit;font-weight:700;font-size:13.5px;display:flex;align-items:center;justify-content:center;gap:6px"><i data-lucide="flag" style="width:17px;height:17px"></i>Lap</button>
-                        <button onclick="{{ onSwtToggle }}" style="flex:1;height:52px;border-radius:15px;background:#0E7490;border:none;cursor:pointer;color:#fff;font-family:inherit;font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px"><i data-vx-icon="{{ swtBtnIcon }}" style="width:20px;height:20px"></i>{{ swtBtnLabel }}</button>
-                        <button onclick="{{ onSwtReset }}" style="flex:none;width:52px;height:52px;border-radius:15px;background:#fff;border:1px solid #E5E9F0;cursor:pointer;color:#0C1116;display:flex;align-items:center;justify-content:center"><i data-lucide="rotate-ccw" style="width:20px;height:20px"></i></button>
+                      <!-- Primary controls: Start/Pause + Reset on top, then a big full-width Lap.
+                           Lap is the tap made at every wall, over and over, so it is by far the
+                           largest target — hard to miss with a wet thumb poolside. -->
+                      <div style="display:flex;flex-direction:column;gap:10px">
+                        <div style="display:flex;gap:10px">
+                          <button onclick="{{ onSwtToggle }}" style="flex:1;height:54px;border-radius:15px;background:#0A0F1A;border:none;cursor:pointer;color:#fff;font-family:inherit;font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px"><i data-vx-icon="{{ swtBtnIcon }}" style="width:20px;height:20px"></i>{{ swtBtnLabel }}</button>
+                          <button onclick="{{ onSwtReset }}" style="flex:none;width:54px;height:54px;border-radius:15px;background:#fff;border:1px solid #E5E9F0;cursor:pointer;color:#0C1116;display:flex;align-items:center;justify-content:center"><i data-lucide="rotate-ccw" style="width:20px;height:20px"></i></button>
+                        </div>
+                        <button onclick="{{ onSwtLap }}" style="width:100%;height:88px;border-radius:18px;background:#0E7490;border:none;cursor:pointer;color:#fff;font-family:inherit;font-weight:800;font-size:24px;display:flex;align-items:center;justify-content:center;gap:12px;box-shadow:0 10px 24px rgba(14,116,144,.28)"><i data-lucide="flag" style="width:28px;height:28px"></i>Lap</button>
                       </div>
                       <!-- Stroke counter for the current length -->
                       <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:12px 14px;box-shadow:0 1px 4px rgba(11,20,40,.04);display:flex;align-items:center;justify-content:space-between">
