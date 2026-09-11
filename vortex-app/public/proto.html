@@ -4587,7 +4587,8 @@ if ('serviceWorker' in navigator) {
                                       <span style="font-family:var(--font-mono);font-size:11px;color:rgba(255,255,255,.55)">{{ e.current }}</span>
                                       <span style="font-size:11px;color:rgba(255,255,255,.4)">→</span>
                                       <span style="font-family:var(--font-mono);font-size:11.5px;font-weight:700;color:#22D7D7">{{ e.target }}</span>
-                                      <sc-if value="{{ e.hasPoints }}" hint-placeholder-val="{{ false }}"><span style="flex:none;font-size:10px;font-weight:700;color:rgba(255,255,255,.5);min-width:52px;text-align:right">{{ e.points }} pts</span></sc-if>
+                                      <sc-if value="{{ e.hasPoints }}" hint-placeholder-val="{{ false }}"><span style="flex:none;font-size:10px;font-weight:700;color:rgba(255,255,255,.5);min-width:46px;text-align:right">{{ e.points }} pts</span></sc-if>
+                                      <button onclick="{{ e.onEdit }}" title="Edit target" style="flex:none;width:24px;height:24px;border-radius:7px;border:none;background:rgba(255,255,255,.1);color:rgba(255,255,255,.75);cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="pencil" style="width:12px;height:12px"></i></button>
                                     </div>
                                     <div style="display:flex;align-items:center;gap:7px;padding-left:1px">
                                       <span style="font-size:9.5px;font-weight:700;letter-spacing:.02em;color:rgba(255,255,255,.4)">{{ e.stdLabel }}</span>
@@ -4621,8 +4622,8 @@ if ('serviceWorker' in navigator) {
                           </div>
                         </div>
                       </sc-if>
-                      <sc-if value="{{ aiSugg.hasData }}" hint-placeholder-val="{{ true }}">
-                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:20px;text-align:center;font-size:12px;color:#9AA2B4">Log at least one PB to get an AI suggestion.</div>
+                      <sc-if value="{{ aiSugg.noData }}" hint-placeholder-val="{{ false }}">
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:20px;text-align:center;font-size:12px;color:#9AA2B4">Log at least one race result to get targets and an AI suggestion.</div>
                       </sc-if>
                     </div>
                     <!-- Every race clip this swimmer is a lane in. The clip is stored once and
@@ -8252,6 +8253,19 @@ if ('serviceWorker' in navigator) {
                 </div>
               </div>
             </sc-if>
+            <sc-if value="{{ tgtEditOpen }}" hint-placeholder-val="{{ false }}">
+              <div class="vx-screen" style="position:absolute;inset:0;z-index:60;background:rgba(10,15,26,.55);display:flex;flex-direction:column;justify-content:flex-end">
+                <div class="vx-sheet" style="background:#fff;border-radius:20px 20px 0 0;padding:18px 16px calc(env(safe-area-inset-bottom) + 18px)">
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><span style="font-size:16px;font-weight:700;color:#0C1116">Edit target · {{ tgtEditEvent }}</span><button onclick="{{ onTgtCancel }}" style="width:32px;height:32px;border-radius:9px;background:#F4F6F8;border:none;color:#7A8296;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:15px;height:15px"></i></button></div>
+                  <p style="margin:0 0 12px;font-size:12px;color:#7A8296;line-height:1.5">Set the target time this swimmer is chasing in {{ tgtEditEvent }}. Coaches and the swimmer's family both see it. Leave it and it falls back to the age-group standard.</p>
+                  <input value="{{ tgtEditVal }}" oninput="{{ onTgtEditVal }}" placeholder="e.g. 26.20 or 2:15.00" inputmode="decimal" style="width:100%;box-sizing:border-box;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:12px;padding:13px;font-family:var(--font-mono);font-size:16px;font-weight:700;color:#0C1116;outline:none;text-align:center">
+                  <div style="display:flex;gap:8px;margin-top:12px">
+                    <sc-if value="{{ tgtHasOverride }}" hint-placeholder-val="{{ false }}"><button onclick="{{ onTgtReset }}" style="flex:none;background:#F4F6F8;color:#3A4152;border:none;border-radius:13px;padding:13px 15px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer">Reset to standard</button></sc-if>
+                    <button onclick="{{ onTgtSave }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:#0A0F1A;color:#fff;border:none;border-radius:13px;padding:13px;font-family:inherit;font-weight:700;font-size:14px;cursor:pointer"><i data-lucide="check" style="width:16px;height:16px"></i>Save target</button>
+                  </div>
+                </div>
+              </div>
+            </sc-if>
             <sc-if value="{{ showVortexId }}" hint-placeholder-val="{{ false }}">
               <div class="vx-screen" style="position:absolute;inset:0;z-index:47;background:#0A0F1A;display:flex;flex-direction:column">
                 <div style="flex:none;height:44px"></div>
@@ -8932,6 +8946,7 @@ class Component extends DCLogic {
       planSessDate:null, planSessSlot:'AM', planSessTime:'', planCalY:null, planCalM:null, planCalDay:null,
       fitSessDate:null, fitSessSlot:'AM', fitSessTime:'', fitCalY:null, fitCalM:null, fitCalDay:null, fitSavedMsg:'',
       shrOpen:false, shrKind:null, shrSquad:null, shrId:null, shrAll:true, shrSel:{},
+      tgtEditOpen:false, tgtEditSw:null, tgtEditEvent:null, tgtEditVal:'',
       videoActiveId:null, videoUrlDraft:'', videoTitleDraft:'', videoTagDraft:'', videoAddOpen:false, videoRate:1, videoNoteDraft:'', videoCurT:0, videoDur:0,
       videoCompareIds:[], videoCompareMsg:'', videoFolderOpen:true, videoFolderQ:'',
       videoStartBusy:false, videoStartMsg:'', videoStartCands:[], videoStartPick:0,
@@ -11286,6 +11301,14 @@ class Component extends DCLogic {
     this._saveGoals(); this.setState({goalEditEvent:null, goalEditVal:'', goalMsg:'Goal saved ✓'});
   }
   removeGoalOverride(swId, event){ if(this.swimmerGoals[swId]) delete this.swimmerGoals[swId][event]; this._saveGoals(); this.forceUpdate(); }
+  // Inline target editing from the Event-targets card (staff only). Writes the same swimmerGoals
+  // override the Goals tool uses, so the edit shows to coaches AND parents.
+  openTgtEdit(swId, event, curStr){ this.setState({ tgtEditOpen:true, tgtEditSw:swId, tgtEditEvent:event, tgtEditVal: curStr||'' }); }
+  closeTgtEdit(){ this.setState({ tgtEditOpen:false, tgtEditEvent:null, tgtEditVal:'' }); }
+  saveTgtEdit(){ const S=this.state; const sec=this.parseTimeStr(S.tgtEditVal); if(sec==null || sec<=0) return this.setState({ savedPlanMsg:'Enter a valid time, e.g. 26.20 or 2:15.00' });
+    const cur=(this.swimmerGoals[S.tgtEditSw]=this.swimmerGoals[S.tgtEditSw]||{}); cur[S.tgtEditEvent]={ sec, source:'coach' };
+    this._saveGoals(); this.setState({ tgtEditOpen:false, tgtEditEvent:null, tgtEditVal:'' }); this.forceUpdate(); }
+  resetTgtEdit(){ const S=this.state; this.removeGoalOverride(S.tgtEditSw, S.tgtEditEvent); this.setState({ tgtEditOpen:false, tgtEditEvent:null, tgtEditVal:'' }); }
   _saveSquadGoals(){ this._saveJSON('vx_squad_goals', this.squadGoals); }
   startEditSquadGoal(event, curSuggested){ this.setState({goalSqEditEvent:event, goalEditEvent:null, goalEditVal: curSuggested!=null ? this.fmt(curSuggested) : '', goalMsg:''}); }
   cancelEditSquadGoal(){ this.setState({goalSqEditEvent:null, goalEditVal:''}); }
@@ -14747,8 +14770,16 @@ class Component extends DCLogic {
         const courseTag = (String(p.course||'').toUpperCase().charAt(0)==='S') ? 'SC' : 'LC';
         const baseSec = this._waBase(p.event, swObj.gender, p.course);
         const pts = (baseSec>0 && p.sec>0) ? String(this._waPoints(baseSec, p.sec)) : '';
-        // Primary target = the swimmer's age-group standard (World Aquatics / regional age benchmark),
-        // converted to the PB's course (the standard is short-course basis).
+        // A coach-set (or edited) goal for this event overrides everything else — this is the
+        // editable target, set in the Goals editor and shared to the family. Shown as-is.
+        const goalOv = (this.swimmerGoals[swObj.id]||{})[p.event];
+        if(goalOv && goalOv.sec>0 && p.sec>0){
+          return { event:p.event, course:courseTag, current:p.time, target:this.fmt(goalOv.sec),
+            stdLabel:(goalOv.source==='coach'?'coach target':'set target'), gap:gapLabel(p.sec, goalOv.sec), gapColor:(p.sec<=goalOv.sec)?'#34D399':'#FCD34D', hasStd:true,
+            points:pts, hasPoints:!!pts };
+        }
+        // Otherwise the target is the swimmer's age-group standard (World Aquatics / regional age
+        // benchmark), converted to the PB's course (the standard is short-course basis).
         const std = this._ageStd(p.event, swObj.gender, swObj.age);
         if(std && p.sec>0){
           const tgt = this._ageStdForCourse(std.sec, p.event, swObj.gender, p.course);
@@ -21956,6 +21987,10 @@ class Component extends DCLogic {
           shrApplyLabel: all? 'Share with whole squad' : (nSel>0? ('Share with '+nSel+' swimmer'+(nSel===1?'':'s')) : 'Choose swimmers'),
           onShareAll:()=>this.onShareAll(), onShareApply:()=>this.applyShare(), onShareStop:()=>this.stopShare(), onShareCancel:()=>this.closeShare(),
         }; })(),
+      // Inline "edit target" sheet (staff), opened from a pencil on an Event-targets row.
+      tgtEditOpen: !!S.tgtEditOpen, tgtEditEvent: S.tgtEditEvent||'', tgtEditVal: S.tgtEditVal||'',
+      tgtHasOverride: !!((this.swimmerGoals[S.tgtEditSw]||{})[S.tgtEditEvent]),
+      onTgtEditVal:(e)=>this.setState({tgtEditVal:e.target.value}), onTgtSave:()=>this.saveTgtEdit(), onTgtReset:()=>this.resetTgtEdit(), onTgtCancel:()=>this.closeTgtEdit(),
       appTopColor: (S.view==='hub'||S.view==='tools'||S.view==='handbook'||S.view==='family'||S.view==='academy') ? '#0A0F1A' : '#EEF1F5',
       statusInk: (S.view==='hub'||S.view==='tools'||S.view==='handbook'||S.view==='family'||S.view==='academy') ? '#fff' : '#0C1116',
       liveClock: S.liveClock || (()=>{ const n=new Date(); let h=n.getHours(); const m=n.getMinutes(); h=h%12; if(h===0)h=12; return h+':'+(m<10?'0':'')+m; })(),
@@ -22558,7 +22593,7 @@ class Component extends DCLogic {
           onFitVjump:(e)=>this.setState({fitForm:{...S2.fitForm, vjump:e.target.value}}),
           onFitSitreach:(e)=>this.setState({fitForm:{...S2.fitForm, sitreach:e.target.value}}),
           onFitAdd:()=>this.addFitTest(swObj.id),
-          aiSugg: (()=>{ const a=this.swimmerAiSuggestion(swObj); return {...a, hasWeak: !!(a.hasData && a.weakStroke), hasEventTargets: !!(a.eventTargets && a.eventTargets.length)}; })(),
+          aiSugg: (()=>{ const a=this.swimmerAiSuggestion(swObj); const ets=(a.eventTargets||[]).map(e=>({...e, onEdit:()=>this.openTgtEdit(swObj.id, e.event, e.target)})); return {...a, eventTargets:ets, noData: !a.hasData, hasWeak: !!(a.hasData && a.weakStroke), hasEventTargets: !!(ets && ets.length)}; })(),
           aiEditOpen:!!S.aiEditOpen, aiEditLabel: S.aiEditOpen?'Close':'Edit',
           onSwAiAsk:()=>this.swimmerAiAsk(swObj),
           swAiBtnLabel: S.swAiLoading ? 'Reading their numbers…' : (S.swAiOut ? 'Ask again' : 'Ask Claude about this swimmer'),
