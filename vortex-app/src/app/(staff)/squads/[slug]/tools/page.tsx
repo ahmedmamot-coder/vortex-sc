@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { ZONE_DEFS } from "@/lib/types";
 import { ZONE_GUIDE, SQUAD_ZONE_MATRIX } from "@/lib/zones";
+import StopwatchIcon from "./stopwatch/stopwatch-icon";
+
+const TOOL_ICONS: Record<string, React.ReactNode> = {
+  stopwatch: <StopwatchIcon size={18} color="#067EEA" />,
+};
 
 const HANDBOOK = [
   { title: "The Vortex Pathway", body: "Pre-Team → Advanced B/A → Junior → Senior B/A → Vortex B/A → Legend, progressing by age and readiness." },
@@ -14,6 +19,7 @@ const HANDBOOK = [
 ];
 
 const TOOL_TILES = [
+  { href: "stopwatch", label: "Stopwatch", desc: "Laps, splits & stroke count on deck" },
   { href: "pace-clock", label: "Pace Clock", desc: "Live poolside countdown from your plan" },
   { href: "plan-review", label: "AI Plan Review", desc: "Rules-based check of the current plan" },
   { href: "t-pace", label: "T-Pace Tests", desc: "Log 400/1000 trials → T-pace/100" },
@@ -38,7 +44,10 @@ export default async function ToolsPage({ params }: { params: Promise<{ slug: st
             href={`/squads/${slug}/tools/${t.href}`}
             className="rounded-[var(--radius-md)] bg-white border border-[#E5E9F0] p-3 hover:border-[#CDD3E2]"
           >
-            <p className="text-[#0C1116] font-semibold text-sm">{t.label}</p>
+            <div className="flex items-center gap-1.5">
+              {TOOL_ICONS[t.href]}
+              <p className="text-[#0C1116] font-semibold text-sm">{t.label}</p>
+            </div>
             <p className="text-xs text-[#7A8296] mt-0.5">{t.desc}</p>
           </Link>
         ))}

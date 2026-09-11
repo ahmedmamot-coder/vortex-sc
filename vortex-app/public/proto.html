@@ -5210,6 +5210,55 @@ if ('serviceWorker' in navigator) {
                     </sc-if>
                   </sc-if>
 
+                  <sc-if value="{{ toolStopwatch }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;flex-direction:column;gap:13px">
+                      <!-- Clock face, painted straight onto the ref element -->
+                      <div style="background:#0A0F1A;color:#fff;border-radius:20px;padding:22px 18px;text-align:center">
+                        <p style="margin:0;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">{{ swtStatusLabel }}</p>
+                        <div ref="{{ onSwtMount }}" style="font-family:var(--font-mono);font-size:52px;line-height:1.05;font-weight:800;letter-spacing:-.03em;margin:12px 0 4px">0.00</div>
+                        <p style="margin:0;font-size:10.5px;color:rgba(255,255,255,.45)">min : sec . hundredths</p>
+                      </div>
+                      <!-- Primary controls -->
+                      <div style="display:flex;gap:10px">
+                        <button onclick="{{ onSwtLap }}" style="flex:none;width:64px;height:52px;border-radius:15px;background:#fff;border:1px solid #E5E9F0;cursor:pointer;color:#0C1116;font-family:inherit;font-weight:700;font-size:13.5px;display:flex;align-items:center;justify-content:center;gap:6px"><i data-lucide="flag" style="width:17px;height:17px"></i>Lap</button>
+                        <button onclick="{{ onSwtToggle }}" style="flex:1;height:52px;border-radius:15px;background:#0E7490;border:none;cursor:pointer;color:#fff;font-family:inherit;font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px"><i data-vx-icon="{{ swtBtnIcon }}" style="width:20px;height:20px"></i>{{ swtBtnLabel }}</button>
+                        <button onclick="{{ onSwtReset }}" style="flex:none;width:52px;height:52px;border-radius:15px;background:#fff;border:1px solid #E5E9F0;cursor:pointer;color:#0C1116;display:flex;align-items:center;justify-content:center"><i data-lucide="rotate-ccw" style="width:20px;height:20px"></i></button>
+                      </div>
+                      <!-- Stroke counter for the current length -->
+                      <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:12px 14px;box-shadow:0 1px 4px rgba(11,20,40,.04);display:flex;align-items:center;justify-content:space-between">
+                        <span><span style="display:block;font-size:13px;font-weight:700;color:#0C1116">Strokes this length</span><span style="display:block;font-size:10.5px;color:#9AA2B4">Tallied onto the next lap you record</span></span>
+                        <span style="display:flex;align-items:center;gap:12px">
+                          <button onclick="{{ onSwtStrokeMinus }}" style="width:36px;height:36px;border-radius:999px;border:1px solid #E5E9F0;background:#fff;color:#0C1116;font-size:20px;font-weight:700;line-height:1;cursor:pointer;padding:0">−</button>
+                          <span style="font-family:var(--font-mono);font-size:24px;font-weight:800;color:#0C1116;min-width:30px;text-align:center">{{ swtStrokes }}</span>
+                          <button onclick="{{ onSwtStrokePlus }}" style="width:36px;height:36px;border-radius:999px;border:none;background:#0E7490;color:#fff;font-size:20px;font-weight:700;line-height:1;cursor:pointer;padding:0">+</button>
+                        </span>
+                      </div>
+                      <sc-if value="{{ swtHasLaps }}" hint-placeholder-val="{{ false }}">
+                        <!-- Summary -->
+                        <div style="display:flex;gap:8px">
+                          <div style="flex:1;background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:11px;text-align:center"><span style="display:block;font-family:var(--font-mono);font-size:20px;font-weight:800;color:#0C1116">{{ swtStatLaps }}</span><span style="display:block;font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4;margin-top:2px">Laps</span></div>
+                          <div style="flex:1;background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:11px;text-align:center"><span style="display:block;font-family:var(--font-mono);font-size:20px;font-weight:800;color:#0C1116">{{ swtStatStrokes }}</span><span style="display:block;font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4;margin-top:2px">Strokes</span></div>
+                          <div style="flex:1;background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:11px;text-align:center"><span style="display:block;font-family:var(--font-mono);font-size:20px;font-weight:800;color:#0C1116">{{ swtStatAvg }}</span><span style="display:block;font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4;margin-top:2px">Avg / lap</span></div>
+                        </div>
+                        <!-- Laps & splits -->
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;overflow:hidden;box-shadow:0 1px 4px rgba(11,20,40,.04)">
+                          <div style="display:grid;grid-template-columns:38px 1fr 1fr 62px;gap:8px;padding:9px 13px;border-bottom:1px solid #EEF1F5;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4"><span>Lap</span><span>Split</span><span>Total</span><span style="text-align:right">Strokes</span></div>
+                          <sc-for list="{{ swtRows }}" as="r" hint-placeholder-count="4">
+                            <div style="display:grid;grid-template-columns:38px 1fr 1fr 62px;gap:8px;padding:10px 13px;border-bottom:1px solid #F4F6F8;align-items:center">
+                              <span style="font-family:var(--font-mono);font-size:13px;color:#9AA2B4">{{ r.n }}</span>
+                              <span style="font-family:var(--font-mono);font-size:14px;font-weight:700;color:{{ r.splitColor }}">{{ r.split }}<sc-if value="{{ r.tagShow }}" hint-placeholder-val="{{ false }}"><span style="font-family:inherit;font-size:9.5px;font-weight:600;margin-left:5px">{{ r.tag }}</span></sc-if></span>
+                              <span style="font-family:var(--font-mono);font-size:13.5px;color:#3A4152">{{ r.total }}</span>
+                              <span style="font-family:var(--font-mono);font-size:13.5px;color:#0C1116;text-align:right">{{ r.strokes }}</span>
+                            </div>
+                          </sc-for>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ swtNoLaps }}" hint-placeholder-val="{{ true }}">
+                        <div style="text-align:center;padding:22px;color:#9AA2B4;background:#fff;border:1px dashed #E5E9F0;border-radius:14px"><i data-lucide="flag" style="width:26px;height:26px"></i><p style="font-size:12.5px;margin-top:10px;line-height:1.5">Start the clock, then tap <span style="font-weight:700;color:#0C1116">Lap</span> at each wall to capture splits and stroke counts.</p></div>
+                      </sc-if>
+                    </div>
+                  </sc-if>
+
                   <sc-if value="{{ toolReview }}" hint-placeholder-val="{{ true }}">
                     <div style="display:flex;flex-direction:column;gap:13px">
                       <div style="display:flex;gap:6px;background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:4px">
@@ -17121,6 +17170,53 @@ class Component extends DCLogic {
     };
     this._swRaf=requestAnimationFrame(tick);
   }
+  // ---- The standalone Stopwatch tool ----
+  //
+  // A free-running clock for on-deck timing, separate from the video race clock above. It counts
+  // laps (pool lengths), keeps the split for each and the cumulative total, and tallies strokes
+  // per length. Like the race clock it is painted straight onto its element rather than through a
+  // re-render — a running clock does not put the whole screen through React sixty times a second.
+  // The running total lives in plain fields (base + start timestamp) so pause/resume never loses a
+  // hundredth to a stale render; the laps and stroke tally live in state so a tap redraws the list.
+  _swtElapsedMs(){
+    const base=this._swtBase||0;
+    return this._swtRunning ? base + (performance.now()-this._swtStart) : base;
+  }
+  onSwtMount(el){
+    this._swtEl=el||null;
+    if(this._swtRaf){ cancelAnimationFrame(this._swtRaf); this._swtRaf=null; }
+    if(!el) return;
+    const paint=()=>{
+      if(!this._swtEl || !document.body.contains(this._swtEl)){ this._swtRaf=null; return; }
+      this._swtEl.textContent=this._fmtStopwatch(this._swtElapsedMs()/1000);
+      this._swtRaf=requestAnimationFrame(paint);
+    };
+    this._swtRaf=requestAnimationFrame(paint);
+  }
+  swtToggle(){
+    if(this._swtRunning){
+      this._swtBase=(this._swtBase||0)+(performance.now()-this._swtStart);
+      this._swtRunning=false;
+    }else{
+      this._swtStart=performance.now();
+      this._swtRunning=true;
+    }
+    this.setState({swtRunning:this._swtRunning});
+  }
+  swtReset(){
+    this._swtRunning=false; this._swtBase=0;
+    if(this._swtEl) this._swtEl.textContent=this._fmtStopwatch(0);
+    this.setState({swtRunning:false, swtLaps:[], swtStrokes:0});
+  }
+  swtLap(){
+    const total=Math.round(this._swtElapsedMs());
+    if(total<=0) return;                                   // nothing to split yet
+    const laps=(this.state.swtLaps||[]).slice();
+    const prevTotal=laps.length ? laps[laps.length-1].totalMs : 0;
+    laps.push({ n:laps.length+1, splitMs:Math.max(0,total-prevTotal), totalMs:total, strokes:this.state.swtStrokes||0 });
+    this.setState({swtLaps:laps, swtStrokes:0});           // strokes reset for the next length
+  }
+  swtStroke(d){ this.setState({swtStrokes:Math.max(0,(this.state.swtStrokes||0)+d)}); }
   videoSetRate(rate){
     this.setState({videoRate:rate});
     const v=this._activeVideo(); if(!v) return;
@@ -19722,6 +19818,7 @@ class Component extends DCLogic {
       'video':'<rect x="2.8" y="6" width="13" height="12" rx="2.2"/><path d="M15.8 11l5.4-3v8l-5.4-3z"/><path d="M7.6 10.6l3.4 1.9-3.4 1.9z"/>',
       'waves':'<path d="M2 7c2.5 0 2.5 2 5 2s2.5-2 5-2 2.5 2 5 2 2.5-2 5-2"/><path d="M2 13c2.5 0 2.5 2 5 2s2.5-2 5-2 2.5 2 5 2 2.5-2 5-2"/><path d="M2 19c2.5 0 2.5 2 5 2s2.5-2 5-2 2.5 2 5 2 2.5-2 5-2"/>',
       'timer':'<circle cx="12" cy="13.5" r="7.3"/><path d="M12 9.6v4l2.5 1.8"/><path d="M9.6 2.8h4.8"/><path d="M12 2.8v3.4"/>',
+      'stopwatch':'<path d="M9.6 2.8h4.8"/><path d="M12 2.8v3.3"/><path d="M18.3 5.1l1.5 1.5"/><circle cx="12" cy="13.8" r="7.4"/><path d="M12 13.8l3.3-2.1"/>',
       'credit-card':'<rect x="2.6" y="5.4" width="18.8" height="13.2" rx="2.4"/><path d="M2.6 9.8h18.8"/><path d="M6.2 14.4h4"/><path d="M15 14.4h3.2"/>',
       'activity':'<path d="M2.5 12h4l2.5-6.5 4.5 13L16 12h5.5"/>',
       'dumbbell':'<path d="M3 9.5v5M6.2 7v10M17.8 7v10M21 9.5v5"/><path d="M6.2 12h11.6"/>',
@@ -20077,6 +20174,7 @@ class Component extends DCLogic {
       {id:'ai', icon:'sparkles', title:'AI Assistants', sub:'Season · dryland · nutrition', tint:'rgba(39,51,214,.1)', color:'#2733D6'},
       {id:'review', icon:'shield-check', title:'AI Plan Review', sub:'Check plan vs zone rules', tint:'rgba(39,51,214,.1)', color:'#2733D6'},
       {id:'clock', icon:'timer', title:'Pace Clock', sub:'Run the session poolside', tint:'rgba(200,30,91,.1)', color:'#C81E5B'},
+      {id:'stopwatch', icon:'stopwatch', title:'Stopwatch', sub:'Laps · splits · stroke count', tint:'rgba(14,116,144,.12)', color:'#0E7490'},
       {id:'zoneeng', icon:'activity', title:'Zone Engine', sub:'6-zone rules & squad limits', tint:'rgba(12,122,79,.1)', color:'#0C7A4F'},
       {id:'tpace', icon:'gauge', title:'T-Pace Tests', sub:'Log 1000/400/T30/T20 · retest due', tint:'rgba(6,126,234,.1)', color:'#067EEA'},
       {id:'promo', icon:'trending-up', title:'Level-Up Review', sub:'Promotion candidates & reviews', tint:'rgba(12,122,79,.1)', color:'#0C7A4F'},
@@ -20354,7 +20452,7 @@ class Component extends DCLogic {
     const mainPadBottom = (S.view==='squad') ? '78px' : '0px';
 
     // ---- tool overlay content ----
-    const toolTitleMap={attday:'Daily Attendance',insights:'Insights',boards:'Boards',video:'Video Analysis',lounge:'Vortex Lounge',goals:'Season Goals',ai:'AI Assistants',review:'AI Plan Review',clock:'Pace Clock',talent:'Talent Board',recovery:'Recovery Board',improvers:'Top Improvers',rankings:'Rankings',standards:'Meet Standards',relay:'Relay Builder',zoneeng:'Zone Engine',sponsors:'Sponsors',tpace:'T-Pace Tests',promo:'Level-Up Review',entries:'Meet Entries',fitness:'Fitness Plan',inbody:'InBody Import',season:'Season Plan',race:'Race Strategy',risk:'Load & Risk',meetday:'Meet Day',bdays:'Birthdays'};
+    const toolTitleMap={attday:'Daily Attendance',insights:'Insights',boards:'Boards',video:'Video Analysis',lounge:'Vortex Lounge',goals:'Season Goals',ai:'AI Assistants',review:'AI Plan Review',clock:'Pace Clock',stopwatch:'Stopwatch',talent:'Talent Board',recovery:'Recovery Board',improvers:'Top Improvers',rankings:'Rankings',standards:'Meet Standards',relay:'Relay Builder',zoneeng:'Zone Engine',sponsors:'Sponsors',tpace:'T-Pace Tests',promo:'Level-Up Review',entries:'Meet Entries',fitness:'Fitness Plan',inbody:'InBody Import',season:'Season Plan',race:'Race Strategy',risk:'Load & Risk',meetday:'Meet Day',bdays:'Birthdays'};
     const toolScope = S.toolScopeClub ? ('Club-wide · '+this.allSwimmersFlat().length+' swimmers') : squad.name+' · '+squad.count+' swimmers';
 
     // ---- Birthdays ----
@@ -23945,6 +24043,35 @@ class Component extends DCLogic {
       toolTitle: toolTitleMap[S.tool]||'', toolScope,
       toolInsights:S.tool==='insights', toolBoards:S.tool==='boards', toolVideo:S.tool==='video', toolLounge:S.tool==='lounge', toolGoals:S.tool==='goals', toolAi:S.tool==='ai',
       toolReview:S.tool==='review', toolClock:S.tool==='clock', toolZone:S.tool==='zoneeng', toolTpace:S.tool==='tpace', toolPromo:S.tool==='promo',
+      ...((self=>{
+        const laps=(S.swtLaps||[]);
+        let fastest=-1, slowest=-1;
+        if(laps.length>=2){ fastest=0; slowest=0; laps.forEach((l,i)=>{ if(l.splitMs<laps[fastest].splitMs) fastest=i; if(l.splitMs>laps[slowest].splitMs) slowest=i; }); }
+        const strokeSum=laps.reduce((a,l)=>a+(l.strokes||0),0);
+        const counted=laps.filter(l=>l.strokes>0);
+        const avg=counted.length ? Math.round(strokeSum/counted.length*10)/10 : 0;
+        const started=!!(S.swtRunning || laps.length || self._swtBase);
+        return {
+          toolStopwatch:S.tool==='stopwatch',
+          onSwtMount: self._swtMountRef || (self._swtMountRef=(el)=>self.onSwtMount(el)),
+          onSwtToggle:()=>self.swtToggle(), onSwtReset:()=>self.swtReset(), onSwtLap:()=>self.swtLap(),
+          onSwtStrokeMinus:()=>self.swtStroke(-1), onSwtStrokePlus:()=>self.swtStroke(1),
+          swtBtnLabel: S.swtRunning?'Pause':(started?'Resume':'Start'),
+          swtBtnIcon: S.swtRunning?'pause':'play',
+          swtStatusLabel: S.swtRunning?('Running · lap '+(laps.length+1)):(started?'Paused':'Ready'),
+          swtStrokes: String(S.swtStrokes||0),
+          swtHasLaps: laps.length>0,
+          swtNoLaps: laps.length===0,
+          swtStatLaps: String(laps.length),
+          swtStatStrokes: String(strokeSum+(S.swtStrokes||0)),
+          swtStatAvg: avg>0?String(avg):'—',
+          swtRows: laps.slice().reverse().map(l=>{ const i=l.n-1; const isF=i===fastest, isS=i===slowest; return {
+            n:String(l.n), split:self._fmtStopwatch(l.splitMs/1000), total:self._fmtStopwatch(l.totalMs/1000),
+            strokes: l.strokes>0?String(l.strokes):'—',
+            splitColor: isF?'#0E9F6E':(isS?'#E5484D':'#0C1116'),
+            tag: isF?'fastest':(isS?'slowest':''), tagShow: isF||isS }; }),
+        };
+      })(this)),
       promoQuery:S.promoQuery, onPromoQuery:(e)=>this.setState({promoQuery:e.target.value}),
       promoRows, promoEmpty, promoScopeLabel,
       toolEntries:S.tool==='entries', toolFitness:S.tool==='fitness', toolInbody:S.tool==='inbody', toolSponsors:S.tool==='sponsors',
