@@ -42,14 +42,27 @@ export async function deleteVideo(slug: string, id: string) {
 export async function saveSplits(
   slug: string,
   videoId: string,
-  splits: { label: string; seconds: number }[],
+  splits: { label: string; seconds: number; strokes?: number | null }[],
 ) {
   const supabase = await createClient();
   await supabase.from("video_splits").delete().eq("video_id", videoId);
   if (splits.length) {
-    await supabase.from("video_splits").insert(
-      splits.map((s, i) => ({ video_id: videoId, label: s.label, seconds: s.seconds, sort_order: i })),
-    );
+    const withStrokes = splits.map((s, i) => ({
+      video_id: videoId,
+      label: s.label,
+      seconds: s.seconds,
+      sort_order: i,
+      strokes: s.strokes ?? null,
+    }));
+    const { error } = await supabase.from("video_splits").insert(withStrokes);
+    // Before video_split_strokes.sql is run the column does not exist; keep the
+    // splits (label + time) rather than lose the capture, and the stroke counts
+    // simply wait for the migration.
+    if (error && /strokes/.test(error.message)) {
+      await supabase.from("video_splits").insert(
+        withStrokes.map(({ strokes: _strokes, ...rest }) => rest),
+      );
+    }
   }
   revalidatePath(`/squads/${slug}/tools/video/${videoId}`);
 }

@@ -1,8 +1,10 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import type { Video, VideoSplit, VideoNote } from "@/lib/data/videos";
-import { RACE_MARKERS } from "@/lib/race";
+import { RACE_MARKERS, markerMetres, computeRaceMetrics, type SplitInput } from "@/lib/race";
+import { OnsetDetector } from "@/lib/audio-onset";
+import { CrossingSequencer } from "@/lib/motion-split";
 import { formatTime } from "@/lib/format";
 import { saveSplits, addNote, deleteNote } from "../actions";
 
@@ -15,6 +17,12 @@ function vimeoId(url: string): string | null {
   return m ? m[1] : null;
 }
 
+type Split = { label: string; seconds: number; strokes: number | null };
+type Audio = { ctx: AudioContext; analyser: AnalyserNode; src: MediaElementAudioSourceNode };
+type VideoWithRVFC = HTMLVideoElement & {
+  requestVideoFrameCallback?: (cb: (now: number, meta: { mediaTime: number }) => void) => number;
+};
+
 export default function VideoDetailClient({
   slug,
   detail,
@@ -23,41 +31,194 @@ export default function VideoDetailClient({
   detail: { video: Video; splits: VideoSplit[]; notes: VideoNote[] };
 }) {
   const { video } = detail;
-  const markers = RACE_MARKERS[video.race_type ?? "50"] ?? RACE_MARKERS["50"];
+  const raceType = video.race_type ?? "50";
+  const markers = RACE_MARKERS[raceType] ?? RACE_MARKERS["50"];
+  const isMp4 = video.kind === "mp4";
+  // The markers a fixed camera can auto-detect: those at a real distance (not the
+  // gun, not the variable breakout).
+  const numberedMarkers = markers.filter((m) => {
+    const d = markerMetres(m);
+    return d != null && d > 0;
+  });
+
+  const orderOf = (label: string) => {
+    const i = markers.indexOf(label);
+    return i < 0 ? 999 : i;
+  };
+  const sortSplits = (list: Split[]) => [...list].sort((a, b) => orderOf(a.label) - orderOf(b.label));
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [rate, setRate] = useState(1);
-  const [splits, setSplits] = useState<{ label: string; seconds: number }[]>(
-    detail.splits.map((s) => ({ label: s.label, seconds: s.seconds })),
+  const [splits, setSplitsRaw] = useState<Split[]>(
+    sortSplits(detail.splits.map((s) => ({ label: s.label, seconds: s.seconds, strokes: s.strokes }))),
   );
-  const [manualStart, setManualStart] = useState<number | null>(null);
+  const setSplits = (list: Split[]) => setSplitsRaw(sortSplits(list));
+
+  const [startAt, setStartAt] = useState<number | null>(null);
+  const [autoListening, setAutoListening] = useState(false);
+  const [autoStatus, setAutoStatus] = useState<string | null>(null);
+
+  // Fixed-camera auto-split: a tapped pixel line per marker (x as a 0..1 fraction).
+  const [lines, setLines] = useState<Record<string, number>>({});
+  const [calMode, setCalMode] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [scanStatus, setScanStatus] = useState<string | null>(null);
+
   const [notes, setNotes] = useState(detail.notes);
   const [noteText, setNoteText] = useState("");
   const [, startTransition] = useTransition();
 
-  const nextMarker = markers[splits.length];
-  const allDone = splits.length >= markers.length;
+  const audioRef = useRef<Audio | null>(null);
+  const detectorRef = useRef<OnsetDetector | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const scanStopRef = useRef(false);
 
-  // Current playback time: from the <video> element for mp4, or a wall-clock
-  // stopwatch for embedded YouTube/Vimeo (whose currentTime we can't read).
-  function currentTime(): number {
-    if (video.kind === "mp4" && videoRef.current) return videoRef.current.currentTime;
-    if (manualStart != null) return (Date.now() - manualStart) / 1000;
-    return 0;
+  const captured = new Set(splits.map((s) => s.label));
+  const remaining = markers.filter((m) => !captured.has(m));
+  const nextMarker = remaining[0] ?? null;
+  const allDone = remaining.length === 0;
+  const started = startAt != null;
+
+  const metrics = computeRaceMetrics(
+    raceType,
+    splits.map<SplitInput>((s) => ({ label: s.label, seconds: s.seconds, strokes: s.strokes })),
+  );
+
+  // Load any saved calibration for this clip (per-device convenience). Runs after
+  // hydration only, so the initial {} matches on both sides — no SSR mismatch.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(`vx_vidcal_${video.id}`);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (raw) setLines(JSON.parse(raw));
+    } catch {
+      /* private mode / blocked storage — calibrate fresh */
+    }
+  }, [video.id]);
+
+  useEffect(() => {
+    return () => {
+      scanStopRef.current = true;
+      stopAuto();
+      audioRef.current?.ctx.close().catch(() => {});
+      audioRef.current = null;
+    };
+  }, []);
+
+  function rawTime(): number {
+    if (isMp4) return videoRef.current?.currentTime ?? 0;
+    return Date.now() / 1000;
+  }
+  function elapsed(): number {
+    if (startAt == null) return 0;
+    return Math.max(0, rawTime() - startAt);
+  }
+
+  function persist(next: Split[]) {
+    const ordered = sortSplits(next);
+    startTransition(() => saveSplits(slug, video.id, ordered));
+  }
+
+  function saveLines(next: Record<string, number>) {
+    setLines(next);
+    try {
+      localStorage.setItem(`vx_vidcal_${video.id}`, JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function stopAuto() {
+    setAutoListening(false);
+    detectorRef.current = null;
+    if (rafRef.current != null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+  }
+
+  function setStartHere() {
+    stopAuto();
+    setStartAt(rawTime());
+    setAutoStatus(null);
+  }
+
+  function clearStart() {
+    stopAuto();
+    setStartAt(null);
+    setAutoStatus(null);
+  }
+
+  function armAuto() {
+    const el = videoRef.current;
+    if (!el) return;
+    try {
+      let a = audioRef.current;
+      if (!a) {
+        const Ctx =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        const ctx = new Ctx();
+        const src = ctx.createMediaElementSource(el);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 1024;
+        analyser.smoothingTimeConstant = 0;
+        src.connect(analyser);
+        analyser.connect(ctx.destination);
+        a = { ctx, analyser, src };
+        audioRef.current = a;
+      }
+      a.ctx.resume().catch(() => {});
+      detectorRef.current = new OnsetDetector();
+      setStartAt(null);
+      setAutoListening(true);
+      setAutoStatus("Listening for the start signal — press play from before the beep.");
+
+      const bins = new Uint8Array(a.analyser.frequencyBinCount);
+      const spec = new Array<number>(bins.length);
+      const tick = () => {
+        const aa = audioRef.current;
+        const det = detectorRef.current;
+        const v = videoRef.current;
+        if (!aa || !det || !v) return;
+        aa.analyser.getByteFrequencyData(bins);
+        for (let i = 0; i < bins.length; i++) spec[i] = bins[i] / 255;
+        if (!v.paused && det.push(spec)) {
+          const t = v.currentTime;
+          setStartAt(t);
+          setAutoStatus(`Start locked to the beep at ${formatTime(t)} in the clip.`);
+          stopAuto();
+          return;
+        }
+        rafRef.current = requestAnimationFrame(tick);
+      };
+      rafRef.current = requestAnimationFrame(tick);
+    } catch {
+      stopAuto();
+      setAutoStatus("Couldn't read this clip's audio — tap “Set start” on the gun frame instead.");
+    }
   }
 
   function tapSplit() {
-    if (allDone) return;
-    const t = currentTime();
-    const updated = [...splits, { label: nextMarker, seconds: t }];
+    if (allDone || !started || !nextMarker) return;
+    const updated = [...splits, { label: nextMarker, seconds: elapsed(), strokes: null }];
     setSplits(updated);
-    startTransition(() => saveSplits(slug, video.id, updated));
+    persist(updated);
   }
 
   function resetSplits() {
     setSplits([]);
-    setManualStart(null);
-    startTransition(() => saveSplits(slug, video.id, []));
+    clearStart();
+    setScanStatus(null);
+    persist([]);
+  }
+
+  function setStrokes(index: number, next: number | null) {
+    const updated = splits.map((s, i) =>
+      i === index ? { ...s, strokes: next != null && next > 0 ? next : null } : s,
+    );
+    setSplits(updated);
+    persist(updated);
   }
 
   function setSpeed(r: number) {
@@ -65,15 +226,190 @@ export default function VideoDetailClient({
     if (videoRef.current) videoRef.current.playbackRate = r;
   }
 
+  function noteTime(): number {
+    if (isMp4) return videoRef.current?.currentTime ?? 0;
+    return elapsed();
+  }
+
+  // --- Fixed-camera auto-split ------------------------------------------------
+
+  function placeLine(e: React.MouseEvent<HTMLDivElement>) {
+    const next = numberedMarkers.find((m) => lines[m] == null);
+    if (!next) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const frac = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    saveLines({ ...lines, [next]: frac });
+  }
+
+  const calDone = numberedMarkers.every((m) => lines[m] != null);
+  const nextCalMarker = numberedMarkers.find((m) => lines[m] == null) ?? null;
+
+  async function autoDetect() {
+    const el = videoRef.current;
+    if (!el || startAt == null || !calDone) return;
+
+    const canvas = document.createElement("canvas");
+    const cw = 320;
+    const ratio = (el.videoHeight || 9) / (el.videoWidth || 16);
+    const ch = Math.max(2, Math.round(cw * ratio));
+    canvas.width = cw;
+    canvas.height = ch;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) {
+      setScanStatus("Canvas unavailable in this browser.");
+      return;
+    }
+
+    const seq = new CrossingSequencer(
+      numberedMarkers.map((m) => ({ label: m, metres: markerMetres(m)! })),
+    );
+    const found: { label: string; seconds: number }[] = [];
+    const bandW = Math.max(4, Math.round(cw * 0.03));
+    let prev: Uint8ClampedArray | null = null;
+    let prevLabel: string | null = null;
+    let tainted = false;
+
+    scanStopRef.current = false;
+    setScanning(true);
+    setScanStatus("Scanning the clip…");
+    const restoreRate = rate;
+    el.muted = true;
+    el.playbackRate = 2;
+
+    await new Promise<void>((res) => {
+      const on = () => {
+        el.removeEventListener("seeked", on);
+        res();
+      };
+      el.addEventListener("seeked", on);
+      try {
+        el.currentTime = startAt;
+      } catch {
+        res();
+      }
+    });
+    await el.play().catch(() => {});
+
+    let stopped = false;
+    const finish = () => {
+      if (stopped) return;
+      stopped = true;
+      el.pause();
+      el.playbackRate = restoreRate;
+      el.muted = false;
+      setScanning(false);
+      if (tainted) {
+        setScanStatus(
+          "This clip's host blocks frame reading — auto-split needs a same-origin/CORS video. Splits stay manual.",
+        );
+        return;
+      }
+      if (found.length) {
+        const nonNumbered = splits.filter((s) => {
+          const d = markerMetres(s.label);
+          return d == null || d === 0;
+        });
+        const merged = [
+          ...nonNumbered,
+          ...found.map((f) => ({ label: f.label, seconds: +f.seconds.toFixed(2), strokes: null })),
+        ];
+        setSplits(merged);
+        persist(merged);
+        setScanStatus(
+          `Auto-detected ${found.length} of ${numberedMarkers.length} splits — check each against the video and nudge if a wave fooled it.`,
+        );
+      } else {
+        setScanStatus(
+          "No crossings found — this works only on a still camera with each line on the swimmer's own lane.",
+        );
+      }
+    };
+
+    const process = (mediaTime: number): boolean => {
+      if (scanStopRef.current) {
+        finish();
+        return true;
+      }
+      const cur = seq.current;
+      if (!cur) {
+        finish();
+        return true;
+      }
+      const curLabel = cur.label;
+      try {
+        ctx.drawImage(el, 0, 0, cw, ch);
+      } catch {
+        tainted = true;
+        finish();
+        return true;
+      }
+      const x = Math.min(cw - bandW, Math.max(0, Math.round((lines[curLabel] || 0) * cw - bandW / 2)));
+      let data: Uint8ClampedArray;
+      try {
+        data = ctx.getImageData(x, 0, bandW, ch).data;
+      } catch {
+        tainted = true;
+        finish();
+        return true;
+      }
+      let motion = 0;
+      if (prev && prevLabel === curLabel && prev.length === data.length) {
+        let s = 0;
+        for (let i = 0; i < data.length; i++) {
+          if ((i & 3) === 3) continue; // skip alpha
+          s += Math.abs(data[i] - prev[i]);
+        }
+        motion = s / (data.length * 0.75) / 255;
+      }
+      prev = data;
+      prevLabel = curLabel;
+
+      const crossing = seq.push(motion, mediaTime - startAt);
+      if (crossing) {
+        found.push({ label: crossing.label, seconds: crossing.seconds });
+        prev = null;
+      }
+      if (seq.done) {
+        finish();
+        return true;
+      }
+      return false;
+    };
+
+    const v = el as VideoWithRVFC;
+    if (typeof v.requestVideoFrameCallback === "function") {
+      const cb = (_now: number, meta: { mediaTime: number }) => {
+        if (stopped) return;
+        if (process(meta.mediaTime)) return;
+        if (el.ended) {
+          finish();
+          return;
+        }
+        v.requestVideoFrameCallback!(cb);
+      };
+      v.requestVideoFrameCallback(cb);
+    } else {
+      const loop = () => {
+        if (stopped) return;
+        if (process(el.currentTime)) return;
+        if (el.ended) {
+          finish();
+          return;
+        }
+        requestAnimationFrame(loop);
+      };
+      requestAnimationFrame(loop);
+    }
+    el.onended = () => finish();
+  }
+
   const ytId = video.kind === "youtube" ? youtubeId(video.url) : null;
   const vmId = video.kind === "vimeo" ? vimeoId(video.url) : null;
 
   return (
     <div>
-      <div className="rounded-[var(--radius-lg)] overflow-hidden bg-black mb-3 aspect-video">
-        {video.kind === "mp4" && (
-          <video ref={videoRef} src={video.url} controls className="w-full h-full" />
-        )}
+      <div className="relative rounded-[var(--radius-lg)] overflow-hidden bg-black mb-3 aspect-video">
+        {isMp4 && <video ref={videoRef} src={video.url} controls className="w-full h-full" />}
         {ytId && (
           <iframe
             src={`https://www.youtube.com/embed/${ytId}`}
@@ -85,9 +421,29 @@ export default function VideoDetailClient({
         {vmId && (
           <iframe src={`https://player.vimeo.com/video/${vmId}`} className="w-full h-full" allowFullScreen />
         )}
+
+        {/* Calibration overlay — tap where each marker line sits in the frame. */}
+        {isMp4 && calMode && (
+          <div className="absolute inset-0 z-10 cursor-crosshair" onClick={placeLine}>
+            {Object.entries(lines).map(([label, frac]) => (
+              <div
+                key={label}
+                className="absolute top-0 bottom-0 w-0.5 bg-[var(--vx-warning)]"
+                style={{ left: `${frac * 100}%` }}
+              >
+                <span className="absolute top-1 -translate-x-1/2 text-[10px] font-bold text-white bg-[var(--vx-warning)] px-1 rounded">
+                  {label}
+                </span>
+              </div>
+            ))}
+            <div className="absolute inset-x-0 bottom-0 bg-black/60 text-white text-xs text-center py-1.5">
+              {nextCalMarker ? `Tap the ${nextCalMarker} line` : "All lines placed ✓ — tap “Done”"}
+            </div>
+          </div>
+        )}
       </div>
 
-      {video.kind === "mp4" && (
+      {isMp4 && (
         <div className="flex gap-1.5 mb-3">
           <span className="text-xs text-[#7A8296] self-center mr-1">Speed:</span>
           {[0.25, 0.5, 0.75, 1].map((r) => (
@@ -95,7 +451,7 @@ export default function VideoDetailClient({
               key={r}
               onClick={() => setSpeed(r)}
               className="px-2 py-1 rounded-[var(--radius-pill)] text-xs font-semibold"
-              style={{ background: rate === r ? "var(--vx-blue)" : "#EEF1F5", color: rate === r? "#fff" : "#4A5568" }}
+              style={{ background: rate === r ? "var(--vx-blue)" : "#EEF1F5", color: rate === r ? "#fff" : "#4A5568" }}
             >
               {r}x
             </button>
@@ -110,59 +466,114 @@ export default function VideoDetailClient({
         </div>
       )}
 
+      {(metrics.total != null || metrics.reaction != null || metrics.out != null) && (
+        <RaceSummary metrics={metrics} raceType={raceType} />
+      )}
+
       {/* Split capture */}
       <div className="rounded-[var(--radius-lg)] bg-white border border-[#E5E9F0] p-4 mb-4">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-[#0C1116] font-semibold text-sm">
-            Race splits · {video.race_type ?? "50"}m
-          </p>
-          <button onClick={resetSplits} className="text-xs text-[var(--vx-danger)]">
-            Reset
-          </button>
+          <p className="text-[#0C1116] font-semibold text-sm">Race splits · {raceType}m</p>
+          {(splits.length > 0 || started) && (
+            <button onClick={resetSplits} className="text-xs text-[var(--vx-danger)]">
+              Reset
+            </button>
+          )}
         </div>
 
-        {video.kind !== "mp4" && manualStart == null && !allDone && (
-          <button
-            onClick={() => setManualStart(Date.now())}
-            className="w-full rounded-[var(--radius-md)] py-2 text-sm font-semibold text-white mb-3"
-            style={{ background: "var(--vx-success)" }}
-          >
-            Start stopwatch (at the beep/dive)
-          </button>
+        {!started ? (
+          <div className="mb-1">
+            <button
+              onClick={setStartHere}
+              className="w-full rounded-[var(--radius-md)] py-3 text-sm font-bold text-white"
+              style={{ background: "var(--vx-success)" }}
+            >
+              {isMp4 ? "Set start — on the gun frame" : "Start stopwatch (at the beep/dive)"}
+            </button>
+
+            {isMp4 &&
+              (autoListening ? (
+                <button
+                  onClick={stopAuto}
+                  className="w-full mt-2 rounded-[var(--radius-md)] py-2.5 text-sm font-semibold border border-[var(--vx-blue)] text-[var(--vx-blue)] flex items-center justify-center gap-2"
+                >
+                  <span className="inline-block w-2 h-2 rounded-full bg-[var(--vx-danger)] animate-pulse" />
+                  Listening for the beep… tap to cancel
+                </button>
+              ) : (
+                <button
+                  onClick={armAuto}
+                  className="w-full mt-2 rounded-[var(--radius-md)] py-2.5 text-sm font-semibold border border-[#E5E9F0] text-[#0C1116]"
+                >
+                  🔊 Auto-start on the beep
+                </button>
+              ))}
+
+            <p className="text-[11px] text-[#7A8296] mt-2 leading-relaxed">
+              {isMp4
+                ? "Pause on the flash/gun and “Set start” for a frame-exact zero, or arm the beep detector and play from before the start."
+                : "Embedded clips have no readable audio — start the stopwatch by hand on the beep."}
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center justify-between text-[11px] text-[#7A8296] mb-2">
+              <span>
+                Gun set{isMp4 && startAt != null ? ` · ${formatTime(startAt)} in clip` : ""} — all splits
+                measured from here.
+              </span>
+              <button onClick={clearStart} className="text-[var(--vx-blue)] font-semibold">
+                Change
+              </button>
+            </div>
+
+            {!allDone ? (
+              <button
+                onClick={tapSplit}
+                className="w-full rounded-[var(--radius-md)] py-3 text-sm font-bold text-white"
+                style={{ background: "var(--vx-blue)" }}
+              >
+                Tap: {nextMarker}
+              </button>
+            ) : (
+              <p className="text-sm text-[var(--vx-success)] text-center py-2">All splits captured ✓</p>
+            )}
+          </>
         )}
 
-        {!allDone ? (
-          <button
-            onClick={tapSplit}
-            disabled={video.kind !== "mp4" && manualStart == null}
-            className="w-full rounded-[var(--radius-md)] py-3 text-sm font-bold text-white disabled:opacity-40"
-            style={{ background: "var(--vx-blue)" }}
-          >
-            Tap: {nextMarker}
-          </button>
-        ) : (
-          <p className="text-sm text-[var(--vx-success)] text-center py-2">All splits captured ✓</p>
-        )}
+        {autoStatus && <p className="text-[11px] text-[var(--vx-blue)] mt-2">{autoStatus}</p>}
 
         {splits.length > 0 && (
-          <div className="flex flex-col gap-1 mt-3">
-            {splits.map((s, i) => {
-              const delta = i === 0 ? s.seconds : s.seconds - splits[i - 1].seconds;
-              return (
-                <div key={i} className="flex items-center justify-between text-sm">
-                  <span className="text-[#0C1116]">{s.label}</span>
-                  <span className="text-[#7A8296]">
-                    {formatTime(s.seconds)} <span className="text-[#9AA2B4]">(+{formatTime(delta)})</span>
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+          <RaceBreakdown
+            metrics={metrics}
+            fastest={metrics.fastestLabel}
+            slowest={metrics.slowestLabel}
+            onStrokes={setStrokes}
+          />
         )}
       </div>
 
+      {/* Fixed-camera auto-split */}
+      {isMp4 && (
+        <AutoSplitPanel
+          calMode={calMode}
+          onToggleCal={() => setCalMode((v) => !v)}
+          calDone={calDone}
+          placed={Object.keys(lines).length}
+          total={numberedMarkers.length}
+          started={started}
+          scanning={scanning}
+          scanStatus={scanStatus}
+          onClearLines={() => saveLines({})}
+          onScan={autoDetect}
+          onStopScan={() => {
+            scanStopRef.current = true;
+          }}
+        />
+      )}
+
       {/* Notes */}
-      <div className="rounded-[var(--radius-lg)] bg-white border border-[#E5E9F0] p-4">
+      <div className="rounded-[var(--radius-lg)] bg-white border border-[#E5E9F0] p-4 mt-4">
         <p className="text-[#0C1116] font-semibold text-sm mb-3">Notes</p>
         <div className="flex gap-2 mb-3">
           <input
@@ -174,7 +585,7 @@ export default function VideoDetailClient({
           <button
             onClick={() => {
               if (!noteText.trim()) return;
-              const t = currentTime();
+              const t = noteTime();
               startTransition(async () => {
                 await addNote(slug, video.id, t, noteText.trim());
               });
@@ -215,6 +626,274 @@ export default function VideoDetailClient({
           {notes.length === 0 && <p className="text-xs text-[#7A8296]">No notes yet.</p>}
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------ auto-split panel */
+
+function AutoSplitPanel({
+  calMode,
+  onToggleCal,
+  calDone,
+  placed,
+  total,
+  started,
+  scanning,
+  scanStatus,
+  onClearLines,
+  onScan,
+  onStopScan,
+}: {
+  calMode: boolean;
+  onToggleCal: () => void;
+  calDone: boolean;
+  placed: number;
+  total: number;
+  started: boolean;
+  scanning: boolean;
+  scanStatus: string | null;
+  onClearLines: () => void;
+  onScan: () => void;
+  onStopScan: () => void;
+}) {
+  return (
+    <div className="rounded-[var(--radius-lg)] bg-white border border-[#E5E9F0] p-4 mt-4">
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-[#0C1116] font-semibold text-sm">
+          Auto-split <span className="text-[10px] font-bold text-[var(--vx-warning)] align-top">BETA</span>
+        </p>
+        <span className="text-[11px] text-[#7A8296]">
+          {placed}/{total} lines
+        </span>
+      </div>
+      <p className="text-[11px] text-[#7A8296] mb-3 leading-relaxed">
+        For a <span className="font-semibold">still camera</span> only. Mark where each split line sits in
+        the frame, then let it read the swimmer’s wave crossing each one. Panning or broadcast clips move the
+        marker every frame — tap those by hand.
+      </p>
+
+      <div className="flex gap-2 flex-wrap">
+        <button
+          onClick={onToggleCal}
+          className="px-3 py-2 rounded-[var(--radius-md)] text-sm font-semibold text-white"
+          style={{ background: calMode ? "var(--vx-success)" : "var(--vx-blue)" }}
+        >
+          {calMode ? "Done placing lines" : placed > 0 ? "Edit lines" : "Calibrate lines"}
+        </button>
+        {placed > 0 && !calMode && (
+          <button
+            onClick={onClearLines}
+            className="px-3 py-2 rounded-[var(--radius-md)] text-sm font-semibold text-[var(--vx-danger)] border border-[#E5E9F0]"
+          >
+            Clear
+          </button>
+        )}
+        {!scanning ? (
+          <button
+            onClick={onScan}
+            disabled={!calDone || !started}
+            className="px-3 py-2 rounded-[var(--radius-md)] text-sm font-bold text-white disabled:opacity-40 ml-auto"
+            style={{ background: "#0A0F1A" }}
+          >
+            Auto-detect splits
+          </button>
+        ) : (
+          <button
+            onClick={onStopScan}
+            className="px-3 py-2 rounded-[var(--radius-md)] text-sm font-semibold text-white ml-auto flex items-center gap-2"
+            style={{ background: "var(--vx-danger)" }}
+          >
+            <span className="inline-block w-2 h-2 rounded-full bg-white animate-pulse" />
+            Stop
+          </button>
+        )}
+      </div>
+
+      {!started && calDone && (
+        <p className="text-[11px] text-[var(--vx-warning)] mt-2">Set the start (the gun) first, above.</p>
+      )}
+      {scanStatus && <p className="text-[11px] text-[var(--vx-blue)] mt-2 leading-relaxed">{scanStatus}</p>}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ summary */
+
+function RaceSummary({
+  metrics,
+  raceType,
+}: {
+  metrics: ReturnType<typeof computeRaceMetrics>;
+  raceType: string;
+}) {
+  return (
+    <div className="rounded-[var(--radius-lg)] p-4 mb-4 text-white" style={{ background: "#0A0F1A" }}>
+      <div className="flex items-end justify-between mb-3">
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.14em] text-[#7A8296] font-bold">Final time</p>
+          <p className="text-4xl font-bold tabular-nums leading-none mt-1">
+            {metrics.total != null ? formatTime(metrics.total) : "—"}
+          </p>
+        </div>
+        {metrics.avgVelocity != null && (
+          <div className="text-right">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-[#7A8296] font-bold">Avg speed</p>
+            <p className="text-2xl font-bold tabular-nums leading-none mt-1">
+              {metrics.avgVelocity.toFixed(2)}
+              <span className="text-sm text-[#7A8296] ml-1">m/s</span>
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-3 gap-2">
+        <SummaryTile label="Out" value={metrics.out != null ? formatTime(metrics.out) : "—"} />
+        <SummaryTile label="Back" value={metrics.back != null ? formatTime(metrics.back) : "—"} />
+        <SummaryTile
+          label="Reaction"
+          value={metrics.reaction != null ? `${metrics.reaction.toFixed(2)}s` : "—"}
+        />
+      </div>
+      {metrics.out != null && metrics.back != null && (
+        <p className="text-[11px] text-[#7A8296] mt-2.5">
+          {metrics.back > metrics.out
+            ? `Faded ${formatTime(metrics.back - metrics.out)} on the back half — a ${raceType}m to build into.`
+            : `Held the back half within ${formatTime(metrics.out - metrics.back)} — strong pacing.`}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function SummaryTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[var(--radius-md)] py-2 px-2.5" style={{ background: "rgba(255,255,255,0.06)" }}>
+      <p className="text-[10px] uppercase tracking-[0.1em] text-[#7A8296] font-bold">{label}</p>
+      <p className="text-lg font-bold tabular-nums leading-tight mt-0.5">{value}</p>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- breakdown */
+
+function RaceBreakdown({
+  metrics,
+  fastest,
+  slowest,
+  onStrokes,
+}: {
+  metrics: ReturnType<typeof computeRaceMetrics>;
+  fastest: string | null;
+  slowest: string | null;
+  onStrokes: (index: number, next: number | null) => void;
+}) {
+  return (
+    <div className="mt-3 -mx-1 overflow-x-auto">
+      <table className="w-full text-sm border-collapse">
+        <thead>
+          <tr className="text-[10px] uppercase tracking-[0.06em] text-[#9AA2B4]">
+            <th className="text-left font-bold py-1.5 px-1">Split</th>
+            <th className="text-right font-bold py-1.5 px-1">Time</th>
+            <th className="text-right font-bold py-1.5 px-1">Seg</th>
+            <th className="text-right font-bold py-1.5 px-1" title="Metres per second">
+              m/s
+            </th>
+            <th className="text-right font-bold py-1.5 px-1" title="Strokes per minute">
+              SR
+            </th>
+            <th className="text-right font-bold py-1.5 px-1" title="Distance per stroke (m)">
+              DPS
+            </th>
+            <th className="text-right font-bold py-1.5 px-1" title="Stroke index = speed × DPS">
+              SI
+            </th>
+            <th className="text-center font-bold py-1.5 px-1">Strokes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {metrics.rows.map((r, i) => {
+            const hi =
+              r.label === fastest ? "var(--vx-success)" : r.label === slowest ? "var(--vx-danger)" : undefined;
+            const strokeable = r.distance != null;
+            return (
+              <tr key={i} className="border-t border-[#EEF1F5]">
+                <td className="py-1.5 px-1 text-[#0C1116] font-semibold whitespace-nowrap">
+                  {hi && (
+                    <span
+                      className="inline-block w-1.5 h-1.5 rounded-full mr-1.5 align-middle"
+                      style={{ background: hi }}
+                    />
+                  )}
+                  {r.label}
+                </td>
+                <td className="py-1.5 px-1 text-right tabular-nums text-[#0C1116]">
+                  {formatTime(r.cumulative)}
+                </td>
+                <td className="py-1.5 px-1 text-right tabular-nums text-[#7A8296]">
+                  {r.segment != null ? formatTime(r.segment) : "—"}
+                </td>
+                <td
+                  className="py-1.5 px-1 text-right tabular-nums font-semibold"
+                  style={{ color: hi ?? "#3A4152" }}
+                >
+                  {r.velocity != null ? r.velocity.toFixed(2) : "—"}
+                </td>
+                <td className="py-1.5 px-1 text-right tabular-nums text-[#3A4152]">
+                  {r.sr != null ? r.sr.toFixed(1) : "—"}
+                </td>
+                <td className="py-1.5 px-1 text-right tabular-nums text-[#3A4152]">
+                  {r.dps != null ? r.dps.toFixed(2) : "—"}
+                </td>
+                <td className="py-1.5 px-1 text-right tabular-nums text-[var(--vx-blue)] font-semibold">
+                  {r.si != null ? r.si.toFixed(2) : "—"}
+                </td>
+                <td className="py-1.5 px-1">
+                  {strokeable ? (
+                    <StrokeStepper value={r.strokes} onChange={(v) => onStrokes(i, v)} />
+                  ) : (
+                    <span className="block text-center text-[#C4CAD6]">—</span>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <p className="text-[11px] text-[#9AA2B4] mt-2 px-1 leading-relaxed">
+        Count strokes per segment to unlock <span className="font-semibold text-[#7A8296]">SR</span> (rate),{" "}
+        <span className="font-semibold text-[#7A8296]">DPS</span> (distance/stroke) and{" "}
+        <span className="font-semibold text-[#7A8296]">SI</span> (stroke index — higher is more efficient).
+      </p>
+    </div>
+  );
+}
+
+function StrokeStepper({
+  value,
+  onChange,
+}: {
+  value: number | null;
+  onChange: (next: number | null) => void;
+}) {
+  return (
+    <div className="flex items-center justify-center gap-1">
+      <button
+        onClick={() => onChange((value ?? 0) - 1)}
+        disabled={!value}
+        className="w-6 h-6 rounded-full text-[#4A5568] bg-[#EEF1F5] disabled:opacity-40 leading-none"
+        aria-label="One fewer stroke"
+      >
+        −
+      </button>
+      <span className="w-5 text-center tabular-nums font-semibold text-[#0C1116]">{value ?? "·"}</span>
+      <button
+        onClick={() => onChange((value ?? 0) + 1)}
+        className="w-6 h-6 rounded-full text-white bg-[var(--vx-blue)] leading-none"
+        aria-label="One more stroke"
+      >
+        +
+      </button>
     </div>
   );
 }
