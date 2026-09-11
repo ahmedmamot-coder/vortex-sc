@@ -2953,12 +2953,18 @@ if ('serviceWorker' in navigator) {
                               <p style="margin:0 0 7px;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">{{ tx.eventTargets }}</p>
                               <div style="display:flex;flex-direction:column;gap:6px">
                                 <sc-for list="{{ famAiSugg.eventTargets }}" as="e" hint-placeholder-count="6">
-                                  <div style="display:flex;align-items:center;gap:8px">
-                                    <span style="flex:1;min-width:0;font-size:12px;font-weight:600;color:#fff">{{ e.event }} <span style="font-size:9.5px;font-weight:700;color:rgba(255,255,255,.4)">{{ e.course }}</span></span>
-                                    <span style="font-family:var(--font-mono);font-size:11px;color:rgba(255,255,255,.55)">{{ e.current }}</span>
-                                    <span style="font-size:11px;color:rgba(255,255,255,.4)">→</span>
-                                    <span style="font-family:var(--font-mono);font-size:11.5px;font-weight:700;color:#22D7D7">{{ e.target }}</span>
-                                    <sc-if value="{{ e.hasPoints }}" hint-placeholder-val="{{ false }}"><span style="flex:none;font-size:10px;font-weight:700;color:rgba(255,255,255,.5);min-width:52px;text-align:right">{{ e.points }} pts</span></sc-if>
+                                  <div style="display:flex;flex-direction:column;gap:2px">
+                                    <div style="display:flex;align-items:center;gap:8px">
+                                      <span style="flex:1;min-width:0;font-size:12px;font-weight:600;color:#fff">{{ e.event }} <span style="font-size:9.5px;font-weight:700;color:rgba(255,255,255,.4)">{{ e.course }}</span></span>
+                                      <span style="font-family:var(--font-mono);font-size:11px;color:rgba(255,255,255,.55)">{{ e.current }}</span>
+                                      <span style="font-size:11px;color:rgba(255,255,255,.4)">→</span>
+                                      <span style="font-family:var(--font-mono);font-size:11.5px;font-weight:700;color:#22D7D7">{{ e.target }}</span>
+                                      <sc-if value="{{ e.hasPoints }}" hint-placeholder-val="{{ false }}"><span style="flex:none;font-size:10px;font-weight:700;color:rgba(255,255,255,.5);min-width:52px;text-align:right">{{ e.points }} pts</span></sc-if>
+                                    </div>
+                                    <div style="display:flex;align-items:center;gap:7px;padding-left:1px">
+                                      <span style="font-size:9.5px;font-weight:700;letter-spacing:.02em;color:rgba(255,255,255,.4)">{{ e.stdLabel }}</span>
+                                      <span style="font-size:10px;font-weight:700;color:{{ e.gapColor }}">{{ e.gap }}</span>
+                                    </div>
                                   </div>
                                 </sc-for>
                               </div>
@@ -14621,6 +14627,40 @@ class Component extends DCLogic {
   }
   // World Aquatics points for a swim: 1000 × (base ÷ time)³, rounded. 0 without a base time.
   _waPoints(baseSec, timeSec){ if(!(baseSec>0) || !(timeSec>0)) return 0; return Math.round(1000 * Math.pow(baseSec/timeSec, 3)); }
+  // Single-year age-group benchmark standards (13/14/15/16), by gender and event, short-course
+  // basis (Swim England East Region 2026 reference — World Aquatics sets no single-year cuts).
+  // Each value is [13yr, 14yr, 15yr, 16yr]; times are strings parsed by parseTimeStr. Edit here to
+  // update. Events without an age-group cut here (e.g. 100 IM) fall back to the personal target.
+  _ageStdTimes(){
+    return {
+      F: {
+        '50 Free':['30.30','29.40','29.15','28.80'],'100 Free':['1:07.00','1:04.25','1:03.50','1:02.00'],'200 Free':['2:25.00','2:21.50','2:17.50','2:15.00'],'400 Free':['5:10.00','5:00.00','4:50.00','4:47.00'],'800 Free':['10:35.00','10:10.00','9:50.00','9:50.00'],'1500 Free':['20:40.00','19:45.00','19:10.00','19:00.00'],
+        '50 Back':['35.00','33.75','33.15','32.65'],'100 Back':['1:16.00','1:13.15','1:11.00','1:10.50'],'200 Back':['2:43.00','2:37.00','2:35.00','2:33.00'],
+        '50 Breast':['39.50','38.45','37.50','36.00'],'100 Breast':['1:27.75','1:24.10','1:21.50','1:20.00'],'200 Breast':['3:10.75','3:05.25','2:59.00','2:56.00'],
+        '50 Fly':['33.90','32.25','31.25','31.00'],'100 Fly':['1:18.00','1:15.00','1:12.00','1:11.00'],'200 Fly':['3:05.00','2:55.00','2:50.00','2:45.00'],
+        '200 IM':['2:45.50','2:41.00','2:35.50','2:34.00'],'400 IM':['5:55.00','5:40.00','5:37.50','5:30.00'],
+      },
+      M: {
+        '50 Free':['30.00','28.25','26.70','26.25'],'100 Free':['1:06.00','1:01.50','58.30','57.20'],'200 Free':['2:24.00','2:16.25','2:08.25','2:06.00'],'400 Free':['5:07.00','4:48.00','4:35.00','4:26.00'],'800 Free':['10:35.00','9:55.00','9:40.00','9:20.00'],'1500 Free':['20:40.00','19:05.00','18:35.00','18:00.00'],
+        '50 Back':['34.90','32.75','30.80','30.40'],'100 Back':['1:15.50','1:11.50','1:07.50','1:06.00'],'200 Back':['2:42.00','2:32.00','2:28.00','2:25.00'],
+        '50 Breast':['39.40','36.85','34.75','33.85'],'100 Breast':['1:26.75','1:21.00','1:17.25','1:15.00'],'200 Breast':['3:09.00','2:58.00','2:47.00','2:44.50'],
+        '50 Fly':['33.75','31.75','29.50','28.75'],'100 Fly':['1:17.50','1:11.75','1:06.50','1:04.00'],'200 Fly':['3:05.00','2:50.00','2:35.00','2:25.00'],
+        '200 IM':['2:44.50','2:33.75','2:25.50','2:22.50'],'400 IM':['5:50.00','5:32.00','5:20.00','5:15.00'],
+      },
+    };
+  }
+  // The age-group standard for one event/gender/age, plus the age bucket used. Ages 13/14/15 map
+  // to their own column; 16 and over use the 16-year column (the top published age-group standard);
+  // under 13, or an event with no age-group cut, returns null. Returns {sec, ageLabel} or null.
+  _ageStd(event, gender, age){
+    const a=parseInt(age,10); if(isNaN(a) || a<13) return null;
+    const G = /girl|female|women|^f/i.test(String(gender||'')) ? 'F' : 'M';
+    const tbl=this._ageStdTimes(); const row = tbl[G] && tbl[G][event]; if(!row) return null;
+    const idx = a>=16 ? 3 : (a-13);
+    const t=row[idx]; if(!t) return null;
+    const sec=this.parseTimeStr(t);
+    return (sec!=null && sec>0) ? { sec, ageLabel:(a>=16?'16':String(a))+'yr' } : null;
+  }
   swimmerAiSuggestion(swObj){
     const pbs=swObj.pbs||[];
     const ov=this.aiSuggOverrides[swObj.id]||{};
@@ -14665,16 +14705,24 @@ class Component extends DCLogic {
     // to a distance-scaled personal target rather than showing a wrong "official" figure \u2014 sprints
     // improve in smaller relative steps than middle-distance and distance.
     const targetPct=(ev)=>{ const d=distOf(ev); return d<=100?0.012:(d<=200?0.017:0.02); };
+    // The gap from a PB to a target, as a signed label: behind the cut → "−2.14s to go", met it → "✓ met".
+    const gapLabel=(pbSec, tgtSec)=>{ const d=pbSec-tgtSec; if(d<=0) return '✓ met'; return '−'+d.toFixed(2)+'s to go'; };
     const eventTargets = pbs.slice().sort((a,b)=> strokeRank(a.event)-strokeRank(b.event) || distOf(a.event)-distOf(b.event) )
       .map(p=>{
         const courseTag = (String(p.course||'').toUpperCase().charAt(0)==='S') ? 'SC' : 'LC';
         const baseSec = this._waBase(p.event, swObj.gender, p.course);
-        if(baseSec>0 && p.sec>0){
-          return { event:p.event, course:courseTag, current:p.time, target:this.fmt(baseSec),
-            points:String(this._waPoints(baseSec, p.sec)), hasPoints:true, wa:true };
+        const pts = (baseSec>0 && p.sec>0) ? String(this._waPoints(baseSec, p.sec)) : '';
+        // Primary target = the swimmer's age-group standard (World Aquatics / regional age benchmark).
+        const std = this._ageStd(p.event, swObj.gender, swObj.age);
+        if(std && p.sec>0){
+          return { event:p.event, course:courseTag, current:p.time, target:this.fmt(std.sec),
+            stdLabel:std.ageLabel+' std', gap:gapLabel(p.sec, std.sec), gapColor:(p.sec<=std.sec)?'#34D399':'#FCD34D', hasStd:true,
+            points:pts, hasPoints:!!pts };
         }
+        // No age-group cut for this event/age → fall back to a distance-scaled personal target.
         const tSec=p.sec*(1-targetPct(p.event));
-        return { event:p.event, course:courseTag, current:p.time, target:this.fmt(tSec), points:'', hasPoints:false, wa:false };
+        return { event:p.event, course:courseTag, current:p.time, target:this.fmt(tSec),
+          stdLabel:'personal target', gap:'', gapColor:'transparent', hasStd:false, points:pts, hasPoints:!!pts };
       });
     // secondary / IM recommendation
     const hasIm = !!byStroke['IM'];
