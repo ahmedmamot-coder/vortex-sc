@@ -5252,11 +5252,12 @@ if ('serviceWorker' in navigator) {
                     <div style="display:flex;flex-direction:column;gap:13px">
                       <!-- Clock face, painted straight onto the ref element. Tapping it, or the
                            expand button, opens the poolside full-screen display. -->
-                      <div style="position:relative;background:#0A0F1A;color:#fff;border-radius:20px;padding:26px 18px;text-align:center">
-                        <button onclick="{{ onSwtFsEnter }}" style="position:absolute;top:12px;right:12px;width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.12);border:none;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer" title="Full screen for poolside"><i data-lucide="maximize-2" style="width:16px;height:16px"></i></button>
-                        <p style="margin:0;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">{{ swtStatusLabel }}</p>
-                        <div onclick="{{ onSwtFsEnter }}" ref="{{ onSwtMount }}" style="font-family:var(--font-mono);font-size:clamp(58px, 18vw, 92px);line-height:1.02;font-weight:800;letter-spacing:-.03em;margin:12px 0 4px;cursor:pointer">0.00</div>
-                        <p style="margin:0;font-size:10.5px;color:rgba(255,255,255,.45)">min : sec . hundredths</p>
+                      <div style="position:relative;overflow:hidden;background:radial-gradient(135% 120% at 88% -12%, rgba(6,126,234,.5) 0%, rgba(34,33,215,.22) 40%, transparent 70%), #0A0F1A;color:#fff;border-radius:20px;padding:26px 18px;text-align:center">
+                        <div style="position:absolute;inset:0;background:url('assets/pattern-transparent.png') right top/180px auto no-repeat;opacity:.22;pointer-events:none"></div>
+                        <button onclick="{{ onSwtFsEnter }}" style="position:absolute;top:12px;right:12px;z-index:2;width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.14);border:none;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer" title="Full screen for poolside"><i data-lucide="maximize-2" style="width:16px;height:16px"></i></button>
+                        <p style="position:relative;z-index:1;margin:0;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.55);font-weight:700">{{ swtStatusLabel }}</p>
+                        <div onclick="{{ onSwtFsEnter }}" ref="{{ onSwtMount }}" style="position:relative;z-index:1;font-family:var(--font-mono);font-size:clamp(58px, 18vw, 92px);line-height:1.02;font-weight:800;letter-spacing:-.03em;margin:12px 0 4px;cursor:pointer">0.00</div>
+                        <p style="position:relative;z-index:1;margin:0;font-size:10.5px;color:rgba(255,255,255,.45)">min : sec . hundredths</p>
                       </div>
                       <!-- Primary controls: Start/Pause + Sound + Reset on top, then a big full-width
                            Lap. Lap is the tap made at every wall, over and over, so it is by far the
@@ -5267,7 +5268,7 @@ if ('serviceWorker' in navigator) {
                           <button onclick="{{ onSwtSoundToggle }}" style="flex:none;width:54px;height:54px;border-radius:15px;background:#fff;border:1px solid #E5E9F0;cursor:pointer;color:#0C1116;display:flex;align-items:center;justify-content:center" title="Start beep on/off"><i data-vx-icon="{{ swtSoundIcon }}" style="width:20px;height:20px"></i></button>
                           <button onclick="{{ onSwtReset }}" style="flex:none;width:54px;height:54px;border-radius:15px;background:#fff;border:1px solid #E5E9F0;cursor:pointer;color:#0C1116;display:flex;align-items:center;justify-content:center"><i data-lucide="rotate-ccw" style="width:20px;height:20px"></i></button>
                         </div>
-                        <button onclick="{{ onSwtLap }}" style="width:100%;height:88px;border-radius:18px;background:#0E7490;border:none;cursor:pointer;color:#fff;font-family:inherit;font-weight:800;font-size:24px;display:flex;align-items:center;justify-content:center;gap:12px;box-shadow:0 10px 24px rgba(14,116,144,.28)"><i data-lucide="flag" style="width:28px;height:28px"></i>Lap</button>
+                        <button onclick="{{ onSwtLap }}" style="width:100%;height:88px;border-radius:18px;background:linear-gradient(135deg,#067EEA 0%,#2221D7 100%);border:none;cursor:pointer;color:#fff;font-family:inherit;font-weight:800;font-size:24px;display:flex;align-items:center;justify-content:center;gap:12px;box-shadow:0 10px 24px rgba(34,33,215,.32)"><i data-lucide="flag" style="width:28px;height:28px"></i>Lap</button>
                         <button onclick="{{ onSwtFsEnter }}" style="width:100%;height:46px;border-radius:14px;background:#fff;border:1px solid #E5E9F0;cursor:pointer;color:#0C1116;font-family:inherit;font-weight:700;font-size:13.5px;display:flex;align-items:center;justify-content:center;gap:8px"><i data-lucide="maximize-2" style="width:17px;height:17px"></i>Full screen for poolside</button>
                       </div>
                       <!-- Stroke counter for the current length -->
@@ -5276,7 +5277,7 @@ if ('serviceWorker' in navigator) {
                         <span style="display:flex;align-items:center;gap:12px">
                           <button onclick="{{ onSwtStrokeMinus }}" style="width:36px;height:36px;border-radius:999px;border:1px solid #E5E9F0;background:#fff;color:#0C1116;font-size:20px;font-weight:700;line-height:1;cursor:pointer;padding:0">−</button>
                           <span style="font-family:var(--font-mono);font-size:24px;font-weight:800;color:#0C1116;min-width:30px;text-align:center">{{ swtStrokes }}</span>
-                          <button onclick="{{ onSwtStrokePlus }}" style="width:36px;height:36px;border-radius:999px;border:none;background:#0E7490;color:#fff;font-size:20px;font-weight:700;line-height:1;cursor:pointer;padding:0">+</button>
+                          <button onclick="{{ onSwtStrokePlus }}" style="width:36px;height:36px;border-radius:999px;border:none;background:#067EEA;color:#fff;font-size:20px;font-weight:700;line-height:1;cursor:pointer;padding:0">+</button>
                         </span>
                       </div>
                       <sc-if value="{{ swtHasLaps }}" hint-placeholder-val="{{ false }}">
@@ -8166,15 +8167,16 @@ if ('serviceWorker' in navigator) {
               </div>
             </sc-if>
             <sc-if value="{{ swtFs }}" hint-placeholder-val="{{ false }}">
-              <div class="vx-screen" style="position:absolute;inset:0;z-index:60;background:#0A0F1A;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 16px">
-                <button onclick="{{ onSwtFsExit }}" style="position:absolute;top:calc(env(safe-area-inset-top) + 12px);right:16px;width:42px;height:42px;border-radius:12px;background:rgba(255,255,255,.12);border:none;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2"><i data-lucide="minimize-2" style="width:19px;height:19px"></i></button>
-                <button onclick="{{ onSwtSoundToggle }}" style="position:absolute;top:calc(env(safe-area-inset-top) + 12px);left:16px;width:42px;height:42px;border-radius:12px;background:rgba(255,255,255,.12);border:none;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2" title="Start beep on/off"><i data-vx-icon="{{ swtSoundIcon }}" style="width:19px;height:19px"></i></button>
-                <p style="margin:0 0 4px;font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700;text-align:center">{{ swtStatusLabel }}</p>
-                <div ref="{{ onSwtFsMount }}" style="font-family:var(--font-mono);font-size:clamp(110px, 34vw, 340px);line-height:.92;font-weight:800;color:#fff;letter-spacing:-.02em">0.00</div>
-                <p style="margin:12px 0 0;font-size:17px;color:rgba(255,255,255,.7);font-weight:600;text-align:center">{{ swtFsSub }}</p>
-                <div style="display:flex;gap:14px;margin-top:30px;align-items:center">
+              <div class="vx-screen" style="position:absolute;inset:0;z-index:60;overflow:hidden;background:radial-gradient(120% 90% at 85% -8%, rgba(6,126,234,.45) 0%, rgba(34,33,215,.2) 38%, transparent 66%), #0A0F1A;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 16px">
+                <div style="position:absolute;inset:0;background:url('assets/pattern-transparent.png') right top/360px auto no-repeat;opacity:.18;pointer-events:none"></div>
+                <button onclick="{{ onSwtFsExit }}" style="position:absolute;top:calc(env(safe-area-inset-top) + 12px);right:16px;width:42px;height:42px;border-radius:12px;background:rgba(255,255,255,.14);border:none;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2"><i data-lucide="minimize-2" style="width:19px;height:19px"></i></button>
+                <button onclick="{{ onSwtSoundToggle }}" style="position:absolute;top:calc(env(safe-area-inset-top) + 12px);left:16px;width:42px;height:42px;border-radius:12px;background:rgba(255,255,255,.14);border:none;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2" title="Start beep on/off"><i data-vx-icon="{{ swtSoundIcon }}" style="width:19px;height:19px"></i></button>
+                <p style="position:relative;z-index:1;margin:0 0 4px;font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.55);font-weight:700;text-align:center">{{ swtStatusLabel }}</p>
+                <div ref="{{ onSwtFsMount }}" style="position:relative;z-index:1;font-family:var(--font-mono);font-size:clamp(110px, 34vw, 340px);line-height:.92;font-weight:800;color:#fff;letter-spacing:-.02em">0.00</div>
+                <p style="position:relative;z-index:1;margin:12px 0 0;font-size:17px;color:rgba(255,255,255,.7);font-weight:600;text-align:center">{{ swtFsSub }}</p>
+                <div style="position:relative;z-index:1;display:flex;gap:14px;margin-top:30px;align-items:center">
                   <button onclick="{{ onSwtToggle }}" style="min-width:150px;height:70px;padding:0 28px;border-radius:18px;background:#111826;border:1px solid rgba(255,255,255,.16);cursor:pointer;color:#fff;font-family:inherit;font-weight:700;font-size:18px;display:flex;align-items:center;justify-content:center;gap:10px"><i data-vx-icon="{{ swtBtnIcon }}" style="width:24px;height:24px"></i>{{ swtBtnLabel }}</button>
-                  <button onclick="{{ onSwtLap }}" style="min-width:220px;height:70px;padding:0 40px;border-radius:18px;background:#0E7490;border:none;cursor:pointer;color:#fff;font-family:inherit;font-weight:800;font-size:26px;display:flex;align-items:center;justify-content:center;gap:12px;box-shadow:0 10px 28px rgba(14,116,144,.4)"><i data-lucide="flag" style="width:30px;height:30px"></i>Lap</button>
+                  <button onclick="{{ onSwtLap }}" style="min-width:220px;height:70px;padding:0 40px;border-radius:18px;background:linear-gradient(135deg,#067EEA 0%,#2221D7 100%);border:none;cursor:pointer;color:#fff;font-family:inherit;font-weight:800;font-size:26px;display:flex;align-items:center;justify-content:center;gap:12px;box-shadow:0 10px 28px rgba(34,33,215,.42)"><i data-lucide="flag" style="width:30px;height:30px"></i>Lap</button>
                   <button onclick="{{ onSwtReset }}" style="width:70px;height:70px;border-radius:18px;background:rgba(255,255,255,.1);border:none;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center"><i data-lucide="rotate-ccw" style="width:26px;height:26px"></i></button>
                 </div>
               </div>
@@ -20282,7 +20284,7 @@ class Component extends DCLogic {
       {id:'ai', icon:'sparkles', title:'AI Assistants', sub:'Season · dryland · nutrition', tint:'rgba(39,51,214,.1)', color:'#2733D6'},
       {id:'review', icon:'shield-check', title:'AI Plan Review', sub:'Check plan vs zone rules', tint:'rgba(39,51,214,.1)', color:'#2733D6'},
       {id:'clock', icon:'timer', title:'Pace Clock', sub:'Run the session poolside', tint:'rgba(200,30,91,.1)', color:'#C81E5B'},
-      {id:'stopwatch', icon:'stopwatch', title:'Stopwatch', sub:'Laps · splits · stroke count', tint:'rgba(14,116,144,.12)', color:'#0E7490'},
+      {id:'stopwatch', icon:'stopwatch', title:'Stopwatch', sub:'Laps · splits · stroke count', tint:'rgba(6,126,234,.1)', color:'#067EEA'},
       {id:'zoneeng', icon:'activity', title:'Zone Engine', sub:'6-zone rules & squad limits', tint:'rgba(12,122,79,.1)', color:'#0C7A4F'},
       {id:'tpace', icon:'gauge', title:'T-Pace Tests', sub:'Log 1000/400/T30/T20 · retest due', tint:'rgba(6,126,234,.1)', color:'#067EEA'},
       {id:'promo', icon:'trending-up', title:'Level-Up Review', sub:'Promotion candidates & reviews', tint:'rgba(12,122,79,.1)', color:'#0C7A4F'},

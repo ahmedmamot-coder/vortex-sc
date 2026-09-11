@@ -11,7 +11,16 @@ import {
 } from "@/lib/stopwatch";
 import StopwatchIcon from "./stopwatch-icon";
 
-export default function StopwatchClient({ accent }: { accent: string }) {
+// The club's logo blues (the azure→indigo of the Vortex "X") and the pale wave
+// pattern behind the dark surfaces, so the tool wears the brand rather than an
+// arbitrary accent.
+const BRAND = "linear-gradient(135deg,#067EEA 0%,#2221D7 100%)";
+const PATTERN =
+  "radial-gradient(120% 90% at 85% -8%, rgba(6,126,234,.45) 0%, rgba(34,33,215,.2) 38%, transparent 66%), " +
+  "url('/assets/pattern-transparent.png') right top/360px auto no-repeat, #0A0F1A";
+
+export default function StopwatchClient({ accent: _accent }: { accent: string }) {
+  const accent = "#067EEA"; // solid brand blue (valid as an SVG stroke); Lap buttons use BRAND
   const [elapsedMs, setElapsedMs] = useState(0);
   const [running, setRunning] = useState(false);
   const [laps, setLaps] = useState<Lap[]>([]);
@@ -172,7 +181,7 @@ export default function StopwatchClient({ accent }: { accent: string }) {
             onClick={lap}
             disabled={!started}
             className="w-full h-[84px] rounded-[var(--radius-lg)] font-bold text-white text-2xl disabled:opacity-40"
-            style={{ background: accent }}
+            style={{ background: BRAND }}
           >
             Lap
           </button>
@@ -187,7 +196,10 @@ export default function StopwatchClient({ accent }: { accent: string }) {
 
       {/* Poolside full-screen display: a huge timer visible across the pool. */}
       {fs && (
-        <div className="fixed inset-0 z-50 bg-[#0A0F1A] text-white flex flex-col items-center justify-center px-4">
+        <div
+          className="fixed inset-0 z-50 text-white flex flex-col items-center justify-center px-4 overflow-hidden"
+          style={{ background: PATTERN }}
+        >
           <button
             onClick={() => setFs(false)}
             className="absolute top-4 right-4 w-11 h-11 rounded-xl bg-white/10"
@@ -227,7 +239,7 @@ export default function StopwatchClient({ accent }: { accent: string }) {
               onClick={lap}
               disabled={!started}
               className="min-w-[220px] h-[70px] px-10 rounded-2xl font-extrabold text-2xl disabled:opacity-40"
-              style={{ background: accent }}
+              style={{ background: BRAND }}
             >
               Lap
             </button>
