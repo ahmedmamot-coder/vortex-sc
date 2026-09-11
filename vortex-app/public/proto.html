@@ -5371,7 +5371,7 @@ if ('serviceWorker' in navigator) {
                             <span data-setrep="1" style="font-family:var(--font-mono);font-size:30px;font-weight:800;color:#fff">{{ setRepInit }}</span>
                             <span style="font-size:12px;color:rgba(255,255,255,.5);font-weight:700">reps</span>
                           </div>
-                          <p style="position:relative;z-index:1;margin:6px 0 0;font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:rgba(255,255,255,.45);font-weight:700">Next send-off in</p>
+                          <p style="position:relative;z-index:1;margin:6px 0 0;font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:rgba(255,255,255,.45);font-weight:700">Next send-off &#183; <span data-setwho="1" style="color:#22D7D7">{{ setWhoInit }}</span></p>
                           <div data-setcount="1" style="position:relative;z-index:1;font-family:var(--font-mono);font-size:clamp(56px,17vw,88px);line-height:1.02;font-weight:800;letter-spacing:-.03em;margin:2px 0 6px">{{ setCountInit }}</div>
                           <div style="position:relative;z-index:1;height:6px;border-radius:3px;background:rgba(255,255,255,.14);overflow:hidden"><div data-setbar="1" style="height:100%;width:0%;background:#22D7D7;border-radius:3px"></div></div>
                           <p style="position:relative;z-index:1;margin:9px 0 0;font-size:11.5px;color:rgba(255,255,255,.6)">{{ setStatus }} &#183; <span data-settotal="1">{{ setTotalInit }}</span> elapsed &#183; {{ setMetres }}</p>
@@ -5380,6 +5380,37 @@ if ('serviceWorker' in navigator) {
                           <button onclick="{{ onSetToggle }}" style="flex:1;height:62px;border-radius:16px;background:linear-gradient(135deg,#067EEA 0%,#2221D7 100%);border:none;cursor:pointer;color:#fff;font-family:inherit;font-weight:800;font-size:17px;display:flex;align-items:center;justify-content:center;gap:9px;box-shadow:0 10px 24px rgba(34,33,215,.28)"><i data-vx-icon="{{ setBtnIcon }}" style="width:21px;height:21px"></i>{{ setBtnLabel }}</button>
                           <button onclick="{{ onSetReset }}" style="flex:none;width:62px;height:62px;border-radius:16px;background:#fff;border:1px solid #E5E9F0;cursor:pointer;color:#0C1116;display:flex;align-items:center;justify-content:center"><i data-lucide="rotate-ccw" style="width:20px;height:20px"></i></button>
                         </div>
+                        <!-- The lane, swum on a stagger: each swimmer keeps their own send-off cycle -->
+                        <sc-if value="{{ setHasLane }}" hint-placeholder-val="{{ false }}">
+                          <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:10px 12px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
+                            <p style="margin:0 0 8px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4">In the lane</p>
+                            <div style="display:flex;flex-direction:column;gap:5px">
+                              <sc-for list="{{ setLaneRows }}" as="ln" hint-placeholder-count="4">
+                                <div style="display:flex;align-items:center;gap:9px">
+                                  <span style="flex:none;width:24px;height:24px;border-radius:7px;background:#0A0F1A;color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800">{{ ln.label }}</span>
+                                  <span style="flex:none;width:36px;font-size:10.5px;color:#9AA2B4;font-weight:700">+{{ ln.offLabel }}</span>
+                                  <span data-setswim="{{ ln.idx }}" style="flex:1;font-family:var(--font-mono);font-size:19px;font-weight:800;color:#0C1116">{{ ln.time }}</span>
+                                  <span data-setswimrep="{{ ln.idx }}" style="flex:none;font-size:10.5px;font-weight:700;color:#067EEA;background:rgba(6,126,234,.1);border-radius:6px;padding:2px 7px">{{ ln.rep }}</span>
+                                </div>
+                              </sc-for>
+                            </div>
+                          </div>
+                        </sc-if>
+                        <!-- The set, from the plan the coach already wrote -->
+                        <button onclick="{{ onSetPlanToggle }}" style="width:100%;height:44px;border-radius:12px;background:#fff;border:1px solid #E5E9F0;cursor:pointer;color:#0C1116;font-family:inherit;font-weight:700;font-size:12.5px;display:flex;align-items:center;justify-content:center;gap:7px"><i data-lucide="clipboard-check" style="width:16px;height:16px"></i>{{ setPlanBtnLabel }}</button>
+                        <sc-if value="{{ setPlanShow }}" hint-placeholder-val="{{ false }}">
+                          <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:10px;box-shadow:0 1px 4px rgba(11,20,40,.04);display:flex;flex-direction:column;gap:6px">
+                            <sc-if value="{{ setPlanEmpty }}" hint-placeholder-val="{{ false }}">
+                              <p style="margin:0;padding:10px;text-align:center;font-size:12px;color:#9AA2B4;line-height:1.5">No sets in this squad's plan yet.<br>Write the session in the Plans tab and it will show up here.</p>
+                            </sc-if>
+                            <sc-for list="{{ setPlanRows }}" as="ps" hint-placeholder-count="4">
+                              <button onclick="{{ ps.onClick }}" style="display:block;width:100%;text-align:left;background:#F6F7F9;border:1px solid #E5E9F0;border-radius:11px;padding:9px 11px;cursor:pointer;font-family:inherit">
+                                <span style="display:block;font-size:13px;font-weight:800;color:#0C1116">{{ ps.title }}</span>
+                                <span style="display:block;font-size:11px;color:#7A8296;margin-top:2px">{{ ps.sub }}</span>
+                              </button>
+                            </sc-for>
+                          </div>
+                        </sc-if>
                         <!-- The set itself -->
                         <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:12px;box-shadow:0 1px 4px rgba(11,20,40,.04);display:flex;flex-direction:column;gap:11px">
                           <div style="display:flex;align-items:center;gap:10px">
@@ -5407,6 +5438,18 @@ if ('serviceWorker' in navigator) {
                             <button onclick="{{ onSetRestDec }}" style="width:34px;height:34px;border-radius:9px;border:1px solid #E5E9F0;background:#fff;color:#0C1116;font-size:18px;font-weight:700;line-height:1;cursor:pointer;padding:0">&#8722;</button>
                             <span style="flex:1;text-align:center;font-family:var(--font-mono);font-size:17px;font-weight:800;color:#0C1116">{{ setRestLabel }}</span>
                             <button onclick="{{ onSetRestInc }}" style="width:34px;height:34px;border-radius:9px;border:none;background:#067EEA;color:#fff;font-size:18px;font-weight:700;line-height:1;cursor:pointer;padding:0">+</button>
+                          </div>
+                          <div style="display:flex;align-items:center;gap:10px">
+                            <span style="flex:none;width:74px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4">Swimmers</span>
+                            <button onclick="{{ onSetSwimDec }}" style="width:34px;height:34px;border-radius:9px;border:1px solid #E5E9F0;background:#fff;color:#0C1116;font-size:18px;font-weight:700;line-height:1;cursor:pointer;padding:0">&#8722;</button>
+                            <span style="flex:1;text-align:center;font-size:13.5px;font-weight:800;color:#0C1116">{{ setSwimmersLabel }}</span>
+                            <button onclick="{{ onSetSwimInc }}" style="width:34px;height:34px;border-radius:9px;border:none;background:#067EEA;color:#fff;font-size:18px;font-weight:700;line-height:1;cursor:pointer;padding:0">+</button>
+                          </div>
+                          <div style="display:flex;align-items:center;gap:10px">
+                            <span style="flex:none;width:74px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4">Gap</span>
+                            <button onclick="{{ onSetGapDec }}" style="width:34px;height:34px;border-radius:9px;border:1px solid #E5E9F0;background:#fff;color:#0C1116;font-size:18px;font-weight:700;line-height:1;cursor:pointer;padding:0">&#8722;</button>
+                            <span style="flex:1;text-align:center;font-size:13.5px;font-weight:800;color:#0C1116">{{ setGapLabel }}</span>
+                            <button onclick="{{ onSetGapInc }}" style="width:34px;height:34px;border-radius:9px;border:none;background:#067EEA;color:#fff;font-size:18px;font-weight:700;line-height:1;cursor:pointer;padding:0">+</button>
                           </div>
                         </div>
                         <!-- Signal -->
@@ -17622,6 +17665,46 @@ class Component extends DCLogic {
   _setSend(){ const v=this.state.setSend; return Math.max(5, v==null?60:v); }   // seconds
   _setRest(){ const v=this.state.setRest; return Math.max(0, v==null?0:v); }    // extra seconds
   _setCycleMs(){ return (this._setSend()+this._setRest())*1000; }
+  _setSwimmers(){ const v=this.state.setSwimmers; return Math.max(1, Math.min(10, v==null?1:v)); }
+  _setGap(){ const v=this.state.setGap; return Math.max(0, Math.min(60, v==null?5:v)); }   // seconds
+  // The whole set runs until the LAST swimmer finishes their last repetition.
+  _setTotalMs(){ return this._setCycleMs()*this._setReps() + (this._setSwimmers()-1)*this._setGap()*1000; }
+  // When swimmer i (0-based) is sent off for repetition k (0-based), measured from the start.
+  // The lane goes in order, one gap apart, and every swimmer keeps their own send-off cycle.
+  _setSendAt(k, i, cycleMs, gapMs){ return k*cycleMs + i*gapMs; }
+  // The next send-off strictly after `ms`: who goes, on which rep, and how long until it.
+  // Only a couple of cycles either side are scanned, so this stays cheap on every frame.
+  _setNextSend(ms, cycleMs, gapMs, reps, swimmers){
+    if(!(cycleMs>0)) return null;
+    const k0=Math.max(0, Math.floor(ms/cycleMs)-1);
+    let best=null;
+    for(let k=k0;k<=k0+2;k++){
+      if(k<0 || k>=reps) continue;
+      for(let i=0;i<swimmers;i++){
+        const at=k*cycleMs+i*gapMs;
+        if(at>ms && (!best || at<best.at)) best={rep:k+1, lane:i+1, at:at, left:at-ms};
+      }
+    }
+    return best;
+  }
+  // How long swimmer i has been swimming their current repetition. Null before their first
+  // send-off and once they have finished the set, so the screen can say so rather than lie.
+  _setSwimMs(ms, i, cycleMs, gapMs, reps){
+    if(!(cycleMs>0)) return null;
+    const off=i*gapMs;
+    if(ms<off) return null;
+    const k=Math.floor((ms-off)/cycleMs);
+    if(k>reps-1) return null;
+    return ms-(k*cycleMs+off);
+  }
+  // Which repetition swimmer i is on: 0 before they start, reps+1 once they are done.
+  _setSwimRep(ms, i, cycleMs, gapMs, reps){
+    if(!(cycleMs>0)) return 0;
+    const off=i*gapMs;
+    if(ms<off) return 0;
+    const k=Math.floor((ms-off)/cycleMs);
+    return k>reps-1 ? reps+1 : k+1;
+  }
   _setMs(){ return (this._setBase||0) + (this._setRunning ? performance.now()-this._setT0 : 0); }
   // Which repetition is live at a given elapsed time (1-based, never past the last one).
   _setRepAt(ms, cycleMs, reps){
@@ -17645,11 +17728,13 @@ class Component extends DCLogic {
     if(this.state.swtSound===false) return;
     const ctx=this._swtAudioCtx(); if(!ctx) return;
     const cycle=this._setCycleMs()/1000, reps=this._setReps(), tone=this._swtTone(), vol=this._swtVol();
+    const swimmers=this._setSwimmers(), gap=this._setGap();
     const done=this._setMs()/1000;                    // already elapsed when (re)scheduling
     const base=ctx.currentTime+0.03;
     let nodes=[];
     for(let k=0;k<reps;k++){
-      let at=base+(k*cycle-done);
+     for(let i=0;i<swimmers;i++){
+      let at=base+(k*cycle+i*gap-done);
       // A quarter-second of slack, because a few milliseconds always pass between marking the
       // start and getting here — without it the very first send-off looks a hair late and was
       // dropped, so the set started in silence. Anything genuinely behind us is skipped; anything
@@ -17657,8 +17742,9 @@ class Component extends DCLogic {
       if(at<base-0.25) continue;
       if(at<base) at=base;
       nodes=nodes.concat(this._swtSignal(at, tone, vol));
+     }
     }
-    const endAt=base+(reps*cycle-done);
+    const endAt=base+(this._setTotalMs()/1000-done);
     if(endAt>=base-0.25) nodes=nodes.concat(this._swtSignal(Math.max(endAt,base),'triple',vol));
     this._setNodes=nodes;
   }
@@ -17671,9 +17757,25 @@ class Component extends DCLogic {
   _setPaint(){
     const root=this._setRoot;
     if(!root || !document.body.contains(root)){ this._setRoot=null; return false; }
-    const cycle=this._setCycleMs(), reps=this._setReps(), ms=this._setMs(), total=cycle*reps;
+    const cycle=this._setCycleMs(), reps=this._setReps(), ms=this._setMs(), total=this._setTotalMs();
+    const swimmers=this._setSwimmers(), gap=this._setGap()*1000;
+    const nx=this._setNextSend(ms, cycle, gap, reps, swimmers);
+    const who=root.querySelector('[data-setwho]');
+    if(who) who.textContent = nx ? ('Swimmer '+nx.lane+' \u00b7 rep '+nx.rep) : 'set complete';
+    const strip=root.querySelectorAll('[data-setswim]');
+    for(let i=0;i<strip.length;i++){
+      const el=strip[i], idx=parseInt(el.getAttribute('data-setswim'),10)||0;
+      const t=this._setSwimMs(ms, idx, cycle, gap, reps);
+      el.textContent = (t==null) ? '\u2014' : this._fmtStopwatch(t/1000);
+    }
+    const sreps=root.querySelectorAll('[data-setswimrep]');
+    for(let i=0;i<sreps.length;i++){
+      const el=sreps[i], idx=parseInt(el.getAttribute('data-setswimrep'),10)||0;
+      const r=this._setSwimRep(ms, idx, cycle, gap, reps);
+      el.textContent = r===0 ? 'ready' : (r>reps ? 'done' : (r+'/'+reps));
+    }
     const cd=root.querySelector('[data-setcount]');
-    if(cd) cd.textContent=this._fmtMinSec(this._setLeftAt(ms,cycle,reps));
+    if(cd) cd.textContent=this._fmtMinSec(nx ? nx.left : 0);
     const rp=root.querySelector('[data-setrep]');
     if(rp) rp.textContent=this._setRepAt(ms,cycle,reps)+' / '+reps;
     const tot=root.querySelector('[data-settotal]');
@@ -17705,6 +17807,37 @@ class Component extends DCLogic {
     this.setState({setOn:true, setDone:false});
     this._setEnsureRaf();
   }
+  // Every set in this squad's plan, as the send-off timer needs it. The plan is the one the
+  // coach already wrote in the Plans tab, so the workout does not get typed twice.
+  _setPlanSets(){
+    const plan=this.getPlan(this.state.squadId), out=[];
+    (plan.sections||[]).forEach(sec=>{
+      (sec.sets||[]).forEach(st=>{
+        const total=Number(st.dist)||0, txt=String(st.txt||'').trim();
+        // "4x50 build @ 1:00" is where the shape of the set actually lives; the row's own
+        // distance is the total for the block. Prefer the written set, fall back to the fields.
+        const m=txt.match(/(\d+)\s*[\u00d7xX]\s*(\d+)/);
+        const reps = m ? Math.max(1, parseInt(m[1],10)||1) : Math.max(1, Number(st.reps)||1);
+        let dist = m ? (parseInt(m[2],10)||0) : (reps>1 ? Math.round(total/reps) : total);
+        if(!dist) dist=total;
+        if(!dist) return;
+        const explicit=this._restToSec(st.sendoff);
+        const send = explicit>0 ? explicit : (this.parseSet(txt, total).interval||0);
+        out.push({ id:st.id, section:sec.title, reps:reps, dist:dist,
+                   send:send, rest:this._restToSec(st.rest), txt:txt });
+      });
+    });
+    return out;
+  }
+  // Pull one plan set onto the clock. A set written without a send-off falls back to a sensible
+  // one derived from the distance, so it can still be run rather than refused.
+  setLoadPlan(i){
+    const sets=this._setPlanSets(), st=sets[i]; if(!st) return;
+    const send=st.send>0 ? st.send : Math.max(20, Math.round((st.dist/50)*60));
+    this.setState({ setReps:st.reps, setDist:st.dist, setSend:send, setRest:(st.send>0?st.rest:0),
+                    setPlanPick:false, setOn:false, setDone:false },
+                  ()=>{ this._setRunning=false; this._setBase=0; this._setCancel(); this._setPaint(); });
+  }
   setReset(){
     this._setRunning=false; this._setBase=0; this._setCancel();
     this.setState({setOn:false, setDone:false});
@@ -17716,7 +17849,9 @@ class Component extends DCLogic {
     this.setState(patch, ()=>{ if(this._setRunning) this._setSchedule(); });
   }
   setStep(k,d,lo,hi){
-    const cur=(k==='setReps')?this._setReps():(k==='setSend'?this._setSend():this._setRest());
+    const read={ setReps:()=>this._setReps(), setSend:()=>this._setSend(), setRest:()=>this._setRest(),
+                 setSwimmers:()=>this._setSwimmers(), setGap:()=>this._setGap() }[k];
+    const cur=read?read():0;
     this.setField(k, Math.max(lo, Math.min(hi, cur+d)));
   }
   videoSetRate(rate){
@@ -24578,18 +24713,44 @@ class Component extends DCLogic {
                 // ---- send-off set: "20 x 50m on 1:00", run automatically ----
                 const reps=self._setReps(), dist=self._setDist(), cyc=self._setCycleMs(), ms=self._setMs();
                 const rest=self._setRest(), tone=self._swtTone(), vol=self._swtVol();
-                const metres=reps*dist;
+                const swimmers=self._setSwimmers(), gap=self._setGap();
+                const nxt=self._setNextSend(ms, cyc, gap*1000, reps, swimmers);
+                const planSets=self._setPlanSets();
+                const metres=reps*dist*swimmers;
                 const chip=(on,accent)=>({bg:on?(accent||'#067EEA'):'#fff', fg:on?'#fff':'#7A8296'});
                 return {
                   onSetMount: self._setMountRef || (self._setMountRef=(el)=>self.onSetMount(el)),
                   onSetToggle:()=>self.setToggle(), onSetReset:()=>self.setReset(),
                   setBtnLabel: S.setOn?'Pause set':(S.setDone?'Run again':'Start set'),
                   setBtnIcon: S.setOn?'pause':'play',
-                  setCountInit: self._fmtMinSec(self._setLeftAt(ms,cyc,reps)),
+                  setCountInit: self._fmtMinSec(nxt?nxt.left:0),
+                  setWhoInit: nxt ? ('Swimmer '+nxt.lane+' \u00b7 rep '+nxt.rep) : 'set complete',
+                  setSwimmersLabel: swimmers+(swimmers===1?' swimmer':' swimmers'),
+                  onSetSwimDec:()=>self.setStep('setSwimmers',-1,1,10), onSetSwimInc:()=>self.setStep('setSwimmers',1,1,10),
+                  setGapLabel: gap+'s apart',
+                  onSetGapDec:()=>self.setStep('setGap',-1,0,60), onSetGapInc:()=>self.setStep('setGap',1,0,60),
+                  setHasLane: swimmers>1,
+                  setLaneRows: (function(){ const out=[];
+                    for(let i=0;i<swimmers;i++){
+                      const t=self._setSwimMs(ms,i,cyc,gap*1000,reps), r=self._setSwimRep(ms,i,cyc,gap*1000,reps);
+                      out.push({ idx:String(i), label:'S'+(i+1), offLabel:(i*gap)+'s',
+                                 time:(t==null?'\u2014':self._fmtStopwatch(t/1000)),
+                                 rep:(r===0?'ready':(r>reps?'done':(r+'/'+reps))) });
+                    }
+                    return out; })(),
+                  setPlanShow: !!S.setPlanPick,
+                  onSetPlanToggle:()=>self.setState({setPlanPick:!S.setPlanPick}),
+                  setPlanBtnLabel: S.setPlanPick?'Hide the plan':'Load a set from the plan',
+                  setPlanEmpty: planSets.length===0,
+                  setPlanRows: planSets.map((st,i)=>({
+                    title: st.reps+' \u00d7 '+st.dist+'m'+(st.send>0?(' on '+self._fmtMinSec(st.send*1000)):''),
+                    sub: [st.section, st.txt].filter(Boolean).join(' \u00b7 ').slice(0,64),
+                    onClick:()=>self.setLoadPlan(i) })),
                   setRepInit: self._setRepAt(ms,cyc,reps)+' / '+reps,
                   setTotalInit: self._fmtMinSec(Math.min(ms,cyc*reps), true),
                   setSummary: reps+' \u00d7 '+dist+'m on '+self._fmtMinSec(self._setSend()*1000)
-                              +(rest?(' + '+rest+'s rest'):''),
+                              +(rest?(' + '+rest+'s rest'):'')
+                              +(swimmers>1?(' \u00b7 '+swimmers+' swimmers, '+gap+'s apart'):''),
                   setMetres: (metres>=1000 ? (metres/1000).toFixed(metres%1000?1:0)+' km' : metres+' m'),
                   setStatus: S.setDone?'Set complete':(S.setOn?'Running':(ms>0?'Paused':'Ready')),
                   setDoneShow: !!S.setDone,

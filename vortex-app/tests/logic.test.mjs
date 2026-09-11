@@ -12956,4 +12956,65 @@ describe("send-off set timer", () => {
   });
 });
 
+/* ------------------------------------- staggered lane on a send-off set (proto.html)
+   "20 x 50m on 1:00, 8 swimmers, 5s apart": the clock sends swimmer 1 at 0:00, swimmer 2 at
+   0:05, and every swimmer then keeps their OWN minute cycle. What must hold is that a swimmer's
+   send-off is their stagger plus their own cycles, that the next signal is always the right
+   swimmer, and that each reads their own time within their own repetition. */
+describe("staggered send-off lane", () => {
+  const ctx = {};
+  const sendAt   = bind("_setSendAt", ctx, []);
+  const nextSend = bind("_setNextSend", ctx, []);
+  const swimMs   = bind("_setSwimMs", ctx, []);
+  const swimRep  = bind("_setSwimRep", ctx, []);
+  const C = 60000, G = 5000, REPS = 20, N = 8;     // 20 x 50 on 1:00, 8 swimmers, 5s apart
+
+  it("sends the lane off one gap apart", () => {
+    eq(sendAt(0, 0, C, G), 0);
+    eq(sendAt(0, 1, C, G), 5000);
+    eq(sendAt(0, 7, C, G), 35000);
+  });
+  it("every swimmer keeps their own cycle", () => {
+    eq(sendAt(1, 0, C, G), 60000, "swimmer 1's second rep");
+    eq(sendAt(1, 1, C, G), 65000, "swimmer 2's second rep, still 5s behind");
+    eq(sendAt(3, 7, C, G), 215000);
+  });
+
+  it("the next signal after the start is swimmer 2", () => {
+    const n = nextSend(0, C, G, REPS, N);
+    eq(n.lane, 2); eq(n.rep, 1); eq(n.left, 5000);
+  });
+  it("after the last swimmer goes, the next is swimmer 1 on the following rep", () => {
+    const n = nextSend(35000, C, G, REPS, N);
+    eq(n.lane, 1); eq(n.rep, 2); eq(n.left, 25000);
+  });
+  it("a single swimmer still counts a plain interval", () => {
+    const n = nextSend(0, C, G, REPS, 1);
+    eq(n.lane, 1); eq(n.rep, 2); eq(n.left, C);
+  });
+  it("there is no next send-off once the set has run", () => {
+    eq(nextSend(C * REPS + G * (N - 1) + 1000, C, G, REPS, N), null);
+  });
+
+  it("a swimmer reads zero the moment they are sent off", () => eq(swimMs(5000, 1, C, G, REPS), 0));
+  it("a swimmer reads their own time inside their own rep", () => {
+    // 1:10 on the master clock: swimmer 2 went at 0:05 and again at 1:05, so 5s into rep 2.
+    eq(swimMs(70000, 1, C, G, REPS), 5000);
+    eq(swimRep(70000, 1, C, G, REPS), 2);
+  });
+  it("a swimmer has nothing to show before their first send-off", () => {
+    eq(swimMs(3000, 1, C, G, REPS), null);
+    eq(swimRep(3000, 1, C, G, REPS), 0);
+  });
+  it("a swimmer is done after their last rep, not the master clock's", () => {
+    const afterLast = sendAt(REPS - 1, 1, C, G) + C + 1;
+    eq(swimMs(afterLast, 1, C, G, REPS), null);
+    eq(swimRep(afterLast, 1, C, G, REPS), REPS + 1);
+  });
+  it("the stagger never leaks between swimmers", () => {
+    // 8 swimmers, all 12s into their own rep 1, each at a different master time.
+    for (let i = 0; i < N; i++) eq(swimMs(i * G + 12000, i, C, G, REPS), 12000);
+  });
+});
+
 await report();
