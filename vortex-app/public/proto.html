@@ -4621,8 +4621,8 @@ if ('serviceWorker' in navigator) {
                           </div>
                         </div>
                       </sc-if>
-                      <sc-if value="{{ aiSugg.hasData }}" hint-placeholder-val="{{ true }}">
-                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:20px;text-align:center;font-size:12px;color:#9AA2B4">Log at least one PB to get an AI suggestion.</div>
+                      <sc-if value="{{ aiSugg.noData }}" hint-placeholder-val="{{ false }}">
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:20px;text-align:center;font-size:12px;color:#9AA2B4">Log at least one race result to get targets and an AI suggestion.</div>
                       </sc-if>
                     </div>
                     <!-- Every race clip this swimmer is a lane in. The clip is stored once and
@@ -14747,8 +14747,16 @@ class Component extends DCLogic {
         const courseTag = (String(p.course||'').toUpperCase().charAt(0)==='S') ? 'SC' : 'LC';
         const baseSec = this._waBase(p.event, swObj.gender, p.course);
         const pts = (baseSec>0 && p.sec>0) ? String(this._waPoints(baseSec, p.sec)) : '';
-        // Primary target = the swimmer's age-group standard (World Aquatics / regional age benchmark),
-        // converted to the PB's course (the standard is short-course basis).
+        // A coach-set (or edited) goal for this event overrides everything else — this is the
+        // editable target, set in the Goals editor and shared to the family. Shown as-is.
+        const goalOv = (this.swimmerGoals[swObj.id]||{})[p.event];
+        if(goalOv && goalOv.sec>0 && p.sec>0){
+          return { event:p.event, course:courseTag, current:p.time, target:this.fmt(goalOv.sec),
+            stdLabel:(goalOv.source==='coach'?'coach target':'set target'), gap:gapLabel(p.sec, goalOv.sec), gapColor:(p.sec<=goalOv.sec)?'#34D399':'#FCD34D', hasStd:true,
+            points:pts, hasPoints:!!pts };
+        }
+        // Otherwise the target is the swimmer's age-group standard (World Aquatics / regional age
+        // benchmark), converted to the PB's course (the standard is short-course basis).
         const std = this._ageStd(p.event, swObj.gender, swObj.age);
         if(std && p.sec>0){
           const tgt = this._ageStdForCourse(std.sec, p.event, swObj.gender, p.course);
@@ -22558,7 +22566,7 @@ class Component extends DCLogic {
           onFitVjump:(e)=>this.setState({fitForm:{...S2.fitForm, vjump:e.target.value}}),
           onFitSitreach:(e)=>this.setState({fitForm:{...S2.fitForm, sitreach:e.target.value}}),
           onFitAdd:()=>this.addFitTest(swObj.id),
-          aiSugg: (()=>{ const a=this.swimmerAiSuggestion(swObj); return {...a, hasWeak: !!(a.hasData && a.weakStroke), hasEventTargets: !!(a.eventTargets && a.eventTargets.length)}; })(),
+          aiSugg: (()=>{ const a=this.swimmerAiSuggestion(swObj); return {...a, noData: !a.hasData, hasWeak: !!(a.hasData && a.weakStroke), hasEventTargets: !!(a.eventTargets && a.eventTargets.length)}; })(),
           aiEditOpen:!!S.aiEditOpen, aiEditLabel: S.aiEditOpen?'Close':'Edit',
           onSwAiAsk:()=>this.swimmerAiAsk(swObj),
           swAiBtnLabel: S.swAiLoading ? 'Reading their numbers…' : (S.swAiOut ? 'Ask again' : 'Ask Claude about this swimmer'),
