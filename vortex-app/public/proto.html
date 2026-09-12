@@ -6314,6 +6314,9 @@ if ('serviceWorker' in navigator) {
                       <sc-if value="{{ bdayHasToday }}" hint-placeholder-val="{{ true }}">
                         <div>
                           <p style="margin:0 2px 7px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">Today</p>
+                          <sc-if value="{{ bdaySendAllShow }}" hint-placeholder-val="{{ false }}">
+                            <button onclick="{{ onBdaySendAll }}" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;background:#C89B3C;color:#fff;border:none;border-radius:12px;padding:11px;font-family:inherit;font-weight:800;font-size:12.5px;cursor:pointer;margin-bottom:10px"><i data-lucide="cake" style="width:16px;height:16px"></i>{{ bdaySendAllLabel }}</button>
+                          </sc-if>
                           <div style="display:flex;flex-direction:column;gap:8px">
                             <sc-for list="{{ bdayTodayRows }}" as="bt" hint-placeholder-count="1">
                               <div style="background:linear-gradient(135deg,#FBF0DD,#fff);border:1px solid #F0D9A8;border-radius:14px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
@@ -19438,6 +19441,20 @@ class Component extends DCLogic {
     await this.birthdayWish(sw.id, sw.name, sw.squadName, this._bdayTurning(sw, today));
     this.setState({bdayMsg:'Sent to '+sw.name+' and their parents ✓'});
   }
+  // Wish every swimmer whose birthday is today in one tap, for the club that would rather not go
+  // one by one. The daily cron sends these automatically anyway; this is the manual "now" button,
+  // and it stands on the same per-swimmer send — so the same once-a-year guard means a child the
+  // cron or another coach already wished is skipped, not greeted twice.
+  async birthdaySendAllToday(){
+    const today=this.todayISO(); const year=today.slice(0,4);
+    const sentMap=this._bdaySentMap();
+    const due=this.allSwimmersFlat().filter(sw=>this._bdayIsToday(sw, today) && sentMap[sw.id]!==year);
+    if(!due.length){ this.setState({bdayMsg:'Everyone with a birthday today has been wished ✓'}); return; }
+    this.setState({bdayMsg:'Sending '+due.length+' birthday greeting'+(due.length===1?'':'s')+'…'});
+    let done=0;
+    for(const sw of due){ try{ await this.birthdaySendNow(sw.id); done++; }catch(e){} }
+    this.setState({bdayMsg:'Sent '+done+' birthday greeting'+(done===1?'':'s')+' to the swimmers and their parents ✓'});
+  }
 
   // ---- The club week ------------------------------------------------------------------
   // The training week runs Saturday → Friday. Every calendar, every weekly total and the
@@ -24855,6 +24872,9 @@ class Component extends DCLogic {
       // ---- birthdays ----
       toolBdays:S.tool==='bdays', bdayScopeLabel:toolScope,
       bdayTodayRows, bdayHasToday: bdayTodayRows.length>0,
+      bdaySendAllShow: bdayTodayRows.filter(r=>!r.sent).length>1,
+      bdaySendAllLabel: 'Send to all '+bdayTodayRows.filter(r=>!r.sent).length+' with a birthday today',
+      onBdaySendAll: ()=>this.birthdaySendAllToday(),
       bdayUpcomingRows, bdayHasUpcoming: bdayUpcomingRows.length>0,
       bdayNoneAtAll: bdayTodayRows.length===0 && bdayUpcomingRows.length===0,
       bdayMissingRows, bdayHasMissing: bdayMissingCount>0,
