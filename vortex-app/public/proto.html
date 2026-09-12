@@ -7940,7 +7940,7 @@ if ('serviceWorker' in navigator) {
                               <div style="display:flex;gap:7px">
                                 <button onclick="{{ s.onSave }}" style="flex:1;background:var(--vx-blue);color:#fff;border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">Save</button>
                                 <button onclick="{{ s.onCancelEdit }}" style="flex:none;width:38px;background:#F4F6F8;color:#7A8296;border:none;border-radius:9px;cursor:pointer"><i data-lucide="x" style="width:14px;height:14px"></i></button>
-                                <sc-if value="{{ s.isCustom }}" hint-placeholder-val="{{ false }}"><button onclick="{{ s.onDelete }}" style="flex:none;width:38px;background:#FDECEC;color:#E5484D;border:none;border-radius:9px;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="trash-2" style="width:14px;height:14px"></i></button></sc-if>
+                                <sc-if value="{{ s.canRemove }}" hint-placeholder-val="{{ false }}"><button onclick="{{ s.onDelete }}" style="flex:none;width:38px;background:#FDECEC;color:#E5484D;border:none;border-radius:9px;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="trash-2" style="width:14px;height:14px"></i></button></sc-if>
                               </div>
                             </div>
                           </sc-if>
@@ -13022,8 +13022,11 @@ class Component extends DCLogic {
     const rows=await window.__vxSelect('staff_accounts', 'select=*&limit=1000');
     if(rows==null) return; // table missing / offline → keep current
     const custom=[]; const ovr={};
-    rows.forEach(r=>{ ovr[r.id]={label:r.name||'', user:r.username||'', pin:r.pin||'', role:r.role||'', squadId:r.squad_id||'', photo:r.photo||'', phone:r.phone||'', email:r.email||'', bio:r.bio||''};
-      if(r.is_custom){ custom.push({id:r.id, name:r.name||'', user:r.username||'', pin:r.pin||'', role:r.role||'Coach', squadId:r.squad_id||'', phone:r.phone||'', email:r.email||'', bio:r.bio||''}); } });
+    rows.forEach(r=>{ ovr[r.id]={label:r.name||'', user:r.username||'', pin:r.pin||'', role:r.role||'', squadId:r.squad_id||'', photo:r.photo||'', phone:r.phone||'', email:r.email||'', bio:r.bio||'', removed:!!r.removed};
+      // A removed coach never goes back on the custom list — the row survives only to carry the
+      // removed flag to other devices. (r.removed is undefined on a club that has not run the
+      // 0011 migration, which reads as not removed — the safe default.)
+      if(r.is_custom && !r.removed){ custom.push({id:r.id, name:r.name||'', user:r.username||'', pin:r.pin||'', role:r.role||'Coach', squadId:r.squad_id||'', phone:r.phone||'', email:r.email||'', bio:r.bio||''}); } });
     this.customStaff=custom; this.accountOvr=ovr;
     try{ this._saveLocalOnly('vx_staff_accounts', custom); this._saveLocalOnly('vx_account_ovr', ovr); }catch(e){}
     this._rebuildAccounts(); this.setState({});
@@ -13081,6 +13084,34 @@ class Component extends DCLogic {
     try{ this.audit('staff.delete', (gone&&gone.label)||id, {account:id}); }catch(e){}
     this.customStaff=this.customStaff.filter(function(a){return a.id!==id;}); if(this.accountOvr[id]){ delete this.accountOvr[id]; } this._rebuildAccounts(); this.setState({staffEditId:null});
     if(window.__vxDelete){ window.__vxDelete('staff_accounts', 'id=eq.'+encodeURIComponent(id)).then(ok=>{ if(ok) this._staffFetch(); }); }
+  }
+  // Never removable: the two full-access owner accounts (removing one could lock the club out of
+  // Club Administration) and whoever is signed in right now.
+  _canRemoveStaff(id){ if(id==='ahmed'||id==='sameh') return false; try{ if(this.state.pickedId===id) return false; }catch(e){} return true; }
+  // Remove a coach from the staff list. A custom (st_) account is deleted outright — its whole
+  // row goes. A built-in coach cannot be spliced out of the hardcoded list, so it is marked
+  // removed on its override row, which rides the same staff_accounts sync as an edit and so
+  // reaches every device. The email allow-list that governs sign-in is separate — say so.
+  staffRemove(id){
+    if(!this._canRemoveStaff(id)) return;
+    const gone=(this.accounts||[]).find(a=>a.id===id);
+    const isCustom=(''+id).indexOf('st_')===0;
+    try{ this.audit('staff.delete', (gone&&gone.label)||id, {account:id}); }catch(e){}
+    if(isCustom){
+      this.customStaff=this.customStaff.filter(function(a){return a.id!==id;});
+      if(this.accountOvr[id]){ delete this.accountOvr[id]; }
+      this._rebuildAccounts(); this.setState({staffEditId:null, staffAccDraft:null});
+      if(window.__vxDelete){ window.__vxDelete('staff_accounts', 'id=eq.'+encodeURIComponent(id)).then(ok=>{ if(ok) this._staffFetch(); }); }
+      return;
+    }
+    const o={...(this.accountOvr[id]||{}), removed:true};
+    this.accountOvr[id]=o;
+    try{ this._saveLocalOnly('vx_account_ovr', this.accountOvr); }catch(e){}
+    this._rebuildAccounts(); this.setState({staffEditId:null, staffAccDraft:null});
+    // Persist the removal on the account's own row so every device drops the coach too. Sending
+    // removed on its own (not through _staffRow) keeps ordinary edits free of the column, so they
+    // still save on a club that has not yet run the 0011 migration.
+    if(window.__vxUpsert){ window.__vxUpsert('staff_accounts', [{id:id, name:(gone&&gone.label)||o.label||'', is_custom:false, removed:true, ts:Date.now()}]).then(ok=>{ if(ok) this._staffFetch(); }); }
   }
   // Squad access and full access are two different questions, and one dropdown was answering
   // both: "no squad" meant every squad AND the run of the club, so a fitness coach who needs to
@@ -13184,8 +13215,11 @@ class Component extends DCLogic {
     return !/\b(assistant|deputy|trainee|intern)\b/.test(title);
   }
   _rebuildAccounts(){
-    // Rebuild this.accounts from the base staff + synced custom staff + per-account overrides.
-    this.accounts = this._baseAccounts.map(a=>({...a}));
+    // Rebuild this.accounts from the base staff + synced custom staff + per-account overrides,
+    // minus any coach whose override marks them removed (a coach who has left). Removal rides the
+    // same staff_accounts sync as an edit, so it reaches every device — see staffRemove.
+    const _ovr0 = this.accountOvr || {};
+    this.accounts = this._baseAccounts.filter(a=>!(_ovr0[a.id] && _ovr0[a.id].removed)).map(a=>({...a}));
     (this.customStaff||[]).forEach(_sa=>{ this.accounts.push({id:_sa.id, user:_sa.user, label:_sa.name, role:_sa.role, pin:_sa.pin, accent:'#2733D6', photo:'', initials:(_sa.name||'?').slice(0,2).toUpperCase(), squadId:_sa.squadId||''}); });
     const ovr=this.accountOvr||{};
     this.accounts.forEach(a=>{ const o=ovr[a.id]; if(o){ if(o.label){ a.label=o.label; a.initials=(o.label||'?').slice(0,2).toUpperCase(); } if(o.user) a.user=o.user; if(o.pin) a.pin=o.pin; if(o.role) a.role=o.role; if(o.squadId!=null) a.squadId=o.squadId; if(o.photo) a.photo=o.photo; if(o.phone!=null) a.phone=o.phone; if(o.email) a.email=o.email; if(o.bio!=null) a.bio=o.bio; } });
@@ -22717,7 +22751,7 @@ class Component extends DCLogic {
       const primary = this._roleLabel(a) || (sq? sq.name : ''); const contactBits=[a.phone, a.email, _accessLine].filter(Boolean).join(' · ');
       const sub = primary + (sq?(' · '+sq.name):'') + ' · @' + (a.user||'') + (contactBits?(' · '+contactBits):'');
       const d=S.staffAccDraft||{}; const draftPhoto = editing? (d.photo ?? a.photo ?? '') : (a.photo||'');
-      return { id:a.id, name:a.label||'', sub:sub, isCustom, isAdminAcc, editing, pwDraft, onPwDraft, onSetPw,
+      return { id:a.id, name:a.label||'', sub:sub, isCustom, isAdminAcc, canRemove:this._canRemoveStaff(a.id), editing, pwDraft, onPwDraft, onSetPw,
         signInText:signIn.text, signInFg:signIn.fg, signInIcon:signIn.icon,
         pwMsgShow: S.staffPwFor===a.id && !!S.staffPwMsg,
         pwMsg: S.staffPwFor===a.id ? (S.staffPwMsg||'') : '',
@@ -22776,7 +22810,7 @@ class Component extends DCLogic {
         onEditEmail:(e)=>this.staffAccChange('email', e.target.value),
         onEditBio:(e)=>this.staffAccChange('bio', e.target.value),
         onSave:()=>this.staffAccSave(a.id), onCancelEdit:()=>this.staffAccCancel(),
-        onDelete:()=>this.staffAddDelete(a.id),
+        onDelete:()=>{ if(window.confirm('Remove '+(a.label||'this account')+' from the staff list?\n\nThis takes them off the roster on this device. It does not by itself cancel their sign-in — remove their email from the club sign-in list to do that.')) this.staffRemove(a.id); },
       };
     });
 

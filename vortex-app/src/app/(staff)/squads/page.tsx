@@ -112,7 +112,6 @@ export default async function SquadsHubPage() {
                     <span className="block font-bold text-[14.5px] text-[#0C1116]">{sq.name}</span>
                     <span className="block text-[12px] text-[#7A8296]">
                       Ages {sq.age_range} · {sq.coach_name}
-                      {sq.assistant_coach_name ? ` · asst. ${sq.assistant_coach_name}` : ""}
                     </span>
                   </span>
                   <span className="text-right flex-none mr-0.5">

@@ -49,7 +49,6 @@ export default async function SquadLayout({
             </h1>
             <p className="m-0 text-[12.5px]" style={{ color: "rgba(255,255,255,.6)" }}>
               {squad.coach_name}
-              {squad.assistant_coach_name ? ` · asst. ${squad.assistant_coach_name}` : ""}
             </p>
           </div>
         </div>
