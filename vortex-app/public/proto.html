@@ -16093,7 +16093,18 @@ class Component extends DCLogic {
     const read=this._alertRead(), hidden=this._alertHidden();
     let anns=(this.announcements||[]).filter(a=>{ if(hidden[a.id]) return false; if(a.audience==='all') return true; if(kind==='coach') return a.audience==='staff'; if(kind==='family') return a.audience==='family'; return false; })
       .map(a=>({ id:a.id, audience:a.audience, icon:'megaphone', title:a.title, body:a.body, at:a.at, read:read[a.id]===true }));
-    return [...extra, ...anns, ...local].sort((a,b)=> new Date(b.at).getTime()-new Date(a.at).getTime());
+    const ordered=[...extra, ...anns, ...local].sort((a,b)=> new Date(b.at).getTime()-new Date(a.at).getTime());
+    // Collapse duplicates. The same greeting could be created twice in a day — two staff phones
+    // opened the app before the shared "already sent" guard had synced between them, so each wrote
+    // its own copy — and the family saw the same "Happy birthday" line two or three times. Two
+    // notifications with the same audience, title and body on the same calendar day are one event;
+    // keep the newest (this list is sorted newest-first) and drop the rest. Real distinct alerts
+    // almost never share all three, and never on purpose, so nothing legitimate is hidden.
+    const seen=new Set(); const out=[];
+    for(const n of ordered){ const day=String(n.at||'').slice(0,10);
+      const key=(n.audience||'')+'|'+(n.title||'')+'|'+(n.body||'')+'|'+day;
+      if(seen.has(key)) continue; seen.add(key); out.push(n); }
+    return out;
   }
   openNotifs(){ this.setState({notifOpen:true}); const ids=this._notifCtxIds; if(ids && ids.length){ this.notifications=this.notifications.map(n=>ids.includes(n.id)?{...n, read:true}:n); this._saveJSON('vx_notifications', this.notifications);
     const rs=this._alertRead(); ids.forEach(id=>{ rs[id]=true; }); try{ localStorage.setItem('vx_alert_read', JSON.stringify(rs)); }catch(e){} this.signupAlerts=(this.signupAlerts||[]).map(a=>ids.includes(a.id)?{...a, read:true}:a); } }

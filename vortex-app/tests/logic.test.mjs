@@ -13017,4 +13017,142 @@ describe("staggered send-off lane", () => {
   });
 });
 
+/* -------------------------------------------------------------------- birthdays
+   The automatic birthday cron (src/lib/birthdays.ts) has to find EXACTLY the
+   swimmers the app itself would, or it wishes the wrong child or the wrong day.
+   These pull the app's own date readers out of proto.html and prove the server
+   port agrees with them, then check the roster reconstruction and the send list. */
+const BD = await import("../src/lib/birthdays.ts");
+describe("birthdays — the port agrees with the app", () => {
+  const realDob = bind("_dobParts", {}, []);
+  const ctx = { todayISO: () => "2026-09-12" };
+  const realIsToday = bind("_bdayIsToday", ctx, ["_bdayMD", "_bdayISO", "_dobParts", "_bdayDateIn"]);
+  const realTurning = bind("_bdayTurning", ctx, ["_bdayISO", "_dobParts", "_bdayDateIn"]);
+
+  // Every documented gotcha the app's reader carries: dd/mm vs mm/dd, the American swap,
+  // leap day, a date that is not real, and the ambiguous-but-left-alone 06/03.
+  const DOBS = [
+    "17/04/2017", "2017-04-17", "08/20/2014", "2016-02-29", "29/02/2016",
+    "06/03/2015", "31/02/2015", "", "12/12/2012", "1/1/2010", "not a date",
+  ];
+  const DAYS = ["2026-04-17", "2026-02-28", "2026-08-20", "2026-03-06", "2026-12-12", "2026-01-01"];
+
+  it("bdayISO matches _dobParts().iso for every shape", () => {
+    for (const d of DOBS) {
+      const real = realDob(d);
+      eq(BD.bdayISO(d), real ? real.iso : null, "dob=" + JSON.stringify(d));
+    }
+  });
+  it("bdayIsToday matches _bdayIsToday on every day", () => {
+    for (const d of DOBS) for (const day of DAYS)
+      eq(BD.bdayIsToday(d, day), realIsToday({ dob: d }, day), d + " on " + day);
+  });
+  it("bdayTurning matches _bdayTurning on every day", () => {
+    for (const d of DOBS) for (const day of DAYS)
+      eq(BD.bdayTurning(d, day), realTurning({ dob: d }, day), d + " on " + day);
+  });
+  it("a Feb-29 child is wished on Feb 28 in a common year, once", () => {
+    eq(BD.bdayIsToday("2016-02-29", "2026-02-28"), true);
+    eq(BD.bdayIsToday("2016-02-29", "2026-03-01"), false);
+  });
+  it("no real date means no birthday", () => {
+    eq(BD.bdayIsToday("", "2026-01-01"), false);
+    eq(BD.bdayISO("Age 9"), null);
+  });
+});
+
+describe("birthdays — roster reconstruction and the send list", () => {
+  const base = {
+    seniorb: [{ id: "a1", name: "Yousef Ibrahim ELfawal" }, { id: "a2", name: "No Date Kid" }],
+    advb: [{ id: "b1", name: "Kaidi Luo" }],
+  };
+  const squads = [{ id: "seniorb", name: "Senior B" }, { id: "advb", name: "Advanced B" }];
+  // Dates of birth live only in the edits overlay — the base seed carries none.
+  const edits = {
+    edits: { seniorb: { a1: { dob: "12/09/2014" } }, advb: { b1: { dob: "12/09/2017" } } },
+    deleted: {},
+    added: {},
+  };
+
+  it("resolves dates of birth from the overlay onto base swimmers", () => {
+    const flat = BD.reconstructRoster(base, squads, edits);
+    const a1 = flat.find((s) => s.id === "a1");
+    eq(a1.dob, "12/09/2014");
+    eq(a1.squadName, "Senior B");
+  });
+  it("finds today's birthdays with the age they are turning", () => {
+    const flat = BD.reconstructRoster(base, squads, edits);
+    const due = BD.birthdaysToday(flat, "2026-09-12");
+    eq(due.map((s) => s.name).sort(), ["Yousef Ibrahim ELfawal", "Kaidi Luo"].sort());
+    eq(due.find((s) => s.id === "a1").turning, 12);
+    eq(due.find((s) => s.id === "b1").turning, 9);
+  });
+  it("a swimmer with no date on file is never in the send list", () => {
+    const flat = BD.reconstructRoster(base, squads, edits);
+    eq(BD.birthdaysToday(flat, "2026-09-12").some((s) => s.id === "a2"), false);
+  });
+  it("an added swimmer is carried with their own date, once", () => {
+    const withAdded = { ...edits, added: { seniorb: [{ id: "c1", name: "New Swimmer", dob: "12/09/2013", movedAt: 1 }] } };
+    const flat = BD.reconstructRoster(base, squads, withAdded);
+    eq(flat.filter((s) => s.id === "c1").length, 1);
+    eq(BD.birthdaysToday(flat, "2026-09-12").find((s) => s.id === "c1").turning, 13);
+  });
+  it("a deleted swimmer drops out of the roster", () => {
+    const withDel = { ...edits, deleted: { seniorb: { a1: true } } };
+    const flat = BD.reconstructRoster(base, squads, withDel);
+    eq(flat.some((s) => s.id === "a1"), false);
+  });
+  it("a swimmer lingering in two squad overlays is one child, not two", () => {
+    const dupBase = { seniorb: [{ id: "d1", name: "Moved Kid" }], advb: [{ id: "d1", name: "Moved Kid" }] };
+    const flat = BD.reconstructRoster(dupBase, squads, { edits: {}, deleted: {}, added: {} });
+    eq(flat.filter((s) => s.id === "d1").length, 1);
+  });
+});
+
+describe("birthdays — parsing the seed and the club clock", () => {
+  it("parseBaseRoster reads VX_ROSTER and stops before VX_MEETS", () => {
+    const js = 'window.VX_ROSTER={"advb":[{"id":"x","name":"A};B"}]};window.VX_MEETS=[{"n":1}];';
+    const r = BD.parseBaseRoster(js);
+    eq(Object.keys(r), ["advb"]);
+    eq(r.advb[0].name, "A};B"); // a brace inside a string must not end the object early
+  });
+  it("parses the real shipped seed", () => {
+    const js = readFileSync(new URL("../public/assets/roster.js", import.meta.url), "utf8");
+    const r = BD.parseBaseRoster(js);
+    const total = Object.values(r).reduce((n, a) => n + a.length, 0);
+    eq(total > 200, true);
+  });
+  it("todayISOInZone gives Doha's day across the UTC midnight boundary", () => {
+    // 22:30 UTC is already the next day in Doha (+03:00).
+    eq(BD.todayISOInZone("Asia/Qatar", new Date("2026-09-12T22:30:00Z")), "2026-09-13");
+    eq(BD.todayISOInZone("Asia/Qatar", new Date("2026-09-12T09:00:00Z")), "2026-09-12");
+  });
+});
+
+describe("notifications — the feed collapses same-day duplicates", () => {
+  const bday = (id, at) => ({
+    id, audience: "family_sw:r3", icon: "cake",
+    title: "Happy birthday, Yousef! 🎂", body: "wishes you a brilliant day", at, read: false,
+  });
+  const ctx = {
+    _alertRead: () => ({}),
+    _alertHidden: () => ({}),
+    _isAdmin: () => false,
+    signupAlerts: [],
+    announcements: [],
+    notifications: [
+      bday("n1", "2026-09-12T09:00:00.000Z"), // two copies on the 12th (the multi-device race)
+      bday("n2", "2026-09-12T06:00:00.000Z"),
+      bday("n3", "2026-09-13T06:00:00.000Z"), // a different day — a real, separate event
+    ],
+  };
+  const notifsFor = bind("notifsFor", ctx, []);
+  it("two identical greetings on one day show as one card, newest kept", () => {
+    const list = notifsFor("family", { swimmerIds: ["seniorb::r3"] });
+    eq(list.length, 2);
+    eq(list[0].id, "n3"); // newest first
+    eq(list[1].id, "n1"); // the 09:00 copy, not the 06:00 one
+  });
+});
+
 await report();
