@@ -12,7 +12,6 @@ create table if not exists public.admins (
 -- >>> EDIT these two if the emails differ (must match the emails the app signs in with) <<<
 insert into public.admins(email) values
   ('ahmedmamot@gmail.com'),
-  ('sameh@vortexswimmingclub.com'),
   ('mosame7100@gmail.com')
 on conflict (email) do nothing;
 

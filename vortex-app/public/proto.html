@@ -2304,7 +2304,15 @@ if ('serviceWorker' in navigator) {
        colours, badges and pattern (no shrinking, no background stripping).
        The app is display:none (NOT visibility:hidden) so it takes up no layout and
        can't push blank pages after the sheet. */
-    html, body{background:#fff !important;margin:0 !important;padding:0 !important;height:auto !important}
+    /* Pin the print root to the printable width. iPad/iPhone Safari scales a printout to fit
+       the page's LAYOUT viewport, not the visible sheet — and the app's viewport is
+       width=device-width. On an iPad that viewport is ~820–1024px, wider than the 186mm sheet,
+       so Safari fits the whole wide viewport onto the paper and the sheet lands in a column with
+       blank paper down the right — "not full". A phone's narrow viewport (the sheet overflows it
+       and is scaled up to fill) and a laptop (no mobile shrink-to-fit) both already look full.
+       Forcing the root to the A4 printable width (210mm − 2×12mm @page margin = 186mm) makes that
+       viewport exactly the sheet's own width on every device, so the sheet fills the page. */
+    html, body{background:#fff !important;margin:0 !important;padding:0 !important;height:auto !important;width:186mm !important}
     body > *{display:none !important}
     body > #vx-print-sheet{display:block !important;position:static !important;margin:0 !important;padding:20px !important}
     #vx-print-sheet *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important}

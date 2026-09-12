@@ -60,7 +60,7 @@ select sa.name,
 /*
 insert into vx_staff_emails (email) values
   (lower(trim('marycrispcleopas@gmail.com'))),
-  (lower(trim('sameh4142@gmail.com')))
+  (lower(trim('another.coach@example.com')))
 on conflict (email) do nothing;
 
 -- Then run section 2 again. Every name that should be able to work must say ✓ can write.
