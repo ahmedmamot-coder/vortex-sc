@@ -107,6 +107,15 @@ describe("a set can be written over lines and moved in the order", () => {
     eq(/<textarea value="\{\{ st\.txt \}\}"[^>]*rows="\{\{ st\.txtRows \}\}"/.test(SOURCE), true,
       "still a single-line input");
   });
+  // The staff Bio box binds its value like every other textarea in the app — `value="{{ ... }}"`,
+  // not child text. Written the other way (child text, no value attribute) the framework filled
+  // it with the whole row object and it showed a literal "[object Object]".
+  it("the staff bio textarea binds its value, not child text", () => {
+    eq(/<textarea value="\{\{ s\.editBio \}\}" oninput="\{\{ s\.onEditBio \}\}"[^>]*><\/textarea>/.test(SOURCE), true,
+      "the bio textarea must use value=\"{{ s.editBio }}\" with an empty body, or it renders [object Object]");
+    eq(/\{\{ s\.editBio \}\}<\/textarea>/.test(SOURCE), false,
+      "the bio value must not be bound as textarea child text");
+  });
   it("and the sheet that prints keeps the line breaks", () => {
     const kept = SOURCE.match(/<span style="white-space:pre-line">\{\{ p[v]?set\.txt \}\}<\/span>/g) || [];
     eq(kept.length, 2, `expected the set text wrapped in both copies of the sheet, found ${kept.length}`);
