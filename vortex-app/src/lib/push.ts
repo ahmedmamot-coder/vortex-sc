@@ -53,9 +53,19 @@ export type PushResult = {
   matched: number;
 };
 
+/** Whether Web Push (browsers/PWAs) can send — needs both halves of the VAPID pair. */
+export function webPushConfigured(): boolean {
+  return !!(VAPID_PUBLIC && VAPID_PRIVATE);
+}
+
+/** Which transports are ready. Booleans only — never a key value. */
+export function pushTransports(): { web: boolean; ios: boolean } {
+  return { web: webPushConfigured(), ios: apnsConfigured() };
+}
+
 /** Web Push, APNs, or both — as long as one transport is configured, sending works. */
 export function pushConfigured(): boolean {
-  return !!(VAPID_PUBLIC && VAPID_PRIVATE) || apnsConfigured();
+  return webPushConfigured() || apnsConfigured();
 }
 
 /** An iPhone registered through the app, rather than a browser holding a Web Push subscription. */

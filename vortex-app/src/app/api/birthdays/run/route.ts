@@ -15,8 +15,8 @@
 // pass it as header x-cron-secret or ?key=; Vercel's own CRON_SECRET bearer is honoured too.
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { SB_URL, SB_SERVICE, haveService } from "@/lib/wearable";
-import { sendPush, pushConfigured } from "@/lib/push";
+import { SB_URL, SB_SERVICE, haveService, serviceKeyRole, serviceKeyWorks } from "@/lib/wearable";
+import { sendPush, pushConfigured, pushTransports } from "@/lib/push";
 import {
   parseBaseRoster,
   buildSquads,
@@ -104,10 +104,6 @@ function notifId(): string {
 type NotifRec = { id: string; audience: string; icon: string; title: string; body: string; at: string; read: boolean };
 
 async function run(request: Request): Promise<Response> {
-  if (!haveService()) {
-    return Response.json({ error: "server missing SUPABASE_SERVICE_ROLE_KEY" }, { status: 500 });
-  }
-
   // Optional guard. When BIRTHDAY_CRON_SECRET (or Vercel's CRON_SECRET) is set, the request must
   // carry it; when neither is set the route is open, the same as the wearable sync cron.
   const url = new URL(request.url);
@@ -118,17 +114,52 @@ async function run(request: Request): Promise<Response> {
     if (given !== secret) return Response.json({ error: "unauthorized" }, { status: 401 });
   }
 
+  const forced = url.searchParams.get("date");
+  const dry = url.searchParams.get("dry") === "1";
+
   // Push may not be configured yet, but the greeting has three channels — the family thread, the
   // in-app feed, and push — and the first two work regardless. So the run goes ahead and does what
   // it can rather than doing nothing; whether push actually landed is reported back below.
   const havePush = pushConfigured();
 
+  // What is and isn't configured — booleans only, never a key value. This is what ?dry=1 reports,
+  // so one call confirms the environment before the first real send. serviceOk asks Supabase
+  // whether the key actually carries service-role rights (the anon key in that slot passes every
+  // presence check and then reads and writes nothing).
+  const transports = pushTransports();
+  const service = haveService();
+  const serviceOk = service ? await serviceKeyWorks() : false;
+  const config = {
+    service,
+    serviceRole: serviceKeyRole(),
+    serviceOk,
+    webPush: transports.web,
+    iosPush: transports.ios,
+    secretGuard: !!secret,
+    clubTimeZone: CLUB_TZ,
+  };
+  const missing: string[] = [];
+  if (!service) missing.push("SUPABASE_SERVICE_ROLE_KEY");
+  else if (serviceOk === false)
+    missing.push(
+      "SUPABASE_SERVICE_ROLE_KEY is set but does not carry service-role rights" +
+        (config.serviceRole === "anon" ? " — it holds the publishable/anon key" : "") +
+        ". The birthday run can read nothing and write nothing.",
+    );
+  if (!havePush) missing.push("push transport: set VAPID_PUBLIC_KEY + VAPID_PRIVATE_KEY, and/or the APNS_* keys");
+  else if (!transports.web) missing.push("web push off: set VAPID_PRIVATE_KEY (paired with the app's public key) for browsers/PWAs");
+
+  // Without the service key we cannot read the roster at all — but a dry run should still report
+  // the config so it can be used to diagnose exactly this. A real run has nothing it can do.
+  if (!service || serviceOk === false) {
+    if (dry) return Response.json({ ok: true, dry: true, config, missing }, { headers: { "cache-control": "no-store" } });
+    return Response.json({ error: missing[0] || "server not configured", config, missing }, { status: 500 });
+  }
+
   const today = todayISOInZone(CLUB_TZ);
   // ?date=YYYY-MM-DD forces a day, for testing and for sending one the club missed. ?dry=1 reports
   // who would be wished without writing or pushing anything.
-  const forced = url.searchParams.get("date");
   const day = forced && /^\d{4}-\d{2}-\d{2}$/.test(forced) ? forced : today;
-  const dry = url.searchParams.get("dry") === "1";
 
   const [baseRoster, rosterEdits, squadEdits, brand, bdaySentRaw, notifsRaw] = await Promise.all([
     loadBaseRoster(url.origin),
@@ -148,13 +179,18 @@ async function run(request: Request): Promise<Response> {
   const due = birthdaysToday(roster, day).filter((sw) => sw.id && sent[sw.id] !== dueYear);
 
   if (dry) {
-    return Response.json({
-      ok: true,
-      dry: true,
-      day,
-      swimmers: roster.length,
-      due: due.map((s) => ({ id: s.id, name: s.name, squad: s.squadName, turning: s.turning })),
-    });
+    return Response.json(
+      {
+        ok: true,
+        dry: true,
+        day,
+        config,
+        missing,
+        swimmers: roster.length,
+        due: due.map((s) => ({ id: s.id, name: s.name, squad: s.squadName, turning: s.turning })),
+      },
+      { headers: { "cache-control": "no-store" } },
+    );
   }
 
   if (!due.length) {
