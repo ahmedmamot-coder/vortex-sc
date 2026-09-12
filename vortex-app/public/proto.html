@@ -6090,6 +6090,16 @@ if ('serviceWorker' in navigator) {
 
                   <sc-if value="{{ toolFitness }}" hint-placeholder-val="{{ true }}">
                     <div style="display:flex;flex-direction:column;gap:12px">
+                      <sc-if value="{{ authExpiredShow }}" hint-placeholder-val="{{ false }}">
+                        <div style="display:flex;align-items:flex-start;gap:10px;background:#FEF3F2;border:1px solid #FECDCA;border-radius:14px;padding:12px 13px">
+                          <i data-lucide="alert-triangle" style="width:18px;height:18px;color:#B42318;flex:none;margin-top:1px"></i>
+                          <div style="flex:1;min-width:0">
+                            <p style="margin:0;font-size:12.5px;font-weight:800;color:#B42318">Your sign-in has expired</p>
+                            <p style="margin:3px 0 0;font-size:11.5px;color:#912018;line-height:1.45">Anything you save now stays on this device only — it will not reach the club calendar or the swimmers. Sign in again first, then build and save your session.</p>
+                            <button onclick="{{ onReSignIn }}" style="margin-top:9px;background:#B42318;color:#fff;border:none;border-radius:9px;padding:8px 14px;font-family:inherit;font-weight:800;font-size:12px;cursor:pointer">Sign in again</button>
+                          </div>
+                        </div>
+                      </sc-if>
                       <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
                         <input value="{{ fitTitle }}" oninput="{{ onFitTitle }}" style="width:100%;border:none;outline:none;background:none;font-family:inherit;font-size:16px;font-weight:700;color:#0C1116;padding:0;margin-bottom:2px">
                         <p style="margin:0;font-size:11px;color:#9AA2B4">Dryland &amp; conditioning — {{ squad.name }}</p>
@@ -25012,6 +25022,8 @@ class Component extends DCLogic {
       fitSections, fitTitle, onFitTitle, onFitAddSection, onFitReset,
       fitMediaMsg:S.fitMediaMsg||'', fitMediaMsgShow:!!S.fitMediaMsg,
       onSaveFitSession:()=>this.saveFitSession(S.squadId), fitSavedMsg:S.fitSavedMsg||'', fitSavedMsgShow:!!S.fitSavedMsg,
+      authExpiredShow: this._saveNeedsSignIn(S),
+      onReSignIn: ()=>this.setState({screen:'login', loginStage:'accounts', loginErr:''}),
       fitSessDate:S.fitSessDate||this.todayISO(), onFitSessDate:(e)=>this.setState({fitSessDate:e.target.value}),
       fitSlotAMBg:(S.fitSessSlot!=='PM')?squad.accent:'#F4F6F8', fitSlotAMFg:(S.fitSessSlot!=='PM')?'#fff':'#7A8296',
       fitSlotPMBg:(S.fitSessSlot==='PM')?squad.accent:'#F4F6F8', fitSlotPMFg:(S.fitSessSlot==='PM')?'#fff':'#7A8296',
