@@ -6090,6 +6090,16 @@ if ('serviceWorker' in navigator) {
 
                   <sc-if value="{{ toolFitness }}" hint-placeholder-val="{{ true }}">
                     <div style="display:flex;flex-direction:column;gap:12px">
+                      <sc-if value="{{ authExpiredShow }}" hint-placeholder-val="{{ false }}">
+                        <div style="display:flex;align-items:flex-start;gap:10px;background:#FEF3F2;border:1px solid #FECDCA;border-radius:14px;padding:12px 13px">
+                          <i data-lucide="alert-triangle" style="width:18px;height:18px;color:#B42318;flex:none;margin-top:1px"></i>
+                          <div style="flex:1;min-width:0">
+                            <p style="margin:0;font-size:12.5px;font-weight:800;color:#B42318">Your sign-in has expired</p>
+                            <p style="margin:3px 0 0;font-size:11.5px;color:#912018;line-height:1.45">Anything you save now stays on this device only — it will not reach the club calendar or the swimmers. Sign in again first, then build and save your session.</p>
+                            <button onclick="{{ onReSignIn }}" style="margin-top:9px;background:#B42318;color:#fff;border:none;border-radius:9px;padding:8px 14px;font-family:inherit;font-weight:800;font-size:12px;cursor:pointer">Sign in again</button>
+                          </div>
+                        </div>
+                      </sc-if>
                       <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
                         <input value="{{ fitTitle }}" oninput="{{ onFitTitle }}" style="width:100%;border:none;outline:none;background:none;font-family:inherit;font-size:16px;font-weight:700;color:#0C1116;padding:0;margin-bottom:2px">
                         <p style="margin:0;font-size:11px;color:#9AA2B4">Dryland &amp; conditioning — {{ squad.name }}</p>
@@ -9053,8 +9063,8 @@ class Component extends DCLogic {
       {id:'reda', user:'reda', label:'Coach Reda', role:'Junior coach', accent:'#2A63E0', photo:'', initials:'CR', squadId:'junior', email:'reda@vortexswimmingclub.com'},
       {id:'chafik', user:'chafik', label:'Coach Chafik', role:'Senior B coach', accent:'#2733D6', photo:'assets/coach-chafik.jpg', initials:'CC', squadId:'seniorb', email:'chafik@vortexswimmingclub.com'},
       {id:'baisher', user:'baisher', label:'Coach Baisher', role:'Senior A coach', accent:'#3B23C7', photo:'', initials:'CB', squadId:'seniora', email:'baisher@vortexswimmingclub.com'},
-      {id:'wassim', user:'wassim', label:'Coach Wassim', role:'Vortex B coach', accent:'#5D22CF', photo:'', initials:'CW', squadId:'vortexb', email:'wassim@vortexswimmingclub.com'},
-      {id:'mahmoud', user:'mahmoud', label:'Coach Mahmoud', role:'Vortex A coach', accent:'#8A22D5', photo:'assets/coach-mahmoud.jpg', initials:'CM', squadId:'vortexa', email:'mahmoud@vortexswimmingclub.com'},
+      {id:'wassim', user:'wassim', label:'Coach Wassim', role:'Vortex LD coach', accent:'#5D22CF', photo:'', initials:'CW', squadId:'vortexb', email:'wassim@vortexswimmingclub.com'},
+      {id:'mahmoud', user:'mahmoud', label:'Coach Mahmoud', role:'Vortex SD coach', accent:'#8A22D5', photo:'assets/coach-mahmoud.jpg', initials:'CM', squadId:'vortexa', email:'mahmoud@vortexswimmingclub.com'},
       {id:'martin', user:'martin', label:'Coach Martin', role:'Legend coach', accent:'#1B22E4', photo:'assets/coach-martin.jpg', initials:'CM', squadId:'legend', email:'martin@vortexswimmingclub.com'},
     ];
     try { this.customStaff = JSON.parse(localStorage.getItem('vx_staff_accounts')||'[]'); } catch(e){ this.customStaff = []; }
@@ -9072,8 +9082,8 @@ class Component extends DCLogic {
       {id:'junior', name:'Junior', ages:'11–12', count:70, coach:'Coach Reda', accent:'#2A63E0', glow:'rgba(42,99,224,.35)', photo:'', short:'Jr'},
       {id:'seniorb', name:'Senior B', ages:'13', count:23, coach:'Coach Chafik', accent:'#2733D6', glow:'rgba(39,51,214,.35)', photo:'assets/coach-chafik.jpg', short:'SnB'},
       {id:'seniora', name:'Senior A', ages:'14', count:24, coach:'Coach Baisher', accent:'#3B23C7', glow:'rgba(59,35,199,.35)', photo:'', short:'SnA'},
-      {id:'vortexb', name:'Vortex B', ages:'15', count:14, coach:'Coach Wassim · asst. Ahmed Abdelwahab', accent:'#5D22CF', glow:'rgba(93,34,207,.35)', photo:'', short:'VxB'},
-      {id:'vortexa', name:'Vortex A', ages:'16', count:15, coach:'Coach Mahmoud · asst. Ahmed Abdelwahab', accent:'#8A22D5', glow:'rgba(138,34,213,.35)', photo:'assets/coach-mahmoud.jpg', short:'VxA'},
+      {id:'vortexb', name:'Vortex LD', ages:'15', count:14, coach:'Coach Wassim · asst. Ahmed Abdelwahab', accent:'#5D22CF', glow:'rgba(93,34,207,.35)', photo:'', short:'VxLD'},
+      {id:'vortexa', name:'Vortex SD', ages:'16', count:15, coach:'Coach Mahmoud · asst. Ahmed Abdelwahab', accent:'#8A22D5', glow:'rgba(138,34,213,.35)', photo:'assets/coach-mahmoud.jpg', short:'VxSD'},
       {id:'legend', name:'Legend', ages:'17+', count:17, coach:'Coach Martin', accent:'#1B22E4', glow:'rgba(27,34,228,.4)', photo:'assets/coach-martin.jpg', short:'Lgd'},
     ];
     // {ovr:{id:{name,ages,accent,short}}, added:[squad], removed:{id:true}, order:[id]}
@@ -9366,7 +9376,7 @@ class Component extends DCLogic {
       compose:'', composeTag:'set', composeImage:'', composeEmojiOpen:false,
       feed:[
         {id:'f1', author:'Coach Baisher', role:'Senior A', initials:'CB', photo:'', tag:'Win', text:'Senior A crushed the 4×100 free relay this morning — new squad best by 2.1s. Proud of the effort.', image:'assets/photo-competition.jpg', likes:24, comments:6, time:'2h', liked:false},
-        {id:'f2', author:'Coach Mahmoud', role:'Vortex A', initials:'CM', photo:'assets/coach-mahmoud.jpg', tag:'Set', text:'Tonight: 3×(8×50 @ :45) descend 1-4, 5-8. EN2 → SP1. Bring your fast legs.', image:'', likes:11, comments:3, time:'5h', liked:false},
+        {id:'f2', author:'Coach Mahmoud', role:'Vortex SD', initials:'CM', photo:'assets/coach-mahmoud.jpg', tag:'Set', text:'Tonight: 3×(8×50 @ :45) descend 1-4, 5-8. EN2 → SP1. Bring your fast legs.', image:'', likes:11, comments:3, time:'5h', liked:false},
         {id:'f3', author:'Ahmed Mamo', role:'Technical Director', initials:'AM', photo:'assets/director-ahmed.jpg', tag:'Notice', text:'Entry deadline for the Nautilus Invitational is Thursday. Coaches, confirm your squad lists in Meets.', image:'', likes:38, comments:9, time:'1d', liked:false},
       ],
       aiKind:'season', aiPrompt:'', aiOut:null, aiLoading:false, aiErr:'',
@@ -25046,6 +25056,8 @@ class Component extends DCLogic {
       fitSections, fitTitle, onFitTitle, onFitAddSection, onFitReset,
       fitMediaMsg:S.fitMediaMsg||'', fitMediaMsgShow:!!S.fitMediaMsg,
       onSaveFitSession:()=>this.saveFitSession(S.squadId), fitSavedMsg:S.fitSavedMsg||'', fitSavedMsgShow:!!S.fitSavedMsg,
+      authExpiredShow: this._saveNeedsSignIn(S),
+      onReSignIn: ()=>this.setState({screen:'login', loginStage:'accounts', loginErr:''}),
       fitSessDate:S.fitSessDate||this.todayISO(), onFitSessDate:(e)=>this.setState({fitSessDate:e.target.value}),
       fitSlotAMBg:(S.fitSessSlot!=='PM')?squad.accent:'#F4F6F8', fitSlotAMFg:(S.fitSessSlot!=='PM')?'#fff':'#7A8296',
       fitSlotPMBg:(S.fitSessSlot==='PM')?squad.accent:'#F4F6F8', fitSlotPMFg:(S.fitSessSlot==='PM')?'#fff':'#7A8296',
