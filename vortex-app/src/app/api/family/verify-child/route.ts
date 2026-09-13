@@ -35,6 +35,8 @@ type Edits = {
   edits?: Record<string, Record<string, Record<string, unknown>>>;
   added?: Record<string, Array<Record<string, unknown>>>;
   deleted?: Record<string, Record<string, boolean>>;
+  // A swimmer deleted from the club entirely, by id — squad-independent, unlike `deleted`.
+  removed?: Record<string, unknown>;
 };
 
 // One process's memory, which is the honest description of it: a serverless deployment can run
@@ -143,6 +145,8 @@ export function dobOf(base: Record<string, Swimmer[]> | null, ed: Edits | null, 
  * because ids are unique across the club and the squad the parent's page names may be stale.
  */
 export function swimmerExists(base: Record<string, Swimmer[]> | null, ed: Edits | null, id: string): boolean {
+  // Deleted from the club is deleted everywhere: a `removed` id is gone whatever squad it sat in.
+  if (ed?.removed?.[id]) return false;
   for (const sq of Object.keys(ed?.added || {}))
     for (const sw of ed?.added?.[sq] || []) if (sw && sw.id === id) return true;
   for (const sq of Object.keys(base || {}))

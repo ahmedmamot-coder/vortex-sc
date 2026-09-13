@@ -888,8 +888,18 @@ if ('serviceWorker' in navigator) {
   // stays, and what changes is that sending it is a MERGE rather than a replacement:
   //
   //   deleted  union   — a deletion is never dropped by someone who had not heard about it
+  //   removed  union   — a swimmer deleted from the club stays deleted, in every squad's added
   //   added    union    (by id, so the same swimmer added twice is still one swimmer)
   //   edits    per swimmer, this device wins — the field a coach just typed is the current one
+  //
+  // `removed` is the deletion `deleted` cannot express. A swimmer the club ADDED lives only in
+  // `added`, keyed under a squad, and deleting them used to mean removing them from that array and
+  // nothing more — no tombstone at all. So the union above put them straight back the moment it
+  // met a copy that had not heard: another coach's phone, or the database's own copy from before
+  // the delete. The child returned, the delete looked like it never saved, and the two coaches
+  // this club runs on lost each other's deletions the same way they once lost each other's moves.
+  // A `removed` id is squad-independent — a delete is gone from everywhere, not from one roster —
+  // and sticky, exactly like `deleted`: whoever has heard about it holds it for the club.
   //
   // The one thing a union cannot express is an un-delete, which would be undone by the next
   // device to send. Putting a swimmer back is rare, recoverable in seconds, and done through Add;
@@ -910,7 +920,7 @@ if ('serviceWorker' in navigator) {
     if(!mine || typeof mine!=="object") return theirs;
     // If either side is not the overlay shape, merging is guesswork. Send what this device has.
     if(!_rosterShaped(mine) || !_rosterShaped(theirs)) return mine;
-    var out={ edits:{}, deleted:{}, added:{} };
+    var out={ edits:{}, deleted:{}, added:{}, removed:{} };
     var side=[theirs, mine];   // mine second, so mine wins where they disagree
     side.forEach(function(e){
       var d=(e && e.deleted) || {};
@@ -918,6 +928,8 @@ if ('serviceWorker' in navigator) {
         out.deleted[sq]=out.deleted[sq]||{};
         Object.keys(d[sq]||{}).forEach(function(sw){ if(d[sq][sw]) out.deleted[sq][sw]=true; });
       });
+      var rm=(e && e.removed) || {};
+      Object.keys(rm).forEach(function(id){ if(rm[id]) out.removed[id]=true; });
       var ed=(e && e.edits) || {};
       Object.keys(ed).forEach(function(sq){
         out.edits[sq]=out.edits[sq]||{};
@@ -996,6 +1008,13 @@ if ('serviceWorker' in navigator) {
       out.added[sq]=(out.added[sq]||[]).filter(function(sw){
         return !sw || !sw.id || home[sw.id].sq===sq;
       });
+    });
+    // A swimmer the club deleted is dropped from every squad's added list, so the document that
+    // goes back up carries no resurrected copy for the next device to pull. The tombstone stays in
+    // out.removed, which is what keeps them gone — clearing the entries without it would let the
+    // very next merge union them back.
+    Object.keys(out.added).forEach(function(sq){
+      out.added[sq]=(out.added[sq]||[]).filter(function(sw){ return !sw || !sw.id || !out.removed[sw.id]; });
     });
     return out;
   }
@@ -9166,7 +9185,7 @@ class Component extends DCLogic {
     const _savedPlans=this._loadPlans(); const _plans={};
     this.squads.forEach(sq=>{ _plans[sq.id]= _savedPlans[sq.id] || this.makeDefaultPlan(); });
 
-    this.rosterEdits=this._loadJSON('vx_roster_edits', {edits:{}, deleted:{}, added:{}});
+    this.rosterEdits=this._loadJSON('vx_roster_edits', {edits:{}, deleted:{}, added:{}, removed:{}});
     // One document, or one row per swimmer: the club's own answer, pulled like any other key.
     this.rosterMode=this._loadJSON('vx_roster_mode', null);
     // Which rows this device has already put in the table, kept across reloads.
@@ -10940,11 +10959,12 @@ class Component extends DCLogic {
     // written, or restored by hand, can be missing one — and `ed.deleted[sq.id]` on a missing
     // `deleted` is not a wrong roster, it is a white screen on every device.
     const _e = this.rosterEdits;
-    const ed = { edits:{}, deleted:{}, added:{},
+    const ed = { edits:{}, deleted:{}, added:{}, removed:{},
                  ...((_e && typeof _e==='object' && !Array.isArray(_e)) ? _e : {}) };
     if(!ed.edits   || typeof ed.edits   !== 'object') ed.edits   = {};
     if(!ed.deleted || typeof ed.deleted !== 'object') ed.deleted = {};
     if(!ed.added   || typeof ed.added   !== 'object') ed.added   = {};
+    if(!ed.removed || typeof ed.removed !== 'object') ed.removed = {};
     const anywhere = this._patchAnywhere(ed);
     // The swimmer's current squad wins field by field; a squad they have left only fills what is
     // still blank, so a date typed today is never replaced by one typed before the move.
@@ -10975,6 +10995,7 @@ class Component extends DCLogic {
     this.squads.forEach(sq=>{
       (ed.added[sq.id]||[]).forEach(sw=>{
         if(!sw || !sw.id) return;
+        if(ed.removed[sw.id]) return;          // deleted from the club — never has a home squad
         const at=(typeof sw.movedAt==='number')?sw.movedAt:0;
         const left=!!(ed.deleted[sq.id]||{})[sw.id];
         const rank=[at, left?0:1];
@@ -10985,7 +11006,7 @@ class Component extends DCLogic {
     });
     const merged={};
     this.squads.forEach(sq=>{
-      const arr=(base[sq.id]||[]).filter(sw=>!(ed.deleted[sq.id]||{})[sw.id]).map(sw=>{
+      const arr=(base[sq.id]||[]).filter(sw=>!(ed.deleted[sq.id]||{})[sw.id] && !ed.removed[sw.id]).map(sw=>{
         const patch=patchFor(sq.id, sw.id);
         if(!patch) return sw;
         const nsw={...sw, ...patch};
@@ -10995,7 +11016,8 @@ class Component extends DCLogic {
       // A swimmer the club added carries their whole record here, but a date typed for them
       // before a move is filed in `edits` under the squad they left — same gap, other half.
       const extra=(ed.added[sq.id]||[])
-        .filter(sw=>!sw || !sw.id || (addedHome[sw.id]||{}).sq===sq.id)
+        .filter(sw=>{ if(sw && sw.id && ed.removed[sw.id]) return false;
+                      return !sw || !sw.id || (addedHome[sw.id]||{}).sq===sq.id; })
         .map(sw=>{
           const p=(sw&&sw.id)?patchFor(sq.id, sw.id):null;
           return p ? {...p, ...sw} : sw;
@@ -11021,24 +11043,26 @@ class Component extends DCLogic {
   // became 317 — an older copy somewhere touched something and won.
   _rosterTotalFor(ed){
     try{
-      const base=window.VX_ROSTER||{}; const e=ed||{edits:{},deleted:{},added:{}};
+      const base=window.VX_ROSTER||{}; const e=ed||{edits:{},deleted:{},added:{},removed:{}};
+      const rm=(e&&e.removed)||{};
       // Counted the way the roster is BUILT, which means once per swimmer. An overlay holding
       // the same swimmer under two squads — what every move used to produce — counted them
       // twice here while the screen, which rebuilds and shows them once, counted them once. The
       // two numbers are compared to decide whether a save held, so the gap between them read as
-      // "NOT saved" on a roster that had saved perfectly well.
+      // "NOT saved" on a roster that had saved perfectly well. A deleted swimmer is not counted
+      // in either list, for the same reason: the screen does not show them.
       const seen={};
       let n=0;
       (this.squads||[]).forEach(sq=>{
         (base[sq.id]||[]).forEach(sw=>{
-          if(!sw || ((e.deleted||{})[sq.id]||{})[sw.id]) return;
+          if(!sw || ((e.deleted||{})[sq.id]||{})[sw.id] || (sw.id&&rm[sw.id])) return;
           if(sw.id){ if(seen[sw.id]) return; seen[sw.id]=1; }
           n++;
         });
       });
       (this.squads||[]).forEach(sq=>{
         (((e.added||{})[sq.id])||[]).forEach(sw=>{
-          if(!sw) return;
+          if(!sw || (sw.id&&rm[sw.id])) return;
           if(sw.id){ if(seen[sw.id]) return; seen[sw.id]=1; }
           n++;
         });
@@ -13018,12 +13042,22 @@ class Component extends DCLogic {
     // A child leaving the roster is the single change most likely to be asked about later,
     // and it was the one change nothing recorded.
     try{ this.audit('swimmer.delete', id+' · '+((this.squadById[squadId]||{}).name||squadId), {swimmer:id, squad:squadId}); }catch(e){}
-    if((this.rosterEdits.added[squadId]||[]).find(s=>s.id===id)){
-      this.rosterEdits.added[squadId]=this.rosterEdits.added[squadId].filter(s=>s.id!==id);
-    } else {
-      this.rosterEdits.deleted[squadId]=this.rosterEdits.deleted[squadId]||{};
-      this.rosterEdits.deleted[squadId][id]=true;
-    }
+    const ed=this.rosterEdits;
+    ed.edits=ed.edits||{}; ed.deleted=ed.deleted||{}; ed.added=ed.added||{}; ed.removed=ed.removed||{};
+    // The tombstone that makes a delete stick. A swimmer the club added lives only in `added`, and
+    // removing them from that array was the whole of the old delete — with nothing to say they had
+    // gone, the merge unioned them straight back from any copy that had not heard (another coach's
+    // phone, or the database's own). `removed` is squad-independent and sticky like `deleted`, so
+    // the child is gone from every roster and stays gone. See _mergeRoster.
+    ed.removed[id]=true;
+    // Drop any `added` copy, under every squad — a swimmer moved once lives under the squad they
+    // joined, and an old move can have left stale copies under others. `removed` would suppress
+    // them anyway; clearing them keeps the document clean.
+    Object.keys(ed.added).forEach(sq=>{ ed.added[sq]=(ed.added[sq]||[]).filter(s=>!s||s.id!==id); });
+    // A base-list swimmer also carries the per-squad marker older readers and the one-row-per-
+    // swimmer table understand; it is inert for an added swimmer, which is never in the base list.
+    ed.deleted[squadId]=ed.deleted[squadId]||{};
+    ed.deleted[squadId][id]=true;
     this.persistRosterEdits();
   }
   staffSave(squadId, form){ this.staffOverrides[squadId]={name:form.name.trim(), pin:form.pin.trim()}; this._saveJSON('vx_staff_ovr', this.staffOverrides); const sq=this.squadById[squadId]; if(sq) sq.coach=form.name.trim(); this.setState({staffEditId:null}); }

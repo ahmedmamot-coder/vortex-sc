@@ -304,14 +304,16 @@ export function pickPeriodThenSwimmer(value: unknown, mine: Set<string>): Json {
 }
 
 /**
- * { edits:{sqid:{swid:patch}}, deleted:{sqid:{swid:true}}, added:{sqid:[{id,...}]} }
+ * { edits:{sqid:{swid:patch}}, deleted:{sqid:{swid:true}}, added:{sqid:[{id,...}]},
+ *   removed:{swid:true} }
  *
- * All three parts are filtered to `mine`. The three keys are always present in the result, even
- * when empty: rebuildRoster() defends against a missing one, and a half-shaped document there is
- * a white screen on every device rather than a wrong roster.
+ * Every part is filtered to `mine`. The core keys are always present in the result, even when
+ * empty: rebuildRoster() defends against a missing one, and a half-shaped document there is a
+ * white screen on every device rather than a wrong roster. `removed` rides along so a parent whose
+ * child the club deleted stops seeing them, the same as staff do.
  */
 export function pickRosterDoc(value: unknown, mine: Set<string>): Json {
-  const out: Json = { edits: {}, deleted: {}, added: {} };
+  const out: Json = { edits: {}, deleted: {}, added: {}, removed: {} };
   if (!value || typeof value !== "object") return out;
   const doc = value as Json;
 
@@ -337,6 +339,9 @@ export function pickRosterDoc(value: unknown, mine: Set<string>): Json {
     }
   }
   out.added = added;
+
+  // Deleted-from-the-club tombstones, keyed by swimmer id — same shape as pickBySwimmer handles.
+  out.removed = pickBySwimmer(doc.removed, mine);
 
   return out;
 }

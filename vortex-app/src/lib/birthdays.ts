@@ -116,6 +116,9 @@ export type RosterEdits = {
   edits?: Record<string, Record<string, Record<string, unknown>>>;
   deleted?: Record<string, Record<string, boolean>>;
   added?: Record<string, Array<Record<string, unknown>>>;
+  // A swimmer deleted from the club entirely, by id — squad-independent, unlike `deleted`. A child
+  // the club removed must not go on receiving automatic birthday messages. See adminDeleteSwimmer.
+  removed?: Record<string, boolean>;
 };
 export type SquadOverlay = {
   ovr?: Record<string, { name?: string }>;
@@ -183,11 +186,13 @@ export function reconstructRoster(
     edits: {},
     deleted: {},
     added: {},
+    removed: {},
     ...(_e && typeof _e === "object" && !Array.isArray(_e) ? _e : {}),
   };
   if (!ed.edits || typeof ed.edits !== "object") ed.edits = {};
   if (!ed.deleted || typeof ed.deleted !== "object") ed.deleted = {};
   if (!ed.added || typeof ed.added !== "object") ed.added = {};
+  if (!ed.removed || typeof ed.removed !== "object") ed.removed = {};
 
   const anywhere = patchAnywhere(ed);
   // The swimmer's current squad wins field by field; a squad they have left only fills blanks.
@@ -224,6 +229,7 @@ export function reconstructRoster(
   };
   const emit = (id: string, sw: Record<string, unknown>, sq: Squad) => {
     if (!id || seen.has(id)) return;
+    if (ed.removed[id]) return;   // deleted from the club — off every list, birthdays included
     seen.add(id);
     out.push({
       id,
