@@ -884,6 +884,113 @@ describe("shipped source", () => {
     });
   });
 
+  /* ---------------------------------------------------------------- deleting a swimmer
+     Sameh and Mary both work the roster from their own phones, and a swimmer one of them
+     deleted kept coming back. A swimmer the club ADDED — 212 of this club's swimmers, and
+     everyone ever moved once — lives only in `added`, and deleting them used to mean splicing
+     them out of that array and nothing else. The roster document is one shared record merged
+     as a union of `added`, so the moment the splice met a copy that still held the child —
+     another coach's phone, or the database's own copy from before the delete — the union put
+     them straight back. The delete looked like it never saved. `removed` is the tombstone the
+     union honours: squad-independent and sticky, like `deleted`, but able to express the
+     removal of a swimmer who is in no squad's base list. */
+  describe("deleting a swimmer the club added", () => {
+    const src = sourceBetween("function _rosterShaped(o){", "\n  window.__vxMergeRoster");
+    const merge = new Function(src + "\nreturn _mergeRoster;")();
+    const melek = { id: "sw_melek", name: "Melek Riabi", age: 17 };
+
+    it("stays deleted against a copy that never heard about the delete", () => {
+      // mine: deleted here. theirs (the database): still holds the child in `added`.
+      const mine   = { edits: {}, deleted: { vortexb: { sw_melek: true } }, added: {}, removed: { sw_melek: true } };
+      const theirs = { edits: {}, deleted: {}, added: { vortexb: [melek] }, removed: {} };
+      const out = merge(mine, theirs);
+      eq((out.added.vortexb || []).length, 0, "the merge put the deleted child back from the database copy");
+      eq(!!out.removed.sw_melek, true, "the tombstone was dropped, so the next merge would resurrect them");
+    });
+
+    it("a delete this device has not heard about is applied to it", () => {
+      // The other way round: this device is the stale one, and the delete rides in from the merge.
+      const mine   = { edits: {}, deleted: {}, added: { vortexb: [melek] }, removed: {} };
+      const theirs = { edits: {}, deleted: { vortexb: { sw_melek: true } }, added: {}, removed: { sw_melek: true } };
+      const out = merge(mine, theirs);
+      eq((out.added.vortexb || []).length, 0, "the deletion the other coach made was undone");
+      eq(!!out.removed.sw_melek, true);
+    });
+
+    it("a swimmer nobody deleted is untouched", () => {
+      const other = { id: "n1", name: "New" };
+      const out = merge({ edits: {}, deleted: {}, added: {}, removed: {} },
+                        { edits: {}, deleted: {}, added: { junior: [other] }, removed: {} });
+      eq((out.added.junior || []).length, 1, "an ordinary added swimmer was dropped by the merge");
+    });
+
+    // The write side and the screen, end to end: adminDeleteSwimmer writes the tombstone, and
+    // rebuildRoster takes the child off the roster and does not put them back.
+    const squads = [{ id: "vortexb", name: "Vortex B" }, { id: "legend", name: "Legend" }];
+    const BASE = { vortexb: [{ id: "base1", name: "Base Swimmer" }], legend: [] };
+    const app = (rosterEdits) => {
+      const ctx = {
+        squads,
+        squadById: { vortexb: squads[0], legend: squads[1] },
+        rosterEdits,
+        roster: {},
+        persistRosterEdits() { this.rebuildRoster(); return true; },
+        setState() {}, forceUpdate() {}, audit() {},
+      };
+      const realWin = globalThis.window;
+      globalThis.window = { ...(realWin || {}), VX_ROSTER: BASE };
+      for (const f of ["rebuildRoster", "adminDeleteSwimmer", "_rosterTotalFor"])
+        bind(f, ctx, ["_patchAnywhere", "_ageFromDob", "_dobParts"]);
+      ctx.rebuildRoster();
+      ctx.restore = () => { globalThis.window = realWin; };
+      return ctx;
+    };
+    const has = (ctx, sqid, id) => (ctx.roster[sqid] || []).some((s) => s.id === id);
+
+    it("an added swimmer is off the roster the moment they are deleted, with a tombstone written", () => {
+      const ctx = app({ edits: {}, deleted: {}, added: { vortexb: [melek] }, removed: {} });
+      try {
+        eq(has(ctx, "vortexb", "sw_melek"), true, "fixture: the swimmer should start on the roster");
+        ctx.adminDeleteSwimmer("vortexb", "sw_melek");
+        eq(has(ctx, "vortexb", "sw_melek"), false, "the deleted swimmer is still on the roster");
+        eq(!!ctx.rosterEdits.removed.sw_melek, true, "no tombstone was written — the merge will bring them back");
+        eq((ctx.rosterEdits.added.vortexb || []).some((s) => s.id === "sw_melek"), false,
+           "the added copy was left in the document for the union to resurrect");
+      } finally { ctx.restore(); }
+    });
+
+    it("the saved-roster count drops by one when a swimmer is deleted", () => {
+      const ctx = app({ edits: {}, deleted: {}, added: { vortexb: [melek] }, removed: {} });
+      try {
+        const before = ctx._rosterTotalFor(ctx.rosterEdits);
+        ctx.adminDeleteSwimmer("vortexb", "sw_melek");
+        eq(ctx._rosterTotalFor(ctx.rosterEdits), before - 1,
+           "the count still includes the deleted swimmer, so a good delete reads as not saved");
+      } finally { ctx.restore(); }
+    });
+
+    it("a base-list swimmer still deletes", () => {
+      const ctx = app({ edits: {}, deleted: {}, added: {}, removed: {} });
+      try {
+        ctx.adminDeleteSwimmer("vortexb", "base1");
+        eq(has(ctx, "vortexb", "base1"), false, "a base swimmer was not removed");
+      } finally { ctx.restore(); }
+    });
+
+    it("and after the delete is merged with the copy that still holds them, they are still gone", () => {
+      // The whole point, chained: delete on this device, then a pull hands back the database copy
+      // that never heard — the merge must not resurrect the child, and rebuild must not show them.
+      const ctx = app({ edits: {}, deleted: {}, added: { vortexb: [melek] }, removed: {} });
+      try {
+        ctx.adminDeleteSwimmer("vortexb", "sw_melek");
+        const dbStillHasThem = { edits: {}, deleted: {}, added: { vortexb: [melek] }, removed: {} };
+        ctx.rosterEdits = merge(ctx.rosterEdits, dbStillHasThem);
+        ctx.rebuildRoster();
+        eq(has(ctx, "vortexb", "sw_melek"), false, "the child came back after the pull merged the stale copy in");
+      } finally { ctx.restore(); }
+    });
+  });
+
   describe("a roster this device cannot read", () => {
     const FULL = { edits: { r1: { dob: "2012-01-01" }, r2: { dob: "2013-02-02" } }, deleted: { r9: 1 }, added: {} };
     const EMPTY = { edits: {}, deleted: {}, added: {} };
@@ -4704,10 +4811,24 @@ describe("InBody sheet", () => {
       // only somebody else's child, so it empties completely.
       eq(JSON.stringify(cut.deleted), "{}", "a deletion of another family's child came back");
 
-      // All three parts are always present, even empty: rebuildRoster() defends against a missing
-      // one because a half-shaped document there is a white screen, not a wrong roster.
+      // The core parts are always present, even empty: rebuildRoster() defends against a missing
+      // one because a half-shaped document there is a white screen, not a wrong roster. `removed`
+      // rides along so a parent whose child the club deleted stops seeing them.
       const empty = M.pickRosterDoc(null, mine);
-      eq(Object.keys(empty).sort().join(","), "added,deleted,edits", "the three-part shape is not guaranteed");
+      eq(Object.keys(empty).sort().join(","), "added,deleted,edits,removed", "the roster-slice shape is not guaranteed");
+    });
+
+    it("a child the club deleted is carried into the family slice as removed, and only that family's", async () => {
+      // A `removed` tombstone is keyed by swimmer id and is what stops the parent's device putting
+      // a deleted child back. It is filtered to `mine` like every other part — one family never
+      // learns which of another family's children the club removed.
+      const M = await import("../src/app/api/family/state/route.ts");
+      const cut = M.pickRosterDoc({
+        edits: {}, deleted: {}, added: {},
+        removed: { r157: true, r76: true },
+      }, new Set(["r157", "r158"]));
+      eq(JSON.stringify(cut.removed), JSON.stringify({ r157: true }),
+         "the removed tombstone was dropped, or another family's leaked in");
     });
 
     it("the family slice allowlists keys rather than excluding them", () => {
@@ -6200,6 +6321,21 @@ describe("InBody sheet", () => {
          "deleted where the roster holds them and added nowhere means gone");
       eq(swimmerExists(base, null, "r1"), true, "present in the shipped roster, no overlay against them");
       eq(swimmerExists(base, null, "r999"), false, "an id the club has never held is not found");
+    });
+
+    // A swimmer the club ADDED, then deleted, lives only in `added` and carries no per-squad
+    // `deleted` the old code could read — `removed` is the tombstone that says they are gone, and
+    // a parent must not be able to link to a child the club removed.
+    it("reports a swimmer the club removed as not found, whatever squad they sat in", () => {
+      const swimmerExists = fn("swimmerExists");
+      // The added copy is still in the document (a stale device's, say) but the tombstone stands.
+      eq(swimmerExists(null, { edits: {}, deleted: {}, removed: { sw_x: true },
+                               added: { legend: [{ id: "sw_x", name: "Added Then Gone" }] } }, "sw_x"), false,
+         "a removed added swimmer could still be linked to");
+      // And a base swimmer removed outright, with no per-squad deletion recorded.
+      const base = { legend: [{ id: "r1", name: "Omar Abu Rezeq" }] };
+      eq(swimmerExists(base, { edits: {}, deleted: {}, added: {}, removed: { r1: true } }, "r1"), false,
+         "a removed base swimmer was still found");
     });
 
     // Everything below is what stops an unauthenticated route being a way to read a child's
@@ -11275,6 +11411,21 @@ describe("the squads are the club's, not the export's", () => {
                  junior: [{ id: "r7", first: "No", last: "Stamp" }] } });
     const where = old.filter((sq) => sq.swimmers.some((s) => s.id === "r7")).map((sq) => sq.slug);
     eq(where, ["junior"]);
+  });
+
+  it("a swimmer the club deleted entirely is out, base or added, whatever squad they sat in", () => {
+    // `deleted` is per-squad and cannot express the removal of a swimmer who lives only in `added`
+    // — deleting them used to be a bare splice from that array, and the connector's own merge, a
+    // union like the app's, would name them again from any copy that still held them. `removed` is
+    // the squad-independent tombstone that fixes it, and the connector has to read it too.
+    const out = MCP_DATA.mergeRoster(
+      [{ slug: "vortexb", name: "Vortex B", swimmers: [{ id: "base1", first: "Base", last: "One" }] },
+       { slug: "legend", name: "Legend", swimmers: [] }],
+      { edits: {}, deleted: {}, removed: { sw_add: true, base1: true },
+        added: { vortexb: [{ id: "sw_add", first: "Added", last: "Child" }] } });
+    const ids = out.flatMap((sq) => sq.swimmers.map((s) => s.id));
+    eq(ids.includes("sw_add"), false, "a deleted added swimmer is still named by the connector");
+    eq(ids.includes("base1"), false, "a deleted base swimmer is still named by the connector");
   });
 
   it("an overlay missing a part does not take the roster with it", () => {
