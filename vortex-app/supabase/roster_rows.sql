@@ -1,57 +1,35 @@
--- The roster, one row per change instead of one document for the whole club.
+-- ⚠️  DO NOT RUN THIS FILE. It is kept only so old links and notes still resolve.
 --
--- Every addition, edit and removal the club has made lived in a single row of club_state. The
--- last device to change anything replaced every other device's work, silently — which is how
--- 304 swimmers became 317 overnight, and why a set of squad colours vanished the same evening.
--- Three people edit this app every day; one shared document cannot hold that.
+-- The canonical one-row-per-swimmer schema is:
 --
--- A row is keyed on squad AND swimmer ('junior::sw_12'), because a move is a removal from one
--- squad and an addition to another, and both halves have to exist at once.
+--     supabase/migrations/0010_vx_roster.sql
 --
---   state 'edit'    — a swimmer from the club's own roster, with the fields that were changed
---   state 'added'   — somebody the club added; the whole record is in patch
---   state 'deleted' — somebody removed from that squad
+-- Run THAT one. It is what the app writes to and what the app names when it asks for the table
+-- to be created ("Run supabase/migrations/0010_vx_roster.sql").
 --
--- Sameh editing a Junior and Mary editing a Senior A now write different rows. Neither can
--- overwrite the other, and neither can revert the club — not "less often", not "with a warning".
+-- Why this file is disarmed
+-- -------------------------
+-- An earlier draft of the rows table lived here with a different shape: a single `state` column
+-- holding 'edit' / 'added' / 'deleted'. The app never shipped against that shape. It writes two
+-- booleans instead — `added` and `deleted` — because a swimmer can be both at once mid-move, and
+-- a row read back has to say which without a second lookup. Creating the table from the old shape
+-- here, and then letting the app write `added`/`deleted` to it, is exactly the kind of schema
+-- mismatch that has cost this club its roster before: every row write would fail against columns
+-- that do not exist, silently, one swimmer at a time.
 --
--- Run this in the Supabase SQL editor. Safe to re-run. The app fills it from what the club
--- already has, once, the first time a manager opens it with the table empty.
-
-create table if not exists vx_roster (
-  id          text primary key,        -- "<squadId>::<swimmerId>"
-  squad_id    text not null,
-  sw_id       text not null,
-  state       text not null default 'edit',
-  patch       jsonb not null default '{}'::jsonb,
-  updated_at  timestamptz not null default now()
-);
-
-create index if not exists vx_roster_squad on vx_roster (squad_id);
-create index if not exists vx_roster_sw    on vx_roster (sw_id);
-
-alter table vx_roster enable row level security;
-
-drop policy if exists vx_roster_read  on vx_roster;
-drop policy if exists vx_roster_write on vx_roster;
-
-do $$
-begin
-  if exists (select 1 from pg_proc where proname = 'vx_is_staff') then
-    -- Families read the roster: their child's squad, squad-mates in a relay, the meet list.
-    create policy vx_roster_read  on vx_roster for select to authenticated using (true);
-    create policy vx_roster_write on vx_roster for all to authenticated
-      using (vx_is_staff()) with check (vx_is_staff());
-    raise notice 'vx: roster readable by anyone signed in, writable by staff';
-  else
-    create policy vx_roster_read  on vx_roster for select to authenticated using (true);
-    create policy vx_roster_write on vx_roster for all to authenticated using (true) with check (true);
-    raise notice 'vx: roster writable by ANY signed-in user — run security_4_roles.sql to narrow it to staff';
-  end if;
-end $$;
-
-notify pgrst, 'reload schema';
-
--- After running it, open the app once as a manager. Then check the club is whole:
---   select state, count(*) from vx_roster group by state;
---   select squad_id, count(*) from vx_roster where state='deleted' group by squad_id;
+-- Two files creating the SAME table name with DIFFERENT columns is a trap with no upside, so the
+-- DDL is removed from this one and there is now a single source of truth.
+--
+-- The rationale for rows over one document is unchanged and worth keeping:
+--
+--   Every addition, edit and removal the club made used to live in ONE club_state document
+--   (vx_roster_edits). The last device to write anything replaced every other device's work,
+--   silently — which is how 304 swimmers became 317 overnight. A row keyed on squad AND swimmer
+--   ("junior::sw_12") means Sameh editing a Junior and Mary editing a Senior A write different
+--   rows and cannot overwrite each other. A move is a removal from one squad and an addition to
+--   another, so both halves exist at once — which is why the key carries the squad, not only the
+--   swimmer, and why the row carries `deleted` and `added` rather than a single state.
+--
+-- To check the live club (read-only), the columns that actually exist are added/deleted:
+--   select added, deleted, count(*) from vx_roster group by 1, 2;
+--   select squad_id, count(*) from vx_roster where deleted group by squad_id;
