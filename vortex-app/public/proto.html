@@ -888,8 +888,18 @@ if ('serviceWorker' in navigator) {
   // stays, and what changes is that sending it is a MERGE rather than a replacement:
   //
   //   deleted  union   — a deletion is never dropped by someone who had not heard about it
+  //   removed  union   — a swimmer deleted from the club stays deleted, in every squad's added
   //   added    union    (by id, so the same swimmer added twice is still one swimmer)
   //   edits    per swimmer, this device wins — the field a coach just typed is the current one
+  //
+  // `removed` is the deletion `deleted` cannot express. A swimmer the club ADDED lives only in
+  // `added`, keyed under a squad, and deleting them used to mean removing them from that array and
+  // nothing more — no tombstone at all. So the union above put them straight back the moment it
+  // met a copy that had not heard: another coach's phone, or the database's own copy from before
+  // the delete. The child returned, the delete looked like it never saved, and the two coaches
+  // this club runs on lost each other's deletions the same way they once lost each other's moves.
+  // A `removed` id is squad-independent — a delete is gone from everywhere, not from one roster —
+  // and sticky, exactly like `deleted`: whoever has heard about it holds it for the club.
   //
   // The one thing a union cannot express is an un-delete, which would be undone by the next
   // device to send. Putting a swimmer back is rare, recoverable in seconds, and done through Add;
@@ -910,7 +920,7 @@ if ('serviceWorker' in navigator) {
     if(!mine || typeof mine!=="object") return theirs;
     // If either side is not the overlay shape, merging is guesswork. Send what this device has.
     if(!_rosterShaped(mine) || !_rosterShaped(theirs)) return mine;
-    var out={ edits:{}, deleted:{}, added:{} };
+    var out={ edits:{}, deleted:{}, added:{}, removed:{} };
     var side=[theirs, mine];   // mine second, so mine wins where they disagree
     side.forEach(function(e){
       var d=(e && e.deleted) || {};
@@ -918,6 +928,8 @@ if ('serviceWorker' in navigator) {
         out.deleted[sq]=out.deleted[sq]||{};
         Object.keys(d[sq]||{}).forEach(function(sw){ if(d[sq][sw]) out.deleted[sq][sw]=true; });
       });
+      var rm=(e && e.removed) || {};
+      Object.keys(rm).forEach(function(id){ if(rm[id]) out.removed[id]=true; });
       var ed=(e && e.edits) || {};
       Object.keys(ed).forEach(function(sq){
         out.edits[sq]=out.edits[sq]||{};
@@ -996,6 +1008,13 @@ if ('serviceWorker' in navigator) {
       out.added[sq]=(out.added[sq]||[]).filter(function(sw){
         return !sw || !sw.id || home[sw.id].sq===sq;
       });
+    });
+    // A swimmer the club deleted is dropped from every squad's added list, so the document that
+    // goes back up carries no resurrected copy for the next device to pull. The tombstone stays in
+    // out.removed, which is what keeps them gone — clearing the entries without it would let the
+    // very next merge union them back.
+    Object.keys(out.added).forEach(function(sq){
+      out.added[sq]=(out.added[sq]||[]).filter(function(sw){ return !sw || !sw.id || !out.removed[sw.id]; });
     });
     return out;
   }
@@ -1182,8 +1201,46 @@ if ('serviceWorker' in navigator) {
       })
       .catch(function(){ return v; });   // unreadable: send what we have, which is today's behaviour
   }
+  // The T-pace log is added to by every coach, from their own phone, and it was going up whole.
+  //
+  // Coach Chafik tested Senior B and logged every one on his device. They saved there and he could
+  // see them. They are not in the club's copy, because vx_tpace is a last-writer-wins document:
+  // another phone holding six trials pushed its whole copy afterwards and the rest stopped
+  // existing. One of his did survive — the 8 September trial that happened to be the newest push.
+  //
+  // This is the same fault vx_event_requests had and the same remedy: a trial the database holds
+  // and this device has never seen is KEPT, and a trial this device has is written as this device
+  // has it. Two coaches adding to one log then cost each other nothing.
+  function _tpaceMergedWith(v){
+    return fetch(REST + "?select=value&key=eq.vx_tpace", { headers: dyn(), cache: "no-store" })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(rows){
+        var theirs=(rows && rows[0] && rows[0].value);
+        if(!theirs || typeof theirs!=="object" || Array.isArray(theirs)) return v;
+        var mine=null; try{ mine=JSON.parse(v); }catch(e){ return v; }
+        if(!mine || typeof mine!=="object" || Array.isArray(mine)) return v;
+        // Trials carry no id, so two are the same record when every measured field matches.
+        var sig=function(t){ return [t&&t.date, t&&t.type, t&&t.sec, t&&t.dist, t&&t.tpace100].join("|"); };
+        var out={}, kept=0;
+        Object.keys(mine).forEach(function(sw){ out[sw]=(mine[sw]||[]).slice(); });
+        Object.keys(theirs).forEach(function(sw){
+          var t=theirs[sw]||[], m=out[sw]||[];
+          if(!Array.isArray(t)) return;
+          var have={}; m.forEach(function(r){ have[sig(r)]=true; });
+          var unseen=t.filter(function(r){ return r && !have[sig(r)]; });
+          if(unseen.length){ kept+=unseen.length;
+            out[sw]=m.concat(unseen).sort(function(a,b){
+              return String((b||{}).date||"").localeCompare(String((a||{}).date||"")); }); }
+        });
+        if(!kept) return v;
+        try{ console.info("vx vx_tpace: keeping "+kept+" trial(s) this device had not heard about"); }catch(e){}
+        return JSON.stringify(out);
+      })
+      .catch(function(){ return v; });   // unreadable: send what we have, which is today's behaviour
+  }
   function _mergedForSend(k, v){
     if(k==="vx_roster_edits") return _rosterMergedWith(v);
+    if(k==="vx_tpace") return _tpaceMergedWith(v);
     if(ADD_ONLY_KEYS.indexOf(k)>=0) return _famDevice() ? _addOnlyMergedWith(k, v) : _rowListMergedWith(k, v);
     return Promise.resolve(v);
   }
@@ -2266,7 +2323,15 @@ if ('serviceWorker' in navigator) {
        colours, badges and pattern (no shrinking, no background stripping).
        The app is display:none (NOT visibility:hidden) so it takes up no layout and
        can't push blank pages after the sheet. */
-    html, body{background:#fff !important;margin:0 !important;padding:0 !important;height:auto !important}
+    /* Pin the print root to the printable width. iPad/iPhone Safari scales a printout to fit
+       the page's LAYOUT viewport, not the visible sheet — and the app's viewport is
+       width=device-width. On an iPad that viewport is ~820–1024px, wider than the 186mm sheet,
+       so Safari fits the whole wide viewport onto the paper and the sheet lands in a column with
+       blank paper down the right — "not full". A phone's narrow viewport (the sheet overflows it
+       and is scaled up to fill) and a laptop (no mobile shrink-to-fit) both already look full.
+       Forcing the root to the A4 printable width (210mm − 2×12mm @page margin = 186mm) makes that
+       viewport exactly the sheet's own width on every device, so the sheet fills the page. */
+    html, body{background:#fff !important;margin:0 !important;padding:0 !important;height:auto !important;width:186mm !important}
     body > *{display:none !important}
     body > #vx-print-sheet{display:block !important;position:static !important;margin:0 !important;padding:20px !important}
     #vx-print-sheet *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important}
@@ -5210,6 +5275,235 @@ if ('serviceWorker' in navigator) {
                     </sc-if>
                   </sc-if>
 
+                  <sc-if value="{{ toolStopwatch }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;flex-direction:column;gap:13px">
+                      <!-- One swimmer, or a whole lane sent off in intervals. -->
+                      <div style="display:flex;gap:6px;background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:4px">
+                        <button onclick="{{ onSwModeOne }}" style="flex:1;padding:9px 4px;border-radius:9px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:11.5px;background:{{ modeOneBg }};color:{{ modeOneFg }}">One swimmer</button>
+                        <button onclick="{{ onSwModeMany }}" style="flex:1;padding:9px 4px;border-radius:9px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:11.5px;background:{{ modeManyBg }};color:{{ modeManyFg }}">Whole lane</button>
+                        <button onclick="{{ onSwModeSet }}" style="flex:1;padding:9px 4px;border-radius:9px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:11.5px;background:{{ modeSetBg }};color:{{ modeSetFg }}">Send-off set</button>
+                      </div>
+                    <sc-if value="{{ swModeOne }}" hint-placeholder-val="{{ true }}">
+                      <!-- Clock face, painted straight onto the ref element. Tapping it, or the
+                           expand button, opens the poolside full-screen display. -->
+                      <div style="position:relative;overflow:hidden;background:radial-gradient(135% 120% at 88% -12%, rgba(6,126,234,.5) 0%, rgba(34,33,215,.22) 40%, transparent 70%), #0A0F1A;color:#fff;border-radius:20px;padding:26px 18px;text-align:center">
+                        <div style="position:absolute;inset:0;background:url('assets/pattern-transparent.png') right top/180px auto no-repeat;opacity:.22;pointer-events:none"></div>
+                        <button onclick="{{ onSwtFsEnter }}" style="position:absolute;top:12px;right:12px;z-index:2;width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.14);border:none;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer" title="Full screen for poolside"><i data-lucide="maximize-2" style="width:16px;height:16px"></i></button>
+                        <p style="position:relative;z-index:1;margin:0;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.55);font-weight:700">{{ swtStatusLabel }}</p>
+                        <div onclick="{{ onSwtFsEnter }}" ref="{{ onSwtMount }}" data-swtclock="tool" style="position:relative;z-index:1;display:inline-block;white-space:nowrap;max-width:100%;font-family:var(--font-mono);font-size:clamp(58px, 18vw, 92px);line-height:1.02;font-weight:800;letter-spacing:-.03em;margin:12px 0 4px;cursor:pointer">0.00</div>
+                        <p style="position:relative;z-index:1;margin:0;font-size:10.5px;color:rgba(255,255,255,.45)">min : sec . hundredths</p>
+                      </div>
+                      <!-- Primary controls: Start/Pause + Sound + Reset on top, then a big full-width
+                           Lap. Lap is the tap made at every wall, over and over, so it is by far the
+                           largest target — hard to miss with a wet thumb poolside. -->
+                      <div style="display:flex;flex-direction:column;gap:10px">
+                        <div style="display:flex;gap:10px">
+                          <button onclick="{{ onSwtToggle }}" style="flex:1;height:54px;border-radius:15px;background:#0A0F1A;border:none;cursor:pointer;color:#fff;font-family:inherit;font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px"><i data-vx-icon="{{ swtBtnIcon }}" style="width:20px;height:20px"></i>{{ swtBtnLabel }}</button>
+                          <button onclick="{{ onSwtSoundToggle }}" style="flex:none;width:54px;height:54px;border-radius:15px;background:#fff;border:1px solid #E5E9F0;cursor:pointer;color:#0C1116;display:flex;align-items:center;justify-content:center" title="Start beep on/off"><i data-vx-icon="{{ swtSoundIcon }}" style="width:20px;height:20px"></i></button>
+                          <button onclick="{{ onSwtReset }}" style="flex:none;width:54px;height:54px;border-radius:15px;background:#fff;border:1px solid #E5E9F0;cursor:pointer;color:#0C1116;display:flex;align-items:center;justify-content:center"><i data-lucide="rotate-ccw" style="width:20px;height:20px"></i></button>
+                        </div>
+                        <button onclick="{{ onSwtLap }}" style="width:100%;height:88px;border-radius:18px;background:linear-gradient(135deg,#067EEA 0%,#2221D7 100%);border:none;cursor:pointer;color:#fff;font-family:inherit;font-weight:800;font-size:24px;display:flex;align-items:center;justify-content:center;gap:12px;box-shadow:0 10px 24px rgba(34,33,215,.32)"><i data-lucide="flag" style="width:28px;height:28px"></i>Lap</button>
+                        <button onclick="{{ onSwtFsEnter }}" style="width:100%;height:46px;border-radius:14px;background:#fff;border:1px solid #E5E9F0;cursor:pointer;color:#0C1116;font-family:inherit;font-weight:700;font-size:13.5px;display:flex;align-items:center;justify-content:center;gap:8px"><i data-lucide="maximize-2" style="width:17px;height:17px"></i>Full screen for poolside</button>
+                      </div>
+                      <!-- Stroke counter for the current length -->
+                      <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:12px 14px;box-shadow:0 1px 4px rgba(11,20,40,.04);display:flex;align-items:center;justify-content:space-between">
+                        <span><span style="display:block;font-size:13px;font-weight:700;color:#0C1116">Strokes this length</span><span style="display:block;font-size:10.5px;color:#9AA2B4">Tallied onto the next lap you record</span></span>
+                        <span style="display:flex;align-items:center;gap:12px">
+                          <button onclick="{{ onSwtStrokeMinus }}" style="width:36px;height:36px;border-radius:999px;border:1px solid #E5E9F0;background:#fff;color:#0C1116;font-size:20px;font-weight:700;line-height:1;cursor:pointer;padding:0">−</button>
+                          <span style="font-family:var(--font-mono);font-size:24px;font-weight:800;color:#0C1116;min-width:30px;text-align:center">{{ swtStrokes }}</span>
+                          <button onclick="{{ onSwtStrokePlus }}" style="width:36px;height:36px;border-radius:999px;border:none;background:#067EEA;color:#fff;font-size:20px;font-weight:700;line-height:1;cursor:pointer;padding:0">+</button>
+                        </span>
+                      </div>
+                      <sc-if value="{{ swtHasLaps }}" hint-placeholder-val="{{ false }}">
+                        <!-- Summary -->
+                        <div style="display:flex;gap:8px">
+                          <div style="flex:1;background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:11px;text-align:center"><span style="display:block;font-family:var(--font-mono);font-size:20px;font-weight:800;color:#0C1116">{{ swtStatLaps }}</span><span style="display:block;font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4;margin-top:2px">Laps</span></div>
+                          <div style="flex:1;background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:11px;text-align:center"><span style="display:block;font-family:var(--font-mono);font-size:20px;font-weight:800;color:#0C1116">{{ swtStatStrokes }}</span><span style="display:block;font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4;margin-top:2px">Strokes</span></div>
+                          <div style="flex:1;background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:11px;text-align:center"><span style="display:block;font-family:var(--font-mono);font-size:20px;font-weight:800;color:#0C1116">{{ swtStatAvg }}</span><span style="display:block;font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4;margin-top:2px">Avg / lap</span></div>
+                        </div>
+                        <!-- Laps & splits -->
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;overflow:hidden;box-shadow:0 1px 4px rgba(11,20,40,.04)">
+                          <div style="display:grid;grid-template-columns:38px 1fr 1fr 62px;gap:8px;padding:9px 13px;border-bottom:1px solid #EEF1F5;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4"><span>Lap</span><span>Split</span><span>Total</span><span style="text-align:right">Strokes</span></div>
+                          <sc-for list="{{ swtRows }}" as="r" hint-placeholder-count="4">
+                            <div style="display:grid;grid-template-columns:38px 1fr 1fr 62px;gap:8px;padding:10px 13px;border-bottom:1px solid #F4F6F8;align-items:center">
+                              <span style="font-family:var(--font-mono);font-size:13px;color:#9AA2B4">{{ r.n }}</span>
+                              <span style="font-family:var(--font-mono);font-size:14px;font-weight:700;color:{{ r.splitColor }}">{{ r.split }}<sc-if value="{{ r.tagShow }}" hint-placeholder-val="{{ false }}"><span style="font-family:inherit;font-size:9.5px;font-weight:600;margin-left:5px">{{ r.tag }}</span></sc-if></span>
+                              <span style="font-family:var(--font-mono);font-size:13.5px;color:#3A4152">{{ r.total }}</span>
+                              <span style="font-family:var(--font-mono);font-size:13.5px;color:#0C1116;text-align:right">{{ r.strokes }}</span>
+                            </div>
+                          </sc-for>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ swtNoLaps }}" hint-placeholder-val="{{ true }}">
+                        <div style="text-align:center;padding:22px;color:#9AA2B4;background:#fff;border:1px dashed #E5E9F0;border-radius:14px"><i data-lucide="flag" style="width:26px;height:26px"></i><p style="font-size:12.5px;margin-top:10px;line-height:1.5">Start the clock, then tap <span style="font-weight:700;color:#0C1116">Lap</span> at each wall to capture splits and stroke counts.</p></div>
+                      </sc-if>
+                    </sc-if>
+
+                    <sc-if value="{{ swModeMany }}" hint-placeholder-val="{{ false }}">
+                      <div ref="{{ onSwmMount }}" style="display:flex;flex-direction:column;gap:11px">
+                        <!-- The master clock every swimmer is measured against. -->
+                        <div style="position:relative;overflow:hidden;background:radial-gradient(135% 130% at 88% -12%, rgba(6,126,234,.5) 0%, rgba(34,33,215,.22) 40%, transparent 70%), #0A0F1A;color:#fff;border-radius:18px;padding:16px 16px 14px;text-align:center">
+                          <div style="position:absolute;inset:0;background:url('assets/pattern-transparent.png') right top/150px auto no-repeat;opacity:.2;pointer-events:none"></div>
+                          <p style="position:relative;z-index:1;margin:0;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">Session clock</p>
+                          <div data-swmmaster="1" style="position:relative;z-index:1;font-family:var(--font-mono);font-size:38px;line-height:1.05;font-weight:800;letter-spacing:-.02em;margin:5px 0 3px">{{ swmMasterTime }}</div>
+                          <p style="position:relative;z-index:1;margin:0;font-size:11px;color:rgba(255,255,255,.6)">{{ swmSummary }}</p>
+                        </div>
+                        <!-- Send the next swimmer off. One tap per interval. -->
+                        <button onclick="{{ onSwmStartNext }}" style="width:100%;height:76px;border-radius:18px;background:{{ swmNextBg }};border:none;cursor:pointer;color:#fff;font-family:inherit;font-weight:800;font-size:19px;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 10px 24px rgba(34,33,215,.26)"><i data-lucide="play" style="width:23px;height:23px"></i>{{ swmNextLabel }}</button>
+                        <div style="display:flex;align-items:center;gap:8px">
+                          <div style="flex:1;display:flex;align-items:center;justify-content:space-between;background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:6px 9px">
+                            <button onclick="{{ onSwmCountDec }}" style="width:30px;height:30px;border-radius:8px;border:1px solid #E5E9F0;background:#fff;color:#0C1116;font-size:17px;font-weight:700;line-height:1;cursor:pointer;padding:0">&#8722;</button>
+                            <span style="font-size:12.5px;font-weight:700;color:#0C1116">{{ swmCountLabel }}</span>
+                            <button onclick="{{ onSwmCountInc }}" style="width:30px;height:30px;border-radius:8px;border:none;background:#067EEA;color:#fff;font-size:17px;font-weight:700;line-height:1;cursor:pointer;padding:0">+</button>
+                          </div>
+                          <button onclick="{{ onSwtSoundToggle }}" style="flex:none;width:42px;height:42px;border-radius:12px;background:#fff;border:1px solid #E5E9F0;cursor:pointer;color:#0C1116;display:flex;align-items:center;justify-content:center" title="Start beep on/off"><i data-vx-icon="{{ swtSoundIcon }}" style="width:18px;height:18px"></i></button>
+                          <button onclick="{{ onSwmReset }}" style="flex:none;height:42px;padding:0 13px;border-radius:12px;background:#fff;border:1px solid #E5E9F0;cursor:pointer;color:#0C1116;font-family:inherit;font-weight:700;font-size:12.5px;display:flex;align-items:center;gap:6px"><i data-lucide="rotate-ccw" style="width:15px;height:15px"></i>Reset</button>
+                        </div>
+                        <!-- One row per swimmer: their own clock, their own laps. -->
+                        <sc-for list="{{ swmRows }}" as="r" hint-placeholder-count="6">
+                          <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:10px 12px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
+                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+                              <span style="flex:none;width:25px;height:25px;border-radius:8px;background:#0A0F1A;color:#fff;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:800">{{ r.label }}</span>
+                              <input value="{{ r.name }}" oninput="{{ r.onName }}" placeholder="{{ r.placeholder }}" style="flex:1;min-width:0;border:none;outline:none;background:none;font-family:inherit;font-size:13px;font-weight:700;color:#0C1116;padding:0">
+                              <span style="flex:none;font-size:10px;font-weight:700;border-radius:7px;padding:3px 7px;background:{{ r.statusBg }};color:{{ r.statusFg }}">{{ r.statusText }}</span>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:9px">
+                              <span data-lane="{{ r.id }}" style="flex:1;min-width:0;font-family:var(--font-mono);font-size:31px;font-weight:800;letter-spacing:-.02em;color:{{ r.timeColor }}">{{ r.time }}</span>
+                              <sc-if value="{{ r.showMain }}" hint-placeholder-val="{{ true }}">
+                                <button onclick="{{ r.onMain }}" style="flex:none;min-width:94px;height:54px;border-radius:14px;border:none;cursor:pointer;color:#fff;font-family:inherit;font-weight:800;font-size:16.5px;background:{{ r.mainBg }}">{{ r.mainLabel }}</button>
+                              </sc-if>
+                              <sc-if value="{{ r.showStop }}" hint-placeholder-val="{{ false }}">
+                                <button onclick="{{ r.onStop }}" style="flex:none;width:46px;height:54px;border-radius:14px;background:#fff;border:1px solid #E5E9F0;cursor:pointer;color:#0C1116;display:flex;align-items:center;justify-content:center" title="Finish"><i data-lucide="square" style="width:15px;height:15px"></i></button>
+                              </sc-if>
+                            </div>
+                            <sc-if value="{{ r.hasSplits }}" hint-placeholder-val="{{ false }}">
+                              <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px">
+                                <sc-for list="{{ r.splits }}" as="sp" hint-placeholder-count="3">
+                                  <span style="font-size:11px;font-family:var(--font-mono);font-weight:700;background:#F4F6F8;color:#3A4152;border-radius:7px;padding:3px 7px">{{ sp.n }} {{ sp.t }}</span>
+                                </sc-for>
+                              </div>
+                            </sc-if>
+                          </div>
+                        </sc-for>
+                      </div>
+                    </sc-if>
+
+                    <sc-if value="{{ swModeSet }}" hint-placeholder-val="{{ false }}">
+                      <div ref="{{ onSetMount }}" style="display:flex;flex-direction:column;gap:11px">
+                        <!-- The set, running itself: a signal on every send-off and a rep count. -->
+                        <div style="position:relative;overflow:hidden;background:radial-gradient(135% 130% at 88% -12%, rgba(6,126,234,.5) 0%, rgba(34,33,215,.22) 40%, transparent 70%), #0A0F1A;color:#fff;border-radius:20px;padding:18px 16px 15px;text-align:center">
+                          <div style="position:absolute;inset:0;background:url('assets/pattern-transparent.png') right top/170px auto no-repeat;opacity:.2;pointer-events:none"></div>
+                          <p style="position:relative;z-index:1;margin:0;font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:rgba(255,255,255,.55);font-weight:700">{{ setSummary }}</p>
+                          <div style="position:relative;z-index:1;display:flex;align-items:baseline;justify-content:center;gap:5px;margin:8px 0 2px">
+                            <span data-setrep="1" style="font-family:var(--font-mono);font-size:30px;font-weight:800;color:#fff">{{ setRepInit }}</span>
+                            <span style="font-size:12px;color:rgba(255,255,255,.5);font-weight:700">reps</span>
+                          </div>
+                          <p style="position:relative;z-index:1;margin:6px 0 0;font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:rgba(255,255,255,.45);font-weight:700">Next send-off &#183; <span data-setwho="1" style="color:#22D7D7">{{ setWhoInit }}</span></p>
+                          <div data-setcount="1" style="position:relative;z-index:1;font-family:var(--font-mono);font-size:clamp(56px,17vw,88px);line-height:1.02;font-weight:800;letter-spacing:-.03em;margin:2px 0 6px">{{ setCountInit }}</div>
+                          <div style="position:relative;z-index:1;height:6px;border-radius:3px;background:rgba(255,255,255,.14);overflow:hidden"><div data-setbar="1" style="height:100%;width:0%;background:#22D7D7;border-radius:3px"></div></div>
+                          <p style="position:relative;z-index:1;margin:9px 0 0;font-size:11.5px;color:rgba(255,255,255,.6)">{{ setStatus }} &#183; <span data-settotal="1">{{ setTotalInit }}</span> elapsed &#183; {{ setMetres }}</p>
+                        </div>
+                        <div style="display:flex;gap:10px">
+                          <button onclick="{{ onSetToggle }}" style="flex:1;height:62px;border-radius:16px;background:linear-gradient(135deg,#067EEA 0%,#2221D7 100%);border:none;cursor:pointer;color:#fff;font-family:inherit;font-weight:800;font-size:17px;display:flex;align-items:center;justify-content:center;gap:9px;box-shadow:0 10px 24px rgba(34,33,215,.28)"><i data-vx-icon="{{ setBtnIcon }}" style="width:21px;height:21px"></i>{{ setBtnLabel }}</button>
+                          <button onclick="{{ onSetReset }}" style="flex:none;width:62px;height:62px;border-radius:16px;background:#fff;border:1px solid #E5E9F0;cursor:pointer;color:#0C1116;display:flex;align-items:center;justify-content:center"><i data-lucide="rotate-ccw" style="width:20px;height:20px"></i></button>
+                        </div>
+                        <!-- The lane, swum on a stagger: each swimmer keeps their own send-off cycle -->
+                        <sc-if value="{{ setHasLane }}" hint-placeholder-val="{{ false }}">
+                          <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:10px 12px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
+                            <p style="margin:0 0 8px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4">In the lane</p>
+                            <div style="display:flex;flex-direction:column;gap:5px">
+                              <sc-for list="{{ setLaneRows }}" as="ln" hint-placeholder-count="4">
+                                <div style="display:flex;align-items:center;gap:9px">
+                                  <span style="flex:none;width:24px;height:24px;border-radius:7px;background:#0A0F1A;color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800">{{ ln.label }}</span>
+                                  <span style="flex:none;width:36px;font-size:10.5px;color:#9AA2B4;font-weight:700">+{{ ln.offLabel }}</span>
+                                  <span data-setswim="{{ ln.idx }}" style="flex:1;font-family:var(--font-mono);font-size:19px;font-weight:800;color:#0C1116">{{ ln.time }}</span>
+                                  <span data-setswimrep="{{ ln.idx }}" style="flex:none;font-size:10.5px;font-weight:700;color:#067EEA;background:rgba(6,126,234,.1);border-radius:6px;padding:2px 7px">{{ ln.rep }}</span>
+                                </div>
+                              </sc-for>
+                            </div>
+                          </div>
+                        </sc-if>
+                        <!-- The set, from the plan the coach already wrote -->
+                        <button onclick="{{ onSetPlanToggle }}" style="width:100%;height:44px;border-radius:12px;background:#fff;border:1px solid #E5E9F0;cursor:pointer;color:#0C1116;font-family:inherit;font-weight:700;font-size:12.5px;display:flex;align-items:center;justify-content:center;gap:7px"><i data-lucide="clipboard-check" style="width:16px;height:16px"></i>{{ setPlanBtnLabel }}</button>
+                        <sc-if value="{{ setPlanShow }}" hint-placeholder-val="{{ false }}">
+                          <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:10px;box-shadow:0 1px 4px rgba(11,20,40,.04);display:flex;flex-direction:column;gap:6px">
+                            <sc-if value="{{ setPlanEmpty }}" hint-placeholder-val="{{ false }}">
+                              <p style="margin:0;padding:10px;text-align:center;font-size:12px;color:#9AA2B4;line-height:1.5">No sets in this squad's plan yet.<br>Write the session in the Plans tab and it will show up here.</p>
+                            </sc-if>
+                            <sc-for list="{{ setPlanRows }}" as="ps" hint-placeholder-count="4">
+                              <button onclick="{{ ps.onClick }}" style="display:block;width:100%;text-align:left;background:#F6F7F9;border:1px solid #E5E9F0;border-radius:11px;padding:9px 11px;cursor:pointer;font-family:inherit">
+                                <span style="display:block;font-size:13px;font-weight:800;color:#0C1116">{{ ps.title }}</span>
+                                <span style="display:block;font-size:11px;color:#7A8296;margin-top:2px">{{ ps.sub }}</span>
+                              </button>
+                            </sc-for>
+                          </div>
+                        </sc-if>
+                        <!-- The set itself -->
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:12px;box-shadow:0 1px 4px rgba(11,20,40,.04);display:flex;flex-direction:column;gap:11px">
+                          <div style="display:flex;align-items:center;gap:10px">
+                            <span style="flex:none;width:74px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4">Reps</span>
+                            <button onclick="{{ onSetRepsDec }}" style="width:34px;height:34px;border-radius:9px;border:1px solid #E5E9F0;background:#fff;color:#0C1116;font-size:18px;font-weight:700;line-height:1;cursor:pointer;padding:0">&#8722;</button>
+                            <input value="{{ setRepsLabel }}" oninput="{{ onSetRepsInput }}" inputmode="numeric" style="flex:1;min-width:0;text-align:center;border:1px solid #E5E9F0;border-radius:9px;padding:7px;font-family:var(--font-mono);font-size:16px;font-weight:800;color:#0C1116;outline:none">
+                            <button onclick="{{ onSetRepsInc }}" style="width:34px;height:34px;border-radius:9px;border:none;background:#067EEA;color:#fff;font-size:18px;font-weight:700;line-height:1;cursor:pointer;padding:0">+</button>
+                          </div>
+                          <div>
+                            <span style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4;margin-bottom:6px">Distance</span>
+                            <div style="display:flex;flex-wrap:wrap;gap:6px">
+                              <sc-for list="{{ setDistChips }}" as="d" hint-placeholder-count="6">
+                                <button onclick="{{ d.onClick }}" style="flex:1;min-width:56px;padding:8px 4px;border-radius:9px;border:1px solid #E5E9F0;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;background:{{ d.bg }};color:{{ d.fg }}">{{ d.label }}</button>
+                              </sc-for>
+                            </div>
+                          </div>
+                          <div style="display:flex;align-items:center;gap:10px">
+                            <span style="flex:none;width:74px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4">Send-off</span>
+                            <button onclick="{{ onSetSendDec }}" style="width:34px;height:34px;border-radius:9px;border:1px solid #E5E9F0;background:#fff;color:#0C1116;font-size:18px;font-weight:700;line-height:1;cursor:pointer;padding:0">&#8722;</button>
+                            <span style="flex:1;text-align:center;font-family:var(--font-mono);font-size:17px;font-weight:800;color:#0C1116">{{ setSendLabel }}</span>
+                            <button onclick="{{ onSetSendInc }}" style="width:34px;height:34px;border-radius:9px;border:none;background:#067EEA;color:#fff;font-size:18px;font-weight:700;line-height:1;cursor:pointer;padding:0">+</button>
+                          </div>
+                          <div style="display:flex;align-items:center;gap:10px">
+                            <span style="flex:none;width:74px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4">Extra rest</span>
+                            <button onclick="{{ onSetRestDec }}" style="width:34px;height:34px;border-radius:9px;border:1px solid #E5E9F0;background:#fff;color:#0C1116;font-size:18px;font-weight:700;line-height:1;cursor:pointer;padding:0">&#8722;</button>
+                            <span style="flex:1;text-align:center;font-family:var(--font-mono);font-size:17px;font-weight:800;color:#0C1116">{{ setRestLabel }}</span>
+                            <button onclick="{{ onSetRestInc }}" style="width:34px;height:34px;border-radius:9px;border:none;background:#067EEA;color:#fff;font-size:18px;font-weight:700;line-height:1;cursor:pointer;padding:0">+</button>
+                          </div>
+                          <div style="display:flex;align-items:center;gap:10px">
+                            <span style="flex:none;width:74px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4">Swimmers</span>
+                            <button onclick="{{ onSetSwimDec }}" style="width:34px;height:34px;border-radius:9px;border:1px solid #E5E9F0;background:#fff;color:#0C1116;font-size:18px;font-weight:700;line-height:1;cursor:pointer;padding:0">&#8722;</button>
+                            <span style="flex:1;text-align:center;font-size:13.5px;font-weight:800;color:#0C1116">{{ setSwimmersLabel }}</span>
+                            <button onclick="{{ onSetSwimInc }}" style="width:34px;height:34px;border-radius:9px;border:none;background:#067EEA;color:#fff;font-size:18px;font-weight:700;line-height:1;cursor:pointer;padding:0">+</button>
+                          </div>
+                          <div style="display:flex;align-items:center;gap:10px">
+                            <span style="flex:none;width:74px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4">Gap</span>
+                            <button onclick="{{ onSetGapDec }}" style="width:34px;height:34px;border-radius:9px;border:1px solid #E5E9F0;background:#fff;color:#0C1116;font-size:18px;font-weight:700;line-height:1;cursor:pointer;padding:0">&#8722;</button>
+                            <span style="flex:1;text-align:center;font-size:13.5px;font-weight:800;color:#0C1116">{{ setGapLabel }}</span>
+                            <button onclick="{{ onSetGapInc }}" style="width:34px;height:34px;border-radius:9px;border:none;background:#067EEA;color:#fff;font-size:18px;font-weight:700;line-height:1;cursor:pointer;padding:0">+</button>
+                          </div>
+                        </div>
+                        <!-- Signal -->
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:12px;box-shadow:0 1px 4px rgba(11,20,40,.04);display:flex;flex-direction:column;gap:10px">
+                          <div>
+                            <span style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4;margin-bottom:6px">Signal</span>
+                            <div style="display:flex;gap:6px">
+                              <sc-for list="{{ setToneChips }}" as="t" hint-placeholder-count="3">
+                                <button onclick="{{ t.onClick }}" style="flex:1;padding:8px 4px;border-radius:9px;border:1px solid #E5E9F0;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;background:{{ t.bg }};color:{{ t.fg }}">{{ t.label }}</button>
+                              </sc-for>
+                            </div>
+                          </div>
+                          <div>
+                            <span style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9AA2B4;margin-bottom:6px">Volume</span>
+                            <div style="display:flex;gap:6px">
+                              <sc-for list="{{ setVolChips }}" as="v" hint-placeholder-count="4">
+                                <button onclick="{{ v.onClick }}" style="flex:1;padding:8px 4px;border-radius:9px;border:1px solid #E5E9F0;cursor:pointer;font-family:inherit;font-weight:700;font-size:12.5px;background:{{ v.bg }};color:{{ v.fg }}">{{ v.label }}</button>
+                              </sc-for>
+                            </div>
+                          </div>
+                          <p style="margin:0;font-size:11px;color:#9AA2B4;line-height:1.45">Every send-off for the whole set is scheduled the moment you start it, so the signals stay exact even if the screen dims. Keep the phone off silent and the volume up.</p>
+                        </div>
+                      </div>
+                    </sc-if>
+                    </div>
+                  </sc-if>
+
                   <sc-if value="{{ toolReview }}" hint-placeholder-val="{{ true }}">
                     <div style="display:flex;flex-direction:column;gap:13px">
                       <div style="display:flex;gap:6px;background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:4px">
@@ -5309,7 +5603,19 @@ if ('serviceWorker' in navigator) {
                       </sc-if>
 
                       <sc-if value="{{ videoHasActive }}" hint-placeholder-val="{{ false }}">
-                        <div style="position:relative;border-radius:16px;overflow:hidden;aspect-ratio:16/9;background:#000;box-shadow:0 8px 22px rgba(11,20,40,.14)" ref="{{ onPlayerMount }}"></div>
+                        <div style="position:relative">
+                          <div style="position:relative;border-radius:16px;overflow:hidden;aspect-ratio:16/9;background:#000;box-shadow:0 8px 22px rgba(11,20,40,.14)" ref="{{ onPlayerMount }}"></div>
+                          <sc-if value="{{ videoCalOn }}" hint-placeholder-val="{{ false }}">
+                            <div onclick="{{ onVideoCalPlace }}" style="position:absolute;inset:0;cursor:crosshair;z-index:6;border-radius:16px;overflow:hidden">
+                              <sc-for list="{{ videoCalMarks }}" as="cm" hint-placeholder-count="3">
+                                <div style="position:absolute;top:0;bottom:0;width:2px;background:var(--vx-warning);left:{{ cm.left }}">
+                                  <span style="position:absolute;top:4px;left:50%;transform:translateX(-50%);font-size:9px;font-weight:800;color:var(--vx-ink);background:var(--vx-warning);padding:1px 4px;border-radius:4px;white-space:nowrap">{{ cm.label }}</span>
+                                </div>
+                              </sc-for>
+                              <div style="position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.62);color:var(--on-brand);font-size:11.5px;font-weight:700;text-align:center;padding:7px">{{ videoCalHint }}</div>
+                            </div>
+                          </sc-if>
+                        </div>
                         <div style="display:flex;align-items:center;justify-content:space-between;margin:0 2px">
                           <span><span style="display:block;font-weight:700;font-size:13.5px;color:#0C1116">{{ activeVideoTitle }}</span><span style="display:block;font-size:11px;color:#7A8296">{{ activeVideoTag }}</span></span>
                           <span style="display:flex;gap:6px">
@@ -5369,6 +5675,28 @@ if ('serviceWorker' in navigator) {
                           </sc-if>
                           <p style="margin:9px 0 0;font-size:10.5px;color:rgba(255,255,255,.4);line-height:1.5">The clock counts from the start signal, so it reads the swimmer's time and not the clip's. Hear the start finds the beep after "take your marks" in the recording itself — check the frame it stops on before you trust it.</p>
                         </div>
+
+                        <sc-if value="{{ videoAutoSplitShow }}" hint-placeholder-val="{{ false }}">
+                          <div class="vx-toolcard">
+                            <div class="vx-toolcard-head">
+                              <span class="vx-toolcard-chip"><i data-lucide="scan-line" style="width:14px;height:14px"></i></span>
+                              <p class="vx-toolcard-title">Auto-split · fixed camera</p>
+                              <span style="margin-left:auto;font-size:9px;font-weight:800;letter-spacing:.08em;color:var(--on-brand);background:var(--vx-warning);padding:2px 6px;border-radius:6px">BETA</span>
+                            </div>
+                            <p style="margin:0 0 10px;font-size:11.5px;color:var(--vx-slate-500);line-height:1.5">Only for a still camera with the lane in frame. Mark where each split line is, then let it read the swimmer's wave crossing each one. A panning or broadcast clip moves the marker every frame — tap those by hand.</p>
+                            <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center">
+                              <button onclick="{{ onVideoCalToggle }}" style="flex:none;background:var(--color-brand);color:var(--on-brand);border:none;border-radius:10px;padding:9px 12px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer">{{ videoCalBtnLabel }}</button>
+                              <span style="font-size:11px;color:var(--vx-slate-300)">{{ videoCalPlacedLabel }}</span>
+                              <sc-if value="{{ videoCalHasLines }}" hint-placeholder-val="{{ false }}">
+                                <button onclick="{{ onVideoCalClear }}" style="flex:none;background:var(--vx-slate-50);color:var(--vx-danger);border:1px solid var(--border-subtle);border-radius:10px;padding:9px 12px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer">Clear</button>
+                              </sc-if>
+                              <button onclick="{{ onVideoAutoSplit }}" style="margin-left:auto;flex:none;background:var(--surface-ink);color:var(--on-brand);border:none;border-radius:10px;padding:9px 13px;font-family:inherit;font-weight:800;font-size:12.5px;cursor:pointer">{{ videoScanBtnLabel }}</button>
+                            </div>
+                            <sc-if value="{{ videoScanMsgShow }}" hint-placeholder-val="{{ false }}">
+                              <p style="margin:9px 0 0;background:var(--vx-slate-50);border-radius:10px;padding:9px 11px;font-size:11.5px;color:var(--vx-slate-700);line-height:1.5">{{ videoScanMsg }}</p>
+                            </sc-if>
+                          </div>
+                        </sc-if>
 
                         <div class="vx-toolcard">
                           <div class="vx-toolcard-head">
@@ -5781,6 +6109,16 @@ if ('serviceWorker' in navigator) {
 
                   <sc-if value="{{ toolFitness }}" hint-placeholder-val="{{ true }}">
                     <div style="display:flex;flex-direction:column;gap:12px">
+                      <sc-if value="{{ authExpiredShow }}" hint-placeholder-val="{{ false }}">
+                        <div style="display:flex;align-items:flex-start;gap:10px;background:#FEF3F2;border:1px solid #FECDCA;border-radius:14px;padding:12px 13px">
+                          <i data-lucide="alert-triangle" style="width:18px;height:18px;color:#B42318;flex:none;margin-top:1px"></i>
+                          <div style="flex:1;min-width:0">
+                            <p style="margin:0;font-size:12.5px;font-weight:800;color:#B42318">Your sign-in has expired</p>
+                            <p style="margin:3px 0 0;font-size:11.5px;color:#912018;line-height:1.45">Anything you save now stays on this device only — it will not reach the club calendar or the swimmers. Sign in again first, then build and save your session.</p>
+                            <button onclick="{{ onReSignIn }}" style="margin-top:9px;background:#B42318;color:#fff;border:none;border-radius:9px;padding:8px 14px;font-family:inherit;font-weight:800;font-size:12px;cursor:pointer">Sign in again</button>
+                          </div>
+                        </div>
+                      </sc-if>
                       <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
                         <input value="{{ fitTitle }}" oninput="{{ onFitTitle }}" style="width:100%;border:none;outline:none;background:none;font-family:inherit;font-size:16px;font-weight:700;color:#0C1116;padding:0;margin-bottom:2px">
                         <p style="margin:0;font-size:11px;color:#9AA2B4">Dryland &amp; conditioning — {{ squad.name }}</p>
@@ -6005,6 +6343,9 @@ if ('serviceWorker' in navigator) {
                       <sc-if value="{{ bdayHasToday }}" hint-placeholder-val="{{ true }}">
                         <div>
                           <p style="margin:0 2px 7px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">Today</p>
+                          <sc-if value="{{ bdaySendAllShow }}" hint-placeholder-val="{{ false }}">
+                            <button onclick="{{ onBdaySendAll }}" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;background:#C89B3C;color:#fff;border:none;border-radius:12px;padding:11px;font-family:inherit;font-weight:800;font-size:12.5px;cursor:pointer;margin-bottom:10px"><i data-lucide="cake" style="width:16px;height:16px"></i>{{ bdaySendAllLabel }}</button>
+                          </sc-if>
                           <div style="display:flex;flex-direction:column;gap:8px">
                             <sc-for list="{{ bdayTodayRows }}" as="bt" hint-placeholder-count="1">
                               <div style="background:linear-gradient(135deg,#FBF0DD,#fff);border:1px solid #F0D9A8;border-radius:14px;padding:13px;box-shadow:0 2px 7px rgba(11,20,40,.05)">
@@ -7624,11 +7965,11 @@ if ('serviceWorker' in navigator) {
                                 <input value="{{ s.editPhone }}" oninput="{{ s.onEditPhone }}" placeholder="Phone / WhatsApp" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
                                 <input value="{{ s.editEmail }}" oninput="{{ s.onEditEmail }}" placeholder="Email" autocapitalize="off" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
                               </div>
-                              <textarea oninput="{{ s.onEditBio }}" placeholder="Bio / qualifications / notes" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none;resize:vertical;min-height:52px">{{ s.editBio }}</textarea>
+                              <textarea value="{{ s.editBio }}" oninput="{{ s.onEditBio }}" placeholder="Bio / qualifications / notes" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none;resize:vertical;min-height:52px"></textarea>
                               <div style="display:flex;gap:7px">
                                 <button onclick="{{ s.onSave }}" style="flex:1;background:var(--vx-blue);color:#fff;border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">Save</button>
                                 <button onclick="{{ s.onCancelEdit }}" style="flex:none;width:38px;background:#F4F6F8;color:#7A8296;border:none;border-radius:9px;cursor:pointer"><i data-lucide="x" style="width:14px;height:14px"></i></button>
-                                <sc-if value="{{ s.isCustom }}" hint-placeholder-val="{{ false }}"><button onclick="{{ s.onDelete }}" style="flex:none;width:38px;background:#FDECEC;color:#E5484D;border:none;border-radius:9px;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="trash-2" style="width:14px;height:14px"></i></button></sc-if>
+                                <sc-if value="{{ s.canRemove }}" hint-placeholder-val="{{ false }}"><button onclick="{{ s.onDelete }}" style="flex:none;width:38px;background:#FDECEC;color:#E5484D;border:none;border-radius:9px;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="trash-2" style="width:14px;height:14px"></i></button></sc-if>
                               </div>
                             </div>
                           </sc-if>
@@ -8033,6 +8374,21 @@ if ('serviceWorker' in navigator) {
                   <button onclick="{{ onClockToggle }}" style="min-width:150px;height:62px;padding:0 26px;border-radius:16px;background:var(--vx-blue);border:none;cursor:pointer;color:#fff;font-family:inherit;font-weight:700;font-size:17px;display:flex;align-items:center;justify-content:center;gap:9px"><i data-vx-icon="{{ clockBtnIcon }}" style="width:22px;height:22px"></i>{{ clockBtnLabel }}</button>
                   <button onclick="{{ onClockReset }}" style="width:62px;height:62px;border-radius:16px;background:rgba(255,255,255,.1);border:none;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center"><i data-lucide="rotate-ccw" style="width:24px;height:24px"></i></button>
                   <button onclick="{{ onClockNext }}" style="width:62px;height:62px;border-radius:16px;background:rgba(255,255,255,.1);border:none;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center"><i data-lucide="skip-forward" style="width:24px;height:24px"></i></button>
+                </div>
+              </div>
+            </sc-if>
+            <sc-if value="{{ swtFs }}" hint-placeholder-val="{{ false }}">
+              <div class="vx-screen" style="position:fixed;inset:0;z-index:120;overflow:hidden;background:radial-gradient(120% 90% at 85% -8%, rgba(6,126,234,.45) 0%, rgba(34,33,215,.2) 38%, transparent 66%), #0A0F1A;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:max(env(safe-area-inset-top),18px) max(env(safe-area-inset-right),18px) max(env(safe-area-inset-bottom),18px) max(env(safe-area-inset-left),18px)">
+                <div style="position:absolute;inset:0;background:url('assets/pattern-transparent.png') right top/40vh auto no-repeat;opacity:.18;pointer-events:none"></div>
+                <button onclick="{{ onSwtFsExit }}" style="position:absolute;top:calc(env(safe-area-inset-top) + 12px);right:16px;width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,.14);border:none;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2"><i data-lucide="minimize-2" style="width:20px;height:20px"></i></button>
+                <button onclick="{{ onSwtSoundToggle }}" style="position:absolute;top:calc(env(safe-area-inset-top) + 12px);left:16px;width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,.14);border:none;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2" title="Start beep on/off"><i data-vx-icon="{{ swtSoundIcon }}" style="width:20px;height:20px"></i></button>
+                <p style="position:relative;z-index:1;margin:0 0 2px;font-size:clamp(12px,2vh,16px);letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.55);font-weight:700;text-align:center">{{ swtStatusLabel }}</p>
+                <div ref="{{ onSwtFsMount }}" data-swtclock="fs" style="position:relative;z-index:1;display:inline-block;white-space:nowrap;max-width:100%;font-family:var(--font-mono);font-size:min(40vw,60vh);line-height:.9;font-weight:800;color:#fff;letter-spacing:-.02em">0.00</div>
+                <p style="position:relative;z-index:1;margin:8px 0 0;font-size:clamp(13px,2.2vh,20px);color:rgba(255,255,255,.7);font-weight:600;text-align:center">{{ swtFsSub }}</p>
+                <div style="position:relative;z-index:1;display:flex;gap:clamp(10px,2vw,20px);margin-top:clamp(16px,4vh,40px);align-items:center;flex-wrap:wrap;justify-content:center">
+                  <button onclick="{{ onSwtToggle }}" style="min-width:clamp(112px,16vw,190px);height:clamp(50px,8vh,78px);padding:0 clamp(18px,2.5vw,30px);border-radius:16px;background:#111826;border:1px solid rgba(255,255,255,.16);cursor:pointer;color:#fff;font-family:inherit;font-weight:700;font-size:clamp(15px,2.2vh,20px);display:flex;align-items:center;justify-content:center;gap:9px"><i data-vx-icon="{{ swtBtnIcon }}" style="width:clamp(20px,2.6vh,26px);height:clamp(20px,2.6vh,26px)"></i>{{ swtBtnLabel }}</button>
+                  <button onclick="{{ onSwtLap }}" style="min-width:clamp(200px,32vw,380px);height:clamp(66px,11vh,108px);padding:0 clamp(30px,4vw,52px);border-radius:20px;background:linear-gradient(135deg,#067EEA 0%,#2221D7 100%);border:none;cursor:pointer;color:#fff;font-family:inherit;font-weight:800;font-size:clamp(24px,3.6vh,38px);display:flex;align-items:center;justify-content:center;gap:12px;box-shadow:0 12px 30px rgba(34,33,215,.45)"><i data-lucide="flag" style="width:clamp(26px,3.6vh,40px);height:clamp(26px,3.6vh,40px)"></i>Lap</button>
+                  <button onclick="{{ onSwtReset }}" style="width:clamp(50px,8vh,78px);height:clamp(50px,8vh,78px);border-radius:16px;background:rgba(255,255,255,.1);border:none;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center"><i data-lucide="rotate-ccw" style="width:clamp(22px,3vh,30px);height:clamp(22px,3vh,30px)"></i></button>
                 </div>
               </div>
             </sc-if>
@@ -8726,8 +9082,8 @@ class Component extends DCLogic {
       {id:'reda', user:'reda', label:'Coach Reda', role:'Junior coach', accent:'#2A63E0', photo:'', initials:'CR', squadId:'junior', email:'reda@vortexswimmingclub.com'},
       {id:'chafik', user:'chafik', label:'Coach Chafik', role:'Senior B coach', accent:'#2733D6', photo:'assets/coach-chafik.jpg', initials:'CC', squadId:'seniorb', email:'chafik@vortexswimmingclub.com'},
       {id:'baisher', user:'baisher', label:'Coach Baisher', role:'Senior A coach', accent:'#3B23C7', photo:'', initials:'CB', squadId:'seniora', email:'baisher@vortexswimmingclub.com'},
-      {id:'wassim', user:'wassim', label:'Coach Wassim', role:'Vortex B coach', accent:'#5D22CF', photo:'', initials:'CW', squadId:'vortexb', email:'wassim@vortexswimmingclub.com'},
-      {id:'mahmoud', user:'mahmoud', label:'Coach Mahmoud', role:'Vortex A coach', accent:'#8A22D5', photo:'assets/coach-mahmoud.jpg', initials:'CM', squadId:'vortexa', email:'mahmoud@vortexswimmingclub.com'},
+      {id:'wassim', user:'wassim', label:'Coach Wassim', role:'Vortex LD coach', accent:'#5D22CF', photo:'', initials:'CW', squadId:'vortexb', email:'wassim@vortexswimmingclub.com'},
+      {id:'mahmoud', user:'mahmoud', label:'Coach Mahmoud', role:'Vortex SD coach', accent:'#8A22D5', photo:'assets/coach-mahmoud.jpg', initials:'CM', squadId:'vortexa', email:'mahmoud@vortexswimmingclub.com'},
       {id:'martin', user:'martin', label:'Coach Martin', role:'Legend coach', accent:'#1B22E4', photo:'assets/coach-martin.jpg', initials:'CM', squadId:'legend', email:'martin@vortexswimmingclub.com'},
     ];
     try { this.customStaff = JSON.parse(localStorage.getItem('vx_staff_accounts')||'[]'); } catch(e){ this.customStaff = []; }
@@ -8745,8 +9101,8 @@ class Component extends DCLogic {
       {id:'junior', name:'Junior', ages:'11–12', count:70, coach:'Coach Reda', accent:'#2A63E0', glow:'rgba(42,99,224,.35)', photo:'', short:'Jr'},
       {id:'seniorb', name:'Senior B', ages:'13', count:23, coach:'Coach Chafik', accent:'#2733D6', glow:'rgba(39,51,214,.35)', photo:'assets/coach-chafik.jpg', short:'SnB'},
       {id:'seniora', name:'Senior A', ages:'14', count:24, coach:'Coach Baisher', accent:'#3B23C7', glow:'rgba(59,35,199,.35)', photo:'', short:'SnA'},
-      {id:'vortexb', name:'Vortex B', ages:'15', count:14, coach:'Coach Wassim · asst. Ahmed Abdelwahab', accent:'#5D22CF', glow:'rgba(93,34,207,.35)', photo:'', short:'VxB'},
-      {id:'vortexa', name:'Vortex A', ages:'16', count:15, coach:'Coach Mahmoud · asst. Ahmed Abdelwahab', accent:'#8A22D5', glow:'rgba(138,34,213,.35)', photo:'assets/coach-mahmoud.jpg', short:'VxA'},
+      {id:'vortexb', name:'Vortex LD', ages:'15', count:14, coach:'Coach Wassim · asst. Ahmed Abdelwahab', accent:'#5D22CF', glow:'rgba(93,34,207,.35)', photo:'', short:'VxLD'},
+      {id:'vortexa', name:'Vortex SD', ages:'16', count:15, coach:'Coach Mahmoud · asst. Ahmed Abdelwahab', accent:'#8A22D5', glow:'rgba(138,34,213,.35)', photo:'assets/coach-mahmoud.jpg', short:'VxSD'},
       {id:'legend', name:'Legend', ages:'17+', count:17, coach:'Coach Martin', accent:'#1B22E4', glow:'rgba(27,34,228,.4)', photo:'assets/coach-martin.jpg', short:'Lgd'},
     ];
     // {ovr:{id:{name,ages,accent,short}}, added:[squad], removed:{id:true}, order:[id]}
@@ -8829,7 +9185,7 @@ class Component extends DCLogic {
     const _savedPlans=this._loadPlans(); const _plans={};
     this.squads.forEach(sq=>{ _plans[sq.id]= _savedPlans[sq.id] || this.makeDefaultPlan(); });
 
-    this.rosterEdits=this._loadJSON('vx_roster_edits', {edits:{}, deleted:{}, added:{}});
+    this.rosterEdits=this._loadJSON('vx_roster_edits', {edits:{}, deleted:{}, added:{}, removed:{}});
     // One document, or one row per swimmer: the club's own answer, pulled like any other key.
     this.rosterMode=this._loadJSON('vx_roster_mode', null);
     // Which rows this device has already put in the table, kept across reloads.
@@ -9028,6 +9384,7 @@ class Component extends DCLogic {
       videoActiveId:null, videoUrlDraft:'', videoTitleDraft:'', videoTagDraft:'', videoAddOpen:false, videoRate:1, videoNoteDraft:'', videoCurT:0, videoDur:0,
       videoCompareIds:[], videoCompareMsg:'', videoFolderOpen:true, videoFolderQ:'',
       videoStartBusy:false, videoStartMsg:'', videoStartCands:[], videoStartPick:0,
+      videoCalMode:false, videoScanBusy:false, videoScanMsg:'', videoScanPct:0,
       videoSwIdx:0, videoSwMsg:'', videoCountMark:null, videoSwPickOpen:false, videoSwQuery:'',
       videoAiOut:null, videoAiLoading:false, videoAiErr:'',
       fitAddOpen:false, fitBusy:null, fitMediaMsg:'', inbodyMode:'pdf', inbodySwId:'', inbodyQuery:'', inbodyPdfBusy:false, inbodyPdfMsg:'', inbodyQrOpen:false, inbodyQrMsg:'', inbodyDraft:null,
@@ -9038,7 +9395,7 @@ class Component extends DCLogic {
       compose:'', composeTag:'set', composeImage:'', composeEmojiOpen:false,
       feed:[
         {id:'f1', author:'Coach Baisher', role:'Senior A', initials:'CB', photo:'', tag:'Win', text:'Senior A crushed the 4×100 free relay this morning — new squad best by 2.1s. Proud of the effort.', image:'assets/photo-competition.jpg', likes:24, comments:6, time:'2h', liked:false},
-        {id:'f2', author:'Coach Mahmoud', role:'Vortex A', initials:'CM', photo:'assets/coach-mahmoud.jpg', tag:'Set', text:'Tonight: 3×(8×50 @ :45) descend 1-4, 5-8. EN2 → SP1. Bring your fast legs.', image:'', likes:11, comments:3, time:'5h', liked:false},
+        {id:'f2', author:'Coach Mahmoud', role:'Vortex SD', initials:'CM', photo:'assets/coach-mahmoud.jpg', tag:'Set', text:'Tonight: 3×(8×50 @ :45) descend 1-4, 5-8. EN2 → SP1. Bring your fast legs.', image:'', likes:11, comments:3, time:'5h', liked:false},
         {id:'f3', author:'Ahmed Mamo', role:'Technical Director', initials:'AM', photo:'assets/director-ahmed.jpg', tag:'Notice', text:'Entry deadline for the Nautilus Invitational is Thursday. Coaches, confirm your squad lists in Meets.', image:'', likes:38, comments:9, time:'1d', liked:false},
       ],
       aiKind:'season', aiPrompt:'', aiOut:null, aiLoading:false, aiErr:'',
@@ -10602,11 +10959,12 @@ class Component extends DCLogic {
     // written, or restored by hand, can be missing one — and `ed.deleted[sq.id]` on a missing
     // `deleted` is not a wrong roster, it is a white screen on every device.
     const _e = this.rosterEdits;
-    const ed = { edits:{}, deleted:{}, added:{},
+    const ed = { edits:{}, deleted:{}, added:{}, removed:{},
                  ...((_e && typeof _e==='object' && !Array.isArray(_e)) ? _e : {}) };
     if(!ed.edits   || typeof ed.edits   !== 'object') ed.edits   = {};
     if(!ed.deleted || typeof ed.deleted !== 'object') ed.deleted = {};
     if(!ed.added   || typeof ed.added   !== 'object') ed.added   = {};
+    if(!ed.removed || typeof ed.removed !== 'object') ed.removed = {};
     const anywhere = this._patchAnywhere(ed);
     // The swimmer's current squad wins field by field; a squad they have left only fills what is
     // still blank, so a date typed today is never replaced by one typed before the move.
@@ -10637,6 +10995,7 @@ class Component extends DCLogic {
     this.squads.forEach(sq=>{
       (ed.added[sq.id]||[]).forEach(sw=>{
         if(!sw || !sw.id) return;
+        if(ed.removed[sw.id]) return;          // deleted from the club — never has a home squad
         const at=(typeof sw.movedAt==='number')?sw.movedAt:0;
         const left=!!(ed.deleted[sq.id]||{})[sw.id];
         const rank=[at, left?0:1];
@@ -10647,7 +11006,7 @@ class Component extends DCLogic {
     });
     const merged={};
     this.squads.forEach(sq=>{
-      const arr=(base[sq.id]||[]).filter(sw=>!(ed.deleted[sq.id]||{})[sw.id]).map(sw=>{
+      const arr=(base[sq.id]||[]).filter(sw=>!(ed.deleted[sq.id]||{})[sw.id] && !ed.removed[sw.id]).map(sw=>{
         const patch=patchFor(sq.id, sw.id);
         if(!patch) return sw;
         const nsw={...sw, ...patch};
@@ -10657,7 +11016,8 @@ class Component extends DCLogic {
       // A swimmer the club added carries their whole record here, but a date typed for them
       // before a move is filed in `edits` under the squad they left — same gap, other half.
       const extra=(ed.added[sq.id]||[])
-        .filter(sw=>!sw || !sw.id || (addedHome[sw.id]||{}).sq===sq.id)
+        .filter(sw=>{ if(sw && sw.id && ed.removed[sw.id]) return false;
+                      return !sw || !sw.id || (addedHome[sw.id]||{}).sq===sq.id; })
         .map(sw=>{
           const p=(sw&&sw.id)?patchFor(sq.id, sw.id):null;
           return p ? {...p, ...sw} : sw;
@@ -10683,24 +11043,26 @@ class Component extends DCLogic {
   // became 317 — an older copy somewhere touched something and won.
   _rosterTotalFor(ed){
     try{
-      const base=window.VX_ROSTER||{}; const e=ed||{edits:{},deleted:{},added:{}};
+      const base=window.VX_ROSTER||{}; const e=ed||{edits:{},deleted:{},added:{},removed:{}};
+      const rm=(e&&e.removed)||{};
       // Counted the way the roster is BUILT, which means once per swimmer. An overlay holding
       // the same swimmer under two squads — what every move used to produce — counted them
       // twice here while the screen, which rebuilds and shows them once, counted them once. The
       // two numbers are compared to decide whether a save held, so the gap between them read as
-      // "NOT saved" on a roster that had saved perfectly well.
+      // "NOT saved" on a roster that had saved perfectly well. A deleted swimmer is not counted
+      // in either list, for the same reason: the screen does not show them.
       const seen={};
       let n=0;
       (this.squads||[]).forEach(sq=>{
         (base[sq.id]||[]).forEach(sw=>{
-          if(!sw || ((e.deleted||{})[sq.id]||{})[sw.id]) return;
+          if(!sw || ((e.deleted||{})[sq.id]||{})[sw.id] || (sw.id&&rm[sw.id])) return;
           if(sw.id){ if(seen[sw.id]) return; seen[sw.id]=1; }
           n++;
         });
       });
       (this.squads||[]).forEach(sq=>{
         (((e.added||{})[sq.id])||[]).forEach(sw=>{
-          if(!sw) return;
+          if(!sw || (sw.id&&rm[sw.id])) return;
           if(sw.id){ if(seen[sw.id]) return; seen[sw.id]=1; }
           n++;
         });
@@ -12680,12 +13042,22 @@ class Component extends DCLogic {
     // A child leaving the roster is the single change most likely to be asked about later,
     // and it was the one change nothing recorded.
     try{ this.audit('swimmer.delete', id+' · '+((this.squadById[squadId]||{}).name||squadId), {swimmer:id, squad:squadId}); }catch(e){}
-    if((this.rosterEdits.added[squadId]||[]).find(s=>s.id===id)){
-      this.rosterEdits.added[squadId]=this.rosterEdits.added[squadId].filter(s=>s.id!==id);
-    } else {
-      this.rosterEdits.deleted[squadId]=this.rosterEdits.deleted[squadId]||{};
-      this.rosterEdits.deleted[squadId][id]=true;
-    }
+    const ed=this.rosterEdits;
+    ed.edits=ed.edits||{}; ed.deleted=ed.deleted||{}; ed.added=ed.added||{}; ed.removed=ed.removed||{};
+    // The tombstone that makes a delete stick. A swimmer the club added lives only in `added`, and
+    // removing them from that array was the whole of the old delete — with nothing to say they had
+    // gone, the merge unioned them straight back from any copy that had not heard (another coach's
+    // phone, or the database's own). `removed` is squad-independent and sticky like `deleted`, so
+    // the child is gone from every roster and stays gone. See _mergeRoster.
+    ed.removed[id]=true;
+    // Drop any `added` copy, under every squad — a swimmer moved once lives under the squad they
+    // joined, and an old move can have left stale copies under others. `removed` would suppress
+    // them anyway; clearing them keeps the document clean.
+    Object.keys(ed.added).forEach(sq=>{ ed.added[sq]=(ed.added[sq]||[]).filter(s=>!s||s.id!==id); });
+    // A base-list swimmer also carries the per-squad marker older readers and the one-row-per-
+    // swimmer table understand; it is inert for an added swimmer, which is never in the base list.
+    ed.deleted[squadId]=ed.deleted[squadId]||{};
+    ed.deleted[squadId][id]=true;
     this.persistRosterEdits();
   }
   staffSave(squadId, form){ this.staffOverrides[squadId]={name:form.name.trim(), pin:form.pin.trim()}; this._saveJSON('vx_staff_ovr', this.staffOverrides); const sq=this.squadById[squadId]; if(sq) sq.coach=form.name.trim(); this.setState({staffEditId:null}); }
@@ -12694,8 +13066,11 @@ class Component extends DCLogic {
     const rows=await window.__vxSelect('staff_accounts', 'select=*&limit=1000');
     if(rows==null) return; // table missing / offline → keep current
     const custom=[]; const ovr={};
-    rows.forEach(r=>{ ovr[r.id]={label:r.name||'', user:r.username||'', pin:r.pin||'', role:r.role||'', squadId:r.squad_id||'', photo:r.photo||'', phone:r.phone||'', email:r.email||'', bio:r.bio||''};
-      if(r.is_custom){ custom.push({id:r.id, name:r.name||'', user:r.username||'', pin:r.pin||'', role:r.role||'Coach', squadId:r.squad_id||'', phone:r.phone||'', email:r.email||'', bio:r.bio||''}); } });
+    rows.forEach(r=>{ ovr[r.id]={label:r.name||'', user:r.username||'', pin:r.pin||'', role:r.role||'', squadId:r.squad_id||'', photo:r.photo||'', phone:r.phone||'', email:r.email||'', bio:r.bio||'', removed:!!r.removed};
+      // A removed coach never goes back on the custom list — the row survives only to carry the
+      // removed flag to other devices. (r.removed is undefined on a club that has not run the
+      // 0011 migration, which reads as not removed — the safe default.)
+      if(r.is_custom && !r.removed){ custom.push({id:r.id, name:r.name||'', user:r.username||'', pin:r.pin||'', role:r.role||'Coach', squadId:r.squad_id||'', phone:r.phone||'', email:r.email||'', bio:r.bio||''}); } });
     this.customStaff=custom; this.accountOvr=ovr;
     try{ this._saveLocalOnly('vx_staff_accounts', custom); this._saveLocalOnly('vx_account_ovr', ovr); }catch(e){}
     this._rebuildAccounts(); this.setState({});
@@ -12753,6 +13128,34 @@ class Component extends DCLogic {
     try{ this.audit('staff.delete', (gone&&gone.label)||id, {account:id}); }catch(e){}
     this.customStaff=this.customStaff.filter(function(a){return a.id!==id;}); if(this.accountOvr[id]){ delete this.accountOvr[id]; } this._rebuildAccounts(); this.setState({staffEditId:null});
     if(window.__vxDelete){ window.__vxDelete('staff_accounts', 'id=eq.'+encodeURIComponent(id)).then(ok=>{ if(ok) this._staffFetch(); }); }
+  }
+  // Never removable: the two full-access owner accounts (removing one could lock the club out of
+  // Club Administration) and whoever is signed in right now.
+  _canRemoveStaff(id){ if(id==='ahmed'||id==='sameh') return false; try{ if(this.state.pickedId===id) return false; }catch(e){} return true; }
+  // Remove a coach from the staff list. A custom (st_) account is deleted outright — its whole
+  // row goes. A built-in coach cannot be spliced out of the hardcoded list, so it is marked
+  // removed on its override row, which rides the same staff_accounts sync as an edit and so
+  // reaches every device. The email allow-list that governs sign-in is separate — say so.
+  staffRemove(id){
+    if(!this._canRemoveStaff(id)) return;
+    const gone=(this.accounts||[]).find(a=>a.id===id);
+    const isCustom=(''+id).indexOf('st_')===0;
+    try{ this.audit('staff.delete', (gone&&gone.label)||id, {account:id}); }catch(e){}
+    if(isCustom){
+      this.customStaff=this.customStaff.filter(function(a){return a.id!==id;});
+      if(this.accountOvr[id]){ delete this.accountOvr[id]; }
+      this._rebuildAccounts(); this.setState({staffEditId:null, staffAccDraft:null});
+      if(window.__vxDelete){ window.__vxDelete('staff_accounts', 'id=eq.'+encodeURIComponent(id)).then(ok=>{ if(ok) this._staffFetch(); }); }
+      return;
+    }
+    const o={...(this.accountOvr[id]||{}), removed:true};
+    this.accountOvr[id]=o;
+    try{ this._saveLocalOnly('vx_account_ovr', this.accountOvr); }catch(e){}
+    this._rebuildAccounts(); this.setState({staffEditId:null, staffAccDraft:null});
+    // Persist the removal on the account's own row so every device drops the coach too. Sending
+    // removed on its own (not through _staffRow) keeps ordinary edits free of the column, so they
+    // still save on a club that has not yet run the 0011 migration.
+    if(window.__vxUpsert){ window.__vxUpsert('staff_accounts', [{id:id, name:(gone&&gone.label)||o.label||'', is_custom:false, removed:true, ts:Date.now()}]).then(ok=>{ if(ok) this._staffFetch(); }); }
   }
   // Squad access and full access are two different questions, and one dropdown was answering
   // both: "no squad" meant every squad AND the run of the club, so a fitness coach who needs to
@@ -12856,8 +13259,11 @@ class Component extends DCLogic {
     return !/\b(assistant|deputy|trainee|intern)\b/.test(title);
   }
   _rebuildAccounts(){
-    // Rebuild this.accounts from the base staff + synced custom staff + per-account overrides.
-    this.accounts = this._baseAccounts.map(a=>({...a}));
+    // Rebuild this.accounts from the base staff + synced custom staff + per-account overrides,
+    // minus any coach whose override marks them removed (a coach who has left). Removal rides the
+    // same staff_accounts sync as an edit, so it reaches every device — see staffRemove.
+    const _ovr0 = this.accountOvr || {};
+    this.accounts = this._baseAccounts.filter(a=>!(_ovr0[a.id] && _ovr0[a.id].removed)).map(a=>({...a}));
     (this.customStaff||[]).forEach(_sa=>{ this.accounts.push({id:_sa.id, user:_sa.user, label:_sa.name, role:_sa.role, pin:_sa.pin, accent:'#2733D6', photo:'', initials:(_sa.name||'?').slice(0,2).toUpperCase(), squadId:_sa.squadId||''}); });
     const ovr=this.accountOvr||{};
     this.accounts.forEach(a=>{ const o=ovr[a.id]; if(o){ if(o.label){ a.label=o.label; a.initials=(o.label||'?').slice(0,2).toUpperCase(); } if(o.user) a.user=o.user; if(o.pin) a.pin=o.pin; if(o.role) a.role=o.role; if(o.squadId!=null) a.squadId=o.squadId; if(o.photo) a.photo=o.photo; if(o.phone!=null) a.phone=o.phone; if(o.email) a.email=o.email; if(o.bio!=null) a.bio=o.bio; } });
@@ -15776,7 +16182,18 @@ class Component extends DCLogic {
     const read=this._alertRead(), hidden=this._alertHidden();
     let anns=(this.announcements||[]).filter(a=>{ if(hidden[a.id]) return false; if(a.audience==='all') return true; if(kind==='coach') return a.audience==='staff'; if(kind==='family') return a.audience==='family'; return false; })
       .map(a=>({ id:a.id, audience:a.audience, icon:'megaphone', title:a.title, body:a.body, at:a.at, read:read[a.id]===true }));
-    return [...extra, ...anns, ...local].sort((a,b)=> new Date(b.at).getTime()-new Date(a.at).getTime());
+    const ordered=[...extra, ...anns, ...local].sort((a,b)=> new Date(b.at).getTime()-new Date(a.at).getTime());
+    // Collapse duplicates. The same greeting could be created twice in a day — two staff phones
+    // opened the app before the shared "already sent" guard had synced between them, so each wrote
+    // its own copy — and the family saw the same "Happy birthday" line two or three times. Two
+    // notifications with the same audience, title and body on the same calendar day are one event;
+    // keep the newest (this list is sorted newest-first) and drop the rest. Real distinct alerts
+    // almost never share all three, and never on purpose, so nothing legitimate is hidden.
+    const seen=new Set(); const out=[];
+    for(const n of ordered){ const day=String(n.at||'').slice(0,10);
+      const key=(n.audience||'')+'|'+(n.title||'')+'|'+(n.body||'')+'|'+day;
+      if(seen.has(key)) continue; seen.add(key); out.push(n); }
+    return out;
   }
   openNotifs(){ this.setState({notifOpen:true}); const ids=this._notifCtxIds; if(ids && ids.length){ this.notifications=this.notifications.map(n=>ids.includes(n.id)?{...n, read:true}:n); this._saveJSON('vx_notifications', this.notifications);
     const rs=this._alertRead(); ids.forEach(id=>{ rs[id]=true; }); try{ localStorage.setItem('vx_alert_read', JSON.stringify(rs)); }catch(e){} this.signupAlerts=(this.signupAlerts||[]).map(a=>ids.includes(a.id)?{...a, read:true}:a); } }
@@ -16258,7 +16675,7 @@ class Component extends DCLogic {
         meta:[(v.raceType||'100')+'m', v.stroke, this._videoSavedAt(v), v.tag,
               lanes.length>1?('vs '+(lanes.length-1)+(lanes.length===2?' other':' others')):'']
              .filter(Boolean).join(' · '),
-        total: M && M.total!=null ? (M.total+'s') : '—' });
+        total: M && M.total!=null ? this._raceTimeS(M.totalNum) : '—' });
     });
     return out.sort((a,b)=>String(b.id).localeCompare(String(a.id)));
   }
@@ -16588,10 +17005,10 @@ class Component extends DCLogic {
     const seen={}; const marks=[];
     cols.forEach(c=>(c.M?c.M.rows:[]).forEach(r=>{ if(!seen[r.label]){ seen[r.label]={label:r.label, metres:r.metres}; marks.push(seen[r.label]); } }));
     marks.sort((a,b)=>a.metres-b.metres);
-    const rowFor=(label, pick)=>{
+    const rowFor=(label, pick, fmt)=>{
       const cells=cols.map(c=>{
         const n=c.M?pick(c):null;
-        return (n!=null && isFinite(n)) ? {num:n, value:n.toFixed(2)} : {num:null, value:'—'};
+        return (n!=null && isFinite(n)) ? {num:n, value:(fmt||(x=>x.toFixed(2)))(n)} : {num:null, value:'—'};
       });
       const nums=cells.map(c=>c.num).filter(n=>n!=null);
       const best=nums.length>1?Math.min(...nums):null;
@@ -16604,7 +17021,7 @@ class Component extends DCLogic {
     const rows=marks.map(mk=>rowFor(mk.label, c=>{
       const r=c.M.rows.find(x=>x.label===mk.label); return r?r.splitNum:null;
     }));
-    const totalRow=rowFor('Total', c=>c.M.totalNum);
+    const totalRow=rowFor('Total', c=>c.M.totalNum, n=>this._fmtStopwatch(n));
     return {cols, rows, totalRow};
   }
   // The date an analysis was filed. Clips saved before this carried no date, but the id was
@@ -16866,6 +17283,153 @@ class Component extends DCLogic {
     const usable=marks.filter(x=>isFinite(x));
     return usable.length ? Math.min.apply(null, usable) : null;
   }
+
+  // ---- Auto-split on a fixed camera ----
+  //
+  // "Hear the start" fixes the gun to the millisecond off the clip's own sound. The splits are
+  // still a coach's thumb. On a still camera — a phone on a tripod with the whole lane in frame —
+  // each distance mark sits at one unmoving column of pixels, and the swimmer's bow wave sweeps
+  // through that column once. So the coach marks where each line is, and the app reads the wave
+  // crossing it. A panning or broadcast clip moves the mark every frame and cannot be read this
+  // way; that is a fact of the footage, said plainly, not a thing to fake.
+
+  // The marks that sit at a real distance — the ones a crossing can be found for. Start has no
+  // distance, so it is never one of them.
+  _vidNumberedLabels(raceType){
+    return this.videoSplitLabels(raceType).filter(l=>this._splitMetres(l,50)!=null);
+  }
+  // Calibration is a convenience of this device and this camera position, so it is kept in the
+  // browser and never pushed to the club's record.
+  _vidCalAll(){ try{ return JSON.parse(localStorage.getItem('vx_vidcal')||'{}')||{}; }catch(e){ return {}; } }
+  _vidCalLines(id){ const a=this._vidCalAll(); return (a&&a[id])||{}; }
+  _vidCalSave(id, lines){ const a=this._vidCalAll(); a[id]=lines; try{ localStorage.setItem('vx_vidcal', JSON.stringify(a)); }catch(e){} this.forceUpdate(); }
+  videoCalToggle(){ this.setState({videoCalMode:!this.state.videoCalMode, videoScanMsg:''}); }
+  videoCalClear(){ const v=this._activeVideo(); if(!v) return; const a=this._vidCalAll(); delete a[v.id]; try{ localStorage.setItem('vx_vidcal', JSON.stringify(a)); }catch(e){} this.forceUpdate(); }
+  // A tap on the frame drops the next un-placed line where the finger landed, as a fraction of
+  // the width so it survives the video being any size on any phone.
+  videoCalPlace(ev){
+    const v=this._activeVideo(); if(!v || !ev || !ev.currentTarget) return;
+    const rect=ev.currentTarget.getBoundingClientRect(); if(!rect.width) return;
+    const frac=Math.min(1, Math.max(0, (ev.clientX-rect.left)/rect.width));
+    const labels=this._vidNumberedLabels(v.raceType||'100');
+    const lines={...this._vidCalLines(v.id)};
+    const next=labels.find(l=>lines[l]==null);
+    if(!next) return;
+    lines[next]=+frac.toFixed(4);
+    this._vidCalSave(v.id, lines);
+  }
+
+  // Sequence the crossings out of the recorded motion. Each numbered mark owns one pixel column;
+  // its motion rises to a peak as the wave passes and falls again. Taken in race order, each mark
+  // is the peak of its column after the previous mark's time (plus a cooldown, so the start splash
+  // or a turn's wash cannot score as the next mark). The peak, not the leading edge, because the
+  // leading edge runs a touch early — the wave reaches the line before its middle does. Pure, so
+  // it is tested against motion we build with the answer known.
+  _detectCrossings(frames, labels, opts){
+    opts=opts||{};
+    const cooldown=opts.cooldownS!=null?opts.cooldownS:1.2;
+    const sensitivity=opts.sensitivity!=null?opts.sensitivity:3;
+    const minFloor=opts.minFloor!=null?opts.minFloor:0.015;
+    const out=[]; let fromT=-Infinity;
+    for(let li=0; li<labels.length; li++){
+      const label=labels[li];
+      const seg=frames.filter(f=> f && f.t>=(isFinite(fromT)?fromT+cooldown:-Infinity));
+      if(seg.length<3) break;
+      const vals=seg.map(f=> (f.m&&f.m[label])||0);
+      const mean=vals.reduce((a,b)=>a+b,0)/vals.length;
+      const variance=vals.reduce((a,b)=>a+(b-mean)*(b-mean),0)/vals.length;
+      const thr=Math.max(minFloor, mean+sensitivity*Math.sqrt(variance));
+      let bestV=-1, bestT=null;
+      for(let k=0;k<seg.length;k++){ if(vals[k]>bestV){ bestV=vals[k]; bestT=seg[k].t; } }
+      if(bestT==null || bestV<thr) break;   // a mark not found; the ones after it cannot be ordered
+      out.push({label, t:+bestT.toFixed(3)});
+      fromT=bestT;
+    }
+    return out;
+  }
+
+  async videoAutoSplit(){
+    const v=this._activeVideo(); if(!v) return;
+    if(v.kind!=='mp4'){ return this.setState({videoScanMsg:'Only uploaded clips can be scanned — a YouTube or Vimeo player will not hand over its frames.'}); }
+    const zero=this.videoStartZero();
+    if(zero==null){ return this.setState({videoScanMsg:'Set the start first — “Hear the start” or “Set start here” — so the splits have a gun to count from.'}); }
+    const labels=this._vidNumberedLabels(v.raceType||'100');
+    const lines=this._vidCalLines(v.id);
+    const useLabels=labels.filter(l=>lines[l]!=null);
+    if(!useLabels.length){ return this.setState({videoScanMsg:'Place at least one marker line first — tap “Calibrate lines”.'}); }
+    const vidId=v.id, swIdx=this._vidSwIdx(v);
+    this.setState({videoScanBusy:true, videoScanPct:0, videoScanMsg:'Fetching the clip…'});
+    let url=null, hidden=null;
+    try{
+      const res=await fetch(this._mediaSrc(v.url));
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      const blob=await res.blob();
+      url=URL.createObjectURL(blob);   // a same-origin blob, so the canvas is never tainted
+      hidden=document.createElement('video');
+      hidden.muted=true; hidden.playsInline=true; hidden.preload='auto'; hidden.src=url;
+      hidden.style.cssText='position:fixed;left:-10000px;top:0;width:2px;height:2px;opacity:0';
+      document.body.appendChild(hidden);
+      await new Promise((ok,no)=>{ hidden.onloadedmetadata=()=>ok(); hidden.onerror=()=>no(new Error('the clip would not load')); });
+      const cw=320, ch=Math.max(2, Math.round(cw*(hidden.videoHeight||9)/(hidden.videoWidth||16)));
+      const canvas=document.createElement('canvas'); canvas.width=cw; canvas.height=ch;
+      const cx=canvas.getContext('2d', {willReadFrequently:true});
+      const bandW=Math.max(4, Math.round(cw*0.03));
+      const dur=hidden.duration||0, span=Math.max(0.1, dur-zero);
+      const frames=[]; const prevBands={}; let lastPct=-1;
+      // Seek to the gun before scanning. Seeking to where the video already sits (a start at 0
+      // on a just-loaded clip) fires no 'seeked', so this resolves at once in that case and never
+      // waits past a fallback in any other — the scan must not hang on a clip it cannot seek.
+      await new Promise((ok)=>{
+        if(Math.abs((hidden.currentTime||0)-zero) < 0.01) return ok();
+        let settled=false; const fin=()=>{ if(!settled){ settled=true; ok(); } };
+        hidden.onseeked=fin; setTimeout(fin, 1500);
+        try{ hidden.currentTime=zero; }catch(e){ fin(); }
+      });
+      hidden.playbackRate=2;
+      this.setState({videoScanMsg:'Reading the swimmer across each line…'});
+      await hidden.play().catch(()=>{});
+      await new Promise((done)=>{
+        const step=(_now, meta)=>{
+          if(this._activeVideo()==null || this._activeVideo().id!==vidId){ return done(); }
+          const t=meta?meta.mediaTime:hidden.currentTime;
+          try{ cx.drawImage(hidden,0,0,cw,ch); }catch(e){ this._scanTainted=true; return done(); }
+          const m={};
+          for(let i=0;i<useLabels.length;i++){
+            const label=useLabels[i];
+            const x=Math.min(cw-bandW, Math.max(0, Math.round(lines[label]*cw - bandW/2)));
+            let data; try{ data=cx.getImageData(x,0,bandW,ch).data; }catch(e){ this._scanTainted=true; return done(); }
+            const prev=prevBands[label]; let mo=0;
+            if(prev && prev.length===data.length){ let s=0; for(let j=0;j<data.length;j++){ if((j&3)===3) continue; s+=Math.abs(data[j]-prev[j]); } mo=s/(data.length*0.75)/255; }
+            prevBands[label]=data; m[label]=mo;
+          }
+          frames.push({t, m});
+          const pct=Math.min(99, Math.round(((t-zero)/span)*100));
+          if(pct>=lastPct+4){ lastPct=pct; this.setState({videoScanPct:pct}); }
+          if(hidden.ended || (dur && t>=dur-0.05)){ return done(); }
+          if(hidden.requestVideoFrameCallback) hidden.requestVideoFrameCallback(step);
+          else requestAnimationFrame(()=>step(0,null));
+        };
+        if(hidden.requestVideoFrameCallback) hidden.requestVideoFrameCallback(step);
+        else requestAnimationFrame(()=>step(0,null));
+      });
+      try{ hidden.pause(); }catch(e){}
+      if(this._scanTainted){ this._scanTainted=false; return this.setState({videoScanBusy:false, videoScanMsg:'This clip’s frames could not be read. Mark the splits by hand.'}); }
+      const crossings=this._detectCrossings(frames, useLabels, {});
+      const startLabel=(this.videoSplitLabels(v.raceType||'100')[0])||'Start';
+      const laps=[{label:startLabel, t:+zero.toFixed(3)}, ...crossings.map(c=>({label:c.label, t:+(+c.t).toFixed(2)}))];
+      this._vidApply(vidId, swIdx, {laps});
+      this.setState({videoScanBusy:false, videoScanPct:100,
+        videoScanMsg: crossings.length
+          ? ('Read '+crossings.length+' of '+useLabels.length+' splits. Check each against the video — nudge any a wave or a neighbouring lane fooled.')
+          : 'No clean crossings found. This works on a still camera with each line on the swimmer’s own lane; otherwise mark the splits by hand.'});
+    }catch(err){
+      const why=(err&&err.message)||'';
+      this.setState({videoScanBusy:false, videoScanMsg:'Could not scan the clip'+(why?(' — '+why):'')+'. Mark the splits by hand.'});
+    }finally{
+      try{ if(hidden) hidden.remove(); }catch(e){}
+      try{ if(url) URL.revokeObjectURL(url); }catch(e){}
+    }
+  }
   // The gun is the gun. Setting it re-bases every split already marked — the marks keep their
   // own place in the clip and only their distance from the start changes — and it is written to
   // every lane, because two swimmers in one heat did not start at two different moments. That
@@ -16921,6 +17485,10 @@ class Component extends DCLogic {
     const body=(m>0 ? (m+':'+(ss<10?'0':'')+ss) : String(ss))+'.'+(hh<10?'0':'')+hh;
     return (neg?'−':'')+body;
   }
+  // A race time as a swimmer reads it: a minute or more is m:ss.hh ("1:03.21"), under a minute is
+  // seconds. The 's' suffix belongs only on the seconds form — "1:03.21s" is not a time anyone
+  // writes — so it is added here rather than glued on at each screen.
+  _raceTimeS(sec){ const s=this._fmtStopwatch(sec); return s.indexOf(':')>=0 ? s : s+'s'; }
   _stopwatchPaint(){
     const el=this._swEl; if(!el) return;
     const zero=this.videoStartZero();
@@ -16938,6 +17506,453 @@ class Component extends DCLogic {
       this._swRaf=requestAnimationFrame(tick);
     };
     this._swRaf=requestAnimationFrame(tick);
+  }
+  // ---- The standalone Stopwatch tool ----
+  //
+  // A free-running clock for on-deck timing, separate from the video race clock above. It counts
+  // laps (pool lengths), keeps the split for each and the cumulative total, and tallies strokes
+  // per length. Like the race clock it is painted straight onto its element rather than through a
+  // re-render — a running clock does not put the whole screen through React sixty times a second.
+  // The running total lives in plain fields (base + start timestamp) so pause/resume never loses a
+  // hundredth to a stale render; the laps and stroke tally live in state so a tap redraws the list.
+  _swtElapsedMs(){
+    const base=this._swtBase||0;
+    return this._swtRunning ? base + (performance.now()-this._swtStart) : base;
+  }
+  // The clock shows in two places at once — the tool card and the poolside full-screen — so the
+  // paint loop drives a LIST of elements, not one. An element drops out of the list on its own the
+  // frame after it leaves the DOM, so a null ref needs no bookkeeping. One rAF runs while any clock
+  // is mounted; painting a static value while paused is cheap and keeps resume glitch-free.
+  _swtPaint(){
+    this._swtEls=(this._swtEls||[]).filter(el=>el && document.body.contains(el));
+    if(!this._swtEls.length) return false;
+    const txt=this._fmtStopwatch(this._swtElapsedMs()/1000);
+    for(let i=0;i<this._swtEls.length;i++){ const el=this._swtEls[i]; el.textContent=txt; this._swtFit(el, txt); }
+    return true;
+  }
+  // Keep the whole time on screen once it grows a minutes field: sized off the viewport for a big
+  // readout, "1:24.72" is far wider than "24.72" and ran off both edges. The font is monospace, so
+  // a string needs about (chars × 0.62em); size the font from the container width and cap it at the
+  // element's intended big size (computed here from the viewport, NOT read back from the style —
+  // the size lives in the inline style, so clearing it to "read" it drops the clock to 16px). Set
+  // explicitly every time the character count, container width or viewport changes, not every frame.
+  _swtFit(el, txt){
+    const parent=el.parentElement; if(!parent) return;
+    const vw=window.innerWidth||360, vh=window.innerHeight||640, cw=parent.clientWidth;
+    const key=txt.length+'|'+Math.round(cw)+'|'+vw+'x'+vh;
+    if(el.__swtFitKey===key) return;
+    el.__swtFitKey=key;
+    // The element's intended size, mirroring its CSS: full-screen min(40vw,60vh); card clamp(58,18vw,92).
+    const base = el.getAttribute('data-swtclock')==='fs'
+      ? Math.min(0.40*vw, 0.60*vh)
+      : Math.max(58, Math.min(0.18*vw, 92));
+    const cs=getComputedStyle(parent);
+    const avail=(cw - (parseFloat(cs.paddingLeft)||0) - (parseFloat(cs.paddingRight)||0)) * 0.98;
+    const widthFit=avail/((txt.length||1)*0.62);           // monospace: each glyph ≈ 0.62em wide
+    el.style.fontSize=Math.floor(Math.max(14, Math.min(base, widthFit)))+'px';
+  }
+  _swtEnsureRaf(){
+    if(this._swtRaf) return;
+    const loop=()=>{ if(!this._swtPaint()){ this._swtRaf=null; return; } this._swtRaf=requestAnimationFrame(loop); };
+    this._swtRaf=requestAnimationFrame(loop);
+  }
+  _swtAttach(el){
+    if(!el) return;
+    this._swtEls=this._swtEls||[];
+    if(this._swtEls.indexOf(el)<0) this._swtEls.push(el);
+    el.textContent=this._fmtStopwatch(this._swtElapsedMs()/1000);
+    this._swtEnsureRaf();
+  }
+  onSwtMount(el){ this._swtAttach(el); }
+  onSwtFsMount(el){ this._swtAttach(el); }
+  // A loud electronic starting signal, synthesised so it needs no audio file and works offline —
+  // our own tone in the register of a competition start beep, not a recording of anyone's system.
+  // Runs on the user's Start tap, the gesture browsers require before a page may make sound.
+  //
+  // On loudness: the first version of this was already at the ceiling — a 1 kHz square driven past
+  // full scale, which the output clips, and a clipped square is the loudest waveform there is. No
+  // amount of extra gain adds anything from there; a limiter and makeup gain measured slightly
+  // QUIETER. What is still on the table is WHERE the energy sits. Hearing peaks around 2–4 kHz, so
+  // the same amplitude up there is heard as considerably louder and cuts through a noisy pool hall.
+  // Measured over the sustain, this stack carries ~2.3× the energy of the old tone in the 2–5 kHz
+  // band (+7 dB) at a higher overall level. The 1.25 kHz voice under the 2.5 kHz fundamental keeps
+  // it sounding like a start horn rather than a thin whistle.
+  //
+  // Beyond this the limit is the phone, not the page: iOS plays Web Audio through the media volume
+  // and honours the silent switch, so a muted handset stays muted whatever we synthesise.
+  _swtBeep(){
+    if(this.state.swtSound===false) return;
+    const ctx=this._swtAudioCtx(); if(!ctx) return;
+    try{ this._swtSignal(ctx.currentTime+0.02, this._swtTone(), this._swtVol()); }catch(e){}
+  }
+  _swtAudioCtx(){
+    const AC=window.AudioContext||window.webkitAudioContext; if(!AC) return null;
+    const ctx=this._swtAudio||(this._swtAudio=new AC());
+    if(ctx.state==='suspended'){ try{ ctx.resume(); }catch(e){} }
+    return ctx;
+  }
+  _swtTone(){ return this.state.swtTone||'horn'; }
+  _swtVol(){ const v=this.state.swtVol; return (v==null?1:v); }
+  // Shape of each signal: one long blast, one short beep, or three short ones.
+  _swtPattern(tone){
+    if(tone==='beep')   return [{o:0, d:0.20}];
+    if(tone==='triple') return [{o:0, d:0.12},{o:0.20, d:0.12},{o:0.40, d:0.12}];
+    return [{o:0, d:0.55}];
+  }
+  // Build one start signal at an ABSOLUTE AudioContext time and hand back its oscillators.
+  // Scheduling ahead of time rather than firing from a frame callback is what lets the send-off
+  // timer stay exact: the audio clock keeps its own time even when the screen dims and animation
+  // frames stop. The caller keeps the nodes so a pause can silence what was already scheduled.
+  _swtSignal(at, tone, vol){
+    const ctx=this._swtAudioCtx(); if(!ctx) return [];
+    const nodes=[];
+    const master=ctx.createGain();
+    master.gain.setValueAtTime(Math.max(0.02, Math.min(1, vol==null?1:vol)), at);
+    master.connect(ctx.destination);
+    const pat=this._swtPattern(tone);
+    for(let i=0;i<pat.length;i++){
+      const seg=pat[i], t0=at+seg.o;
+      [[2500,1],[1250,0.7],[3750,0.5]].forEach(function(p){
+        const o=ctx.createOscillator(); o.type='square'; o.frequency.setValueAtTime(p[0],t0);
+        const g=ctx.createGain();
+        g.gain.setValueAtTime(0.0001,t0);
+        g.gain.exponentialRampToValueAtTime(p[1], t0+0.008);
+        g.gain.setValueAtTime(p[1], t0+Math.max(0.03, seg.d-0.06));
+        g.gain.exponentialRampToValueAtTime(0.0001, t0+seg.d);
+        o.connect(g); g.connect(master); o.start(t0); o.stop(t0+seg.d+0.02);
+        nodes.push(o);
+      });
+    }
+    return nodes;
+  }
+  swtToggle(){
+    if(this._swtRunning){
+      this._swtBase=(this._swtBase||0)+(performance.now()-this._swtStart);
+      this._swtRunning=false;
+    }else{
+      const fresh=!(this._swtBase>0);      // a true start, not a resume after pause
+      this._swtStart=performance.now();
+      this._swtRunning=true;
+      if(fresh) this._swtBeep();           // the start signal fires on the gun, not on every resume
+    }
+    this.setState({swtRunning:this._swtRunning});
+    this._swtEnsureRaf();
+  }
+  swtReset(){
+    this._swtRunning=false; this._swtBase=0;
+    this._swtPaint();
+    this.setState({swtRunning:false, swtLaps:[], swtStrokes:0});
+  }
+  swtLap(){
+    const total=Math.round(this._swtElapsedMs());
+    if(total<=0) return;                                   // nothing to split yet
+    const laps=(this.state.swtLaps||[]).slice();
+    const prevTotal=laps.length ? laps[laps.length-1].totalMs : 0;
+    laps.push({ n:laps.length+1, splitMs:Math.max(0,total-prevTotal), totalMs:total, strokes:this.state.swtStrokes||0 });
+    this.setState({swtLaps:laps, swtStrokes:0});           // strokes reset for the next length
+  }
+  swtStroke(d){ this.setState({swtStrokes:Math.max(0,(this.state.swtStrokes||0)+d)}); }
+  swtSoundToggle(){ this.setState({swtSound:this.state.swtSound===false}); }
+  swtFsEnter(){ this.setState({swtFs:true}); this._enterNativeFs();
+    // Best-effort landscape lock for the poolside board. Supported on Android/Chrome once native
+    // full-screen is on; iOS Safari has no such API, so there the coach just turns the phone and
+    // the fixed, edge-to-edge overlay fills whatever way it is held.
+    try{ if(screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(()=>{}); }catch(e){} }
+  swtFsExit(){ this.setState({swtFs:false}); this._exitNativeFs();
+    try{ if(screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); }catch(e){} }
+  // ---- Whole-lane stopwatch: one clock, one timer per swimmer ----
+  //
+  // In training a lane is sent off in intervals — swimmer 1 goes, five seconds later swimmer 2,
+  // and so on — and the coach needs every one of them timed at once. Rather than run eight
+  // stopwatches, there is ONE master clock and each swimmer stores the master time they were sent
+  // off at. A swimmer's elapsed time is then just (master now − their start), so every lane is
+  // read off the same clock and no two can drift apart. Their laps are stored per swimmer, so a
+  // split taken for one never touches another.
+  _swmMs(){ return (this._swmBase||0) + (this._swmRunning ? performance.now()-this._swmStart : 0); }
+  _swmMake(n){
+    const out=[];
+    for(let i=0;i<n;i++) out.push({id:'L'+(i+1), name:'', startMs:null, endMs:null, laps:[]});
+    return out;
+  }
+  _swmLanes(){ const l=this.state.swmLanes; return (l && l.length) ? l : this._swmMake(6); }
+  // One swimmer's elapsed time at a given master time. A swimmer who has not been sent off yet
+  // reads zero; one who has finished is frozen at the moment they were stopped.
+  _swmLaneMs(lane, masterMs){
+    if(!lane || lane.startMs==null) return 0;
+    const end=(lane.endMs!=null) ? lane.endMs : masterMs;
+    return Math.max(0, end-lane.startMs);
+  }
+  // The lap that swimmer would record now: the split is measured from THEIR previous lap, not
+  // from the master clock, so a stagger of any size leaves the splits unaffected.
+  _swmLapOf(lane, masterMs){
+    const t=Math.round(this._swmLaneMs(lane, masterMs));
+    const laps=(lane && lane.laps)||[];
+    const prev=laps.length ? laps[laps.length-1].totalMs : 0;
+    return { n:laps.length+1, splitMs:Math.max(0,t-prev), totalMs:t };
+  }
+  _swmEnsureRaf(){
+    if(this._swmRaf) return;
+    const loop=()=>{ if(!this._swmPaint()){ this._swmRaf=null; return; } this._swmRaf=requestAnimationFrame(loop); };
+    this._swmRaf=requestAnimationFrame(loop);
+  }
+  onSwmMount(el){ this._swmRoot=el||null; if(el) this._swmEnsureRaf(); }
+  // Every lane's clock is painted straight onto its element, for the same reason as the single
+  // stopwatch: eight clocks through a re-render would redraw the screen sixty times a second.
+  _swmPaint(){
+    const root=this._swmRoot;
+    if(!root || !document.body.contains(root)){ this._swmRoot=null; return false; }
+    const m=this._swmMs(), lanes=this._swmLanes();
+    const els=root.querySelectorAll('[data-lane]');
+    for(let i=0;i<els.length;i++){
+      const el=els[i], id=el.getAttribute('data-lane');
+      let lane=null;
+      for(let j=0;j<lanes.length;j++) if(lanes[j].id===id){ lane=lanes[j]; break; }
+      if(lane) el.textContent=this._fmtStopwatch(this._swmLaneMs(lane,m)/1000);
+    }
+    const mEl=root.querySelector('[data-swmmaster]');
+    if(mEl) mEl.textContent=this._fmtStopwatch(m/1000);
+    return true;
+  }
+  swmSetCount(d){
+    const cur=this._swmLanes(), n=Math.max(1, Math.min(10, cur.length+d));
+    if(n===cur.length) return;
+    let lanes;
+    if(n>cur.length){ lanes=cur.slice(); for(let i=cur.length;i<n;i++) lanes.push({id:'L'+(i+1), name:'', startMs:null, endMs:null, laps:[]}); }
+    else lanes=cur.slice(0,n);
+    this.setState({swmLanes:lanes});
+  }
+  // Sending a swimmer off starts the master clock on the first one, and sounds the start signal
+  // every time — the coach is starting a swimmer, not a session.
+  swmStartLane(id){
+    if(!this._swmRunning){ this._swmStart=performance.now(); this._swmRunning=true; }
+    const at=Math.round(this._swmMs());
+    const lanes=this._swmLanes().map(l=> (l.id===id && l.startMs==null) ? {...l, startMs:at} : l);
+    this._swtBeep();
+    this.setState({swmLanes:lanes});
+    this._swmEnsureRaf();
+  }
+  swmStartNext(){ const n=this._swmLanes().filter(l=>l.startMs==null)[0]; if(n) this.swmStartLane(n.id); }
+  swmLap(id){
+    const m=this._swmMs();
+    const lanes=this._swmLanes().map(l=>
+      (l.id!==id || l.startMs==null || l.endMs!=null) ? l : {...l, laps:l.laps.concat([this._swmLapOf(l,m)])});
+    this.setState({swmLanes:lanes});
+  }
+  // Finishing only freezes the clock. It does NOT invent a last lap: the coach taps Lap on the
+  // finish wall, and adding another here would show that length twice.
+  swmStop(id){
+    const m=Math.round(this._swmMs());
+    const lanes=this._swmLanes().map(l=>
+      (l.id===id && l.startMs!=null && l.endMs==null) ? {...l, endMs:m} : l);
+    this.setState({swmLanes:lanes});
+  }
+  swmName(id,v){ this.setState({swmLanes:this._swmLanes().map(l=> l.id===id ? {...l, name:v} : l)}); }
+  // Clears the times but keeps the names — the same lane usually swims the next set.
+  swmReset(){
+    this._swmRunning=false; this._swmBase=0;
+    this.setState({swmLanes:this._swmLanes().map(l=>({...l, startMs:null, endMs:null, laps:[]}))});
+    this._swmPaint();
+  }
+  // ---- Send-off set timer: "20 x 50m on 1:00", run automatically ----
+  //
+  // The coach enters the set once and the clock runs it: a start signal on every send-off and a
+  // rep counter, so nobody has to watch a pace clock and shout "go". Every send-off for the whole
+  // set is SCHEDULED INTO THE AUDIO CLOCK the moment the set starts, not fired from a frame
+  // callback — animation frames are throttled the moment the screen dims, and a send-off that
+  // arrives late is worse than useless. Pausing silences whatever was already scheduled.
+  _setReps(){ const v=this.state.setReps; return Math.max(1, Math.min(99, v==null?20:v)); }
+  _setDist(){ const v=this.state.setDist; return (v==null?50:v); }
+  _setSend(){ const v=this.state.setSend; return Math.max(5, v==null?60:v); }   // seconds
+  _setRest(){ const v=this.state.setRest; return Math.max(0, v==null?0:v); }    // extra seconds
+  _setCycleMs(){ return (this._setSend()+this._setRest())*1000; }
+  _setSwimmers(){ const v=this.state.setSwimmers; return Math.max(1, Math.min(10, v==null?1:v)); }
+  _setGap(){ const v=this.state.setGap; return Math.max(0, Math.min(60, v==null?5:v)); }   // seconds
+  // The whole set runs until the LAST swimmer finishes their last repetition.
+  _setTotalMs(){ return this._setCycleMs()*this._setReps() + (this._setSwimmers()-1)*this._setGap()*1000; }
+  // When swimmer i (0-based) is sent off for repetition k (0-based), measured from the start.
+  // The lane goes in order, one gap apart, and every swimmer keeps their own send-off cycle.
+  _setSendAt(k, i, cycleMs, gapMs){ return k*cycleMs + i*gapMs; }
+  // The next send-off strictly after `ms`: who goes, on which rep, and how long until it.
+  // Only a couple of cycles either side are scanned, so this stays cheap on every frame.
+  _setNextSend(ms, cycleMs, gapMs, reps, swimmers){
+    if(!(cycleMs>0)) return null;
+    const k0=Math.max(0, Math.floor(ms/cycleMs)-1);
+    let best=null;
+    for(let k=k0;k<=k0+2;k++){
+      if(k<0 || k>=reps) continue;
+      for(let i=0;i<swimmers;i++){
+        const at=k*cycleMs+i*gapMs;
+        if(at>ms && (!best || at<best.at)) best={rep:k+1, lane:i+1, at:at, left:at-ms};
+      }
+    }
+    return best;
+  }
+  // How long swimmer i has been swimming their current repetition. Null before their first
+  // send-off and once they have finished the set, so the screen can say so rather than lie.
+  _setSwimMs(ms, i, cycleMs, gapMs, reps){
+    if(!(cycleMs>0)) return null;
+    const off=i*gapMs;
+    if(ms<off) return null;
+    const k=Math.floor((ms-off)/cycleMs);
+    if(k>reps-1) return null;
+    return ms-(k*cycleMs+off);
+  }
+  // Which repetition swimmer i is on: 0 before they start, reps+1 once they are done.
+  _setSwimRep(ms, i, cycleMs, gapMs, reps){
+    if(!(cycleMs>0)) return 0;
+    const off=i*gapMs;
+    if(ms<off) return 0;
+    const k=Math.floor((ms-off)/cycleMs);
+    return k>reps-1 ? reps+1 : k+1;
+  }
+  _setMs(){ return (this._setBase||0) + (this._setRunning ? performance.now()-this._setT0 : 0); }
+  // Which repetition is live at a given elapsed time (1-based, never past the last one).
+  _setRepAt(ms, cycleMs, reps){
+    if(!(cycleMs>0)) return 1;
+    return Math.max(1, Math.min(reps, Math.floor(ms/cycleMs)+1));
+  }
+  // Milliseconds until the next send-off; zero once the whole set has run.
+  _setLeftAt(ms, cycleMs, reps){
+    if(!(cycleMs>0)) return 0;
+    if(ms>=cycleMs*reps) return 0;
+    return cycleMs - (ms%cycleMs);
+  }
+  _setCancel(){
+    const n=this._setNodes||[];
+    for(let i=0;i<n.length;i++){ try{ n[i].stop(0); }catch(e){} try{ n[i].disconnect(); }catch(e){} }
+    this._setNodes=[];
+  }
+  // Lay every remaining send-off onto the audio clock, plus a triple at the end of the set.
+  _setSchedule(){
+    this._setCancel();
+    if(this.state.swtSound===false) return;
+    const ctx=this._swtAudioCtx(); if(!ctx) return;
+    const cycle=this._setCycleMs()/1000, reps=this._setReps(), tone=this._swtTone(), vol=this._swtVol();
+    const swimmers=this._setSwimmers(), gap=this._setGap();
+    const done=this._setMs()/1000;                    // already elapsed when (re)scheduling
+    const base=ctx.currentTime+0.03;
+    let nodes=[];
+    for(let k=0;k<reps;k++){
+     for(let i=0;i<swimmers;i++){
+      let at=base+(k*cycle+i*gap-done);
+      // A quarter-second of slack, because a few milliseconds always pass between marking the
+      // start and getting here — without it the very first send-off looks a hair late and was
+      // dropped, so the set started in silence. Anything genuinely behind us is skipped; anything
+      // that is essentially now fires now.
+      if(at<base-0.25) continue;
+      if(at<base) at=base;
+      nodes=nodes.concat(this._swtSignal(at, tone, vol));
+     }
+    }
+    const endAt=base+(this._setTotalMs()/1000-done);
+    if(endAt>=base-0.25) nodes=nodes.concat(this._swtSignal(Math.max(endAt,base),'triple',vol));
+    this._setNodes=nodes;
+  }
+  _setEnsureRaf(){
+    if(this._setRaf) return;
+    const loop=()=>{ if(!this._setPaint()){ this._setRaf=null; return; } this._setRaf=requestAnimationFrame(loop); };
+    this._setRaf=requestAnimationFrame(loop);
+  }
+  onSetMount(el){ this._setRoot=el||null; if(el) this._setEnsureRaf(); }
+  _setPaint(){
+    const root=this._setRoot;
+    if(!root || !document.body.contains(root)){ this._setRoot=null; return false; }
+    const cycle=this._setCycleMs(), reps=this._setReps(), ms=this._setMs(), total=this._setTotalMs();
+    const swimmers=this._setSwimmers(), gap=this._setGap()*1000;
+    const nx=this._setNextSend(ms, cycle, gap, reps, swimmers);
+    const who=root.querySelector('[data-setwho]');
+    if(who) who.textContent = nx ? ('Swimmer '+nx.lane+' \u00b7 rep '+nx.rep) : 'set complete';
+    const strip=root.querySelectorAll('[data-setswim]');
+    for(let i=0;i<strip.length;i++){
+      const el=strip[i], idx=parseInt(el.getAttribute('data-setswim'),10)||0;
+      const t=this._setSwimMs(ms, idx, cycle, gap, reps);
+      el.textContent = (t==null) ? '\u2014' : this._fmtStopwatch(t/1000);
+    }
+    const sreps=root.querySelectorAll('[data-setswimrep]');
+    for(let i=0;i<sreps.length;i++){
+      const el=sreps[i], idx=parseInt(el.getAttribute('data-setswimrep'),10)||0;
+      const r=this._setSwimRep(ms, idx, cycle, gap, reps);
+      el.textContent = r===0 ? 'ready' : (r>reps ? 'done' : (r+'/'+reps));
+    }
+    const cd=root.querySelector('[data-setcount]');
+    if(cd) cd.textContent=this._fmtMinSec(nx ? nx.left : 0);
+    const rp=root.querySelector('[data-setrep]');
+    if(rp) rp.textContent=this._setRepAt(ms,cycle,reps)+' / '+reps;
+    const tot=root.querySelector('[data-settotal]');
+    if(tot) tot.textContent=this._fmtMinSec(Math.min(ms,total), true);
+    const bar=root.querySelector('[data-setbar]');
+    if(bar) bar.style.width=(cycle>0 ? Math.max(0,Math.min(100,((ms%cycle)/cycle)*100)) : 0)+'%';
+    // The set has run its course: stop the clock once, and let the screen say so.
+    if(this._setRunning && ms>=total){
+      this._setRunning=false; this._setBase=total;
+      this.setState({setOn:false, setDone:true});
+    }
+    return true;
+  }
+  _fmtMinSec(ms, down){
+    const s=Math.max(0, down ? Math.floor(ms/1000) : Math.ceil(ms/1000));
+    const m=Math.floor(s/60), r=s-m*60;
+    return m+':'+(r<10?'0':'')+r;
+  }
+  setToggle(){
+    if(this._setRunning){
+      this._setBase=(this._setBase||0)+(performance.now()-this._setT0);
+      this._setRunning=false; this._setCancel();
+      this.setState({setOn:false});
+      return;
+    }
+    if(this.state.setDone){ this._setBase=0; }
+    this._setT0=performance.now(); this._setRunning=true;
+    this._setSchedule();
+    this.setState({setOn:true, setDone:false});
+    this._setEnsureRaf();
+  }
+  // Every set in this squad's plan, as the send-off timer needs it. The plan is the one the
+  // coach already wrote in the Plans tab, so the workout does not get typed twice.
+  _setPlanSets(){
+    const plan=this.getPlan(this.state.squadId), out=[];
+    (plan.sections||[]).forEach(sec=>{
+      (sec.sets||[]).forEach(st=>{
+        const total=Number(st.dist)||0, txt=String(st.txt||'').trim();
+        // "4x50 build @ 1:00" is where the shape of the set actually lives; the row's own
+        // distance is the total for the block. Prefer the written set, fall back to the fields.
+        const m=txt.match(/(\d+)\s*[\u00d7xX]\s*(\d+)/);
+        const reps = m ? Math.max(1, parseInt(m[1],10)||1) : Math.max(1, Number(st.reps)||1);
+        let dist = m ? (parseInt(m[2],10)||0) : (reps>1 ? Math.round(total/reps) : total);
+        if(!dist) dist=total;
+        if(!dist) return;
+        const explicit=this._restToSec(st.sendoff);
+        const send = explicit>0 ? explicit : (this.parseSet(txt, total).interval||0);
+        out.push({ id:st.id, section:sec.title, reps:reps, dist:dist,
+                   send:send, rest:this._restToSec(st.rest), txt:txt });
+      });
+    });
+    return out;
+  }
+  // Pull one plan set onto the clock. A set written without a send-off falls back to a sensible
+  // one derived from the distance, so it can still be run rather than refused.
+  setLoadPlan(i){
+    const sets=this._setPlanSets(), st=sets[i]; if(!st) return;
+    const send=st.send>0 ? st.send : Math.max(20, Math.round((st.dist/50)*60));
+    this.setState({ setReps:st.reps, setDist:st.dist, setSend:send, setRest:(st.send>0?st.rest:0),
+                    setPlanPick:false, setOn:false, setDone:false },
+                  ()=>{ this._setRunning=false; this._setBase=0; this._setCancel(); this._setPaint(); });
+  }
+  setReset(){
+    this._setRunning=false; this._setBase=0; this._setCancel();
+    this.setState({setOn:false, setDone:false});
+    this._setPaint();
+  }
+  // Changing the set while it runs re-lays the remaining send-offs on the audio clock.
+  setField(k,v){
+    const patch={}; patch[k]=v;
+    this.setState(patch, ()=>{ if(this._setRunning) this._setSchedule(); });
+  }
+  setStep(k,d,lo,hi){
+    const read={ setReps:()=>this._setReps(), setSend:()=>this._setSend(), setRest:()=>this._setRest(),
+                 setSwimmers:()=>this._setSwimmers(), setGap:()=>this._setGap() }[k];
+    const cur=read?read():0;
+    this.setField(k, Math.max(lo, Math.min(hi, cur+d)));
   }
   videoSetRate(rate){
     this.setState({videoRate:rate});
@@ -18504,6 +19519,20 @@ class Component extends DCLogic {
     await this.birthdayWish(sw.id, sw.name, sw.squadName, this._bdayTurning(sw, today));
     this.setState({bdayMsg:'Sent to '+sw.name+' and their parents ✓'});
   }
+  // Wish every swimmer whose birthday is today in one tap, for the club that would rather not go
+  // one by one. The daily cron sends these automatically anyway; this is the manual "now" button,
+  // and it stands on the same per-swimmer send — so the same once-a-year guard means a child the
+  // cron or another coach already wished is skipped, not greeted twice.
+  async birthdaySendAllToday(){
+    const today=this.todayISO(); const year=today.slice(0,4);
+    const sentMap=this._bdaySentMap();
+    const due=this.allSwimmersFlat().filter(sw=>this._bdayIsToday(sw, today) && sentMap[sw.id]!==year);
+    if(!due.length){ this.setState({bdayMsg:'Everyone with a birthday today has been wished ✓'}); return; }
+    this.setState({bdayMsg:'Sending '+due.length+' birthday greeting'+(due.length===1?'':'s')+'…'});
+    let done=0;
+    for(const sw of due){ try{ await this.birthdaySendNow(sw.id); done++; }catch(e){} }
+    this.setState({bdayMsg:'Sent '+done+' birthday greeting'+(done===1?'':'s')+' to the swimmers and their parents ✓'});
+  }
 
   // ---- The club week ------------------------------------------------------------------
   // The training week runs Saturday → Friday. Every calendar, every weekly total and the
@@ -19540,6 +20569,7 @@ class Component extends DCLogic {
       'video':'<rect x="2.8" y="6" width="13" height="12" rx="2.2"/><path d="M15.8 11l5.4-3v8l-5.4-3z"/><path d="M7.6 10.6l3.4 1.9-3.4 1.9z"/>',
       'waves':'<path d="M2 7c2.5 0 2.5 2 5 2s2.5-2 5-2 2.5 2 5 2 2.5-2 5-2"/><path d="M2 13c2.5 0 2.5 2 5 2s2.5-2 5-2 2.5 2 5 2 2.5-2 5-2"/><path d="M2 19c2.5 0 2.5 2 5 2s2.5-2 5-2 2.5 2 5 2 2.5-2 5-2"/>',
       'timer':'<circle cx="12" cy="13.5" r="7.3"/><path d="M12 9.6v4l2.5 1.8"/><path d="M9.6 2.8h4.8"/><path d="M12 2.8v3.4"/>',
+      'stopwatch':'<path d="M9.6 2.8h4.8"/><path d="M12 2.8v3.3"/><path d="M18.3 5.1l1.5 1.5"/><circle cx="12" cy="13.8" r="7.4"/><path d="M12 13.8l3.3-2.1"/>',
       'credit-card':'<rect x="2.6" y="5.4" width="18.8" height="13.2" rx="2.4"/><path d="M2.6 9.8h18.8"/><path d="M6.2 14.4h4"/><path d="M15 14.4h3.2"/>',
       'activity':'<path d="M2.5 12h4l2.5-6.5 4.5 13L16 12h5.5"/>',
       'dumbbell':'<path d="M3 9.5v5M6.2 7v10M17.8 7v10M21 9.5v5"/><path d="M6.2 12h11.6"/>',
@@ -19895,6 +20925,7 @@ class Component extends DCLogic {
       {id:'ai', icon:'sparkles', title:'AI Assistants', sub:'Season · dryland · nutrition', tint:'rgba(39,51,214,.1)', color:'#2733D6'},
       {id:'review', icon:'shield-check', title:'AI Plan Review', sub:'Check plan vs zone rules', tint:'rgba(39,51,214,.1)', color:'#2733D6'},
       {id:'clock', icon:'timer', title:'Pace Clock', sub:'Run the session poolside', tint:'rgba(200,30,91,.1)', color:'#C81E5B'},
+      {id:'stopwatch', icon:'stopwatch', title:'Stopwatch', sub:'Laps · splits · stroke count', tint:'rgba(6,126,234,.1)', color:'#067EEA'},
       {id:'zoneeng', icon:'activity', title:'Zone Engine', sub:'6-zone rules & squad limits', tint:'rgba(12,122,79,.1)', color:'#0C7A4F'},
       {id:'tpace', icon:'gauge', title:'T-Pace Tests', sub:'Log 1000/400/T30/T20 · retest due', tint:'rgba(6,126,234,.1)', color:'#067EEA'},
       {id:'promo', icon:'trending-up', title:'Level-Up Review', sub:'Promotion candidates & reviews', tint:'rgba(12,122,79,.1)', color:'#0C7A4F'},
@@ -20172,7 +21203,7 @@ class Component extends DCLogic {
     const mainPadBottom = (S.view==='squad') ? '78px' : '0px';
 
     // ---- tool overlay content ----
-    const toolTitleMap={attday:'Daily Attendance',insights:'Insights',boards:'Boards',video:'Video Analysis',lounge:'Vortex Lounge',goals:'Season Goals',ai:'AI Assistants',review:'AI Plan Review',clock:'Pace Clock',talent:'Talent Board',recovery:'Recovery Board',improvers:'Top Improvers',rankings:'Rankings',standards:'Meet Standards',relay:'Relay Builder',zoneeng:'Zone Engine',sponsors:'Sponsors',tpace:'T-Pace Tests',promo:'Level-Up Review',entries:'Meet Entries',fitness:'Fitness Plan',inbody:'InBody Import',season:'Season Plan',race:'Race Strategy',risk:'Load & Risk',meetday:'Meet Day',bdays:'Birthdays'};
+    const toolTitleMap={attday:'Daily Attendance',insights:'Insights',boards:'Boards',video:'Video Analysis',lounge:'Vortex Lounge',goals:'Season Goals',ai:'AI Assistants',review:'AI Plan Review',clock:'Pace Clock',stopwatch:'Stopwatch',talent:'Talent Board',recovery:'Recovery Board',improvers:'Top Improvers',rankings:'Rankings',standards:'Meet Standards',relay:'Relay Builder',zoneeng:'Zone Engine',sponsors:'Sponsors',tpace:'T-Pace Tests',promo:'Level-Up Review',entries:'Meet Entries',fitness:'Fitness Plan',inbody:'InBody Import',season:'Season Plan',race:'Race Strategy',risk:'Load & Risk',meetday:'Meet Day',bdays:'Birthdays'};
     const toolScope = S.toolScopeClub ? ('Club-wide · '+this.allSwimmersFlat().length+' swimmers') : squad.name+' · '+squad.count+' swimmers';
 
     // ---- Birthdays ----
@@ -21101,7 +22132,7 @@ class Component extends DCLogic {
     const videoSwTabs = vidSwimmers.map((s,i)=>{
       const M=this.videoRaceMetrics(activeVid, i);
       return { name:s.name||('Swimmer '+(i+1)), on:i===vidSwIdx,
-        sub: M && M.total!=null ? (M.total+'s') : ((s.laps||[]).length ? ((s.laps||[]).length+' marks') : 'not marked'),
+        sub: M && M.total!=null ? this._raceTimeS(M.totalNum) : ((s.laps||[]).length ? ((s.laps||[]).length+' marks') : 'not marked'),
         bg: i===vidSwIdx?'var(--surface-ink)':'var(--surface-card)',
         fg: i===vidSwIdx?'var(--text-inverse)':'var(--vx-slate-700)',
         edge: i===vidSwIdx?'var(--surface-ink)':'var(--border-subtle)',
@@ -21153,6 +22184,19 @@ class Component extends DCLogic {
     const raceTypeOptions = activeVid ? ['50','100','200','400','800','1500'].map(rt=>({label:rt, onClick:()=>this.videoSetRaceType(rt), on:(activeVid.raceType||'100')===rt, bg:(activeVid.raceType||'100')===rt?squad.accent:'#fff', fg:(activeVid.raceType||'100')===rt?'#fff':'#3A4152'})) : [];
     const nextSplitLabel = activeVid ? (()=>{ const labels=this.videoSplitLabels(activeVid.raceType||'100'); const done=(vidTrack.laps||[]).length; return done<labels.length ? labels[done] : null; })() : null;
     const videoSplitsTotal = activeVid ? this.videoSplitLabels(activeVid.raceType||'100').length : 0;
+    // Auto-split (fixed camera): the marker lines placed on this clip, and what to prompt next.
+    const videoAutoSplitShow = !!activeVid && activeVid.kind==='mp4';
+    const videoNumberedLabels = activeVid ? this._vidNumberedLabels(activeVid.raceType||'100') : [];
+    const videoCalLines = activeVid ? this._vidCalLines(activeVid.id) : {};
+    const videoCalPlaced = videoNumberedLabels.filter(l=>videoCalLines[l]!=null);
+    const videoCalNext = videoNumberedLabels.find(l=>videoCalLines[l]==null) || null;
+    const videoCalOn = !!S.videoCalMode && videoAutoSplitShow;
+    const videoCalMarks = videoCalPlaced.map(l=>({label:l, left:(videoCalLines[l]*100).toFixed(1)+'%'}));
+    const videoCalHint = videoCalNext ? ('Tap where the '+videoCalNext+' line is') : 'All lines placed — tap “Done placing lines”';
+    const videoScanBusy = !!S.videoScanBusy;
+    const videoScanBtnLabel = videoScanBusy ? ('Scanning… '+(S.videoScanPct||0)+'%') : 'Auto-detect splits';
+    const videoCalBtnLabel = S.videoCalMode ? 'Done placing lines' : (videoCalPlaced.length? 'Edit lines' : 'Calibrate lines');
+    const videoScanCanRun = videoCalPlaced.length>0 && videoStartZero!=null && !videoScanBusy;
     // An analysis captured under the old marks holds more of them than the club now taps, and
     // "8/6 captured" reads as a fault rather than as an older swim.
     const videoSplitsDone = activeVid ? Math.min((vidTrack.laps||[]).length, videoSplitsTotal) : 0;
@@ -21183,7 +22227,7 @@ class Component extends DCLogic {
       return { id:v.id, title:v.title||'Untitled clip',
         meta:[(v.raceType||'100')+'m', v.stroke, this._videoSavedAt(v), v.tag,
               lanes.length>1?(lanes.length+' swimmers'):''].filter(Boolean).join(' · '),
-        total: M?(M.total+'s'):'—',
+        total: M?this._raceTimeS(M.totalNum):'—',
         splits: done+'/'+tot,
         isActive: activeVid && activeVid.id===v.id,
         rowBg: activeVid && activeVid.id===v.id ? '#F3F7FF' : '#fff',
@@ -21751,7 +22795,7 @@ class Component extends DCLogic {
       const primary = this._roleLabel(a) || (sq? sq.name : ''); const contactBits=[a.phone, a.email, _accessLine].filter(Boolean).join(' · ');
       const sub = primary + (sq?(' · '+sq.name):'') + ' · @' + (a.user||'') + (contactBits?(' · '+contactBits):'');
       const d=S.staffAccDraft||{}; const draftPhoto = editing? (d.photo ?? a.photo ?? '') : (a.photo||'');
-      return { id:a.id, name:a.label||'', sub:sub, isCustom, isAdminAcc, editing, pwDraft, onPwDraft, onSetPw,
+      return { id:a.id, name:a.label||'', sub:sub, isCustom, isAdminAcc, canRemove:this._canRemoveStaff(a.id), editing, pwDraft, onPwDraft, onSetPw,
         signInText:signIn.text, signInFg:signIn.fg, signInIcon:signIn.icon,
         pwMsgShow: S.staffPwFor===a.id && !!S.staffPwMsg,
         pwMsg: S.staffPwFor===a.id ? (S.staffPwMsg||'') : '',
@@ -21810,7 +22854,7 @@ class Component extends DCLogic {
         onEditEmail:(e)=>this.staffAccChange('email', e.target.value),
         onEditBio:(e)=>this.staffAccChange('bio', e.target.value),
         onSave:()=>this.staffAccSave(a.id), onCancelEdit:()=>this.staffAccCancel(),
-        onDelete:()=>this.staffAddDelete(a.id),
+        onDelete:()=>{ if(window.confirm('Remove '+(a.label||'this account')+' from the staff list?\n\nThis takes them off the roster on this device. It does not by itself cancel their sign-in — remove their email from the club sign-in list to do that.')) this.staffRemove(a.id); },
       };
     });
 
@@ -23750,6 +24794,147 @@ class Component extends DCLogic {
       toolTitle: toolTitleMap[S.tool]||'', toolScope,
       toolInsights:S.tool==='insights', toolBoards:S.tool==='boards', toolVideo:S.tool==='video', toolLounge:S.tool==='lounge', toolGoals:S.tool==='goals', toolAi:S.tool==='ai',
       toolReview:S.tool==='review', toolClock:S.tool==='clock', toolZone:S.tool==='zoneeng', toolTpace:S.tool==='tpace', toolPromo:S.tool==='promo',
+      ...((self=>{
+        const laps=(S.swtLaps||[]);
+        let fastest=-1, slowest=-1;
+        if(laps.length>=2){ fastest=0; slowest=0; laps.forEach((l,i)=>{ if(l.splitMs<laps[fastest].splitMs) fastest=i; if(l.splitMs>laps[slowest].splitMs) slowest=i; }); }
+        const strokeSum=laps.reduce((a,l)=>a+(l.strokes||0),0);
+        const counted=laps.filter(l=>l.strokes>0);
+        const avg=counted.length ? Math.round(strokeSum/counted.length*10)/10 : 0;
+        const started=!!(S.swtRunning || laps.length || self._swtBase);
+        const soundOn=S.swtSound!==false;
+        const lastLap=laps.length?laps[laps.length-1]:null;
+        return {
+          toolStopwatch:S.tool==='stopwatch',
+          ...((()=>{
+            // ---- whole-lane mode: a timer per swimmer off one master clock ----
+            const _mode=S.swMode||'one';
+            const many=_mode==='many';
+            const lanes=(S.swmLanes && S.swmLanes.length) ? S.swmLanes : self._swmMake(6);
+            const mNow=self._swmMs();
+            const startedN=lanes.filter(l=>l.startMs!=null).length;
+            const doneN=lanes.filter(l=>l.endMs!=null).length;
+            const next=lanes.filter(l=>l.startMs==null)[0];
+            const nextIdx=next ? lanes.indexOf(next)+1 : 0;
+            return {
+              swModeOne:_mode==='one', swModeMany:many, swModeSet:_mode==='set',
+              onSwModeOne:()=>self.setState({swMode:'one'}), onSwModeMany:()=>self.setState({swMode:'many'}),
+              onSwModeSet:()=>self.setState({swMode:'set'}),
+              modeOneBg: _mode==='one'?'#0A0F1A':'#fff', modeOneFg: _mode==='one'?'#fff':'#7A8296',
+              modeManyBg: many?'#0A0F1A':'#fff', modeManyFg: many?'#fff':'#7A8296',
+              modeSetBg: _mode==='set'?'#0A0F1A':'#fff', modeSetFg: _mode==='set'?'#fff':'#7A8296',
+              ...((()=>{
+                // ---- send-off set: "20 x 50m on 1:00", run automatically ----
+                const reps=self._setReps(), dist=self._setDist(), cyc=self._setCycleMs(), ms=self._setMs();
+                const rest=self._setRest(), tone=self._swtTone(), vol=self._swtVol();
+                const swimmers=self._setSwimmers(), gap=self._setGap();
+                const nxt=self._setNextSend(ms, cyc, gap*1000, reps, swimmers);
+                const planSets=self._setPlanSets();
+                const metres=reps*dist*swimmers;
+                const chip=(on,accent)=>({bg:on?(accent||'#067EEA'):'#fff', fg:on?'#fff':'#7A8296'});
+                return {
+                  onSetMount: self._setMountRef || (self._setMountRef=(el)=>self.onSetMount(el)),
+                  onSetToggle:()=>self.setToggle(), onSetReset:()=>self.setReset(),
+                  setBtnLabel: S.setOn?'Pause set':(S.setDone?'Run again':'Start set'),
+                  setBtnIcon: S.setOn?'pause':'play',
+                  setCountInit: self._fmtMinSec(nxt?nxt.left:0),
+                  setWhoInit: nxt ? ('Swimmer '+nxt.lane+' \u00b7 rep '+nxt.rep) : 'set complete',
+                  setSwimmersLabel: swimmers+(swimmers===1?' swimmer':' swimmers'),
+                  onSetSwimDec:()=>self.setStep('setSwimmers',-1,1,10), onSetSwimInc:()=>self.setStep('setSwimmers',1,1,10),
+                  setGapLabel: gap+'s apart',
+                  onSetGapDec:()=>self.setStep('setGap',-1,0,60), onSetGapInc:()=>self.setStep('setGap',1,0,60),
+                  setHasLane: swimmers>1,
+                  setLaneRows: (function(){ const out=[];
+                    for(let i=0;i<swimmers;i++){
+                      const t=self._setSwimMs(ms,i,cyc,gap*1000,reps), r=self._setSwimRep(ms,i,cyc,gap*1000,reps);
+                      out.push({ idx:String(i), label:'S'+(i+1), offLabel:(i*gap)+'s',
+                                 time:(t==null?'\u2014':self._fmtStopwatch(t/1000)),
+                                 rep:(r===0?'ready':(r>reps?'done':(r+'/'+reps))) });
+                    }
+                    return out; })(),
+                  setPlanShow: !!S.setPlanPick,
+                  onSetPlanToggle:()=>self.setState({setPlanPick:!S.setPlanPick}),
+                  setPlanBtnLabel: S.setPlanPick?'Hide the plan':'Load a set from the plan',
+                  setPlanEmpty: planSets.length===0,
+                  setPlanRows: planSets.map((st,i)=>({
+                    title: st.reps+' \u00d7 '+st.dist+'m'+(st.send>0?(' on '+self._fmtMinSec(st.send*1000)):''),
+                    sub: [st.section, st.txt].filter(Boolean).join(' \u00b7 ').slice(0,64),
+                    onClick:()=>self.setLoadPlan(i) })),
+                  setRepInit: self._setRepAt(ms,cyc,reps)+' / '+reps,
+                  setTotalInit: self._fmtMinSec(Math.min(ms,cyc*reps), true),
+                  setSummary: reps+' \u00d7 '+dist+'m on '+self._fmtMinSec(self._setSend()*1000)
+                              +(rest?(' + '+rest+'s rest'):'')
+                              +(swimmers>1?(' \u00b7 '+swimmers+' swimmers, '+gap+'s apart'):''),
+                  setMetres: (metres>=1000 ? (metres/1000).toFixed(metres%1000?1:0)+' km' : metres+' m'),
+                  setStatus: S.setDone?'Set complete':(S.setOn?'Running':(ms>0?'Paused':'Ready')),
+                  setDoneShow: !!S.setDone,
+                  setRepsLabel: String(reps),
+                  onSetRepsDec:()=>self.setStep('setReps',-1,1,99), onSetRepsInc:()=>self.setStep('setReps',1,1,99),
+                  onSetRepsInput:(e)=>self.setField('setReps', Math.max(1,Math.min(99,parseInt(e.target.value||'1',10)||1))),
+                  setSendLabel: self._fmtMinSec(self._setSend()*1000),
+                  onSetSendDec:()=>self.setStep('setSend',-5,5,1800), onSetSendInc:()=>self.setStep('setSend',5,5,1800),
+                  setRestLabel: rest?('+'+rest+'s'):'none',
+                  onSetRestDec:()=>self.setStep('setRest',-5,0,600), onSetRestInc:()=>self.setStep('setRest',5,0,600),
+                  setDistChips: [25,50,75,100,200,400].map(d=>({label:d+'m', ...chip(dist===d), onClick:()=>self.setField('setDist',d)})),
+                  setToneChips: [['horn','Horn'],['beep','Beep'],['triple','Triple']].map(t=>({label:t[1], ...chip(tone===t[0],'#0A0F1A'), onClick:()=>self.setField('swtTone',t[0])})),
+                  setVolChips: [[0.25,'Low'],[0.5,'Mid'],[0.75,'High'],[1,'Max']].map(v=>({label:v[1], ...chip(Math.abs(vol-v[0])<0.01), onClick:()=>self.setField('swtVol',v[0])})),
+                };
+              })()),
+              onSwmMount: self._swmMountRef || (self._swmMountRef=(el)=>self.onSwmMount(el)),
+              onSwmStartNext:()=>self.swmStartNext(), onSwmReset:()=>self.swmReset(),
+              onSwmCountDec:()=>self.swmSetCount(-1), onSwmCountInc:()=>self.swmSetCount(1),
+              swmMasterTime: self._fmtStopwatch(mNow/1000),
+              swmCountLabel: lanes.length+' swimmers',
+              swmNextLabel: next ? ('Start '+(lanes[nextIdx-1].name || ('Swimmer '+nextIdx))) : 'All swimmers started',
+              swmNextBg: next ? 'linear-gradient(135deg,#067EEA 0%,#2221D7 100%)' : '#9AA2B4',
+              swmSummary: startedN===0 ? 'Tap start to send the first swimmer off'
+                        : (startedN+' of '+lanes.length+' started'+(doneN?(' \u00b7 '+doneN+' finished'):'')),
+              swmRows: lanes.map((l,i)=>{
+                const on=l.startMs!=null, done=l.endMs!=null, run=on&&!done;
+                return {
+                  id:l.id, label:'S'+(i+1), name:l.name||'', placeholder:'Swimmer '+(i+1),
+                  time: self._fmtStopwatch(self._swmLaneMs(l,mNow)/1000),
+                  timeColor: done?'#0C7A4F':(run?'#0C1116':'#9AA2B4'),
+                  statusText: done?'Finished':(run?('Lap '+(l.laps.length+1)):'Ready'),
+                  statusBg: done?'#E6F6EE':(run?'rgba(6,126,234,.1)':'#F4F6F8'),
+                  statusFg: done?'#0C7A4F':(run?'#067EEA':'#9AA2B4'),
+                  showMain: !done, showStop: run,
+                  mainLabel: on?'Lap':'Start',
+                  mainBg: on?'linear-gradient(135deg,#067EEA 0%,#2221D7 100%)':'#0A0F1A',
+                  onMain: on ? (()=>self.swmLap(l.id)) : (()=>self.swmStartLane(l.id)),
+                  onStop: ()=>self.swmStop(l.id),
+                  onName: (e)=>self.swmName(l.id, e.target.value),
+                  hasSplits: l.laps.length>0,
+                  splits: l.laps.map(x=>({ n:'L'+x.n, t:self._fmtStopwatch(x.splitMs/1000) })),
+                };
+              }),
+            };
+          })()),
+          onSwtMount: self._swtMountRef || (self._swtMountRef=(el)=>self.onSwtMount(el)),
+          onSwtFsMount: self._swtFsMountRef || (self._swtFsMountRef=(el)=>self.onSwtFsMount(el)),
+          onSwtToggle:()=>self.swtToggle(), onSwtReset:()=>self.swtReset(), onSwtLap:()=>self.swtLap(),
+          onSwtStrokeMinus:()=>self.swtStroke(-1), onSwtStrokePlus:()=>self.swtStroke(1),
+          onSwtSoundToggle:()=>self.swtSoundToggle(),
+          onSwtFsEnter:()=>self.swtFsEnter(), onSwtFsExit:()=>self.swtFsExit(),
+          swtFs:!!S.swtFs,
+          swtSoundOn:soundOn, swtSoundIcon: soundOn?'volume-2':'volume-x',
+          swtBtnLabel: S.swtRunning?'Pause':(started?'Resume':'Start'),
+          swtBtnIcon: S.swtRunning?'pause':'play',
+          swtStatusLabel: S.swtRunning?('Running · lap '+(laps.length+1)):(started?'Paused':'Ready'),
+          swtFsSub: lastLap ? ('Last lap '+self._fmtStopwatch(lastLap.splitMs/1000)+' · '+laps.length+(laps.length===1?' lap':' laps')) : 'Tap Lap at each wall',
+          swtStrokes: String(S.swtStrokes||0),
+          swtHasLaps: laps.length>0,
+          swtNoLaps: laps.length===0,
+          swtStatLaps: String(laps.length),
+          swtStatStrokes: String(strokeSum+(S.swtStrokes||0)),
+          swtStatAvg: avg>0?String(avg):'—',
+          swtRows: laps.slice().reverse().map(l=>{ const i=l.n-1; const isF=i===fastest, isS=i===slowest; return {
+            n:String(l.n), split:self._fmtStopwatch(l.splitMs/1000), total:self._fmtStopwatch(l.totalMs/1000),
+            strokes: l.strokes>0?String(l.strokes):'—',
+            splitColor: isF?'#0E9F6E':(isS?'#E5484D':'#0C1116'),
+            tag: isF?'fastest':(isS?'slowest':''), tagShow: isF||isS }; }),
+        };
+      })(this)),
       promoQuery:S.promoQuery, onPromoQuery:(e)=>this.setState({promoQuery:e.target.value}),
       promoRows, promoEmpty, promoScopeLabel,
       toolEntries:S.tool==='entries', toolFitness:S.tool==='fitness', toolInbody:S.tool==='inbody', toolSponsors:S.tool==='sponsors',
@@ -23765,6 +24950,9 @@ class Component extends DCLogic {
       // ---- birthdays ----
       toolBdays:S.tool==='bdays', bdayScopeLabel:toolScope,
       bdayTodayRows, bdayHasToday: bdayTodayRows.length>0,
+      bdaySendAllShow: bdayTodayRows.filter(r=>!r.sent).length>1,
+      bdaySendAllLabel: 'Send to all '+bdayTodayRows.filter(r=>!r.sent).length+' with a birthday today',
+      onBdaySendAll: ()=>this.birthdaySendAllToday(),
       bdayUpcomingRows, bdayHasUpcoming: bdayUpcomingRows.length>0,
       bdayNoneAtAll: bdayTodayRows.length===0 && bdayUpcomingRows.length===0,
       bdayMissingRows, bdayHasMissing: bdayMissingCount>0,
@@ -23902,6 +25090,8 @@ class Component extends DCLogic {
       fitSections, fitTitle, onFitTitle, onFitAddSection, onFitReset,
       fitMediaMsg:S.fitMediaMsg||'', fitMediaMsgShow:!!S.fitMediaMsg,
       onSaveFitSession:()=>this.saveFitSession(S.squadId), fitSavedMsg:S.fitSavedMsg||'', fitSavedMsgShow:!!S.fitSavedMsg,
+      authExpiredShow: this._saveNeedsSignIn(S),
+      onReSignIn: ()=>this.setState({screen:'login', loginStage:'accounts', loginErr:''}),
       fitSessDate:S.fitSessDate||this.todayISO(), onFitSessDate:(e)=>this.setState({fitSessDate:e.target.value}),
       fitSlotAMBg:(S.fitSessSlot!=='PM')?squad.accent:'#F4F6F8', fitSlotAMFg:(S.fitSessSlot!=='PM')?'#fff':'#7A8296',
       fitSlotPMBg:(S.fitSessSlot==='PM')?squad.accent:'#F4F6F8', fitSlotPMFg:(S.fitSessSlot==='PM')?'#fff':'#7A8296',
@@ -24132,6 +25322,16 @@ class Component extends DCLogic {
       videoStartAltLabel: videoStartCands.length>1
         ? ('Not it? Try the next of '+videoStartCands.length+' sounds') : '',
       onVideoNextStartCand:()=>this.videoNextStartCandidate(),
+      // ---- Auto-split on a fixed camera ----
+      videoAutoSplitShow, videoCalOn, videoCalMarks, videoCalHint,
+      videoCalBtnLabel, videoCalHasLines: videoCalPlaced.length>0,
+      videoCalPlacedLabel: videoCalPlaced.length+'/'+videoNumberedLabels.length+' lines',
+      videoScanBtnLabel, videoScanCanRun, videoScanBusy,
+      videoScanMsg: S.videoScanMsg||'', videoScanMsgShow: !!S.videoScanMsg,
+      onVideoCalToggle: activeVid ? ()=>this.videoCalToggle() : null,
+      onVideoCalPlace: activeVid ? (e)=>this.videoCalPlace(e) : null,
+      onVideoCalClear: activeVid ? ()=>this.videoCalClear() : null,
+      onVideoAutoSplit: activeVid ? ()=>this.videoAutoSplit() : null,
       ...(()=>{
         const M=this.videoRaceMetrics(activeVid, vidSwIdx);
         // Nothing marked yet. Every key the sheet reads is still handed over, because a binding
@@ -24146,7 +25346,7 @@ class Component extends DCLogic {
         const head=[];
         if(M.firstFifteen) head.push({label:'First 15m', value:M.firstFifteen.sec, sub:M.firstFifteen.vel+' m/s · start & underwater', color:'var(--color-brand)'});
         if(M.underwater) head.push({label:'Underwater', value:M.underwater.vel, sub:M.underwater.metres+' m · '+M.underwater.sec+' s', color:'var(--ac-cyan)'});
-        if(M.out) head.push({label:'Out / back', value:M.out+' / '+M.back, sub:'first & second length', color:'var(--color-brand)'});
+        if(M.out) head.push({label:'Out / back', value:this._fmtStopwatch(+M.out)+' / '+this._fmtStopwatch(+M.back), sub:'first & second length', color:'var(--color-brand)'});
         // The underwaters. Off the block and off the walls are two different skills, and a
         // swimmer who kicks eight off the start and three off every turn is losing the race at
         // the turns — which one figure averaged over both would hide.
@@ -24164,7 +25364,7 @@ class Component extends DCLogic {
         // four bars of the same height and says nothing about where the race was lost.
         const span=Math.max(0.15, top-floor);
         return {
-          raceHasMetrics:true, raceTotal:M.total!=null?(M.total+'s'):'', raceTotalShow:M.total!=null,
+          raceHasMetrics:true, raceTotal:M.total!=null?this._raceTimeS(M.totalNum):'', raceTotalShow:M.total!=null,
           raceStartWrong: !!M.startWrong,
           raceEventCap: (activeVid&&activeVid.raceType?activeVid.raceType+'m':'race')+' · total',
           raceHeadline:head,

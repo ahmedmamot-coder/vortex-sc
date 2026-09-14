@@ -17,9 +17,6 @@ export interface VideoSplit {
   label: string;
   seconds: number;
   sort_order: number;
-  /** Strokes taken in the segment ending at this marker. Null until the
-   *  video_split_strokes.sql migration is run, or when nobody counted. */
-  strokes: number | null;
 }
 
 export interface VideoNote {
@@ -52,12 +49,7 @@ export async function getVideoDetail(
   ]);
   return {
     video: video as Video,
-    // Normalise strokes to null so the UI needn't care whether the column exists
-    // yet (it is absent until video_split_strokes.sql is run).
-    splits: (splits ?? []).map((s) => ({
-      ...s,
-      strokes: (s as { strokes?: number | null }).strokes ?? null,
-    })) as VideoSplit[],
+    splits: (splits ?? []) as VideoSplit[],
     notes: (notes ?? []) as VideoNote[],
   };
 }

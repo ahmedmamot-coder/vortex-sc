@@ -3,13 +3,11 @@
 
 import { readFileSync, readdirSync } from "node:fs";
 import { bind, methodSource, describe, it, itAsync, eq, report, SOURCE, sourceBetween, runInSandbox } from "./harness.mjs";
-import { computeRaceMetrics, markerMetres, raceDistance } from "@/lib/race";
-import { OnsetDetector } from "@/lib/audio-onset";
-import { CrossingSequencer } from "@/lib/motion-split";
 import { parseSetNotation, perRepDistance, describeSet } from "@/lib/plan-notation";
 // The real route module. Node strips the types, so these tests run the filter that ships
 // rather than a regex-mangled copy of it.
 const AI_ROUTE = await import("../src/app/api/ai/coach/route.ts");
+const SW = await import("../src/lib/stopwatch.ts");
 
 /* ---------------------------------------------------------------- attendance
    A swimmer signed off (traveling / sick / inactive) must count as absent, and a
@@ -109,6 +107,15 @@ describe("a set can be written over lines and moved in the order", () => {
   it("the notes field takes more than one line", () => {
     eq(/<textarea value="\{\{ st\.txt \}\}"[^>]*rows="\{\{ st\.txtRows \}\}"/.test(SOURCE), true,
       "still a single-line input");
+  });
+  // The staff Bio box binds its value like every other textarea in the app — `value="{{ ... }}"`,
+  // not child text. Written the other way (child text, no value attribute) the framework filled
+  // it with the whole row object and it showed a literal "[object Object]".
+  it("the staff bio textarea binds its value, not child text", () => {
+    eq(/<textarea value="\{\{ s\.editBio \}\}" oninput="\{\{ s\.onEditBio \}\}"[^>]*><\/textarea>/.test(SOURCE), true,
+      "the bio textarea must use value=\"{{ s.editBio }}\" with an empty body, or it renders [object Object]");
+    eq(/\{\{ s\.editBio \}\}<\/textarea>/.test(SOURCE), false,
+      "the bio value must not be bound as textarea child text");
   });
   it("and the sheet that prints keeps the line breaks", () => {
     const kept = SOURCE.match(/<span style="white-space:pre-line">\{\{ p[v]?set\.txt \}\}<\/span>/g) || [];
@@ -875,6 +882,113 @@ describe("shipped source", () => {
                           { edits: {}, deleted: {}, added: { junior: [other] } });
         eq((out.added.junior || []).length, 1, "a swimmer added on another device was dropped");
       });
+    });
+  });
+
+  /* ---------------------------------------------------------------- deleting a swimmer
+     Sameh and Mary both work the roster from their own phones, and a swimmer one of them
+     deleted kept coming back. A swimmer the club ADDED — 212 of this club's swimmers, and
+     everyone ever moved once — lives only in `added`, and deleting them used to mean splicing
+     them out of that array and nothing else. The roster document is one shared record merged
+     as a union of `added`, so the moment the splice met a copy that still held the child —
+     another coach's phone, or the database's own copy from before the delete — the union put
+     them straight back. The delete looked like it never saved. `removed` is the tombstone the
+     union honours: squad-independent and sticky, like `deleted`, but able to express the
+     removal of a swimmer who is in no squad's base list. */
+  describe("deleting a swimmer the club added", () => {
+    const src = sourceBetween("function _rosterShaped(o){", "\n  window.__vxMergeRoster");
+    const merge = new Function(src + "\nreturn _mergeRoster;")();
+    const melek = { id: "sw_melek", name: "Melek Riabi", age: 17 };
+
+    it("stays deleted against a copy that never heard about the delete", () => {
+      // mine: deleted here. theirs (the database): still holds the child in `added`.
+      const mine   = { edits: {}, deleted: { vortexb: { sw_melek: true } }, added: {}, removed: { sw_melek: true } };
+      const theirs = { edits: {}, deleted: {}, added: { vortexb: [melek] }, removed: {} };
+      const out = merge(mine, theirs);
+      eq((out.added.vortexb || []).length, 0, "the merge put the deleted child back from the database copy");
+      eq(!!out.removed.sw_melek, true, "the tombstone was dropped, so the next merge would resurrect them");
+    });
+
+    it("a delete this device has not heard about is applied to it", () => {
+      // The other way round: this device is the stale one, and the delete rides in from the merge.
+      const mine   = { edits: {}, deleted: {}, added: { vortexb: [melek] }, removed: {} };
+      const theirs = { edits: {}, deleted: { vortexb: { sw_melek: true } }, added: {}, removed: { sw_melek: true } };
+      const out = merge(mine, theirs);
+      eq((out.added.vortexb || []).length, 0, "the deletion the other coach made was undone");
+      eq(!!out.removed.sw_melek, true);
+    });
+
+    it("a swimmer nobody deleted is untouched", () => {
+      const other = { id: "n1", name: "New" };
+      const out = merge({ edits: {}, deleted: {}, added: {}, removed: {} },
+                        { edits: {}, deleted: {}, added: { junior: [other] }, removed: {} });
+      eq((out.added.junior || []).length, 1, "an ordinary added swimmer was dropped by the merge");
+    });
+
+    // The write side and the screen, end to end: adminDeleteSwimmer writes the tombstone, and
+    // rebuildRoster takes the child off the roster and does not put them back.
+    const squads = [{ id: "vortexb", name: "Vortex B" }, { id: "legend", name: "Legend" }];
+    const BASE = { vortexb: [{ id: "base1", name: "Base Swimmer" }], legend: [] };
+    const app = (rosterEdits) => {
+      const ctx = {
+        squads,
+        squadById: { vortexb: squads[0], legend: squads[1] },
+        rosterEdits,
+        roster: {},
+        persistRosterEdits() { this.rebuildRoster(); return true; },
+        setState() {}, forceUpdate() {}, audit() {},
+      };
+      const realWin = globalThis.window;
+      globalThis.window = { ...(realWin || {}), VX_ROSTER: BASE };
+      for (const f of ["rebuildRoster", "adminDeleteSwimmer", "_rosterTotalFor"])
+        bind(f, ctx, ["_patchAnywhere", "_ageFromDob", "_dobParts"]);
+      ctx.rebuildRoster();
+      ctx.restore = () => { globalThis.window = realWin; };
+      return ctx;
+    };
+    const has = (ctx, sqid, id) => (ctx.roster[sqid] || []).some((s) => s.id === id);
+
+    it("an added swimmer is off the roster the moment they are deleted, with a tombstone written", () => {
+      const ctx = app({ edits: {}, deleted: {}, added: { vortexb: [melek] }, removed: {} });
+      try {
+        eq(has(ctx, "vortexb", "sw_melek"), true, "fixture: the swimmer should start on the roster");
+        ctx.adminDeleteSwimmer("vortexb", "sw_melek");
+        eq(has(ctx, "vortexb", "sw_melek"), false, "the deleted swimmer is still on the roster");
+        eq(!!ctx.rosterEdits.removed.sw_melek, true, "no tombstone was written — the merge will bring them back");
+        eq((ctx.rosterEdits.added.vortexb || []).some((s) => s.id === "sw_melek"), false,
+           "the added copy was left in the document for the union to resurrect");
+      } finally { ctx.restore(); }
+    });
+
+    it("the saved-roster count drops by one when a swimmer is deleted", () => {
+      const ctx = app({ edits: {}, deleted: {}, added: { vortexb: [melek] }, removed: {} });
+      try {
+        const before = ctx._rosterTotalFor(ctx.rosterEdits);
+        ctx.adminDeleteSwimmer("vortexb", "sw_melek");
+        eq(ctx._rosterTotalFor(ctx.rosterEdits), before - 1,
+           "the count still includes the deleted swimmer, so a good delete reads as not saved");
+      } finally { ctx.restore(); }
+    });
+
+    it("a base-list swimmer still deletes", () => {
+      const ctx = app({ edits: {}, deleted: {}, added: {}, removed: {} });
+      try {
+        ctx.adminDeleteSwimmer("vortexb", "base1");
+        eq(has(ctx, "vortexb", "base1"), false, "a base swimmer was not removed");
+      } finally { ctx.restore(); }
+    });
+
+    it("and after the delete is merged with the copy that still holds them, they are still gone", () => {
+      // The whole point, chained: delete on this device, then a pull hands back the database copy
+      // that never heard — the merge must not resurrect the child, and rebuild must not show them.
+      const ctx = app({ edits: {}, deleted: {}, added: { vortexb: [melek] }, removed: {} });
+      try {
+        ctx.adminDeleteSwimmer("vortexb", "sw_melek");
+        const dbStillHasThem = { edits: {}, deleted: {}, added: { vortexb: [melek] }, removed: {} };
+        ctx.rosterEdits = merge(ctx.rosterEdits, dbStillHasThem);
+        ctx.rebuildRoster();
+        eq(has(ctx, "vortexb", "sw_melek"), false, "the child came back after the pull merged the stale copy in");
+      } finally { ctx.restore(); }
     });
   });
 
@@ -4698,10 +4812,24 @@ describe("InBody sheet", () => {
       // only somebody else's child, so it empties completely.
       eq(JSON.stringify(cut.deleted), "{}", "a deletion of another family's child came back");
 
-      // All three parts are always present, even empty: rebuildRoster() defends against a missing
-      // one because a half-shaped document there is a white screen, not a wrong roster.
+      // The core parts are always present, even empty: rebuildRoster() defends against a missing
+      // one because a half-shaped document there is a white screen, not a wrong roster. `removed`
+      // rides along so a parent whose child the club deleted stops seeing them.
       const empty = M.pickRosterDoc(null, mine);
-      eq(Object.keys(empty).sort().join(","), "added,deleted,edits", "the three-part shape is not guaranteed");
+      eq(Object.keys(empty).sort().join(","), "added,deleted,edits,removed", "the roster-slice shape is not guaranteed");
+    });
+
+    it("a child the club deleted is carried into the family slice as removed, and only that family's", async () => {
+      // A `removed` tombstone is keyed by swimmer id and is what stops the parent's device putting
+      // a deleted child back. It is filtered to `mine` like every other part — one family never
+      // learns which of another family's children the club removed.
+      const M = await import("../src/app/api/family/state/route.ts");
+      const cut = M.pickRosterDoc({
+        edits: {}, deleted: {}, added: {},
+        removed: { r157: true, r76: true },
+      }, new Set(["r157", "r158"]));
+      eq(JSON.stringify(cut.removed), JSON.stringify({ r157: true }),
+         "the removed tombstone was dropped, or another family's leaked in");
     });
 
     it("the family slice allowlists keys rather than excluding them", () => {
@@ -6196,6 +6324,21 @@ describe("InBody sheet", () => {
       eq(swimmerExists(base, null, "r999"), false, "an id the club has never held is not found");
     });
 
+    // A swimmer the club ADDED, then deleted, lives only in `added` and carries no per-squad
+    // `deleted` the old code could read — `removed` is the tombstone that says they are gone, and
+    // a parent must not be able to link to a child the club removed.
+    it("reports a swimmer the club removed as not found, whatever squad they sat in", () => {
+      const swimmerExists = fn("swimmerExists");
+      // The added copy is still in the document (a stale device's, say) but the tombstone stands.
+      eq(swimmerExists(null, { edits: {}, deleted: {}, removed: { sw_x: true },
+                               added: { legend: [{ id: "sw_x", name: "Added Then Gone" }] } }, "sw_x"), false,
+         "a removed added swimmer could still be linked to");
+      // And a base swimmer removed outright, with no per-squad deletion recorded.
+      const base = { legend: [{ id: "r1", name: "Omar Abu Rezeq" }] };
+      eq(swimmerExists(base, { edits: {}, deleted: {}, added: {}, removed: { r1: true } }, "r1"), false,
+         "a removed base swimmer was still found");
+    });
+
     // Everything below is what stops an unauthenticated route being a way to read a child's
     // date of birth. It has no sign-in because the person asking has no account yet.
     it("never sends a date of birth back, in any answer it can give", () => {
@@ -6549,6 +6692,11 @@ describe("InBody sheet", () => {
       // the tablet decide the laptop's unsent work is stale. The roster itself is in vx_roster
       // and in vx_roster_edits, both accounted for already.
       vx_roster_sent: "which of this device's roster rows the database has taken",
+      // Where each split line sits in the frame for auto-split. It is a property of THIS camera
+      // in THIS position, not of the swim: the same clip filmed from the other end of the pool
+      // has different lines. Sharing it would put one poolside phone's angle onto another's, so it
+      // stays on the device that placed it — and a device without it simply calibrates again.
+      vx_vidcal: "where this device placed each auto-split marker line, per clip",
     };
     // 2. A local copy of a database table, so the screen can draw before the read comes back.
     //    The table is the truth; losing the copy costs nothing.
@@ -6636,8 +6784,14 @@ describe("InBody sheet", () => {
     // the club later DELETED from the meets would be recreated from the old calendar on the next
     // boot — a meet the club has cancelled coming back by itself, every morning. It is also the
     // shortest-lived key here: it goes when vx_meets_cal does.
+    //
+    // 15, for vx_vidcal, the auto-split marker lines. The argument is that it is not data about
+    // the swim but about the camera: where the 25m line falls in the frame is a fact of where the
+    // phone was standing, and the same race filmed from the other end has different lines. Syncing
+    // it would push one poolside angle onto every other device; a device without it just taps the
+    // lines again, in seconds, against the frame it is looking at.
     it("the device-only list stays small enough to read", () =>
-      eq(Object.keys(DEVICE_ONLY).length <= 14, true, "if this needs to grow, the reason needs an argument"));
+      eq(Object.keys(DEVICE_ONLY).length <= 15, true, "if this needs to grow, the reason needs an argument"));
   });
 
   // Before any of that: the file has to parse. A stray brace anywhere in 16,000 lines takes the
@@ -7554,7 +7708,7 @@ describe("InBody sheet", () => {
       c._vidSwimmers = bind("_vidSwimmers", c);
       c._vidTrack = bind("_vidTrack", c, ["_vidSwimmers"]);
       c.videoRaceMetrics = bind("videoRaceMetrics", c, ["_splitMetres", "_vidTrack", "_vidSwimmers"]);
-      c._compareTable = bind("_compareTable", c);
+      c._compareTable = bind("_compareTable", c, ["_fmtStopwatch"]);
       c.videoCompareTable = bind("videoCompareTable", c, ["videoRaceMetrics", "_compareTable"]);
       c.videoCompareToggle = bind("videoCompareToggle", c);
       return c;
@@ -7694,7 +7848,7 @@ describe("InBody sheet", () => {
       c._vidPatchTrack = bind("_vidPatchTrack", c, ["_vidSwimmers"]);
       c._vidApply = bind("_vidApply", c, ["_vidPatchTrack", "_vidSwimmers"]);
       c.videoRaceMetrics = bind("videoRaceMetrics", c, ["_splitMetres", "_vidTrack", "_vidSwimmers"]);
-      c._compareTable = bind("_compareTable", c);
+      c._compareTable = bind("_compareTable", c, ["_fmtStopwatch"]);
       c.videoClipCompare = bind("videoClipCompare", c, ["_vidSwimmers", "videoRaceMetrics", "_compareTable"]);
       c.videoStartZero = bind("videoStartZero", c, ["_activeVideo", "_vidTrack"]);
       c._videoStartLimit = bind("_videoStartLimit", c, ["_vidSwimmers"]);
@@ -7857,13 +8011,13 @@ describe("InBody sheet", () => {
       c._vidPatchTrack = bind("_vidPatchTrack", c, ["_vidSwimmers"]);
       c._vidApply = bind("_vidApply", c, ["_vidPatchTrack", "_vidSwimmers"]);
       c.videoRaceMetrics = bind("videoRaceMetrics", c, ["_splitMetres", "_vidTrack", "_vidSwimmers"]);
-      c._compareTable = bind("_compareTable", c);
+      c._compareTable = bind("_compareTable", c, ["_fmtStopwatch"]);
       c.videoClipCompare = bind("videoClipCompare", c, ["_vidSwimmers", "videoRaceMetrics", "_compareTable"]);
       c.videoSwimmerLink = bind("videoSwimmerLink", c, ["_activeVideo", "allSwimmersFlat", "_vidApply"]);
       c.videoSwimmerOutside = bind("videoSwimmerOutside", c, ["_activeVideo", "_vidApply"]);
       c.videoSwimmerUnlink = bind("videoSwimmerUnlink", c, ["_activeVideo", "_vidApply"]);
       c._videoSavedAt = bind("_videoSavedAt", c);
-      c.swimmerVideos = bind("swimmerVideos", c, ["_vidSwimmers", "videoRaceMetrics", "_videoSavedAt"]);
+      c.swimmerVideos = bind("swimmerVideos", c, ["_vidSwimmers", "videoRaceMetrics", "_videoSavedAt", "_raceTimeS", "_fmtStopwatch"]);
       return c;
     };
     const laps = (t) => [{ label: "Start", t: 0 }, { label: "15m", t: 6.6 }, { label: "50m", t }];
@@ -7995,6 +8149,8 @@ describe("InBody sheet", () => {
       ["the in-clip head to head", "{{ videoClipCompareHas }}", "{{ videoClipCompareFoot }}"],
       ["the assistant card", "Coach's read", "{{ videoAiFoot }}"],
       ["the folder search", "Find a swim —", "{{ videoFolderNoHitsMsg }}"],
+      ["the auto-split card", "Auto-split · fixed camera", "{{ videoScanMsg }}"],
+      ["the calibration overlay", "{{ onVideoCalPlace }}", "{{ videoCalHint }}"],
     ];
     for (const [what, from, to] of REGIONS) {
       it(what + " carries no colour of its own", () => {
@@ -8028,7 +8184,7 @@ describe("InBody sheet", () => {
       const css = (SOURCE.match(/\.vx-toolcard\{[\s\S]*?\.vx-toolcard-note\{[^}]*\}/) || [""])[0];
       eq(/pattern-transparent\.png/.test(css), true, "the watermark");
       eq(/var\(--brand-gradient\)/.test(css), true, "and the brand rule down the left");
-      eq(videoSection.split('class="vx-toolcard"').length - 1, 3,
+      eq(videoSection.split('class="vx-toolcard"').length - 1, 4,
          "every new card uses it rather than each inventing a card");
     });
     // The split table's headings did not sit over their own numbers on a phone, because the
@@ -8148,6 +8304,7 @@ describe("InBody sheet", () => {
       c._goertzel = bind("_goertzel", c);
       c._findStartTone = bind("_findStartTone", c, ["_audioEnvelope", "_percentile", "_goertzel"]);
       c._fmtStopwatch = bind("_fmtStopwatch", c);
+      c._raceTimeS = bind("_raceTimeS", c, ["_fmtStopwatch"]);
       return c;
     };
 
@@ -8248,6 +8405,17 @@ describe("InBody sheet", () => {
       eq(c._fmtStopwatch(26.63), "26.63");
       eq(c._fmtStopwatch(63.4), "1:03.40", "a 100 is a minute and change, not 63 seconds");
       eq(c._fmtStopwatch(-0.42), "−0.42", "before the gun it counts down");
+    });
+
+    // The race-analysis headline read "63.21s" for a 100 that took 1:03.21 — a total is a race
+    // time, and a race time past a minute is minutes and seconds. The 's' belongs on the seconds
+    // form only; "1:03.21s" is not a time anyone writes.
+    it("a total past a minute reads as m:ss, not raw seconds", () => {
+      const c = ctx();
+      eq(c._raceTimeS(58.58), "58.58s", "a sub-minute swim keeps the seconds unit");
+      eq(c._raceTimeS(63.21), "1:03.21", "a 100 over the minute is 1:03.21, and carries no trailing s");
+      eq(c._raceTimeS(123.45), "2:03.45");
+      eq(c._raceTimeS(9.9), "9.90s");
     });
   });
 
@@ -11246,6 +11414,21 @@ describe("the squads are the club's, not the export's", () => {
     eq(where, ["junior"]);
   });
 
+  it("a swimmer the club deleted entirely is out, base or added, whatever squad they sat in", () => {
+    // `deleted` is per-squad and cannot express the removal of a swimmer who lives only in `added`
+    // — deleting them used to be a bare splice from that array, and the connector's own merge, a
+    // union like the app's, would name them again from any copy that still held them. `removed` is
+    // the squad-independent tombstone that fixes it, and the connector has to read it too.
+    const out = MCP_DATA.mergeRoster(
+      [{ slug: "vortexb", name: "Vortex B", swimmers: [{ id: "base1", first: "Base", last: "One" }] },
+       { slug: "legend", name: "Legend", swimmers: [] }],
+      { edits: {}, deleted: {}, removed: { sw_add: true, base1: true },
+        added: { vortexb: [{ id: "sw_add", first: "Added", last: "Child" }] } });
+    const ids = out.flatMap((sq) => sq.swimmers.map((s) => s.id));
+    eq(ids.includes("sw_add"), false, "a deleted added swimmer is still named by the connector");
+    eq(ids.includes("base1"), false, "a deleted base swimmer is still named by the connector");
+  });
+
   it("an overlay missing a part does not take the roster with it", () => {
     // An overlay written by an older build, or half restored, can arrive without `deleted`. The
     // app guards this for the same reason: it is not a wrong roster, it is a crash.
@@ -12667,231 +12850,469 @@ describe("the T-pace screen tells the truth about a save", () => {
   });
 });
 
-/* ------------------------------------------------------------- race metrics
-   The pro-style analysis: velocity, stroke rate, distance-per-stroke and stroke
-   index per segment. These are the numbers a coach reads back to a swimmer, so a
-   wrong one is worse than none. The relationships must stay self-consistent:
-   velocity = (SR/60) × DPS, and SI = velocity × DPS. */
-describe("race metrics", () => {
-  it("reads the metres a marker sits at", () => {
-    eq(markerMetres("Reaction"), 0);
-    eq(markerMetres("15m"), 15);
-    eq(markerMetres("100m"), 100);
-    eq(markerMetres("Breakout"), null, "breakout has no fixed distance");
-    eq(markerMetres("Turn"), null);
-  });
-
-  it("knows each race's finishing distance", () => {
-    eq(raceDistance("50"), 50);
-    eq(raceDistance("100"), 100);
-    eq(raceDistance("1500"), 1500);
-  });
-
-  // A 10m segment (15m→25m) swum in 5.0s at 5 strokes: 2.0 m/s, DPS 2.0, SR 60, SI 4.0.
-  it("computes velocity, SR, DPS and SI for a clean segment", () => {
-    const { rows } = computeRaceMetrics("100", [
-      { label: "15m", seconds: 10 },
-      { label: "25m", seconds: 15, strokes: 5 },
-    ]);
-    const seg = rows[1];
-    eq(seg.velocity, 2, "10m / 5s");
-    eq(seg.dps, 2, "10m / 5 strokes");
-    eq(seg.sr, 60, "5 strokes in 5s → 60/min");
-    eq(seg.si, 4, "velocity × DPS");
-  });
-
-  it("keeps velocity = SR/60 × DPS internally consistent", () => {
-    const { rows } = computeRaceMetrics("100", [
-      { label: "25m", seconds: 12.19 },
-      { label: "35m", seconds: 18.22, strokes: 5 },
-    ]);
-    const seg = rows[1];
-    // Reconstruct velocity from the reported SR and DPS.
-    const v = (seg.sr / 60) * seg.dps;
-    eq(Math.abs(v - seg.velocity) < 0.05, true, `${v} vs ${seg.velocity}`);
-  });
-
-  it("shows a Breakout as a time only, never a bogus speed", () => {
-    const { rows } = computeRaceMetrics("100", [
-      { label: "15m", seconds: 6.27 },
-      { label: "Breakout", seconds: 8.0 },
-      { label: "25m", seconds: 12.19, strokes: 6 },
-    ]);
-    eq(rows[1].velocity, null, "breakout distance is unknown");
-    eq(rows[1].segment, 1.73, "but its raw split still shows");
-    // The 25m segment measures back to 15m across the breakout: 10m in 5.92s.
-    eq(rows[2].distance, 10);
-    eq(rows[2].velocity, 1.69);
-  });
-
-  it("splits a 100 into out and back at the 50", () => {
-    const m = computeRaceMetrics("100", [
-      { label: "Reaction", seconds: 0.62 },
-      { label: "50m", seconds: 27.48 },
-      { label: "100m", seconds: 58.58 },
-    ]);
-    eq(m.total, 58.58);
-    eq(m.out, 27.48);
-    eq(m.back, 31.1, "58.58 − 27.48");
-    eq(m.reaction, 0.62);
-  });
-
-  it("leaves totals null until the race is finished", () => {
-    const m = computeRaceMetrics("100", [
-      { label: "15m", seconds: 6.27 },
-      { label: "25m", seconds: 12.19 },
-    ]);
-    eq(m.total, null);
-    eq(m.out, null);
-    eq(m.avgVelocity, null);
-  });
-
-  it("omits DPS and SR when strokes were not counted", () => {
-    const { rows } = computeRaceMetrics("100", [
-      { label: "15m", seconds: 10 },
-      { label: "25m", seconds: 15 },
-    ]);
-    eq(rows[1].velocity, 2, "velocity needs only the clock");
-    eq(rows[1].dps, null);
-    eq(rows[1].sr, null);
-    eq(rows[1].si, null);
-  });
-
-  it("never divides by a zero stroke count", () => {
-    const { rows } = computeRaceMetrics("100", [
-      { label: "25m", seconds: 10 },
-      { label: "50m", seconds: 15, strokes: 0 },
-    ]);
-    eq(rows[1].dps, null);
-    eq(rows[1].sr, null);
-  });
-
-  it("flags the fastest and slowest full segments", () => {
-    const m = computeRaceMetrics("100", [
-      { label: "Reaction", seconds: 0.6 },
-      { label: "15m", seconds: 6.0 },   // 15m in 5.4s → 2.78 m/s (fastest, the dive)
-      { label: "50m", seconds: 27.0 },  // 35m in 21s → 1.67 m/s
-      { label: "100m", seconds: 58.0 }, // 50m in 31s → 1.61 m/s (slowest)
-    ]);
-    eq(m.fastestLabel, "15m");
-    eq(m.slowestLabel, "100m");
-  });
-});
-
-/* -------------------------------------------------------------- auto-start
-   The video clock locks to the starter's beep by watching for a sudden spike in
-   the audio spectrum. A false start (firing on crowd noise, or before the race)
-   would silently mis-time every split, so the guardrails matter more than the
-   catch: it must ignore a steady room and a slow swell, and only trip on the
-   sharp transient of the signal. */
-describe("auto-start onset detection", () => {
-  const BINS = 32;
-  const flat = (v) => new Array(BINS).fill(v);
-  // A little deterministic wobble so the baseline has real variance to clear.
-  const wobble = (base, i) => flat(base).map((v, k) => v + 0.01 * Math.sin(i * 1.7 + k));
-
-  it("locks onto a sharp beep after a quiet lead-in", () => {
-    const d = new OnsetDetector();
-    let firedAt = -1;
-    for (let i = 0; i < 40; i++) {
-      const spectrum = i === 30 ? flat(0.9) : wobble(0.08, i); // the beep at frame 30
-      if (d.push(spectrum) && firedAt < 0) firedAt = i;
-    }
-    eq(firedAt, 30, "start should lock to the beep frame");
-  });
-
-  it("does not fire on a steady room (no transient)", () => {
-    const d = new OnsetDetector();
-    let fired = false;
-    for (let i = 0; i < 120; i++) {
-      if (d.push(wobble(0.3, i))) fired = true; // constant-ish crowd hum
-    }
-    eq(fired, false, "a steady spectrum has near-zero flux");
-  });
-
-  it("does not fire on a slow swell", () => {
-    const d = new OnsetDetector();
-    let fired = false;
-    for (let i = 0; i < 120; i++) {
-      if (d.push(flat(Math.min(0.9, 0.05 + i * 0.006)))) fired = true; // gentle ramp
-    }
-    eq(fired, false, "a gradual rise never spikes the flux");
-  });
-
-  it("holds fire during the warmup, even on an early spike", () => {
-    const d = new OnsetDetector({ warmup: 8 });
-    let firedAt = -1;
-    for (let i = 0; i < 20; i++) {
-      const spectrum = i === 3 ? flat(0.9) : flat(0.08);
-      if (d.push(spectrum) && firedAt < 0) firedAt = i;
-    }
-    eq(firedAt < 0 || firedAt >= 8, true, "must not fire before the baseline settles");
-  });
-});
-
-/* ------------------------------------------------------- fixed-camera splits
-   Auto-split watches one marker's pixel column at a time and finalises a split
-   when the swimmer's wave peaks there. A split placed on the wrong wave is worse
-   than a hand tap, so the sequencing must stay in order, land on the peak (not
-   the leading edge), and never score one wave twice. */
-describe("motion crossing sequencer", () => {
+/* --------------------------------------------------- video auto-split (proto)
+   Fixed-camera auto-split sequences the swimmer's wave crossing each marker's
+   pixel column. A split on the wrong wave is worse than a hand tap, so the real
+   method that ships in proto.html — not a copy — must stay in race order, land on
+   the peak (not the leading edge), and stop rather than guess when a mark is
+   missing. */
+describe("video auto-split crossing detection", () => {
+  const detect = bind("_detectCrossings", {}, []);
   const DT = 1 / 30;
-  // A wave passing a column: a short Gaussian bump of motion around `centre`.
-  const bump = (t, centre) =>
-    centre == null ? 0 : 0.6 * Math.exp(-((t - centre) ** 2) / (2 * 0.15 ** 2));
-
-  // Scan a clip where each marker's wave peaks at bumpTimes[i]. The sequencer
-  // only ever watches the current marker, so we feed that marker's column.
-  function scan(bumpTimes, motionFor, opts) {
-    const markers = bumpTimes.map((_, i) => ({ label: `${15 + i * 10}m`, metres: 15 + i * 10 }));
-    const seq = new CrossingSequencer(markers, opts);
+  const bump = (t, c) => (c == null ? 0 : 0.6 * Math.exp(-((t - c) ** 2) / (2 * 0.15 ** 2)));
+  const labels = (n) => Array.from({ length: n }, (_, i) => "m" + i);
+  function frames(bumpTimes) {
     const out = [];
-    let i = 0;
-    for (let t = 0; t <= 9 && !seq.done; t += DT, i++) {
-      const cur = out.length; // index of the marker currently watched
-      const c = seq.push(motionFor(t, cur, i), t);
-      if (c) out.push(c);
+    for (let t = 0; t <= 9; t += DT) {
+      const m = {};
+      bumpTimes.forEach((c, i) => {
+        m["m" + i] = bump(t, c) + 0.004 * Math.abs(Math.sin(t * 53 + i));
+      });
+      out.push({ t: +t.toFixed(4), m });
     }
     return out;
   }
 
-  it("captures crossings in race order", () => {
-    const times = [2.0, 5.0];
-    const noise = (i) => 0.004 * Math.abs(Math.sin(i * 2.3));
-    const crossings = scan(times, (t, cur, i) => bump(t, times[cur]) + noise(i));
-    eq(crossings.length, 2);
-    eq(crossings[0].label, "15m");
-    eq(crossings[1].label, "25m");
-    eq(Math.abs(crossings[0].seconds - 2.0) < 0.12, true, `got ${crossings[0].seconds}`);
-    eq(Math.abs(crossings[1].seconds - 5.0) < 0.12, true, `got ${crossings[1].seconds}`);
+  it("finds each crossing in race order at its peak", () => {
+    const r = detect(frames([2.0, 5.0]), labels(2), {});
+    eq(r.length, 2);
+    eq(r[0].label, "m0");
+    eq(r[1].label, "m1");
+    eq(Math.abs(r[0].t - 2.0) < 0.12, true, `got ${r[0].t}`);
+    eq(Math.abs(r[1].t - 5.0) < 0.12, true, `got ${r[1].t}`);
+  });
+
+  it("stops at the first mark it cannot find, rather than guessing", () => {
+    const r = detect(frames([2.0, null]), labels(2), {});
+    eq(r.length, 1);
+    eq(r[0].label, "m0");
+  });
+
+  it("ignores a steady, turbulent column", () => {
+    const out = [];
+    for (let t = 0; t <= 6; t += DT) out.push({ t: +t.toFixed(4), m: { m0: 0.3 + 0.003 * Math.sin(t * 20) } });
+    eq(detect(out, ["m0"], {}).length, 0);
   });
 
   it("lands on the motion peak, not the leading edge", () => {
-    const crossings = scan([3.0], (t) => bump(t, 3.0));
-    eq(crossings.length, 1);
-    eq(Math.abs(crossings[0].seconds - 3.0) < 0.08, true, `peak off at ${crossings[0].seconds}`);
+    const r = detect(frames([3.0]), ["m0"], {});
+    eq(r.length, 1);
+    eq(Math.abs(r[0].t - 3.0) < 0.08, true, `peak off at ${r[0].t}`);
+  });
+});
+
+/* ---------------------------------------------------------------- stopwatch
+   The poolside stopwatch reads out m:ss.cs and turns cumulative taps into
+   per-lap splits. A split that came out negative, or a clock that rolled the
+   seconds wrong, is a number a coach reads onto a training log — so the split
+   maths and the format are pinned here. */
+describe("stopwatch", () => {
+  const { formatStopwatch, recordLap, lapExtremes, totalStrokes, averageStrokes } = SW;
+
+  it("formats sub-second as 0:00.cs", () => eq(formatStopwatch(900), "0:00.90"));
+  it("pads seconds and centiseconds", () => eq(formatStopwatch(65230), "1:05.23"));
+  it("rolls minutes at 60s", () => eq(formatStopwatch(60000), "1:00.00"));
+  it("truncates rather than rounds centiseconds", () => eq(formatStopwatch(1239), "0:01.23"));
+  it("never shows a negative clock", () => eq(formatStopwatch(-500), "0:00.00"));
+
+  it("first split equals the total", () => eq(recordLap([], 4000, 0).splitMs, 4000));
+  it("later split subtracts the previous total", () => {
+    const first = recordLap([], 4000, 0);
+    eq(recordLap([first], 9500, 0).splitMs, 5500);
+  });
+  it("numbers laps in order", () => {
+    const first = recordLap([], 4000, 0);
+    eq(recordLap([first], 9500, 0).n, 2);
+  });
+  it("clamps an out-of-order tap to a non-negative split", () => {
+    const first = recordLap([], 9500, 0);
+    eq(recordLap([first], 4000, 0).splitMs, 0);
+  });
+  it("carries the strokes counted for the lap", () => eq(recordLap([], 4000, 18).strokes, 18));
+
+  const laps = [
+    recordLap([], 4000, 18),
+    recordLap([recordLap([], 4000, 18)], 7000, 16),
+  ];
+  it("flags fastest and slowest by split", () => {
+    const { fastest, slowest } = lapExtremes(laps);
+    eq(fastest, 1);
+    eq(slowest, 0);
+  });
+  it("does not flag a single lap", () => {
+    const one = lapExtremes([recordLap([], 4000, 18)]);
+    eq(one.fastest, null);
+    eq(one.slowest, null);
+  });
+  it("sums strokes across laps", () => eq(totalStrokes(laps), 34));
+  it("averages only laps that logged strokes", () => {
+    eq(averageStrokes([recordLap([], 4000, 20), recordLap([], 4000, 0)]), 20);
+  });
+  it("averages to one decimal", () => {
+    eq(averageStrokes([recordLap([], 1000, 18), recordLap([], 1000, 17), recordLap([], 1000, 18)]), 17.7);
+  });
+});
+
+/* ------------------------- two coaches adding to one T-pace log, from two phones
+   Coach Chafik tested Senior B and logged every one on his phone. They saved
+   there and he could see them. The club's copy held six trials, and one of them
+   was his 8 September test — the newest push at the time. The rest had stopped
+   existing, because vx_tpace went up as a whole document and another phone
+   pushed its own copy afterwards. */
+describe("a T-pace push keeps what the club already has", () => {
+  const SRC = sourceBetween("function _tpaceMergedWith(v){", "\n  function _mergedForSend");
+  const trial = (date, dist) => ({ date, type: "t30", sec: 1800, dist, tpace100: +(180000 / dist).toFixed(2) });
+
+  const send = (theirs, mine, opts = {}) =>
+    runInSandbox(SRC + "\nreturn _tpaceMergedWith(mine);", {
+      REST: "", dyn: () => ({}), console: { info() {} },
+      fetch: () => opts.dead
+        ? Promise.reject(new Error("offline"))
+        : Promise.resolve({ ok: opts.notOk ? false : true,
+                            json: () => Promise.resolve(theirs === undefined ? [] : [{ value: theirs }]) }),
+      mine: JSON.stringify(mine),
+    });
+
+  itAsync("a phone with six trials cannot delete the twenty it never saw", async () => {
+    const chafik = {};
+    for (let i = 0; i < 20; i++) chafik["sb" + i] = [trial("2026-09-08", 1500 + i * 10)];
+    const ahmed = { r52: [trial("2026-09-03", 2200)], r60: [trial("2026-09-03", 2100)] };
+    const out = JSON.parse(await send(chafik, ahmed));
+    eq(Object.keys(out).length, 22, "twenty of Chafik's plus the two this phone holds");
+    eq(out.sb0.length, 1);
+    eq(out.r52.length, 1, "and nothing of this device's is dropped either");
   });
 
-  it("ignores a steady turbulent column", () => {
-    const crossings = scan([null, null], (_t, _cur, i) => 0.3 + 0.003 * Math.sin(i));
-    eq(crossings.length, 0);
+  itAsync("the same trial on both sides is not duplicated", async () => {
+    const both = { r264: [trial("2026-09-08", 1800)] };
+    const out = JSON.parse(await send(both, JSON.parse(JSON.stringify(both))));
+    eq(out.r264.length, 1);
   });
 
-  it("scores one sustained wave only once", () => {
-    // Motion jumps up at t=1 and stays high — a single event, not two marks.
-    const crossings = scan([null, null], (t) => (t >= 1 ? 0.6 : 0.02));
-    eq(crossings.length, 1, "a plateau must not cascade into the next marker");
+  itAsync("two different trials for one swimmer both survive", async () => {
+    const out = JSON.parse(await send(
+      { r264: [trial("2026-09-01", 1700)] },
+      { r264: [trial("2026-09-08", 1800)] }));
+    eq(out.r264.length, 2);
+    eq(out.r264[0].date, "2026-09-08", "newest first, as every reader assumes");
   });
 
-  it("reports done only after every marker is crossed", () => {
-    const seq = new CrossingSequencer([{ label: "15m", metres: 15 }]);
-    eq(seq.done, false);
-    let done = false;
-    for (let t = 0, i = 0; t <= 5; t += DT, i++) {
-      seq.push(bump(t, 2.0) + 0.004 * Math.abs(Math.sin(i * 2.3)), t);
-      if (seq.done) { done = true; break; }
+  itAsync("an empty club copy sends this device's unchanged", async () => {
+    const mine = { r52: [trial("2026-09-03", 2200)] };
+    eq(JSON.parse(await send({}, mine)).r52.length, 1);
+  });
+
+  itAsync("nothing new on their side sends the original string untouched", async () => {
+    // Re-serialising for no reason would rewrite the document on every push.
+    const mine = { r52: [trial("2026-09-03", 2200)] };
+    eq(await send({}, mine), JSON.stringify(mine));
+  });
+
+  itAsync("a database that cannot be read sends what we have", async () => {
+    const mine = { r52: [trial("2026-09-03", 2200)] };
+    eq(await send(undefined, mine, { dead: true }), JSON.stringify(mine));
+    eq(await send(undefined, mine, { notOk: true }), JSON.stringify(mine));
+  });
+
+  itAsync("a club copy of the wrong shape is not trusted into the send", async () => {
+    const mine = { r52: [trial("2026-09-03", 2200)] };
+    for (const junk of [null, "text", [1, 2, 3]]) eq(await send(junk, mine), JSON.stringify(mine));
+  });
+
+  it("and the push actually routes through it", () => {
+    const route = sourceBetween("function _mergedForSend(k, v){", "\n  function pushKey");
+    eq(/k==="vx_tpace"\) return _tpaceMergedWith\(v\)/.test(route), true,
+       "without this the log is still sent as a replacement");
+    eq(/select=value&key=eq\.vx_tpace/.test(SOURCE), true,
+       "merged against what the database holds now, not a mirror up to 20s old");
+  });
+});
+
+/* --------------------------------------------------- whole-lane stopwatch (proto.html)
+   A lane is sent off in intervals: swimmer 1 goes, five seconds later swimmer 2, and so on.
+   Every swimmer is read off ONE master clock, so the thing that must hold is that a stagger
+   never leaks between them — one swimmer's split is measured from their own previous lap, and
+   finishing one freezes only that one. Bound to the real methods in proto.html. */
+describe("whole-lane stopwatch", () => {
+  const ctx = {};
+  const laneMs = bind("_swmLaneMs", ctx, []);
+  const lapOf  = bind("_swmLapOf", ctx, ["_swmLaneMs"]);
+  const lane = (o) => ({ id: "L1", name: "", startMs: null, endMs: null, laps: [], ...o });
+
+  it("a swimmer not sent off yet reads zero", () => eq(laneMs(lane({}), 40000), 0));
+  it("elapsed counts from their own send-off, not the master clock", () =>
+    eq(laneMs(lane({ startMs: 5000 }), 12000), 7000));
+  it("a finished swimmer is frozen at their finish", () =>
+    eq(laneMs(lane({ startMs: 5000, endMs: 30000 }), 999999), 25000));
+  it("never reads negative before their send-off", () =>
+    eq(laneMs(lane({ startMs: 9000 }), 4000), 0));
+
+  it("staggered swimmers each read their own time off the one clock", () => {
+    const m = 40000;
+    eq(laneMs(lane({ startMs: 0 }), m), 40000);
+    eq(laneMs(lane({ startMs: 5000 }), m), 35000);
+    eq(laneMs(lane({ startMs: 10000 }), m), 30000);
+  });
+
+  it("the first lap equals that swimmer's own elapsed", () =>
+    eq(lapOf(lane({ startMs: 5000 }), 35000).splitMs, 30000));
+  it("a later split is measured from their previous lap", () => {
+    const l = lane({ startMs: 5000, laps: [{ n: 1, splitMs: 30000, totalMs: 30000 }] });
+    const nxt = lapOf(l, 48000);
+    eq(nxt.n, 2);
+    eq(nxt.totalMs, 43000);
+    eq(nxt.splitMs, 13000, "43s of their own minus the 30s already logged");
+  });
+  it("the stagger does not change anyone's split", () => {
+    // two swimmers 5s apart, each 20s into their own swim: identical splits.
+    const a = lapOf(lane({ startMs: 0 }), 20000);
+    const b = lapOf(lane({ startMs: 5000 }), 25000);
+    eq(a.splitMs, b.splitMs);
+    eq(a.splitMs, 20000);
+  });
+  it("a finished swimmer's lap stops advancing with the master clock", () => {
+    const l = lane({ startMs: 0, endMs: 25000 });
+    eq(lapOf(l, 90000).totalMs, 25000);
+  });
+  it("laps are numbered per swimmer", () => {
+    const l = lane({ startMs: 0, laps: [{ n: 1, splitMs: 1, totalMs: 1 }, { n: 2, splitMs: 1, totalMs: 2 }] });
+    eq(lapOf(l, 5000).n, 3);
+  });
+});
+
+/* ------------------------------------------------ send-off set timer (proto.html)
+   "20 x 50m on 1:00" run by the clock: a signal every send-off, counting 1/20 to 20/20. The
+   arithmetic that matters is which repetition is live and how long until the next send-off —
+   get either wrong and a lane goes early. Bound to the real methods in proto.html. */
+describe("send-off set timer", () => {
+  const ctx = {};
+  const repAt  = bind("_setRepAt", ctx, []);
+  const leftAt = bind("_setLeftAt", ctx, []);
+  const CYCLE = 60000, REPS = 20;            // 20 x 50m on 1:00
+
+  it("starts on rep 1", () => eq(repAt(0, CYCLE, REPS), 1));
+  it("stays on rep 1 until the first send-off", () => eq(repAt(59999, CYCLE, REPS), 1));
+  it("turns over to rep 2 exactly on the send-off", () => eq(repAt(60000, CYCLE, REPS), 2));
+  it("counts the rep the coach would call", () => eq(repAt(210000, CYCLE, REPS), 4, "3:30 into a 1:00 set"));
+  it("never counts past the last rep", () => {
+    eq(repAt(CYCLE * REPS, CYCLE, REPS), REPS);
+    eq(repAt(CYCLE * REPS * 3, CYCLE, REPS), REPS);
+  });
+
+  it("a full interval remains at the start", () => eq(leftAt(0, CYCLE, REPS), CYCLE));
+  it("counts down inside the interval", () => eq(leftAt(210000, CYCLE, REPS), 30000));
+  it("resets to a full interval the moment one goes", () => eq(leftAt(60000, CYCLE, REPS), CYCLE));
+  it("reads zero once the whole set has run", () => {
+    eq(leftAt(CYCLE * REPS, CYCLE, REPS), 0);
+    eq(leftAt(CYCLE * REPS + 5000, CYCLE, REPS), 0);
+  });
+  it("a rest added to the send-off lengthens the cycle", () => {
+    const withRest = 75000;                   // 1:00 send-off + 15s rest
+    eq(repAt(75000, withRest, REPS), 2);
+    eq(leftAt(70000, withRest, REPS), 5000);
+  });
+  it("a zero cycle cannot divide by zero", () => {
+    eq(repAt(1000, 0, REPS), 1);
+    eq(leftAt(1000, 0, REPS), 0);
+  });
+});
+
+/* ------------------------------------- staggered lane on a send-off set (proto.html)
+   "20 x 50m on 1:00, 8 swimmers, 5s apart": the clock sends swimmer 1 at 0:00, swimmer 2 at
+   0:05, and every swimmer then keeps their OWN minute cycle. What must hold is that a swimmer's
+   send-off is their stagger plus their own cycles, that the next signal is always the right
+   swimmer, and that each reads their own time within their own repetition. */
+describe("staggered send-off lane", () => {
+  const ctx = {};
+  const sendAt   = bind("_setSendAt", ctx, []);
+  const nextSend = bind("_setNextSend", ctx, []);
+  const swimMs   = bind("_setSwimMs", ctx, []);
+  const swimRep  = bind("_setSwimRep", ctx, []);
+  const C = 60000, G = 5000, REPS = 20, N = 8;     // 20 x 50 on 1:00, 8 swimmers, 5s apart
+
+  it("sends the lane off one gap apart", () => {
+    eq(sendAt(0, 0, C, G), 0);
+    eq(sendAt(0, 1, C, G), 5000);
+    eq(sendAt(0, 7, C, G), 35000);
+  });
+  it("every swimmer keeps their own cycle", () => {
+    eq(sendAt(1, 0, C, G), 60000, "swimmer 1's second rep");
+    eq(sendAt(1, 1, C, G), 65000, "swimmer 2's second rep, still 5s behind");
+    eq(sendAt(3, 7, C, G), 215000);
+  });
+
+  it("the next signal after the start is swimmer 2", () => {
+    const n = nextSend(0, C, G, REPS, N);
+    eq(n.lane, 2); eq(n.rep, 1); eq(n.left, 5000);
+  });
+  it("after the last swimmer goes, the next is swimmer 1 on the following rep", () => {
+    const n = nextSend(35000, C, G, REPS, N);
+    eq(n.lane, 1); eq(n.rep, 2); eq(n.left, 25000);
+  });
+  it("a single swimmer still counts a plain interval", () => {
+    const n = nextSend(0, C, G, REPS, 1);
+    eq(n.lane, 1); eq(n.rep, 2); eq(n.left, C);
+  });
+  it("there is no next send-off once the set has run", () => {
+    eq(nextSend(C * REPS + G * (N - 1) + 1000, C, G, REPS, N), null);
+  });
+
+  it("a swimmer reads zero the moment they are sent off", () => eq(swimMs(5000, 1, C, G, REPS), 0));
+  it("a swimmer reads their own time inside their own rep", () => {
+    // 1:10 on the master clock: swimmer 2 went at 0:05 and again at 1:05, so 5s into rep 2.
+    eq(swimMs(70000, 1, C, G, REPS), 5000);
+    eq(swimRep(70000, 1, C, G, REPS), 2);
+  });
+  it("a swimmer has nothing to show before their first send-off", () => {
+    eq(swimMs(3000, 1, C, G, REPS), null);
+    eq(swimRep(3000, 1, C, G, REPS), 0);
+  });
+  it("a swimmer is done after their last rep, not the master clock's", () => {
+    const afterLast = sendAt(REPS - 1, 1, C, G) + C + 1;
+    eq(swimMs(afterLast, 1, C, G, REPS), null);
+    eq(swimRep(afterLast, 1, C, G, REPS), REPS + 1);
+  });
+  it("the stagger never leaks between swimmers", () => {
+    // 8 swimmers, all 12s into their own rep 1, each at a different master time.
+    for (let i = 0; i < N; i++) eq(swimMs(i * G + 12000, i, C, G, REPS), 12000);
+  });
+});
+
+/* -------------------------------------------------------------------- birthdays
+   The automatic birthday cron (src/lib/birthdays.ts) has to find EXACTLY the
+   swimmers the app itself would, or it wishes the wrong child or the wrong day.
+   These pull the app's own date readers out of proto.html and prove the server
+   port agrees with them, then check the roster reconstruction and the send list. */
+const BD = await import("../src/lib/birthdays.ts");
+describe("birthdays — the port agrees with the app", () => {
+  const realDob = bind("_dobParts", {}, []);
+  const ctx = { todayISO: () => "2026-09-12" };
+  const realIsToday = bind("_bdayIsToday", ctx, ["_bdayMD", "_bdayISO", "_dobParts", "_bdayDateIn"]);
+  const realTurning = bind("_bdayTurning", ctx, ["_bdayISO", "_dobParts", "_bdayDateIn"]);
+
+  // Every documented gotcha the app's reader carries: dd/mm vs mm/dd, the American swap,
+  // leap day, a date that is not real, and the ambiguous-but-left-alone 06/03.
+  const DOBS = [
+    "17/04/2017", "2017-04-17", "08/20/2014", "2016-02-29", "29/02/2016",
+    "06/03/2015", "31/02/2015", "", "12/12/2012", "1/1/2010", "not a date",
+  ];
+  const DAYS = ["2026-04-17", "2026-02-28", "2026-08-20", "2026-03-06", "2026-12-12", "2026-01-01"];
+
+  it("bdayISO matches _dobParts().iso for every shape", () => {
+    for (const d of DOBS) {
+      const real = realDob(d);
+      eq(BD.bdayISO(d), real ? real.iso : null, "dob=" + JSON.stringify(d));
     }
-    eq(done, true);
+  });
+  it("bdayIsToday matches _bdayIsToday on every day", () => {
+    for (const d of DOBS) for (const day of DAYS)
+      eq(BD.bdayIsToday(d, day), realIsToday({ dob: d }, day), d + " on " + day);
+  });
+  it("bdayTurning matches _bdayTurning on every day", () => {
+    for (const d of DOBS) for (const day of DAYS)
+      eq(BD.bdayTurning(d, day), realTurning({ dob: d }, day), d + " on " + day);
+  });
+  it("a Feb-29 child is wished on Feb 28 in a common year, once", () => {
+    eq(BD.bdayIsToday("2016-02-29", "2026-02-28"), true);
+    eq(BD.bdayIsToday("2016-02-29", "2026-03-01"), false);
+  });
+  it("no real date means no birthday", () => {
+    eq(BD.bdayIsToday("", "2026-01-01"), false);
+    eq(BD.bdayISO("Age 9"), null);
+  });
+});
+
+describe("birthdays — roster reconstruction and the send list", () => {
+  const base = {
+    seniorb: [{ id: "a1", name: "Yousef Ibrahim ELfawal" }, { id: "a2", name: "No Date Kid" }],
+    advb: [{ id: "b1", name: "Kaidi Luo" }],
+  };
+  const squads = [{ id: "seniorb", name: "Senior B" }, { id: "advb", name: "Advanced B" }];
+  // Dates of birth live only in the edits overlay — the base seed carries none.
+  const edits = {
+    edits: { seniorb: { a1: { dob: "12/09/2014" } }, advb: { b1: { dob: "12/09/2017" } } },
+    deleted: {},
+    added: {},
+  };
+
+  it("resolves dates of birth from the overlay onto base swimmers", () => {
+    const flat = BD.reconstructRoster(base, squads, edits);
+    const a1 = flat.find((s) => s.id === "a1");
+    eq(a1.dob, "12/09/2014");
+    eq(a1.squadName, "Senior B");
+  });
+  it("finds today's birthdays with the age they are turning", () => {
+    const flat = BD.reconstructRoster(base, squads, edits);
+    const due = BD.birthdaysToday(flat, "2026-09-12");
+    eq(due.map((s) => s.name).sort(), ["Yousef Ibrahim ELfawal", "Kaidi Luo"].sort());
+    eq(due.find((s) => s.id === "a1").turning, 12);
+    eq(due.find((s) => s.id === "b1").turning, 9);
+  });
+  it("a swimmer with no date on file is never in the send list", () => {
+    const flat = BD.reconstructRoster(base, squads, edits);
+    eq(BD.birthdaysToday(flat, "2026-09-12").some((s) => s.id === "a2"), false);
+  });
+  it("an added swimmer is carried with their own date, once", () => {
+    const withAdded = { ...edits, added: { seniorb: [{ id: "c1", name: "New Swimmer", dob: "12/09/2013", movedAt: 1 }] } };
+    const flat = BD.reconstructRoster(base, squads, withAdded);
+    eq(flat.filter((s) => s.id === "c1").length, 1);
+    eq(BD.birthdaysToday(flat, "2026-09-12").find((s) => s.id === "c1").turning, 13);
+  });
+  it("a deleted swimmer drops out of the roster", () => {
+    const withDel = { ...edits, deleted: { seniorb: { a1: true } } };
+    const flat = BD.reconstructRoster(base, squads, withDel);
+    eq(flat.some((s) => s.id === "a1"), false);
+  });
+  it("a swimmer lingering in two squad overlays is one child, not two", () => {
+    const dupBase = { seniorb: [{ id: "d1", name: "Moved Kid" }], advb: [{ id: "d1", name: "Moved Kid" }] };
+    const flat = BD.reconstructRoster(dupBase, squads, { edits: {}, deleted: {}, added: {} });
+    eq(flat.filter((s) => s.id === "d1").length, 1);
+  });
+});
+
+describe("birthdays — parsing the seed and the club clock", () => {
+  it("parseBaseRoster reads VX_ROSTER and stops before VX_MEETS", () => {
+    const js = 'window.VX_ROSTER={"advb":[{"id":"x","name":"A};B"}]};window.VX_MEETS=[{"n":1}];';
+    const r = BD.parseBaseRoster(js);
+    eq(Object.keys(r), ["advb"]);
+    eq(r.advb[0].name, "A};B"); // a brace inside a string must not end the object early
+  });
+  it("parses the real shipped seed", () => {
+    const js = readFileSync(new URL("../public/assets/roster.js", import.meta.url), "utf8");
+    const r = BD.parseBaseRoster(js);
+    const total = Object.values(r).reduce((n, a) => n + a.length, 0);
+    eq(total > 200, true);
+  });
+  it("todayISOInZone gives Doha's day across the UTC midnight boundary", () => {
+    // 22:30 UTC is already the next day in Doha (+03:00).
+    eq(BD.todayISOInZone("Asia/Qatar", new Date("2026-09-12T22:30:00Z")), "2026-09-13");
+    eq(BD.todayISOInZone("Asia/Qatar", new Date("2026-09-12T09:00:00Z")), "2026-09-12");
+  });
+});
+
+describe("notifications — the feed collapses same-day duplicates", () => {
+  const bday = (id, at) => ({
+    id, audience: "family_sw:r3", icon: "cake",
+    title: "Happy birthday, Yousef! 🎂", body: "wishes you a brilliant day", at, read: false,
+  });
+  const ctx = {
+    _alertRead: () => ({}),
+    _alertHidden: () => ({}),
+    _isAdmin: () => false,
+    signupAlerts: [],
+    announcements: [],
+    notifications: [
+      bday("n1", "2026-09-12T09:00:00.000Z"), // two copies on the 12th (the multi-device race)
+      bday("n2", "2026-09-12T06:00:00.000Z"),
+      bday("n3", "2026-09-13T06:00:00.000Z"), // a different day — a real, separate event
+    ],
+  };
+  const notifsFor = bind("notifsFor", ctx, []);
+  it("two identical greetings on one day show as one card, newest kept", () => {
+    const list = notifsFor("family", { swimmerIds: ["seniorb::r3"] });
+    eq(list.length, 2);
+    eq(list[0].id, "n3"); // newest first
+    eq(list[1].id, "n1"); // the 09:00 copy, not the 06:00 one
   });
 });
 

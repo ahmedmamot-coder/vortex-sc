@@ -110,6 +110,7 @@ create table if not exists public.staff_accounts (
   id text primary key, name text, username text, pin text, role text,
   squad_id text, phone text, email text, bio text, photo text,
   is_custom boolean default false, ts bigint,
+  removed boolean not null default false,
   created_at timestamptz not null default now()
 );
 alter table public.staff_accounts enable row level security;

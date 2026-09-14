@@ -600,6 +600,36 @@ a day.
   - Needs `SUPABASE_SERVICE_ROLE_KEY` and (recommended) `BACKUP_SECRET` env vars, plus
     running `supabase/backup_bucket.sql`.
 
+## Birthday greetings — sent automatically
+
+The app wishes a swimmer happy birthday by writing a message into the family thread, dropping a
+notification for the family and the managers, and pushing to both (`birthdayWish` in
+`public/proto.html`). It always knew *how*; the problem was *when*. `birthdayRun()` only fires when
+a **staff** device opens the app, so a child whose birthday fell on a day no coach opened the app
+was never wished.
+
+`GET /api/birthdays/run` does the same work on a schedule, no phone required. A **Vercel cron runs
+it daily at 06:00 UTC** (09:00 Doha — see `vercel.json`), and it:
+
+- reconstructs the roster the same way the app does — the base seed (`public/assets/roster.js`)
+  with the `vx_roster_edits` overlay laid over it, where every date of birth actually lives — using
+  the shared, tested port in `src/lib/birthdays.ts`;
+- works out "today" in **Doha time** (`Asia/Qatar`), so the day is never off by one wherever the
+  function runs;
+- wishes each swimmer whose birthday is today, keyed off the **same `vx_bday_sent` guard** the app
+  uses (claim-first, then send), so the cron and the app can never wish the same child twice in a
+  year — it is safe to run every morning, and safe alongside a coach opening the app.
+
+Push goes over Web Push and APNs together through `src/lib/push.ts` (shared with
+`/api/push/send`), so it reaches browsers, installed PWAs and the native iOS app in one send.
+
+- Needs `SUPABASE_SERVICE_ROLE_KEY` (to read the roster document and write as the club) and the
+  push transport keys (`VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`, and/or the `APNS_*` keys).
+- Optional guard: set `BIRTHDAY_CRON_SECRET` (or rely on Vercel's `CRON_SECRET`); pass it as header
+  `x-cron-secret`, a `Bearer` token, or `?key=`.
+- Preview without sending: `?dry=1` lists who would be wished. Send a specific day the club missed:
+  `?date=YYYY-MM-DD`.
+
 ## Calendar feed
 
 - `GET /api/meets/ics` is a live iCal feed of club meets. Families **Subscribe** to

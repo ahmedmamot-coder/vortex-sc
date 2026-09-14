@@ -1,6 +1,7 @@
 {
   "crons": [
     { "path": "/api/wearable/sync", "schedule": "0 5 * * *" },
-    { "path": "/api/backup/export", "schedule": "0 3 * * *" }
+    { "path": "/api/backup/export", "schedule": "0 3 * * *" },
+    { "path": "/api/birthdays/run", "schedule": "0 6 * * *" }
   ]
 }

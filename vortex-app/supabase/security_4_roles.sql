@@ -43,8 +43,6 @@ create table if not exists vx_staff_emails (
 
 insert into vx_staff_emails (email) values
   ('ahmedmamot@gmail.com'),
-  ('sameh4142@gmail.com'),
-  ('sameh@vortexswimmingclub.com'),
   ('mosame7100@gmail.com')
 on conflict (email) do nothing;
 
@@ -383,8 +381,6 @@ end $$;
 -- table is ever emptied by accident.
 insert into vx_staff_emails (email) values
   ('ahmedmamot@gmail.com'),
-  ('sameh4142@gmail.com'),
-  ('sameh@vortexswimmingclub.com'),
   ('mosame7100@gmail.com')
 on conflict (email) do nothing;
 

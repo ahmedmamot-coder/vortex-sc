@@ -70,6 +70,11 @@ export type Edits = {
   edits: Record<string, Record<string, Patch>>;
   deleted: Record<string, Record<string, unknown>>;
   added: Record<string, RawSwimmer[]>;
+  // A swimmer deleted from the club entirely, by id. Squad-independent and sticky, unlike
+  // `deleted`, which is per-squad and cannot express the removal of a swimmer who lives only in
+  // `added`. The app's _mergeRoster and rebuildRoster read it the same way; without it here the
+  // connector would go on naming a child the coaches deleted. See adminDeleteSwimmer in proto.html.
+  removed: Record<string, unknown>;
 };
 
 /**
@@ -90,6 +95,7 @@ async function rosterEdits(): Promise<Edits | null> {
     edits: obj<Edits["edits"]>(e.edits),
     deleted: obj<Edits["deleted"]>(e.deleted),
     added: obj<Edits["added"]>(e.added),
+    removed: obj<Edits["removed"]>(e.removed),
   };
 }
 
@@ -155,10 +161,13 @@ export function mergeRoster(base: RawSquad[], ed: Edits): RawSquad[] {
   // were not deleted out of" decide, then squad order so the choice is the same everywhere.
   // The order matters — the other way round, a stale copy with no deletion recorded beats a
   // move made ten seconds ago and silently undoes it.
+  // A swimmer deleted from the club is gone from every squad, base and added alike, and stays
+  // gone — the tombstone is a union, so a stale copy cannot put the child back. Read once here.
+  const removed = ed.removed || {};
   const home: Record<string, { sq: string; at: number; kept: number }> = {};
   for (const sq of base) {
     for (const sw of ed.added[sq.slug] || []) {
-      if (!sw || !sw.id) continue;
+      if (!sw || !sw.id || removed[sw.id]) continue;
       const at = typeof sw.movedAt === "number" ? sw.movedAt : 0;
       const kept = (ed.deleted[sq.slug] || {})[sw.id] ? 0 : 1;
       const cur = home[sw.id];
@@ -174,12 +183,12 @@ export function mergeRoster(base: RawSquad[], ed: Edits): RawSquad[] {
   const merged: RawSquad[] = base.map((sq) => {
     const gone = ed.deleted[sq.slug] || {};
     const kept = (sq.swimmers || [])
-      .filter((s) => !gone[swimmerId(sq.slug, s)])
+      .filter((s) => { const id = swimmerId(sq.slug, s); return !gone[id] && !removed[id]; })
       .map((s) => applyPatch(s, patchFor(sq.slug, swimmerId(sq.slug, s))));
     // A swimmer the club added carries their whole record; an edit typed for them before a move
     // is filed under the squad they left, so the patch goes on underneath rather than over.
     const added = (ed.added[sq.slug] || [])
-      .filter((s) => s && s.id && (home[s.id] || {}).sq === sq.slug)
+      .filter((s) => s && s.id && !removed[s.id] && (home[s.id] || {}).sq === sq.slug)
       .map((s) => applyPatch(s, patchFor(sq.slug, s.id as string)));
     return { ...sq, swimmers: [...kept, ...added] };
   });
