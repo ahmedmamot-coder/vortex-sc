@@ -3820,13 +3820,14 @@ if ('serviceWorker' in navigator) {
                             <sc-for list="{{ ps.sets }}" as="st" hint-placeholder-count="3">
                               <div style="background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:10px 11px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
                                 <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
-                                  <span style="display:flex;align-items:center;gap:3px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:3px 5px;flex:none"><i data-lucide="repeat-2" style="width:16px;height:16px;color:#9AA2B4"></i><button onclick="{{ st.onRepsDec }}" style="width:23px;height:23px;border:none;border-radius:6px;background:#EEF1F5;color:#3A4152;font-size:16px;font-weight:700;cursor:pointer;line-height:1;padding:0">−</button><input value="{{ st.reps }}" oninput="{{ st.onReps }}" type="number" inputmode="numeric" style="width:32px;border:none;text-align:center;font-family:var(--font-mono);font-weight:700;font-size:14px;color:#0C1116;outline:none;background:none;padding:0"><button onclick="{{ st.onRepsInc }}" style="width:23px;height:23px;border:none;border-radius:6px;background:#EEF1F5;color:#3A4152;font-size:16px;font-weight:700;cursor:pointer;line-height:1;padding:0">+</button></span>
+                                  <sc-if value="{{ st.open }}" hint-placeholder-val="{{ true }}"><span style="display:flex;align-items:center;gap:3px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:3px 5px;flex:none"><i data-lucide="repeat-2" style="width:16px;height:16px;color:#9AA2B4"></i><button onclick="{{ st.onRepsDec }}" style="width:23px;height:23px;border:none;border-radius:6px;background:#EEF1F5;color:#3A4152;font-size:16px;font-weight:700;cursor:pointer;line-height:1;padding:0">−</button><input value="{{ st.reps }}" oninput="{{ st.onReps }}" type="number" inputmode="numeric" style="width:32px;border:none;text-align:center;font-family:var(--font-mono);font-weight:700;font-size:14px;color:#0C1116;outline:none;background:none;padding:0"><button onclick="{{ st.onRepsInc }}" style="width:23px;height:23px;border:none;border-radius:6px;background:#EEF1F5;color:#3A4152;font-size:16px;font-weight:700;cursor:pointer;line-height:1;padding:0">+</button></span>
                                   <span style="font-size:14px;font-weight:800;color:#B9C0CC;flex:none">×</span>
                                   <span style="display:flex;align-items:center;gap:3px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:3px 5px;flex:none"><i data-lucide="ruler" style="width:18px;height:18px;color:{{ squad.accent }}"></i><button onclick="{{ st.onDistDec }}" style="width:23px;height:23px;border:none;border-radius:6px;background:#EEF1F5;color:#3A4152;font-size:16px;font-weight:700;cursor:pointer;line-height:1;padding:0">−</button><input value="{{ st.dist }}" oninput="{{ st.onDist }}" type="number" inputmode="numeric" style="width:42px;border:none;text-align:center;font-family:var(--font-mono);font-weight:700;font-size:14px;color:{{ squad.accent }};outline:none;background:none;padding:0"><button onclick="{{ st.onDistInc }}" style="width:23px;height:23px;border:none;border-radius:6px;background:#EEF1F5;color:#3A4152;font-size:16px;font-weight:700;cursor:pointer;line-height:1;padding:0">+</button><span style="font-size:11px;color:#9AA2B4;font-weight:700">m</span></span>
                                   <span style="display:flex;align-items:center;gap:3px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:3px 5px;flex:none" title="Circuit rounds — repeat this whole set"><i data-lucide="rotate-cw" style="width:16px;height:16px;color:#7A8296"></i><button onclick="{{ st.onCircuitDec }}" style="width:23px;height:23px;border:none;border-radius:6px;background:#EEF1F5;color:#3A4152;font-size:16px;font-weight:700;cursor:pointer;line-height:1;padding:0">−</button><span style="min-width:16px;text-align:center;font-family:var(--font-mono);font-weight:700;font-size:14px;color:#0C1116">{{ st.circuit }}</span><button onclick="{{ st.onCircuitInc }}" style="width:23px;height:23px;border:none;border-radius:6px;background:#EEF1F5;color:#3A4152;font-size:16px;font-weight:700;cursor:pointer;line-height:1;padding:0">+</button><span style="font-size:9px;color:#9AA2B4;font-weight:800;letter-spacing:.04em">RDS</span></span>
-                                  <span style="flex:1;min-width:30px;text-align:right;font-family:var(--font-mono);font-size:11px;font-weight:700;color:#9AA2B4">{{ st.setMetres }}m</span>
-                                  <button onclick="{{ st.onUp }}" title="Move this set up" style="flex:none;width:24px;height:24px;border-radius:7px;border:none;background:{{ st.upBg }};color:{{ st.upFg }};cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="chevron-up" style="width:15px;height:15px"></i></button><button onclick="{{ st.onDown }}" title="Move this set down" style="flex:none;width:24px;height:24px;border-radius:7px;border:none;background:{{ st.downBg }};color:{{ st.downFg }};cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="chevron-down" style="width:15px;height:15px"></i></button><sc-if value="{{ st.hasSwap }}" hint-placeholder-val="{{ true }}"><button onclick="{{ st.onSwap }}" title="Move this set to the other section" style="flex:none;height:24px;border-radius:7px;border:none;background:#F3EEFF;color:#5B34C9;cursor:pointer;display:flex;align-items:center;gap:3px;padding:0 7px;font-family:inherit;font-size:10px;font-weight:800;white-space:nowrap"><i data-lucide="arrow-left-right" style="width:12px;height:12px"></i>{{ st.swapLabel }}</button></sc-if><button onclick="{{ st.onFav }}" title="Save this set to favourites" style="flex:none;width:24px;height:24px;border-radius:7px;border:none;background:#FFF6E0;color:#B7791F;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="star" style="width:14px;height:14px"></i></button><button onclick="{{ st.onRemove }}" style="flex:none;width:24px;height:24px;border-radius:7px;border:none;background:#F4F6F8;color:#9AA2B4;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:14px;height:14px"></i></button>
+                                  <span style="flex:1;min-width:30px;text-align:right;font-family:var(--font-mono);font-size:11px;font-weight:700;color:#9AA2B4">{{ st.setMetres }}m</span></sc-if><sc-if value="{{ st.closed }}" hint-placeholder-val="{{ false }}"><button onclick="{{ st.onToggleOpen }}" style="flex:1;min-width:0;text-align:left;background:none;border:none;padding:0;cursor:pointer;font-family:inherit"><span style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap"><span style="font-size:15px;font-weight:800;color:#0C1116;letter-spacing:-.01em">{{ st.headLine }}</span><sc-if value="{{ st.hasHeadStroke }}" hint-placeholder-val="{{ true }}"><span style="font-size:12.5px;font-weight:800;color:{{ squad.accent }}">{{ st.headStroke }}</span></sc-if><sc-if value="{{ st.hasSummaryRest }}" hint-placeholder-val="{{ true }}"><span style="margin-left:auto;font-family:var(--font-mono);font-size:11px;font-weight:700;color:#9AA2B4">{{ st.summaryRest }}</span></sc-if></span><span style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px"><sc-for list="{{ st.summaryPills }}" as="pl" hint-placeholder-count="3"><span style="background:{{ pl.bg }};color:{{ pl.fg }};border-radius:6px;padding:2px 7px;font-size:9.5px;font-weight:800;white-space:nowrap">{{ pl.label }}</span></sc-for></span><sc-if value="{{ st.hasNote }}" hint-placeholder-val="{{ true }}"><span style="display:block;font-size:11.5px;color:#7A8296;margin-top:5px;line-height:1.4">{{ st.noteLine }}</span></sc-if></button></sc-if>
+                                  <button onclick="{{ st.onToggleOpen }}" title="Open or close this set" style="flex:none;width:24px;height:24px;border-radius:7px;border:none;background:#EEF1F5;color:#5B6478;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="pencil" style="width:13px;height:13px"></i></button><button onclick="{{ st.onUp }}" title="Move this set up" style="flex:none;width:24px;height:24px;border-radius:7px;border:none;background:{{ st.upBg }};color:{{ st.upFg }};cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="chevron-up" style="width:15px;height:15px"></i></button><button onclick="{{ st.onDown }}" title="Move this set down" style="flex:none;width:24px;height:24px;border-radius:7px;border:none;background:{{ st.downBg }};color:{{ st.downFg }};cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="chevron-down" style="width:15px;height:15px"></i></button><sc-if value="{{ st.hasSwap }}" hint-placeholder-val="{{ true }}"><button onclick="{{ st.onSwap }}" title="Move this set to the other section" style="flex:none;height:24px;border-radius:7px;border:none;background:#F3EEFF;color:#5B34C9;cursor:pointer;display:flex;align-items:center;gap:3px;padding:0 7px;font-family:inherit;font-size:10px;font-weight:800;white-space:nowrap"><i data-lucide="arrow-left-right" style="width:12px;height:12px"></i>{{ st.swapLabel }}</button></sc-if><button onclick="{{ st.onFav }}" title="Save this set to favourites" style="flex:none;width:24px;height:24px;border-radius:7px;border:none;background:#FFF6E0;color:#B7791F;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="star" style="width:14px;height:14px"></i></button><button onclick="{{ st.onRemove }}" style="flex:none;width:24px;height:24px;border-radius:7px;border:none;background:#F4F6F8;color:#9AA2B4;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:14px;height:14px"></i></button>
                                 </div>
+                                <sc-if value="{{ st.open }}" hint-placeholder-val="{{ true }}">
                                 <textarea value="{{ st.txt }}" oninput="{{ st.onTxt }}" rows="{{ st.txtRows }}" placeholder="Notes — one line per thing, press Enter for the next (e.g. 1- 25 kick / 25 swim)…" style="width:100%;box-sizing:border-box;border:none;outline:none;background:none;font-family:inherit;font-size:12.5px;line-height:1.45;color:#3A4152;padding:6px 2px 0;resize:vertical;overflow:hidden;white-space:pre-wrap"></textarea>
                                 <!-- Every choice for this set in one box: type, stroke, tools, zone, focus. -->
                                 <div style="margin-top:9px;border:1px solid #E5E9F0;background:#FBFCFE;border-radius:11px;padding:3px 9px">
@@ -3891,8 +3892,10 @@ if ('serviceWorker' in navigator) {
                                 <sc-if value="{{ st.hasAdvice }}" hint-placeholder-val="{{ false }}">
                                   <div style="display:flex;gap:6px;align-items:flex-start;margin-top:8px;background:var(--vx-blue-tint);border-radius:8px;padding:7px 9px"><i data-lucide="sparkles" style="width:13px;height:13px;color:var(--vx-blue-dark);flex:none;margin-top:1px"></i><span style="font-size:10.5px;color:var(--vx-blue-dark);line-height:1.4">{{ st.advice }}</span></div>
                                 </sc-if>
+                                </sc-if>
                               </div>
                             </sc-for>
+                            <input onkeydown="{{ ps.onQuickAdd }}" placeholder="Type a set — e.g. 8x100 free en2 fins @1:30" style="width:100%;box-sizing:border-box;margin:2px 0 7px;border:1.5px dashed #CDD3E0;border-radius:11px;background:#FAFBFD;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
                             <sc-if value="{{ ps.hasFavs }}" hint-placeholder-val="{{ true }}">
                               <div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin:2px 1px 7px">
                                 <span style="font-size:9px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#B7791F;display:flex;align-items:center;gap:3px;margin-right:2px"><i data-lucide="star" style="width:12px;height:12px"></i>Favourites</span>
@@ -19814,6 +19817,50 @@ class Component extends DCLogic {
       const copy=JSON.parse(JSON.stringify(fav.set||{})); copy.id=this._uid('s');
       sec.sets=sec.sets||[]; sec.sets.push(copy); }); }
   removeFavorite(favId){ this.planFavs=(this.planFavs||[]).filter(f=>f.id!==favId); this._savePlanFavs(); }
+  // ---- coach's notation: type a set the way you'd write it on the whiteboard ----
+  // "8x100 free en2 fins @1:30 descend" -> a structured set. Best-effort: anything a token is
+  // not recognised as stays in the notes, so nothing a coach types is ever dropped.
+  _notationParse(raw){
+    const out={reps:1, dist:0, strokes:[], types:[], equip:[], labels:[], zone:'', sendoff:'', rest:'', txt:''};
+    if(!raw || !String(raw).trim()) return out;
+    const pick=(table,tok)=>{ for(const row of table){ if(row[0].test(tok)) return row[1]; } return null; };
+    const STROKE=[[/^(free|fr|freestyle)$/,'FREE'],[/^(fly|fl|butterfly)$/,'FLY'],[/^(back|bk|backstroke)$/,'BK'],[/^(breast|br|brs|breaststroke)$/,'BR'],[/^(im|medley)$/,'IM']];
+    const TYPE=[[/^swim$/,'Swim'],[/^drill$/,'Drill'],[/^kick$/,'Kick'],[/^pull$/,'Pull'],[/^scull$/,'Scull']];
+    const EQUIP=[[/^fins?$/,'Fins'],[/^(paddles?|pad)$/,'Paddles'],[/^(buoy|pullbuoy|pb)$/,'Pull buoy'],[/^(kickboard|board|kb)$/,'Kickboard'],[/^snorkel$/,'Snorkel'],[/^band$/,'Band']];
+    const LABEL=[[/^(descend|desc)$/,'Descend'],[/^(ascend|asc)$/,'Ascend'],[/^build$/,'Build up'],[/^dps$/,'DPS'],[/^(underwater|uw)$/,'Underwater'],[/^(strokecount|sc)$/,'Stroke count'],[/^vertical$/,'Vertical']];
+    let text=String(raw).replace(/(\d)\s*[x×*]\s*(\d)/g,'$1x$2');
+    const send=text.match(/@\s*(\d{1,2}:\d{2}|\d{1,3})/);
+    if(send){ out.sendoff=send[1]; text=text.replace(send[0],' '); }
+    else { const r=text.match(/\b(?:rest|r)\s*(\d{1,2}:\d{2}|\d{1,3})\b/i);
+      if(r){ out.rest=r[1].indexOf(':')>=0?r[1]:(':'+String(r[1]).padStart(2,'0')); text=text.replace(r[0],' '); } }
+    let gotReps=false, gotDist=false; const left=[];
+    String(text).split(/\s+/).forEach(orig=>{
+      if(!orig) return; const t=orig.replace(/[,.;]+$/,'').toLowerCase(); if(!t) return;
+      const m=t.match(/^(\d+)x(\d+)m?$/);
+      if(m && !gotReps){ out.reps=parseInt(m[1],10); out.dist=parseInt(m[2],10); gotReps=true; gotDist=true; return; }
+      const d=t.match(/^(\d+)m?$/);
+      if(d && !gotDist){ out.dist=parseInt(d[1],10); gotDist=true; return; }
+      const sk=pick(STROKE,t); if(sk){ if(out.strokes.indexOf(sk)<0) out.strokes.push(sk); return; }
+      const ty=pick(TYPE,t);   if(ty){ if(out.types.indexOf(ty)<0) out.types.push(ty); return; }
+      const eq=pick(EQUIP,t);  if(eq){ if(out.equip.indexOf(eq)<0) out.equip.push(eq); return; }
+      const lb=pick(LABEL,t);  if(lb){ if(out.labels.indexOf(lb)<0) out.labels.push(lb); return; }
+      if(/^(en1|en2|en3|sp1|sp2|sp3)$/.test(t) && !out.zone){ out.zone=t.toUpperCase(); return; }
+      left.push(orig);
+    });
+    out.txt=left.join(' ').trim();
+    return out; }
+  addSetFromNotation(id, secId, text){
+    const p=this._notationParse(text); if(!p.dist && !p.txt) return;
+    this.mutatePlan(id, pl=>{ const sec=(pl.sections||[]).find(x=>x.id===secId); if(!sec) return;
+      sec.sets=sec.sets||[];
+      sec.sets.push({id:this._uid('s'), reps:p.reps, dist:p.dist, txt:p.txt, equip:p.equip, types:p.types,
+        strokes:p.strokes, labels:p.labels, zone:p.zone, rest:p.rest, sendoff:p.sendoff, hr:''}); }); }
+  // Which set is open for editing. View state only — never written into the plan, so it is not
+  // synced to the other coaches' phones.
+  togglePlanSet(setId){ this.setState({planOpenSet: this.state.planOpenSet===setId ? null : setId}); }
+  // The one-line summary a collapsed set reads as: "4 × 100m FREE".
+  _setHeadLine(s){ const reps=Number(s.reps)||1, dist=Number(s.dist)||0;
+    return (reps>1?(reps+' × '+dist):String(dist))+'m'; }
   // ---- one-tap Pre-set <-> Main set ----
   // Titles are what a coach reads, and they are editable, so match them loosely rather than
   // relying on an id: "Pre set", "Preset" and "Pre-set" are all the same section.
@@ -21063,6 +21110,9 @@ class Component extends DCLogic {
         onRoundsDec:()=>this.stepSectionRounds(S.squadId, sm.id, -1), onRoundsInc:()=>this.stepSectionRounds(S.squadId, sm.id, 1),
         onTitle:(e)=>this.renameSection(S.squadId, sm.id, e.target.value),
         onRemoveSection:()=>this.removeSection(S.squadId, sm.id),
+        // Quick-add: type a set in coach's notation and press Enter.
+        onQuickAdd:(e)=>{ if(e.key!=='Enter') return; const v=e.target.value; if(!String(v).trim()) return;
+          e.target.value=''; this.addSetFromNotation(S.squadId, sm.id, v); },
         favs:(this.planFavs||[]).map(f=>({ label:f.label||'set', onAdd:()=>this.addSetFromFavorite(S.squadId,sm.id,f.id), onRemove:()=>this.removeFavorite(f.id) })),
         hasFavs:((this.planFavs||[]).length>0),
         sets:sets.map((s,sxi)=>{ const reps=Number(s.reps)||1; const dist=Number(s.dist)||0; return {
@@ -21101,6 +21151,20 @@ class Component extends DCLogic {
           downBg: sxi<sets.length-1?'#F4F6F8':'#FAFBFC', downFg: sxi<sets.length-1?'#3A4152':'#D7DCE4',
           onUp:()=>this.movePlanSet(S.squadId,sm.id,s.id,-1),
           onDown:()=>this.movePlanSet(S.squadId,sm.id,s.id,1),
+          // Option A: a set reads as one line until it is tapped open.
+          open:(this.state.planOpenSet===s.id), closed:(this.state.planOpenSet!==s.id),
+          onToggleOpen:()=>this.togglePlanSet(s.id),
+          headLine:this._setHeadLine(s),
+          headStroke:((s.strokes||[])[0]||''), hasHeadStroke:((s.strokes||[]).length>0),
+          summaryPills:(()=>{ const out=[];
+            if(s.zone) out.push({label:s.zone,bg:squad.accent,fg:'#fff'});
+            (s.types||[]).forEach(t=>out.push({label:t,bg:'#E7F2FE',fg:'#0B6BC2'}));
+            (s.equip||[]).forEach(e=>out.push({label:e,bg:'#F3EEFF',fg:'#5B34C9'}));
+            (s.labels||[]).forEach(l=>out.push({label:l,bg:'#EEF1F5',fg:'#4A5568'}));
+            return out; })(),
+          summaryRest:(s.sendoff?('@'+s.sendoff):(s.rest?('rest '+s.rest):'')),
+          hasSummaryRest:!!(s.sendoff||s.rest),
+          noteLine:String(s.txt||'').split('\n')[0], hasNote:!!String(s.txt||'').trim(),
           onFav:()=>this.saveSetAsFavorite(S.squadId,sm.id,s.id),
           hasSwap:!!swapTo, swapLabel:(swapTo?String(swapTo.title||'').replace(/\s+set$/i,''):''),
           onSwap:()=>this.swapSetSection(S.squadId,sm.id,s.id),
