@@ -116,6 +116,15 @@ describe("a set can be written over lines and moved in the order", () => {
     eq(/\{\{ s\.editBio \}\}<\/textarea>/.test(SOURCE), false,
       "the bio value must not be bound as textarea child text");
   });
+  // The squad editor must be able to change the coach shown on the squad card — the field was
+  // missing, so a squad's coach could be set on create but never edited, and staff-list changes
+  // never touched it.
+  it("the squad editor has a coach field bound to value", () => {
+    eq(/<input value="\{\{ sq\.editCoach \}\}" oninput="\{\{ sq\.onEditCoach \}\}"/.test(SOURCE), true,
+      "the squad edit form must include a coach input");
+    eq(/coach:\(d\.coach\|\|''\)\.trim\(\)/.test(SOURCE), true,
+      "onSaveSquad must persist the coach field");
+  });
   it("and the sheet that prints keeps the line breaks", () => {
     const kept = SOURCE.match(/<span style="white-space:pre-line">\{\{ p[v]?set\.txt \}\}<\/span>/g) || [];
     eq(kept.length, 2, `expected the set text wrapped in both copies of the sheet, found ${kept.length}`);

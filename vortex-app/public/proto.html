@@ -7841,6 +7841,7 @@ if ('serviceWorker' in navigator) {
                                 <input value="{{ sq.editAges }}" oninput="{{ sq.onEditAges }}" placeholder="Ages" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
                                 <input value="{{ sq.editShort }}" oninput="{{ sq.onEditShort }}" placeholder="Badge" maxlength="3" style="flex:1;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
                               </div>
+                              <input value="{{ sq.editCoach }}" oninput="{{ sq.onEditCoach }}" placeholder="Coach (shown on the squad card)" style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#0C1116;outline:none">
                               <div style="display:flex;align-items:center;gap:9px;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:9px;padding:7px 11px">
                                 <span style="flex:1;font-size:12px;color:#3A4152">Squad colour</span>
                                 <input type="color" value="{{ sq.editAccent }}" oninput="{{ sq.onEditAccent }}" onchange="{{ sq.onEditAccent }}" style="width:44px;height:28px;border:none;background:none;padding:0;cursor:pointer">
@@ -10713,6 +10714,7 @@ class Component extends DCLogic {
       if(o.ages!=null){ s.ages=o.ages; }
       if(o.accent){ s.accent=o.accent; s.glow=this._glowFrom(o.accent); }
       if(o.short){ s.short=o.short; }
+      if(o.coach!=null){ s.coach=o.coach; }
     });
     const order=(e.order||[]).filter(id=>all.some(s=>s.id===id));
     if(order.length){
@@ -24479,7 +24481,7 @@ class Component extends DCLogic {
         // re-render between each letter, which fights whoever is typing, and it left "Done"
         // as a button that closed the panel without ever being the thing that saved.
         const d=(editing && S.squadDraft) ? S.squadDraft
-              : {name:sq.name, ages:sq.ages||'', short:sq.short||'', accent:sq.accent};
+              : {name:sq.name, ages:sq.ages||'', short:sq.short||'', accent:sq.accent, coach:sq.coach||''};
         const setD=(patch)=>this.setState({squadDraft:{...d, ...patch}, squadMsg:''});
         return {
           id:sq.id, name:sq.name, accent:sq.accent, short:sq.short||'', ages:sq.ages||'',
@@ -24487,17 +24489,18 @@ class Component extends DCLogic {
           meta:(n===1?'1 swimmer':n+' swimmers')+(sq.ages?(' · ages '+sq.ages):'')+' · id '+sq.id,
           editing, editLabel: editing?'Close':'Edit',
           onToggleEdit:()=>this.setState({squadEditId: editing?null:sq.id, squadMsg:'',
-            squadDraft: editing?null:{name:sq.name, ages:sq.ages||'', short:sq.short||'', accent:sq.accent}}),
+            squadDraft: editing?null:{name:sq.name, ages:sq.ages||'', short:sq.short||'', accent:sq.accent, coach:sq.coach||''}}),
           editName:d.name, onEditName:(e)=>setD({name:e.target.value}),
           editAges:d.ages, onEditAges:(e)=>setD({ages:e.target.value}),
           editShort:d.short, onEditShort:(e)=>setD({short:e.target.value}),
+          editCoach:d.coach!=null?d.coach:(sq.coach||''), onEditCoach:(e)=>setD({coach:e.target.value}),
           editAccent:d.accent, onEditAccent:(e)=>setD({accent:e.target.value}),
           // Nothing is written until this is pressed, and it says what happened when it is.
           onSaveSquad:()=>{ this.squadFieldSave(sq.id, {name:(d.name||'').trim()||sq.name,
-            ages:(d.ages||'').trim(), short:(d.short||'').trim().slice(0,3)||sq.short, accent:d.accent});
+            ages:(d.ages||'').trim(), short:(d.short||'').trim().slice(0,3)||sq.short, coach:(d.coach||'').trim(), accent:d.accent});
             this.setState({squadEditId:null, squadDraft:null}); },
-          saveLabel: (editing && (d.name!==sq.name || d.ages!==(sq.ages||'') || d.short!==(sq.short||'') || d.accent!==sq.accent)) ? 'Save changes' : 'Save',
-          dirty: editing && (d.name!==sq.name || d.ages!==(sq.ages||'') || d.short!==(sq.short||'') || d.accent!==sq.accent),
+          saveLabel: (editing && (d.name!==sq.name || d.ages!==(sq.ages||'') || d.short!==(sq.short||'') || (d.coach||'')!==(sq.coach||'') || d.accent!==sq.accent)) ? 'Save changes' : 'Save',
+          dirty: editing && (d.name!==sq.name || d.ages!==(sq.ages||'') || d.short!==(sq.short||'') || (d.coach||'')!==(sq.coach||'') || d.accent!==sq.accent),
           canDelete: n===0 && this.squads.length>1,
           deleteHint: n>0 ? ('Move its '+n+' swimmer'+(n===1?'':'s')+' out first') : (this.squads.length<=1?'The club needs at least one squad':'No swimmers \u2014 safe to delete'),
           onDelete:()=>this.squadDelete(sq.id),
