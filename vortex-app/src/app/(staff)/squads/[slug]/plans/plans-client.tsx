@@ -31,6 +31,25 @@ import type { PlanSetFavorite } from "@/lib/types";
 
 const zoneColor = (id: string) => ZONE_DEFS.find((z) => z.id === id)?.color ?? "#7A8296";
 
+// The two sections a set gets bounced between most often. Names are matched loosely
+// so "Pre-set", "Pre set" and "Preset" all count, and so do "Main set" and "Main".
+const PRE_SET = /^pre[\s-]?set$/i;
+const MAIN_SET = /^main([\s-]?set)?$/i;
+
+/**
+ * The section a one-tap swap should send this set to: Pre-set ⇄ Main set.
+ * null when the plan has no such pair, or the set is in neither of them —
+ * the "Move to" picker in the editor still covers those.
+ */
+function swapTarget<T extends { id: string; name: string }>(sections: T[], currentId: string): T | null {
+  const pre = sections.find((s) => PRE_SET.test(s.name.trim()));
+  const main = sections.find((s) => MAIN_SET.test(s.name.trim()));
+  if (!pre || !main) return null;
+  if (currentId === pre.id) return main;
+  if (currentId === main.id) return pre;
+  return null;
+}
+
 /** A toggle chip in the detail editor. */
 function Chip({
   active,
@@ -46,7 +65,7 @@ function Chip({
   return (
     <button
       onClick={onClick}
-      className="px-2.5 py-1 rounded-[var(--radius-pill)] text-[11px] font-semibold transition-colors"
+      className="px-3 py-1.5 rounded-[var(--radius-pill)] text-[11.5px] font-semibold transition-colors"
       style={{ background: active ? activeBg : "#EEF1F5", color: active ? "#fff" : "#4A5568" }}
     >
       {label}
@@ -228,6 +247,7 @@ export default function PlansClient({
               {section.sets.map((set, idx) => {
                 const per = perRepDistance(set.distance, set.reps);
                 const isEditing = editing === set.id;
+                const swap = swapTarget(plan.sections, section.id);
                 return (
                   <div
                     key={set.id}
@@ -297,6 +317,16 @@ export default function PlansClient({
                         >
                           ▼
                         </button>
+                        {swap && (
+                          <button
+                            className={`${iconBtn} w-auto px-1.5 gap-1 text-[10px] font-bold`}
+                            onClick={() => run(() => moveSetToSection(set.id, slug, plan.id, swap.id))}
+                            aria-label={`Move to ${swap.name}`}
+                            title={`Move to ${swap.name}`}
+                          >
+                            ⇄ {swap.name.replace(/\s*set$/i, "")}
+                          </button>
+                        )}
                         <button
                           className={iconBtn}
                           onClick={() => run(() => saveFavorite(squad.id, slug, setFields(set)))}
@@ -357,85 +387,88 @@ export default function PlansClient({
                           />
                         </div>
 
-                        <ChipRow label="Stroke">
-                          {STROKE_OPTIONS.map((s) => (
-                            <Chip
-                              key={s}
-                              active={set.stroke === s}
-                              activeBg="var(--vx-blue)"
-                              label={s}
-                              onClick={() =>
-                                run(() =>
-                                  updateSet(set.id, slug, plan.id, { stroke: set.stroke === s ? null : s }),
-                                )
-                              }
-                            />
-                          ))}
-                        </ChipRow>
+                        {/* Every choice in one box: stroke, type, tools, zone, focus. */}
+                        <div className="rounded-[var(--radius-md)] border border-[#E5E9F0] bg-white px-3 py-0.5">
+                          <ChipRow label="Stroke">
+                            {STROKE_OPTIONS.map((s) => (
+                              <Chip
+                                key={s}
+                                active={set.stroke === s}
+                                activeBg="var(--vx-blue)"
+                                label={s}
+                                onClick={() =>
+                                  run(() =>
+                                    updateSet(set.id, slug, plan.id, { stroke: set.stroke === s ? null : s }),
+                                  )
+                                }
+                              />
+                            ))}
+                          </ChipRow>
 
-                        <ChipRow label="Type">
-                          {SET_TYPE_OPTIONS.map((t) => (
-                            <Chip
-                              key={t}
-                              active={set.set_types.includes(t)}
-                              activeBg="var(--vx-blue)"
-                              label={t}
-                              onClick={() =>
-                                run(() =>
-                                  updateSet(set.id, slug, plan.id, { set_types: toggle(set.set_types, t) }),
-                                )
-                              }
-                            />
-                          ))}
-                        </ChipRow>
+                          <ChipRow label="Type">
+                            {SET_TYPE_OPTIONS.map((t) => (
+                              <Chip
+                                key={t}
+                                active={set.set_types.includes(t)}
+                                activeBg="var(--vx-blue)"
+                                label={t}
+                                onClick={() =>
+                                  run(() =>
+                                    updateSet(set.id, slug, plan.id, { set_types: toggle(set.set_types, t) }),
+                                  )
+                                }
+                              />
+                            ))}
+                          </ChipRow>
 
-                        <ChipRow label="Tools">
-                          {EQUIPMENT_OPTIONS.map((eq) => (
-                            <Chip
-                              key={eq}
-                              active={set.equipment.includes(eq)}
-                              activeBg="#3B2FD6"
-                              label={eq}
-                              onClick={() =>
-                                run(() =>
-                                  updateSet(set.id, slug, plan.id, { equipment: toggle(set.equipment, eq) }),
-                                )
-                              }
-                            />
-                          ))}
-                        </ChipRow>
+                          <ChipRow label="Tools">
+                            {EQUIPMENT_OPTIONS.map((eq) => (
+                              <Chip
+                                key={eq}
+                                active={set.equipment.includes(eq)}
+                                activeBg="#3B2FD6"
+                                label={eq}
+                                onClick={() =>
+                                  run(() =>
+                                    updateSet(set.id, slug, plan.id, { equipment: toggle(set.equipment, eq) }),
+                                  )
+                                }
+                              />
+                            ))}
+                          </ChipRow>
 
-                        <ChipRow label="Zone">
-                          {ZONE_DEFS.map((z) => (
-                            <Chip
-                              key={z.id}
-                              active={set.zone === z.id}
-                              activeBg={z.color}
-                              label={z.id}
-                              onClick={() =>
-                                run(() =>
-                                  updateSet(set.id, slug, plan.id, {
-                                    zone: set.zone === z.id ? null : z.id,
-                                  }),
-                                )
-                              }
-                            />
-                          ))}
-                        </ChipRow>
+                          <ChipRow label="Zone">
+                            {ZONE_DEFS.map((z) => (
+                              <Chip
+                                key={z.id}
+                                active={set.zone === z.id}
+                                activeBg={z.color}
+                                label={z.id}
+                                onClick={() =>
+                                  run(() =>
+                                    updateSet(set.id, slug, plan.id, {
+                                      zone: set.zone === z.id ? null : z.id,
+                                    }),
+                                  )
+                                }
+                              />
+                            ))}
+                          </ChipRow>
 
-                        <ChipRow label="Focus">
-                          {FOCUS_OPTIONS.map((x) => (
-                            <Chip
-                              key={x}
-                              active={set.focus.includes(x)}
-                              activeBg="#0C1116"
-                              label={x}
-                              onClick={() =>
-                                run(() => updateSet(set.id, slug, plan.id, { focus: toggle(set.focus, x) }))
-                              }
-                            />
-                          ))}
-                        </ChipRow>
+                          <ChipRow label="Focus" last>
+                            {FOCUS_OPTIONS.map((x) => (
+                              <Chip
+                                key={x}
+                                active={set.focus.includes(x)}
+                                activeBg="#0C1116"
+                                label={x}
+                                onClick={() =>
+                                  run(() => updateSet(set.id, slug, plan.id, { focus: toggle(set.focus, x) }))
+                                }
+                              />
+                            ))}
+                          </ChipRow>
+                        </div>
 
                         <input
                           defaultValue={set.description}
@@ -505,11 +538,24 @@ export default function PlansClient({
   );
 }
 
-function ChipRow({ label, children }: { label: string; children: React.ReactNode }) {
+/** One labelled row of choices inside the single options box. */
+function ChipRow({
+  label,
+  children,
+  last = false,
+}: {
+  label: string;
+  children: React.ReactNode;
+  last?: boolean;
+}) {
   return (
-    <div className="flex items-center gap-1.5 flex-wrap">
-      <span className="text-[10px] text-[#7A8296] font-semibold w-12 shrink-0">{label}</span>
-      {children}
+    <div
+      className={`flex items-start gap-3 py-2.5 ${last ? "" : "border-b border-[#F0F2F6]"}`}
+    >
+      <span className="text-[10px] text-[#7A8296] font-bold w-11 shrink-0 pt-1.5 uppercase tracking-wide">
+        {label}
+      </span>
+      <div className="flex flex-wrap gap-1.5 flex-1">{children}</div>
     </div>
   );
 }
