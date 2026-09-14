@@ -3,6 +3,7 @@
 
 import { readFileSync, readdirSync } from "node:fs";
 import { bind, methodSource, describe, it, itAsync, eq, report, SOURCE, sourceBetween, runInSandbox } from "./harness.mjs";
+import { parseSetNotation, perRepDistance, describeSet } from "@/lib/plan-notation";
 // The real route module. Node strips the types, so these tests run the filter that ships
 // rather than a regex-mangled copy of it.
 const AI_ROUTE = await import("../src/app/api/ai/coach/route.ts");
@@ -13321,6 +13322,70 @@ describe("notifications — the feed collapses same-day duplicates", () => {
     eq(list.length, 2);
     eq(list[0].id, "n3"); // newest first
     eq(list[1].id, "n1"); // the 09:00 copy, not the 06:00 one
+  });
+});
+
+/* ------------------------------------------------------- plan notation (Option A quick-add)
+   A coach types a set the way they write it on the whiteboard. Whatever a token is not
+   recognised as must survive in the description — nothing typed is ever dropped. */
+describe("plan notation", () => {
+  it("reads reps × distance into a total", () => {
+    const p = parseSetNotation("8x100");
+    eq([p.reps, p.distance], [8, 800]);
+  });
+
+  it("accepts spaces and the × sign around the reps", () => {
+    const p = parseSetNotation("4 × 100");
+    eq([p.reps, p.distance], [4, 400]);
+  });
+
+  it("a lone number is a single-rep distance", () => {
+    const p = parseSetNotation("400");
+    eq([p.reps, p.distance], [1, 400]);
+  });
+
+  it("pulls stroke, zone, tools and focus out of one line", () => {
+    const p = parseSetNotation("8x100 free en2 fins descend");
+    eq(p.stroke, "Free");
+    eq(p.zone, "EN2");
+    eq(p.equipment, ["Fins"]);
+    eq(p.focus, ["Descend"]);
+  });
+
+  it("reads a send-off written with @", () => {
+    eq(parseSetNotation("8x100 free @1:30").rest, "@1:30");
+  });
+
+  it("reads a plain rest in seconds", () => {
+    eq(parseSetNotation("100 kick rest 20").rest, "0:20");
+  });
+
+  it("keeps unrecognised words as the description", () => {
+    const p = parseSetNotation("8x100 free hold pace @1:30");
+    eq(p.description, "hold pace");
+  });
+
+  it("never mistakes the second number for the distance", () => {
+    // "3x50" is the set; a stray "25" note must not overwrite the parsed distance.
+    const p = parseSetNotation("3x50 drill 25 kick");
+    eq([p.reps, p.distance], [3, 150]);
+    eq(p.set_types, ["Drill", "Kick"]);
+    eq(p.description, "25");
+  });
+
+  it("empty input is an empty single-rep set, not a crash", () => {
+    const p = parseSetNotation("   ");
+    eq([p.reps, p.distance, p.stroke, p.description], [1, 0, null, ""]);
+  });
+
+  it("per-rep distance splits the total, or shows the whole for one rep", () => {
+    eq(perRepDistance(800, 8), 100);
+    eq(perRepDistance(400, 1), 400);
+  });
+
+  it("describes a set the way a coach would say it", () => {
+    eq(describeSet({ reps: 8, distance: 800, stroke: "Free" }), "8 × 100m Free");
+    eq(describeSet({ reps: 1, distance: 400, stroke: null }), "400m");
   });
 });
 

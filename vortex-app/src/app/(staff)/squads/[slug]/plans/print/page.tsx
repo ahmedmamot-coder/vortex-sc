@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getSquadBySlug } from "@/lib/data/squads";
 import { getOrCreatePlan } from "@/lib/data/plans";
 import { ZONE_DEFS } from "@/lib/types";
+import { perRepDistance } from "@/lib/plan-notation";
 import PrintButton from "./print-button";
 
 export default async function PlanPrintPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -50,13 +51,20 @@ export default async function PlanPrintPage({ params }: { params: Promise<{ slug
               <tbody>
                 {section.sets.map((set) => (
                   <tr key={set.id} className="border-b-2" style={{ borderColor: "#C9B8F5" }}>
-                    <td className="py-3 font-bold w-20 align-top">{set.distance}m</td>
+                    <td className="py-3 font-bold w-24 align-top">
+                      {set.reps > 1 ? `${set.reps} × ${perRepDistance(set.distance, set.reps)}` : set.distance}m
+                    </td>
                     <td className="py-3 align-top">
-                      <p>{set.description}</p>
+                      <p>
+                        {set.stroke ? <span className="font-semibold">{set.stroke}</span> : null}
+                        {set.stroke && set.description ? " — " : ""}
+                        {set.description}
+                      </p>
                       <p className="text-xs mt-1" style={{ color: "#3B2FD6", fontWeight: 700 }}>
                         {[
                           set.set_types.length ? `Type: ${set.set_types.join(", ")}` : "",
                           set.equipment.length ? `Tools: ${set.equipment.join(", ")}` : "",
+                          set.focus.length ? `Focus: ${set.focus.join(", ")}` : "",
                           set.rest ? `Rest: ${set.rest}` : "",
                         ]
                           .filter(Boolean)

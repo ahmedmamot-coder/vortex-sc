@@ -3,18 +3,50 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import type { Squad } from "@/lib/types";
-import { EQUIPMENT_OPTIONS, SET_TYPE_OPTIONS, ZONE_DEFS } from "@/lib/types";
+import {
+  EQUIPMENT_OPTIONS,
+  SET_TYPE_OPTIONS,
+  STROKE_OPTIONS,
+  FOCUS_OPTIONS,
+  ZONE_DEFS,
+} from "@/lib/types";
 import type { PlanWithSections } from "@/lib/data/plans";
+import { perRepDistance } from "@/lib/plan-notation";
 import PdfImport from "./pdf-import";
 import {
   updatePlanMeta,
   addSection,
   removeSection,
   addSet,
+  addSetFromNotation,
   removeSet,
   updateSet,
+  moveSet,
+  moveSetToSection,
 } from "./actions";
 
+const zoneColor = (id: string) => ZONE_DEFS.find((z) => z.id === id)?.color ?? "#7A8296";
+
+// The two sections a set gets bounced between most often. Names are matched loosely
+// so "Pre-set", "Pre set" and "Preset" all count, and so do "Main set" and "Main".
+const PRE_SET = /^pre[\s-]?set$/i;
+const MAIN_SET = /^main([\s-]?set)?$/i;
+
+/**
+ * The section a one-tap swap should send this set to: Pre-set ⇄ Main set.
+ * null when the plan has no such pair, or the set is in neither of them —
+ * the "Move to" picker in the editor still covers those.
+ */
+function swapTarget<T extends { id: string; name: string }>(sections: T[], currentId: string): T | null {
+  const pre = sections.find((s) => PRE_SET.test(s.name.trim()));
+  const main = sections.find((s) => MAIN_SET.test(s.name.trim()));
+  if (!pre || !main) return null;
+  if (currentId === pre.id) return main;
+  if (currentId === main.id) return pre;
+  return null;
+}
+
+/** A toggle chip in the detail editor. */
 function Chip({
   active,
   activeBg,
@@ -29,16 +61,28 @@ function Chip({
   return (
     <button
       onClick={onClick}
-      className="px-2 py-0.5 rounded-[var(--radius-pill)] text-[10px] font-semibold"
-      style={{
-        background: active ? activeBg : "#EEF1F5",
-        color: active ? "#fff" : "#4A5568",
-      }}
+      className="px-3 py-1.5 rounded-[var(--radius-pill)] text-[11.5px] font-semibold transition-colors"
+      style={{ background: active ? activeBg : "#EEF1F5", color: active ? "#fff" : "#4A5568" }}
     >
       {label}
     </button>
   );
 }
+
+/** A small read-only pill on a collapsed notation line. */
+function Pill({ label, bg, color = "#fff" }: { label: string; bg: string; color?: string }) {
+  return (
+    <span
+      className="px-2 py-0.5 rounded-[var(--radius-pill)] text-[10px] font-bold whitespace-nowrap"
+      style={{ background: bg, color }}
+    >
+      {label}
+    </span>
+  );
+}
+
+const iconBtn =
+  "w-7 h-7 grid place-items-center rounded-[var(--radius-sm)] text-[#7A8296] hover:bg-[#EEF1F5] disabled:opacity-30 disabled:hover:bg-transparent";
 
 export default function PlansClient({
   slug,
@@ -50,11 +94,14 @@ export default function PlansClient({
   plan: PlanWithSections;
 }) {
   const [title, setTitle] = useState(plan.title);
+  const [editing, setEditing] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
   function toggle<T>(arr: T[], value: T): T[] {
     return arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value];
   }
+  const run = (fn: () => Promise<unknown>) => startTransition(() => void fn());
+
 
   return (
     <div>
@@ -62,7 +109,7 @@ export default function PlansClient({
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          onBlur={() => startTransition(() => updatePlanMeta(plan.id, slug, { title }))}
+          onBlur={() => run(() => updatePlanMeta(plan.id, slug, { title }))}
           className="text-[#0C1116] font-bold text-lg bg-transparent border-b border-transparent focus:border-[#CDD3E2] outline-none"
         />
         <div className="flex items-center gap-3">
@@ -78,18 +125,20 @@ export default function PlansClient({
 
       <PdfImport planId={plan.id} slug={slug} />
 
-      <div className="flex flex-wrap gap-2 mb-6">
+      {/* Session zone */}
+      <div className="flex flex-wrap gap-2 mb-4">
         {ZONE_DEFS.map((z) => (
           <Chip
             key={z.id}
             active={plan.zone === z.id}
             activeBg={z.color}
             label={`${z.id} · ${z.label}`}
-            onClick={() => startTransition(() => updatePlanMeta(plan.id, slug, { zone: z.id }))}
+            onClick={() => run(() => updatePlanMeta(plan.id, slug, { zone: z.id }))}
           />
         ))}
       </div>
 
+      {/* Sections */}
       <div className="flex flex-col gap-5">
         {plan.sections.map((section) => (
           <div
@@ -100,114 +149,282 @@ export default function PlansClient({
             <div className="flex items-center justify-between mb-3">
               <span className="text-[#0C1116] font-bold">{section.name}</span>
               <button
-                onClick={() => startTransition(() => removeSection(section.id, slug, plan.id))}
+                onClick={() => run(() => removeSection(section.id, slug, plan.id))}
                 className="text-xs text-[var(--vx-danger)]"
               >
                 Remove section
               </button>
             </div>
 
-            <div className="flex flex-col gap-3">
-              {section.sets.map((set) => (
-                <div
-                  key={set.id}
-                  className="rounded-[var(--radius-md)] p-3"
-                  style={{ borderLeft: `3px solid ${squad.accent_color}`, background: "#F6F7F9" }}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <input
-                      type="number"
-                      defaultValue={set.distance}
-                      onBlur={(e) =>
-                        startTransition(() =>
-                          updateSet(set.id, slug, plan.id, { distance: Number(e.target.value) }),
-                        )
-                      }
-                      className="w-20 rounded-[var(--radius-sm)] bg-white border border-[#E5E9F0] px-2 py-1 text-[#0C1116] text-sm"
-                    />
-                    <span className="text-xs text-[#7A8296]">m</span>
-                    <input
-                      defaultValue={set.description}
-                      onBlur={(e) =>
-                        startTransition(() =>
-                          updateSet(set.id, slug, plan.id, { description: e.target.value }),
-                        )
-                      }
-                      className="flex-1 rounded-[var(--radius-sm)] bg-white border border-[#E5E9F0] px-2 py-1 text-[#0C1116] text-sm"
-                    />
-                    <button
-                      onClick={() => startTransition(() => removeSet(set.id, slug, plan.id))}
-                      className="text-[var(--vx-danger)] text-xs"
-                    >
-                      ✕
-                    </button>
-                  </div>
+            <div className="flex flex-col gap-2">
+              {section.sets.map((set, idx) => {
+                const per = perRepDistance(set.distance, set.reps);
+                const isEditing = editing === set.id;
+                const swap = swapTarget(plan.sections, section.id);
+                return (
+                  <div
+                    key={set.id}
+                    className="rounded-[var(--radius-md)] bg-[#F6F7F9]"
+                    style={{ borderLeft: `3px solid ${set.zone ? zoneColor(set.zone) : squad.accent_color}` }}
+                  >
+                    {/* Collapsed notation line */}
+                    <div className="flex items-start gap-2 p-3">
+                      <button
+                        onClick={() => setEditing(isEditing ? null : set.id)}
+                        className="flex-1 text-left"
+                      >
+                        <div className="flex items-baseline gap-1.5 flex-wrap">
+                          <span className="text-[15px] font-extrabold text-[#0C1116]">
+                            {set.reps > 1 ? (
+                              <>
+                                {set.reps} <span className="text-[#7A8296] font-semibold">×</span> {per}
+                              </>
+                            ) : (
+                              set.distance
+                            )}
+                            <span className="text-[#7A8296] text-xs font-bold">m</span>
+                          </span>
+                          {set.stroke && (
+                            <span className="text-[13px] font-extrabold" style={{ color: "var(--vx-blue)" }}>
+                              {set.stroke}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+                          {set.zone && <Pill label={set.zone} bg={zoneColor(set.zone)} />}
+                          {set.set_types.map((t) => (
+                            <Pill key={t} label={t} bg="var(--vx-blue)" />
+                          ))}
+                          {set.equipment.map((e) => (
+                            <Pill key={e} label={e} bg="#3B2FD6" />
+                          ))}
+                          {set.focus.map((x) => (
+                            <Pill key={x} label={x} bg="#EEF1F5" color="#4A5568" />
+                          ))}
+                          {set.rest && (
+                            <span className="text-[11px] font-bold text-[#7A8296]">
+                              {set.rest.startsWith("@") ? set.rest : `rest ${set.rest}`}
+                            </span>
+                          )}
+                        </div>
+                        {set.description && (
+                          <p className="text-[12px] text-[#7A8296] mt-1.5 leading-snug">{set.description}</p>
+                        )}
+                      </button>
 
-                  <div className="flex flex-wrap gap-1.5 mb-1.5 items-center">
-                    <span className="text-[10px] text-[#7A8296] mr-1">Type:</span>
-                    {SET_TYPE_OPTIONS.map((t) => (
-                      <Chip
-                        key={t}
-                        active={set.set_types.includes(t)}
-                        activeBg="var(--vx-blue)"
-                        label={t}
-                        onClick={() =>
-                          startTransition(() =>
-                            updateSet(set.id, slug, plan.id, { set_types: toggle(set.set_types, t) }),
-                          )
-                        }
-                      />
-                    ))}
-                  </div>
+                      {/* Per-set controls */}
+                      <div className="flex items-center shrink-0">
+                        <button
+                          className={iconBtn}
+                          disabled={idx === 0}
+                          onClick={() => run(() => moveSet(set.id, slug, plan.id, "up"))}
+                          aria-label="Move up"
+                        >
+                          ▲
+                        </button>
+                        <button
+                          className={iconBtn}
+                          disabled={idx === section.sets.length - 1}
+                          onClick={() => run(() => moveSet(set.id, slug, plan.id, "down"))}
+                          aria-label="Move down"
+                        >
+                          ▼
+                        </button>
+                        {swap && (
+                          <button
+                            className={`${iconBtn} w-auto px-1.5 gap-1 text-[10px] font-bold`}
+                            onClick={() => run(() => moveSetToSection(set.id, slug, plan.id, swap.id))}
+                            aria-label={`Move to ${swap.name}`}
+                            title={`Move to ${swap.name}`}
+                          >
+                            ⇄ {swap.name.replace(/\s*set$/i, "")}
+                          </button>
+                        )}
+                        <button
+                          className={iconBtn}
+                          onClick={() => setEditing(isEditing ? null : set.id)}
+                          aria-label="Edit set"
+                        >
+                          {isEditing ? "▾" : "✎"}
+                        </button>
+                        <button
+                          className={`${iconBtn} text-[var(--vx-danger)]`}
+                          onClick={() => run(() => removeSet(set.id, slug, plan.id))}
+                          aria-label="Delete set"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
 
-                  <div className="flex flex-wrap gap-1.5 mb-1.5 items-center">
-                    <span className="text-[10px] text-[#7A8296] mr-1">Tools:</span>
-                    {EQUIPMENT_OPTIONS.map((eq) => (
-                      <Chip
-                        key={eq}
-                        active={set.equipment.includes(eq)}
-                        activeBg="#3B2FD6"
-                        label={eq}
-                        onClick={() =>
-                          startTransition(() =>
-                            updateSet(set.id, slug, plan.id, { equipment: toggle(set.equipment, eq) }),
-                          )
-                        }
-                      />
-                    ))}
-                  </div>
+                    {/* Expanded detail editor */}
+                    {isEditing && (
+                      <div className="px-3 pb-3 pt-1 border-t border-[#E5E9F0] flex flex-col gap-2.5">
+                        <div className="flex items-center gap-2 flex-wrap pt-2">
+                          <label className="text-[10px] text-[#7A8296] font-semibold">Reps</label>
+                          <input
+                            type="number"
+                            min={1}
+                            defaultValue={set.reps}
+                            onBlur={(e) => {
+                              const reps = Math.max(1, Number(e.target.value) || 1);
+                              run(() => updateSet(set.id, slug, plan.id, { reps, distance: reps * per }));
+                            }}
+                            className="w-16 rounded-[var(--radius-sm)] bg-white border border-[#E5E9F0] px-2 py-1 text-sm"
+                          />
+                          <span className="text-[#7A8296] text-xs">×</span>
+                          <input
+                            type="number"
+                            min={0}
+                            defaultValue={per}
+                            onBlur={(e) => {
+                              const p = Math.max(0, Number(e.target.value) || 0);
+                              run(() => updateSet(set.id, slug, plan.id, { distance: set.reps * p }));
+                            }}
+                            className="w-20 rounded-[var(--radius-sm)] bg-white border border-[#E5E9F0] px-2 py-1 text-sm"
+                          />
+                          <span className="text-[#7A8296] text-xs">m / rep</span>
+                          <input
+                            defaultValue={set.rest}
+                            placeholder="rest / @send-off"
+                            onBlur={(e) => run(() => updateSet(set.id, slug, plan.id, { rest: e.target.value }))}
+                            className="ml-auto w-32 rounded-[var(--radius-sm)] bg-white border border-[#E5E9F0] px-2 py-1 text-xs"
+                          />
+                        </div>
 
-                  <div className="flex flex-wrap gap-1.5 items-center">
-                    <span className="text-[10px] text-[#7A8296] mr-1">Zone:</span>
-                    {ZONE_DEFS.map((z) => (
-                      <Chip
-                        key={z.id}
-                        active={(set.zone ?? plan.zone) === z.id}
-                        activeBg={z.color}
-                        label={z.id}
-                        onClick={() => startTransition(() => updateSet(set.id, slug, plan.id, { zone: z.id }))}
-                      />
-                    ))}
-                    <input
-                      defaultValue={set.rest}
-                      placeholder="Rest"
-                      onBlur={(e) =>
-                        startTransition(() => updateSet(set.id, slug, plan.id, { rest: e.target.value }))
-                      }
-                      className="ml-auto w-20 rounded-[var(--radius-sm)] bg-white border border-[#E5E9F0] px-2 py-0.5 text-[#0C1116] text-xs"
-                    />
+                        {/* Every choice in one box: stroke, type, tools, zone, focus. */}
+                        <div className="rounded-[var(--radius-md)] border border-[#E5E9F0] bg-white px-3 py-0.5">
+                          <ChipRow label="Stroke">
+                            {STROKE_OPTIONS.map((s) => (
+                              <Chip
+                                key={s}
+                                active={set.stroke === s}
+                                activeBg="var(--vx-blue)"
+                                label={s}
+                                onClick={() =>
+                                  run(() =>
+                                    updateSet(set.id, slug, plan.id, { stroke: set.stroke === s ? null : s }),
+                                  )
+                                }
+                              />
+                            ))}
+                          </ChipRow>
+
+                          <ChipRow label="Type">
+                            {SET_TYPE_OPTIONS.map((t) => (
+                              <Chip
+                                key={t}
+                                active={set.set_types.includes(t)}
+                                activeBg="var(--vx-blue)"
+                                label={t}
+                                onClick={() =>
+                                  run(() =>
+                                    updateSet(set.id, slug, plan.id, { set_types: toggle(set.set_types, t) }),
+                                  )
+                                }
+                              />
+                            ))}
+                          </ChipRow>
+
+                          <ChipRow label="Tools">
+                            {EQUIPMENT_OPTIONS.map((eq) => (
+                              <Chip
+                                key={eq}
+                                active={set.equipment.includes(eq)}
+                                activeBg="#3B2FD6"
+                                label={eq}
+                                onClick={() =>
+                                  run(() =>
+                                    updateSet(set.id, slug, plan.id, { equipment: toggle(set.equipment, eq) }),
+                                  )
+                                }
+                              />
+                            ))}
+                          </ChipRow>
+
+                          <ChipRow label="Zone">
+                            {ZONE_DEFS.map((z) => (
+                              <Chip
+                                key={z.id}
+                                active={set.zone === z.id}
+                                activeBg={z.color}
+                                label={z.id}
+                                onClick={() =>
+                                  run(() =>
+                                    updateSet(set.id, slug, plan.id, {
+                                      zone: set.zone === z.id ? null : z.id,
+                                    }),
+                                  )
+                                }
+                              />
+                            ))}
+                          </ChipRow>
+
+                          <ChipRow label="Focus" last>
+                            {FOCUS_OPTIONS.map((x) => (
+                              <Chip
+                                key={x}
+                                active={set.focus.includes(x)}
+                                activeBg="#0C1116"
+                                label={x}
+                                onClick={() =>
+                                  run(() => updateSet(set.id, slug, plan.id, { focus: toggle(set.focus, x) }))
+                                }
+                              />
+                            ))}
+                          </ChipRow>
+                        </div>
+
+                        <input
+                          defaultValue={set.description}
+                          placeholder="Notes — e.g. 200fr / 200 (25 scull–25 pull)"
+                          onBlur={(e) =>
+                            run(() => updateSet(set.id, slug, plan.id, { description: e.target.value }))
+                          }
+                          className="w-full rounded-[var(--radius-sm)] bg-white border border-[#E5E9F0] px-2 py-1.5 text-sm"
+                        />
+
+                        {plan.sections.length > 1 && (
+                          <div className="flex items-center gap-2">
+                            <label className="text-[10px] text-[#7A8296] font-semibold">Move to</label>
+                            <select
+                              value=""
+                              onChange={(e) => {
+                                if (!e.target.value) return;
+                                run(() => moveSetToSection(set.id, slug, plan.id, e.target.value));
+                                setEditing(null);
+                              }}
+                              className="text-xs rounded-[var(--radius-sm)] border border-[#E5E9F0] bg-white px-2 py-1"
+                            >
+                              <option value="">another section…</option>
+                              {plan.sections
+                                .filter((s) => s.id !== section.id)
+                                .map((s) => (
+                                  <option key={s.id} value={s.id}>
+                                    {s.name}
+                                  </option>
+                                ))}
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
-            <button
-              onClick={() =>
-                startTransition(() => addSet(section.id, slug, plan.id, section.sets.length))
+            {/* Quick-add + blank */}
+            <QuickAdd
+              onAdd={(text) =>
+                run(() => addSetFromNotation(section.id, slug, plan.id, text, section.sets.length))
               }
-              className="mt-3 text-xs font-semibold text-[#4A5568]"
+            />
+            <button
+              onClick={() => run(() => addSet(section.id, slug, plan.id, section.sets.length))}
+              className="mt-2 text-xs font-semibold text-[#4A5568]"
             >
-              + Add set
+              + Blank set
             </button>
           </div>
         ))}
@@ -215,12 +432,67 @@ export default function PlansClient({
 
       <button
         onClick={() =>
-          startTransition(() => addSection(plan.id, slug, "New section", plan.sections.length))
+          run(() => addSection(plan.id, slug, "New section", plan.sections.length))
         }
         className="mt-4 rounded-[var(--radius-md)] px-4 py-2 text-sm font-semibold text-white"
         style={{ background: "var(--vx-blue)" }}
       >
         + Add section
+      </button>
+    </div>
+  );
+}
+
+/** One labelled row of choices inside the single options box. */
+function ChipRow({
+  label,
+  children,
+  last = false,
+}: {
+  label: string;
+  children: React.ReactNode;
+  last?: boolean;
+}) {
+  return (
+    <div
+      className={`flex items-start gap-3 py-2.5 ${last ? "" : "border-b border-[#F0F2F6]"}`}
+    >
+      <span className="text-[10px] text-[#7A8296] font-bold w-11 shrink-0 pt-1.5 uppercase tracking-wide">
+        {label}
+      </span>
+      <div className="flex flex-wrap gap-1.5 flex-1">{children}</div>
+    </div>
+  );
+}
+
+function QuickAdd({ onAdd }: { onAdd: (text: string) => void }) {
+  const [text, setText] = useState("");
+  const submit = () => {
+    const t = text.trim();
+    if (!t) return;
+    onAdd(t);
+    setText("");
+  };
+  return (
+    <div className="mt-3 flex items-center gap-2">
+      <input
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            submit();
+          }
+        }}
+        placeholder="Type a set — e.g. 8x100 free en2 fins @1:30"
+        className="flex-1 rounded-[var(--radius-md)] border border-dashed border-[#CDD3E2] bg-[#FAFBFD] px-3 py-2 text-sm outline-none focus:border-[var(--vx-blue)]"
+      />
+      <button
+        onClick={submit}
+        className="rounded-[var(--radius-md)] px-3 py-2 text-sm font-semibold text-white shrink-0"
+        style={{ background: "var(--vx-blue)" }}
+      >
+        Add
       </button>
     </div>
   );

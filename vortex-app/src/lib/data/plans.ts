@@ -65,6 +65,23 @@ function normalizePlan(raw: Plan & { plan_sections: (PlanSection & { plan_sets: 
     ...raw,
     sections: raw.plan_sections
       .sort((a, b) => a.sort_order - b.sort_order)
-      .map((s) => ({ ...s, sets: s.plan_sets.sort((a, b) => a.sort_order - b.sort_order) })),
+      .map((s) => ({
+        ...s,
+        sets: s.plan_sets.sort((a, b) => a.sort_order - b.sort_order).map(normalizeSet),
+      })),
+  };
+}
+
+// The reps/stroke/focus columns arrived after the first plans shipped, so rows written
+// before the migration have them absent. Fill sane defaults rather than leaking undefined
+// into the editor: a set is at least one rep, has no chosen stroke, and no focus tags.
+function normalizeSet(set: PlanSet): PlanSet {
+  return {
+    ...set,
+    reps: set.reps ?? 1,
+    stroke: set.stroke ?? null,
+    focus: set.focus ?? [],
+    equipment: set.equipment ?? [],
+    set_types: set.set_types ?? [],
   };
 }

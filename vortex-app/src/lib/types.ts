@@ -83,13 +83,17 @@ export interface PlanSet {
   id: string;
   section_id: string;
   distance: number;
+  reps: number;
   description: string;
   equipment: string[];
   set_types: string[];
+  stroke: string | null;
+  focus: string[];
   rest: string;
   zone: Zone | null;
   sort_order: number;
 }
+
 
 export interface Attendance {
   id: string;
@@ -108,6 +112,17 @@ export interface FamilyAccount {
 
 export const EQUIPMENT_OPTIONS = ["Fins", "Paddles", "Pull buoy", "Kickboard", "Snorkel", "Band"] as const;
 export const SET_TYPE_OPTIONS = ["Swim", "Drill", "Kick", "Pull", "Scull"] as const;
+export const STROKE_OPTIONS = ["Free", "Fly", "BK", "BR", "IM", "Choice"] as const;
+export const FOCUS_OPTIONS = [
+  "Descend",
+  "Ascend",
+  "Build",
+  "Neg split",
+  "DPS",
+  "Stroke count",
+  "Sprint",
+  "Underwater",
+] as const;
 
 export const ZONE_DEFS: { id: Zone; label: string; name: string; color: string }[] = [
   { id: "EN1", label: "Recovery", name: "Recovery", color: "#22C1DA" },

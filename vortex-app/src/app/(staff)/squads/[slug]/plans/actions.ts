@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { parseSetNotation } from "@/lib/plan-notation";
 
 async function recomputeTotal(planId: string) {
   const supabase = await createClient();
@@ -36,16 +37,59 @@ export async function removeSection(sectionId: string, slug: string, planId: str
   revalidatePath(`/squads/${slug}/plans`);
 }
 
-export async function addSet(sectionId: string, slug: string, planId: string, sortOrder: number) {
+// Fields a set carries besides its position — shared by a blank add and a
+// quick-add from typed notation.
+type SetFields = Partial<{
+  distance: number;
+  reps: number;
+  description: string;
+  equipment: string[];
+  set_types: string[];
+  stroke: string | null;
+  focus: string[];
+  rest: string;
+  zone: string | null;
+}>;
+
+export async function addSet(
+  sectionId: string,
+  slug: string,
+  planId: string,
+  sortOrder: number,
+  fields: SetFields = {},
+) {
   const supabase = await createClient();
   await supabase.from("plan_sets").insert({
     section_id: sectionId,
-    distance: 100,
-    description: "New set",
+    distance: fields.distance ?? 100,
+    description: fields.description ?? "New set",
     sort_order: sortOrder,
+    ...fields,
   });
   await recomputeTotal(planId);
   revalidatePath(`/squads/${slug}/plans`);
+}
+
+// Quick-add: a coach types "8x100 free en2 fins @1:30" and gets a structured set.
+export async function addSetFromNotation(
+  sectionId: string,
+  slug: string,
+  planId: string,
+  text: string,
+  sortOrder: number,
+) {
+  const p = parseSetNotation(text);
+  await addSet(sectionId, slug, planId, sortOrder, {
+    distance: p.distance,
+    reps: p.reps,
+    stroke: p.stroke,
+    set_types: p.set_types,
+    equipment: p.equipment,
+    focus: p.focus,
+    rest: p.rest,
+    zone: p.zone,
+    description: p.description,
+  });
 }
 
 export async function removeSet(setId: string, slug: string, planId: string) {
@@ -96,17 +140,66 @@ export async function updateSet(
   setId: string,
   slug: string,
   planId: string,
-  fields: Partial<{
-    distance: number;
-    description: string;
-    equipment: string[];
-    set_types: string[];
-    rest: string;
-    zone: string | null;
-  }>,
+  fields: SetFields,
 ) {
   const supabase = await createClient();
   await supabase.from("plan_sets").update(fields).eq("id", setId);
   if (fields.distance !== undefined) await recomputeTotal(planId);
+  revalidatePath(`/squads/${slug}/plans`);
+}
+
+/**
+ * Move a set up or down within its own section by swapping sort_order with the
+ * neighbour in that direction. A no-op at the top/bottom edge.
+ */
+export async function moveSet(setId: string, slug: string, planId: string, dir: "up" | "down") {
+  const supabase = await createClient();
+  const { data: set } = await supabase
+    .from("plan_sets")
+    .select("id, section_id, sort_order")
+    .eq("id", setId)
+    .single();
+  if (!set) return;
+
+  const { data: siblings } = await supabase
+    .from("plan_sets")
+    .select("id, sort_order")
+    .eq("section_id", set.section_id)
+    .order("sort_order", { ascending: true });
+
+  const ordered = siblings ?? [];
+  const i = ordered.findIndex((s) => s.id === setId);
+  const j = dir === "up" ? i - 1 : i + 1;
+  if (i < 0 || j < 0 || j >= ordered.length) return;
+
+  // Swap the two rows' positions.
+  await supabase.from("plan_sets").update({ sort_order: ordered[j].sort_order }).eq("id", ordered[i].id);
+  await supabase.from("plan_sets").update({ sort_order: ordered[i].sort_order }).eq("id", ordered[j].id);
+  revalidatePath(`/squads/${slug}/plans`);
+}
+
+/**
+ * Move a set to another section (e.g. Pre-set → Main set, or back). It lands at the
+ * end of the target section. Total metres is unchanged, so no recompute.
+ */
+export async function moveSetToSection(
+  setId: string,
+  slug: string,
+  planId: string,
+  targetSectionId: string,
+) {
+  const supabase = await createClient();
+  const { data: tail } = await supabase
+    .from("plan_sets")
+    .select("sort_order")
+    .eq("section_id", targetSectionId)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const nextOrder = (tail?.sort_order ?? -1) + 1;
+  await supabase
+    .from("plan_sets")
+    .update({ section_id: targetSectionId, sort_order: nextOrder })
+    .eq("id", setId);
   revalidatePath(`/squads/${slug}/plans`);
 }
