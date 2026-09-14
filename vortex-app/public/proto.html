@@ -10742,6 +10742,22 @@ class Component extends DCLogic {
     this.squads=all;
     this.squadById={}; this.squads.forEach(s=>this.squadById[s.id]=s);
   }
+  // The face on a squad card is the coach's own, taken from their staff account, not a picture
+  // pinned to the squad — so when the coach changes, the photo changes with them instead of
+  // showing whoever used to have it. Matched on the head coach named on the card (the part before
+  // the first "·"), against the staff list. No match, or no photo on file, falls back to the
+  // initials badge.
+  _coachPhotoForSquad(sq){
+    const head=String((sq&&sq.coach)||'').split('·')[0].trim();
+    const norm=(s)=>String(s||'').toLowerCase().replace(/^coach\s+/,'').trim();
+    const target=norm(head);
+    if(!target) return '';
+    const accts=this.accounts||[];
+    const m=accts.find(a=>norm(a.label)===target)
+      || accts.find(a=>{ const n=norm(a.label); return n && (n.startsWith(target+' ')||target.startsWith(n+' ')); })
+      || accts.find(a=>{ const n=norm(a.label); return n && n.split(' ')[0]===target.split(' ')[0]; });
+    return (m && m.photo) ? m.photo : '';
+  }
   // The soft halo behind a squad card is the accent at low opacity. Derived rather than stored,
   // so a colour change cannot leave the glow showing the old one.
   _glowFrom(hex){
@@ -20948,12 +20964,12 @@ class Component extends DCLogic {
     const _visibleSquads = this.squads.filter(sq=>this._canSeeSquad(sq.id, _acct));
     const squadCards = _visibleSquads.map(sq=>({
       name:sq.name, ages:sq.ages, coach:sq.coach, count:sq.count, accent:sq.accent, glow:sq.glow,
-      avatar:this.av(sq.photo||null, badgeOf(sq), 38, 11, sq.accent, '#fff', 12),
+      avatar:this.av(this._coachPhotoForSquad(sq)||null, badgeOf(sq), 38, 11, sq.accent, '#fff', 12),
       onClick:()=>this.openSquad(sq.id),
     }));
     const switcherList = _visibleSquads.map(sq=>({
       name:sq.name, ages:sq.ages, count:sq.count, accent:sq.accent,
-      avatar:this.av(sq.photo||null, badgeOf(sq), 36, 10, sq.accent, '#fff', 11),
+      avatar:this.av(this._coachPhotoForSquad(sq)||null, badgeOf(sq), 36, 10, sq.accent, '#fff', 11),
       current: sq.id===S.squadId, rowBg: sq.id===S.squadId?'#F4F6F8':'#fff', rowBorder: sq.id===S.squadId?sq.accent:'#E5E9F0',
       onClick:()=>this.openSquad(sq.id),
     }));
@@ -23498,7 +23514,7 @@ class Component extends DCLogic {
       squad:{name:squad.name, ages:squad.ages, count:squad.count, coach:squad.coach, accent:squad.accent, accentGrad:this._gradTile(squad.accent), accentGlow:this._tileGlow(squad.accent), glow:squad.glow,
         heroGrad:'linear-gradient(135deg,'+this._shade(squad.accent,26)+' 0%,'+squad.accent+' 44%,'+this._shade(squad.accent,-50)+' 100%)',
         heroBlob:this._hexA(this._shade(squad.accent,55),.55),
-        avatar:this.av(squad.photo||null, badgeOf(squad), 52, 15, 'rgba(255,255,255,.16)', '#fff', 15, 'rgba(255,255,255,.18)')},
+        avatar:this.av(this._coachPhotoForSquad(squad)||null, badgeOf(squad), 52, 15, 'rgba(255,255,255,.16)', '#fff', 15, 'rgba(255,255,255,.18)')},
       onOpenSwitcher:()=>this.setState({showSwitcher:true}), onCloseSwitcher:()=>this.setState({showSwitcher:false}), showSwitcher:S.showSwitcher,
       tabGroup:S.tab==='group', tabPlans:S.tab==='plans', tabAttend:S.tab==='attend', tabResults:S.tab==='results', tabMore:S.tab==='more',
       attendShowDay: attendView==='day', attendShowMonth: attendView==='month', attendShowYear: attendView==='year',

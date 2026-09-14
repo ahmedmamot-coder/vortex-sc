@@ -126,6 +126,14 @@ describe("a set can be written over lines and moved in the order", () => {
     eq(/coach:\(d\.coach\|\|''\)\.trim\(\)/.test(SOURCE), true,
       "onSaveSquad must persist the coach field");
   });
+  // The squad card face is the coach's own photo from their staff account, matched via
+  // _coachPhotoForSquad — not a picture pinned to the squad, which showed the previous coach.
+  it("the squad card photo follows the coach's staff account", () => {
+    eq(/_coachPhotoForSquad\(sq\)/.test(SOURCE), true,
+      "squad cards must derive the photo from the coach's account");
+    eq(/_coachPhotoForSquad\(squad\)/.test(SOURCE), true,
+      "the squad header must derive the photo from the coach's account too");
+  });
   it("and the sheet that prints keeps the line breaks", () => {
     const kept = SOURCE.match(/<span style="white-space:pre-line">\{\{ p[v]?set\.txt \}\}<\/span>/g) || [];
     eq(kept.length, 2, `expected the set text wrapped in both copies of the sheet, found ${kept.length}`);
