@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import type { PlanSet, Squad } from "@/lib/types";
+import type { Squad } from "@/lib/types";
 import {
   EQUIPMENT_OPTIONS,
   SET_TYPE_OPTIONS,
@@ -19,15 +19,11 @@ import {
   removeSection,
   addSet,
   addSetFromNotation,
-  addSetFromFavorite,
   removeSet,
   updateSet,
   moveSet,
   moveSetToSection,
-  saveFavorite,
-  deleteFavorite,
 } from "./actions";
-import type { PlanSetFavorite } from "@/lib/types";
 
 const zoneColor = (id: string) => ZONE_DEFS.find((z) => z.id === id)?.color ?? "#7A8296";
 
@@ -92,16 +88,13 @@ export default function PlansClient({
   slug,
   squad,
   plan,
-  favorites,
 }: {
   slug: string;
   squad: Squad;
   plan: PlanWithSections;
-  favorites: PlanSetFavorite[];
 }) {
   const [title, setTitle] = useState(plan.title);
   const [editing, setEditing] = useState<string | null>(null);
-  const [favOpen, setFavOpen] = useState(false);
   const [, startTransition] = useTransition();
 
   function toggle<T>(arr: T[], value: T): T[] {
@@ -109,17 +102,6 @@ export default function PlansClient({
   }
   const run = (fn: () => Promise<unknown>) => startTransition(() => void fn());
 
-  const setFields = (s: PlanSet) => ({
-    distance: s.distance,
-    reps: s.reps,
-    stroke: s.stroke,
-    description: s.description,
-    equipment: s.equipment,
-    set_types: s.set_types,
-    focus: s.focus,
-    rest: s.rest,
-    zone: s.zone,
-  });
 
   return (
     <div>
@@ -154,75 +136,6 @@ export default function PlansClient({
             onClick={() => run(() => updatePlanMeta(plan.id, slug, { zone: z.id }))}
           />
         ))}
-      </div>
-
-      {/* Favourites shelf */}
-      <div className="mb-6 rounded-[var(--radius-lg)] border border-[#E5E9F0] bg-white">
-        <button
-          onClick={() => setFavOpen((o) => !o)}
-          className="w-full flex items-center justify-between px-4 py-2.5"
-        >
-          <span className="text-sm font-bold text-[#0C1116]">
-            ★ Favourites <span className="text-[#7A8296] font-semibold">({favorites.length})</span>
-          </span>
-          <span className="text-[#7A8296] text-xs">{favOpen ? "Hide" : "Show"}</span>
-        </button>
-        {favOpen && (
-          <div className="px-4 pb-4 border-t border-[#EEF1F5] pt-3">
-            {favorites.length === 0 ? (
-              <p className="text-xs text-[#7A8296]">
-                Star any set (☆) to save it here, then drop it into a plan later.
-              </p>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {favorites.map((f) => (
-                  <div
-                    key={f.id}
-                    className="flex items-center gap-2 flex-wrap rounded-[var(--radius-md)] bg-[#F6F7F9] px-3 py-2"
-                  >
-                    <span className="font-bold text-sm text-[#0C1116]">{f.label || `${f.distance}m`}</span>
-                    {f.zone && <Pill label={f.zone} bg={zoneColor(f.zone)} />}
-                    {f.equipment.map((e) => (
-                      <Pill key={e} label={e} bg="#3B2FD6" />
-                    ))}
-                    {f.focus.map((x) => (
-                      <Pill key={x} label={x} bg="#EEF1F5" color="#4A5568" />
-                    ))}
-                    <div className="ml-auto flex items-center gap-2">
-                      <select
-                        defaultValue=""
-                        onChange={(e) => {
-                          const sectionId = e.target.value;
-                          if (!sectionId) return;
-                          const section = plan.sections.find((s) => s.id === sectionId);
-                          run(() =>
-                            addSetFromFavorite(sectionId, slug, plan.id, f.id, section?.sets.length ?? 0),
-                          );
-                          e.target.value = "";
-                        }}
-                        className="text-xs rounded-[var(--radius-sm)] border border-[#E5E9F0] bg-white px-2 py-1 text-[#0C1116]"
-                      >
-                        <option value="">Add to…</option>
-                        {plan.sections.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        onClick={() => run(() => deleteFavorite(f.id, slug))}
-                        className="text-[var(--vx-danger)] text-xs font-semibold"
-                        aria-label="Remove favourite"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
       {/* Sections */}
@@ -327,14 +240,6 @@ export default function PlansClient({
                             ⇄ {swap.name.replace(/\s*set$/i, "")}
                           </button>
                         )}
-                        <button
-                          className={iconBtn}
-                          onClick={() => run(() => saveFavorite(squad.id, slug, setFields(set)))}
-                          aria-label="Save to favourites"
-                          title="Save to favourites"
-                        >
-                          ☆
-                        </button>
                         <button
                           className={iconBtn}
                           onClick={() => setEditing(isEditing ? null : set.id)}

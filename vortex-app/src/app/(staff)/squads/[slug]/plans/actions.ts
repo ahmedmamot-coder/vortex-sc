@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { parseSetNotation, describeSet } from "@/lib/plan-notation";
+import { parseSetNotation } from "@/lib/plan-notation";
 
 async function recomputeTotal(planId: string) {
   const supabase = await createClient();
@@ -37,8 +37,8 @@ export async function removeSection(sectionId: string, slug: string, planId: str
   revalidatePath(`/squads/${slug}/plans`);
 }
 
-// Fields a set carries besides its position — shared by a blank add, a quick-add from
-// typed notation, and a drop from the favourites shelf.
+// Fields a set carries besides its position — shared by a blank add and a
+// quick-add from typed notation.
 type SetFields = Partial<{
   distance: number;
   reps: number;
@@ -201,67 +201,5 @@ export async function moveSetToSection(
     .from("plan_sets")
     .update({ section_id: targetSectionId, sort_order: nextOrder })
     .eq("id", setId);
-  revalidatePath(`/squads/${slug}/plans`);
-}
-
-/** Star a set: copy its writable shape onto the squad's favourites shelf. */
-export async function saveFavorite(squadId: string, slug: string, fields: SetFields) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const label = describeSet({
-    reps: fields.reps ?? 1,
-    distance: fields.distance ?? 0,
-    stroke: fields.stroke ?? null,
-  });
-  await supabase.from("plan_set_favorites").insert({
-    squad_id: squadId,
-    label,
-    reps: fields.reps ?? 1,
-    distance: fields.distance ?? 0,
-    stroke: fields.stroke ?? null,
-    description: fields.description ?? "",
-    equipment: fields.equipment ?? [],
-    set_types: fields.set_types ?? [],
-    focus: fields.focus ?? [],
-    rest: fields.rest ?? "",
-    zone: fields.zone ?? null,
-    created_by: user?.id ?? null,
-  });
-  revalidatePath(`/squads/${slug}/plans`);
-}
-
-/** Drop a starred set into a section as a new, fully editable set. */
-export async function addSetFromFavorite(
-  sectionId: string,
-  slug: string,
-  planId: string,
-  favoriteId: string,
-  sortOrder: number,
-) {
-  const supabase = await createClient();
-  const { data: fav } = await supabase
-    .from("plan_set_favorites")
-    .select("*")
-    .eq("id", favoriteId)
-    .single();
-  if (!fav) return;
-  await addSet(sectionId, slug, planId, sortOrder, {
-    distance: fav.distance,
-    reps: fav.reps,
-    stroke: fav.stroke,
-    description: fav.description,
-    equipment: fav.equipment,
-    set_types: fav.set_types,
-    focus: fav.focus,
-    rest: fav.rest,
-    zone: fav.zone,
-  });
-}
-
-export async function deleteFavorite(favoriteId: string, slug: string) {
-  const supabase = await createClient();
-  await supabase.from("plan_set_favorites").delete().eq("id", favoriteId);
   revalidatePath(`/squads/${slug}/plans`);
 }

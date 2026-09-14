@@ -94,23 +94,6 @@ export interface PlanSet {
   sort_order: number;
 }
 
-// A starred set, saved once and dropped into any plan later. Mirrors the writable
-// shape of PlanSet minus its position, plus a short label to recognise it by.
-export interface PlanSetFavorite {
-  id: string;
-  squad_id: string;
-  label: string;
-  reps: number;
-  distance: number;
-  stroke: string | null;
-  description: string;
-  equipment: string[];
-  set_types: string[];
-  focus: string[];
-  rest: string;
-  zone: Zone | null;
-  created_at: string;
-}
 
 export interface Attendance {
   id: string;
