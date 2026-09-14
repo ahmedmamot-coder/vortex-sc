@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { getSquadBySlug } from "@/lib/data/squads";
-import { getOrCreatePlan } from "@/lib/data/plans";
+import { getOrCreatePlan, getFavorites } from "@/lib/data/plans";
 import PlansClient from "./plans-client";
 
 export default async function PlansPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -9,6 +9,7 @@ export default async function PlansPage({ params }: { params: Promise<{ slug: st
   if (!squad) notFound();
 
   const plan = await getOrCreatePlan(squad.id);
+  const favorites = await getFavorites(squad.id);
 
-  return <PlansClient slug={slug} squad={squad} plan={plan} />;
+  return <PlansClient slug={slug} squad={squad} plan={plan} favorites={favorites} />;
 }
