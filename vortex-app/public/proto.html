@@ -8737,7 +8737,9 @@ if ('serviceWorker' in navigator) {
                       <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:7px">
                         <div><span style="display:block;font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">Name</span><span style="display:block;font-size:16px;font-weight:700;letter-spacing:-.01em;margin-top:1px">{{ vortexIdCard.name }}</span></div>
                         <div style="display:flex;gap:18px">
-                          <div><span style="display:block;font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">Date of birth</span><span style="display:block;font-family:var(--font-mono);font-weight:700;font-size:12px;margin-top:2px">{{ vortexIdCard.dob }}</span></div>
+                          <sc-if value="{{ vortexIdCard.dobKnown }}" hint-placeholder-val="{{ true }}">
+                            <div><span style="display:block;font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">Date of birth</span><span style="display:block;font-family:var(--font-mono);font-weight:700;font-size:12px;margin-top:2px">{{ vortexIdCard.dob }}</span></div>
+                          </sc-if>
                           <div><span style="display:block;font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">Squad</span><span style="display:block;font-weight:700;font-size:12px;margin-top:2px">{{ vortexIdCard.squadName }}</span></div>
                         </div>
                       </div>
@@ -23921,7 +23923,7 @@ class Component extends DCLogic {
             name:swObj.name, initials:swObj.initials, avatarEl: this.av(this.swimmerPhotos[swObj.id]||null, swObj.initials, 72, 20, 'rgba(255,255,255,.18)', '#fff', 22, 'rgba(255,255,255,.3)'),
             squadName:squad.name, age:swObj.age, gender:swObj.gender, genIcon:this.genMeta(swObj.gender).icon, genBg:this.genMeta(swObj.gender).bg,
             accent:squad.accent, glow:squad.glow, isSponsored:sponsorOn,
-            dob: this._swDob(swObj),
+            dob: this._swDob(swObj), dobKnown: this._swDob(swObj)!=='—',
             idNumber: this.vortexIdNumber(swObj.id),
             season:'2025 / 2026',
           },
@@ -24298,7 +24300,7 @@ class Component extends DCLogic {
           onOpenVortexId:()=>this.setState({showVortexId:true}),
           vortexIdCard:{ name:sw.name, initials:sw.initials, avatarEl: this.av(this.swimmerPhotos[sw.id]||null, sw.initials, 72, 20, 'rgba(255,255,255,.18)', '#fff', 22, 'rgba(255,255,255,.3)'),
             squadName:sq.name, age:sw.age, gender:sw.gender, genIcon:gm.icon, genBg:gm.bg, accent:sq.accent, glow:sq.glow, isSponsored:!!meta.sponsored,
-            dob:this._swDob(sw), idNumber:this.vortexIdNumber(sw.id), season:'2025 / 2026' },
+            dob:this._swDob(sw), dobKnown:this._swDob(sw)!=='—', idNumber:this.vortexIdNumber(sw.id), season:'2025 / 2026' },
           famEventChips, famProgEvent:selEvent||'—', famHasEvents:famEventChips.length>0,
           famCourseLcmBg: famCourse==='lcm'?sq.accent:'#fff', famCourseLcmFg: famCourse==='lcm'?'#fff':'#3A4152',
           famCourseScmBg: famCourse==='scm'?sq.accent:'#fff', famCourseScmFg: famCourse==='scm'?'#fff':'#3A4152',
