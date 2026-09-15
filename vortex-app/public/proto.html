@@ -2132,6 +2132,11 @@ if ('serviceWorker' in navigator) {
   @keyframes vxbar{from{transform:scaleY(0)}to{transform:scaleY(1)}}
   .vx-screen{animation:vxrise .32s cubic-bezier(.22,1,.36,1)}
   .vx-sheet{animation:vxsheet .34s cubic-bezier(.22,1,.36,1)}
+  /* Roster counts flash a stale number for the second before the club's shared roster arrives
+     (see _rosterFetch). These placeholder bars hold their place until the count is trustworthy. */
+  @keyframes vxskel{0%,100%{opacity:1}50%{opacity:.4}}
+  .vx-skel{animation:vxskel 1.15s ease-in-out infinite}
+  @media (prefers-reduced-motion:reduce){ .vx-skel{animation:none} }
   [data-lucide]{stroke-width:2;flex:none}
   /* Dark mode: the main scroll area gets an inline `filter:invert(...)` on the light screens.
      We key the helper rules off that inline style so photos/videos are re-inverted (look normal)
@@ -2521,14 +2526,14 @@ if ('serviceWorker' in navigator) {
                       <span style="width:54px;height:54px;border-radius:15px;overflow:hidden;flex:none;box-shadow:0 0 0 2px rgba(255,255,255,.15)">{{ hubUserAvatar }}</span>
                       <div><p style="margin:0;font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:600">{{ hubUserRole }}</p><h1 style="font-size:23px;font-weight:700;letter-spacing:-.02em;margin:2px 0 0">{{ hubUserName }}</h1></div>
                     </div>
-                    <p style="position:relative;margin:16px 0 0;color:rgba(255,255,255,.62);font-size:13.5px;line-height:1.4">{{ clubStatLine }}</p>
+                    <p style="position:relative;margin:16px 0 0;color:rgba(255,255,255,.62);font-size:13.5px;line-height:1.4"><sc-if value="{{ rosterLoading }}" hint-placeholder-val="{{ false }}"><span class="vx-skel" style="display:inline-block;width:230px;max-width:82%;height:12px;border-radius:6px;vertical-align:middle;background:rgba(255,255,255,.18)"></span></sc-if><sc-if value="{{ rosterReady }}" hint-placeholder-val="{{ true }}">{{ clubStatLine }}</sc-if></p>
                   </div>
 
                   <div style="position:relative;z-index:1;padding:16px 15px 22px;display:flex;flex-direction:column;gap:16px;margin-top:-16px">
                     <div style="background:#fff;border:1px solid #E5E9F0;border-radius:20px;padding:14px;box-shadow:0 12px 30px rgba(11,20,40,.08)">
                       <p style="margin:0 0 11px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#7A8296">Today at a glance</p>
                       <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
-                        <button onclick="{{ onDashAttend }}" style="text-align:left;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:14px;padding:11px 12px;cursor:pointer;font-family:inherit"><span style="display:flex;align-items:center;gap:7px;margin-bottom:5px"><i data-lucide="clipboard-check" style="width:14px;height:14px;color:#0C7A4F"></i><span style="font-size:10.5px;font-weight:700;color:#7A8296">Attendance</span></span><span style="display:block;font-size:22px;font-weight:800;color:#0C1116;line-height:1">{{ dashAttendPct }}</span><span style="display:block;font-size:10.5px;color:#9AA2B4;margin-top:2px">{{ dashAttendSub }}</span></button>
+                        <button onclick="{{ onDashAttend }}" style="text-align:left;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:14px;padding:11px 12px;cursor:pointer;font-family:inherit"><span style="display:flex;align-items:center;gap:7px;margin-bottom:5px"><i data-lucide="clipboard-check" style="width:14px;height:14px;color:#0C7A4F"></i><span style="font-size:10.5px;font-weight:700;color:#7A8296">Attendance</span></span><sc-if value="{{ rosterReady }}" hint-placeholder-val="{{ true }}"><span style="display:block;font-size:22px;font-weight:800;color:#0C1116;line-height:1">{{ dashAttendPct }}</span><span style="display:block;font-size:10.5px;color:#9AA2B4;margin-top:2px">{{ dashAttendSub }}</span></sc-if><sc-if value="{{ rosterLoading }}" hint-placeholder-val="{{ false }}"><span class="vx-skel" style="display:block;width:54px;height:20px;border-radius:6px;background:#E9EDF3"></span><span class="vx-skel" style="display:block;width:82px;height:9px;border-radius:5px;margin-top:7px;background:#EEF1F5"></span></sc-if></button>
                         <button onclick="{{ onDashRecovery }}" style="text-align:left;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:14px;padding:11px 12px;cursor:pointer;font-family:inherit"><span style="display:flex;align-items:center;gap:7px;margin-bottom:5px"><i data-lucide="heart-pulse" style="width:14px;height:14px;color:#C81E5B"></i><span style="font-size:10.5px;font-weight:700;color:#7A8296">Red recovery</span></span><span style="display:block;font-size:22px;font-weight:800;color:#0C1116;line-height:1">{{ dashRed }}</span><span style="display:block;font-size:10.5px;color:#9AA2B4;margin-top:2px">{{ dashRedSub }}</span></button>
                         <button onclick="{{ onDashMeets }}" style="text-align:left;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:14px;padding:11px 12px;cursor:pointer;font-family:inherit;grid-column:span 2"><span style="display:flex;align-items:center;gap:7px;margin-bottom:5px"><i data-lucide="calendar-days" style="width:14px;height:14px;color:#067EEA"></i><span style="font-size:10.5px;font-weight:700;color:#7A8296">Next meet</span></span><span style="display:block;font-size:14px;font-weight:800;color:#0C1116;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ dashMeetName }}</span><span style="display:block;font-size:10.5px;color:#9AA2B4;margin-top:2px">{{ dashMeetSub }}</span></button>
                       </div>
@@ -9395,6 +9400,11 @@ class Component extends DCLogic {
     this.waTargets=this._loadJSON('vx_wa_targets', {});
     this.loungeComments={};
     this.rebuildRoster();
+    // The roster on hand is the seed plus whatever this device has heard so far — it can be short a
+    // deletion another device made until the first sync pull lands (see _rosterFetch / _autoSyncTick),
+    // which is what made the hub count blink 348 → 346. Hold the counts as "loading" until that pull
+    // settles. With no backend to pull from, the copy in hand is already the whole truth.
+    this._rosterHydrated = !(window.__vxpull || window.__vxSelect);
 
     this.state = {
       screen:'login', loginStage:'accounts', pickedId:'ahmed', pin:'', err:false, loginUser:'', loginPinVal:'', loginErr:'',
@@ -11480,6 +11490,9 @@ class Component extends DCLogic {
     pending.forEach(r=>{ by[r.id]=r; });
     return {rows:Object.keys(by).map(k=>by[k]), pending};
   }
+  // The first sync pull has settled, so the counts on screen now reflect the club's shared roster,
+  // not just this device's copy. Reveal them (see the .vx-skel loading state on the hub).
+  _markRosterHydrated(){ if(this._rosterHydrated) return; this._rosterHydrated=true; try{ this.forceUpdate(); }catch(e){} }
   async _rosterFetch(){
     if(!this._rosterRowsOn()) return;
     if(!window.__vxSelect) return;
@@ -20654,7 +20667,8 @@ class Component extends DCLogic {
     this._familyFetch();
   }
   async _autoSyncTick(){
-    if(!window.__vxpull || this._syncBusy) return; this._syncBusy=true;
+    if(!window.__vxpull){ this._markRosterHydrated(); return; }  // no backend: the copy in hand is the whole truth
+    if(this._syncBusy) return; this._syncBusy=true;
     try {
       const keys=window.__VX_SYNC||[]; const rows=await window.__vxpull(keys);
       const setLocal=window.__vxsetlocal || ((k,v)=>localStorage.setItem(k,v));
@@ -20699,7 +20713,10 @@ class Component extends DCLogic {
     try{ this._squadPlansFetch(); }catch(e){}
     try{ this._squadsFetch(); }catch(e){}
     try{ this._videosFetch(); }catch(e){}
-    try{ this._rosterFetch(); }catch(e){}
+    // In rows mode this resolves once the shared roster is merged in; in document mode it returns at
+    // once, the deletions already applied by _hydrateShared above. Either way the count is now the
+    // club's, so the hub can stop showing its loading bars.
+    try{ Promise.resolve(this._rosterFetch()).then(()=>this._markRosterHydrated(), ()=>this._markRosterHydrated()); }catch(e){ this._markRosterHydrated(); }
     try{ this._planCustomFetch(); }catch(e){}
     try{ this._planFavsFetch(); }catch(e){}
     try{ this._famMsgFetch(); }catch(e){}
@@ -23546,12 +23563,18 @@ class Component extends DCLogic {
         const nextMeet=future[0]?future[0].mm:(_allForNext[0]||null);
         // unread: swimmers whose last family message awaits a coach reply
         let unread=0; const fm=this.famMessages||{}; scopeSw.forEach(sw=>{ const t=fm[sw.id]; if(t&&t.length&&t[t.length-1].sender==='family') unread++; });
+        // Until the first sync pull settles, the roster (and everything counted from it) may still be
+        // short a change another device made, so the hub shows loading bars instead of a number that
+        // would blink a second later. See _rosterHydrated / _markRosterHydrated.
+        const rosterLoading = !this._rosterHydrated;
         return {
+          rosterLoading, rosterReady: !rosterLoading,
           hubUserName: acc.label||'', hubUserRole: this._accessLine(acc), hubUserAvatar: this.av(acc.photo||null, acc.initials||'?', 54, 15, acc.accent||'#067EEA', '#fff', 20),
           clubStatLine: isAdm ? (this.allSwimmersFlat().length+' swimmers across '+this.squads.length+' squads · '+this.allMeets().length+' meets on record.')
             : (lockSq ? (lockSq.count+' swimmers · '+lockSq.name+' · '+lockSq.coach) : 'Welcome back.'),
           toolsSpan: isAdm ? 'auto' : 'span 2',
-          toolsSubLabel: isAdm ? ('Club-wide · '+this.allSwimmersFlat().length+' swimmers') : (lockSq ? (lockSq.name+' · '+lockSq.count+' swimmers') : 'Your squad'),
+          toolsSubLabel: rosterLoading ? (isAdm ? 'Club-wide' : (lockSq ? lockSq.name : 'Your squad'))
+            : (isAdm ? ('Club-wide · '+this.allSwimmersFlat().length+' swimmers') : (lockSq ? (lockSq.name+' · '+lockSq.count+' swimmers') : 'Your squad')),
           dashAttendPct:String(dashAttendPct)+'%', dashAttendSub:present+' of '+total+' present',
           dashRed:String(redCount), dashRedIsZero:redCount===0, dashRedSub: redCount? 'need lighter load' : 'all recovered',
           dashUnread:String(unread), dashUnreadIsZero:unread===0, dashUnreadSub: unread? 'awaiting reply' : 'all replied',
