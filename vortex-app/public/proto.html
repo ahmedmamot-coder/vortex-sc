@@ -3903,7 +3903,7 @@ if ('serviceWorker' in navigator) {
                                   <span style="font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#B9C0CC;width:42px;flex:none;padding-top:7px;display:flex;align-items:center;gap:3px"><i data-lucide="tag" style="width:11px;height:11px"></i>Focus</span>
                                   <div style="flex:1;min-width:0">
                                     <button onclick="{{ st.onFocusMenu }}" style="width:100%;box-sizing:border-box;display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #E5E9F0;border-radius:8px;padding:6px 9px;cursor:pointer;font-family:inherit;text-align:left">
-                                      <span style="flex:1;min-width:0;font-size:11.5px;font-weight:700;color:#3A4152;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ st.focusSummary }}</span>
+                                      <span style="flex:1;min-width:0;font-size:11.5px;font-weight:700;color:#3A4152;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;white-space:normal;line-height:1.35;word-break:break-word">{{ st.focusSummary }}</span>
                                       <i data-lucide="chevron-down" style="width:14px;height:14px;color:#9AA2B4;flex:none"></i>
                                     </button>
                                     <sc-if value="{{ st.focusOpen }}" hint-placeholder-val="{{ false }}">
