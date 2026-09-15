@@ -8772,7 +8772,7 @@ if ('serviceWorker' in navigator) {
                   <button onclick="{{ onCloseVortexId }}" style="width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.1);border:none;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer"><i data-lucide="x" style="width:16px;height:16px"></i></button>
                 </div>
                 <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:10px 20px 30px">
-                  <div style="width:100%;max-width:360px;aspect-ratio:1.586;border-radius:16px;overflow:hidden;position:relative;background:#000;box-shadow:0 20px 50px rgba(0,0,0,.5);color:#fff;display:{{ vortexIdFrontDisplay }};flex-direction:column">
+                  <div id="vxid-front-card" data-vxid-name="{{ vortexIdCard.name }}" style="width:100%;max-width:360px;aspect-ratio:1.586;border-radius:16px;overflow:hidden;position:relative;background:#000;box-shadow:0 20px 50px rgba(0,0,0,.5);color:#fff;display:{{ vortexIdFrontDisplay }};flex-direction:column">
                     <img src="assets/a4d3e396.jpg" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">
                     <div style="position:absolute;inset:0;background:linear-gradient(90deg,rgba(0,0,0,.92) 0%,rgba(0,0,0,.55) 55%,rgba(0,0,0,.15) 100%)"></div>
                     <sc-if value="{{ vortexIdCard.isSponsored }}" hint-placeholder-val="{{ false }}">
@@ -8787,7 +8787,9 @@ if ('serviceWorker' in navigator) {
                       <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:7px">
                         <div><span style="display:block;font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">Name</span><span style="display:block;font-size:16px;font-weight:700;letter-spacing:-.01em;margin-top:1px">{{ vortexIdCard.name }}</span></div>
                         <div style="display:flex;gap:18px">
-                          <div><span style="display:block;font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">Date of birth</span><span style="display:block;font-family:var(--font-mono);font-weight:700;font-size:12px;margin-top:2px">{{ vortexIdCard.dob }}</span></div>
+                          <sc-if value="{{ vortexIdCard.dobKnown }}" hint-placeholder-val="{{ true }}">
+                            <div><span style="display:block;font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">Date of birth</span><span style="display:block;font-family:var(--font-mono);font-weight:700;font-size:12px;margin-top:2px">{{ vortexIdCard.dob }}</span></div>
+                          </sc-if>
                           <div><span style="display:block;font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700">Squad</span><span style="display:block;font-weight:700;font-size:12px;margin-top:2px">{{ vortexIdCard.squadName }}</span></div>
                         </div>
                       </div>
@@ -8803,8 +8805,15 @@ if ('serviceWorker' in navigator) {
                     <img src="assets/b798adf9.png" alt="Vortex SC" style="position:relative;width:76px;height:76px;filter:drop-shadow(0 4px 14px rgba(0,0,0,.6))">
                   </div>
                 </div>
-                <div style="flex:none;display:flex;justify-content:center;padding:0 20px 26px">
-                  <button onclick="{{ onFlipVortexId }}" style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);color:#fff;border-radius:11px;padding:10px 18px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer"><i data-lucide="rotate-cw" style="width:15px;height:15px"></i>{{ vortexIdFlipLabel }}</button>
+                <div style="flex:none;display:flex;flex-direction:column;align-items:center;gap:9px;padding:0 20px 26px">
+                  <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:8px">
+                    <button onclick="{{ onDownloadVortexImage }}" style="display:flex;align-items:center;gap:7px;background:#fff;border:none;color:#0A0F1A;border-radius:11px;padding:10px 16px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer"><i data-lucide="image-down" style="width:15px;height:15px"></i>Save image</button>
+                    <button onclick="{{ onDownloadVortexPdf }}" style="display:flex;align-items:center;gap:7px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);color:#fff;border-radius:11px;padding:10px 16px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer"><i data-lucide="file-down" style="width:15px;height:15px"></i>Save PDF</button>
+                    <button onclick="{{ onFlipVortexId }}" style="display:flex;align-items:center;gap:7px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);color:#fff;border-radius:11px;padding:10px 16px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer"><i data-lucide="rotate-cw" style="width:15px;height:15px"></i>{{ vortexIdFlipLabel }}</button>
+                  </div>
+                  <sc-if value="{{ vortexIdMsg }}" hint-placeholder-val="{{ false }}">
+                    <span style="font-size:11.5px;font-weight:600;color:rgba(255,255,255,.75)">{{ vortexIdMsg }}</span>
+                  </sc-if>
                 </div>
               </div>
             </sc-if>
@@ -9416,7 +9425,7 @@ class Component extends DCLogic {
       calOpen:false, calName:'', calLocation:'', calDate:'', calCourse:'LCM', calErr:'',
       meetEditName:null, meetEditDraft:null, meetEditErr:'',
       meetsMsg:'', meetsMsgOk:false,
-      showVortexId:false,
+      showVortexId:false, vortexIdMsg:'',
       compBuildOpen:false, compName:'', compLocation:'', compDate:'', compCourse:'LCM', compEvents:[], compErr:'',
       printPreviewOpen:false, printPaperScale:1, printPaperZoom:1,
       staffEditId:null, staffForm:{name:'',pin:''}, staffAddOpen:false, staffAddForm:{name:'',user:'',pass:'',email:'',pin:'',role:'Coach',phone:'',squadId:''}, staffAddMsg:'', staffAddOk:false, staffAddBusy:false,
@@ -13591,6 +13600,76 @@ class Component extends DCLogic {
       if(target && target.number){ window.open('https://wa.me/'+target.number, '_blank'); this.setState({shareOpen:false, shareMsg:'PDF downloaded — attach it in the WhatsApp chat with '+target.label+' ✓'}); return; }
       this.setState({shareOpen:false, shareMsg:'PDF downloaded — attach it in any chat ✓'}); return;
     }catch(e){ this.setState({shareOpen:false, shareMsg:'Could not export the PDF on this device.'}); }
+  }
+  // ---- Vortex ID: save the member card as an image or a PDF ----
+  // Show a short status under the card. A trailing "…" marks a "busy" message that
+  // stays put until the next call replaces it; anything else clears after a moment.
+  _flashVortexMsg(text){
+    try{ clearTimeout(this._vxidMsgT); }catch(e){}
+    this.setState({vortexIdMsg:text});
+    if(text && !/[…]$/.test(text)){ this._vxidMsgT=setTimeout(()=>this.setState({vortexIdMsg:''}), 2800); }
+  }
+  _vortexIdFileName(ext){
+    let live=null; try{ live=document.getElementById('vxid-front-card'); }catch(e){}
+    const nm=((live&&live.getAttribute('data-vxid-name'))||'Vortex ID').replace(/[^\w\- ]+/g,'').trim()||'Vortex ID';
+    return 'Vortex ID - '+nm+'.'+ext;
+  }
+  // Rasterise the FRONT of the card (the side that carries the member details), whichever
+  // side is currently flipped up. We clone it into an off-screen host and force it visible
+  // so the capture is always the ID face, at a crisp 3x, with transparent rounded corners.
+  async _renderVortexCardCanvas(){
+    const live=document.getElementById('vxid-front-card');
+    if(!live) return null;
+    if(!window.html2canvas) await this._loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js', 8000);
+    if(!window.html2canvas) throw new Error('renderer unavailable');
+    const clone=live.cloneNode(true);
+    clone.removeAttribute('id');
+    clone.style.display='flex'; clone.style.margin='0'; clone.style.maxWidth='360px'; clone.style.width='360px'; clone.style.boxShadow='none';
+    const host=document.createElement('div');
+    host.style.cssText='position:fixed;left:-10000px;top:0;z-index:-1;width:360px';
+    host.appendChild(clone);
+    document.body.appendChild(host);
+    try{
+      // The clone reuses already-loaded images, but wait so none render half-drawn.
+      const imgs=Array.prototype.slice.call(clone.querySelectorAll('img'));
+      await Promise.all(imgs.map(im=> (im.complete && im.naturalWidth) ? null
+        : new Promise(res=>{ im.onload=im.onerror=res; setTimeout(res, 3000); })));
+      return await window.html2canvas(clone, {scale:3, backgroundColor:null, useCORS:true, logging:false, imageTimeout:4000});
+    } finally { try{ host.remove(); }catch(e){} }
+  }
+  // Native share sheet first (so phones can drop it into Photos / Files / a chat), with a
+  // plain download fallback for desktop and browsers without file sharing.
+  async _shareOrSaveFile(blob, fname, mime, title){
+    try{
+      if(navigator.canShare){ const file=new File([blob], fname, {type:mime});
+        if(navigator.canShare({files:[file]})){ await navigator.share({files:[file], title}); return 'shared'; } }
+    }catch(e){ if(e && e.name==='AbortError') return 'abort'; }
+    try{ const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=fname;
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>{ try{ URL.revokeObjectURL(url); }catch(_){}}, 60000);
+      return 'saved';
+    }catch(e){ return 'fail'; }
+  }
+  async downloadVortexId(kind){
+    this._flashVortexMsg(kind==='pdf'?'Preparing PDF…':'Preparing image…');
+    try{
+      const canvas=await this._renderVortexCardCanvas();
+      if(!canvas) throw new Error('no card');
+      let blob, fname, mime;
+      if(kind==='pdf'){
+        if(!(window.jspdf && window.jspdf.jsPDF)) await this._loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', 8000);
+        if(!(window.jspdf && window.jspdf.jsPDF)) throw new Error('pdf lib unavailable');
+        const jsPDF=window.jspdf.jsPDF; const pdf=new jsPDF({unit:'mm', format:'a4', orientation:'portrait'});
+        const cardW=100, cardH=cardW*canvas.height/canvas.width;   // keep the card's aspect ratio
+        const PW=210; pdf.addImage(canvas.toDataURL('image/png'), 'PNG', (PW-cardW)/2, 40, cardW, cardH, undefined, 'FAST');
+        blob=pdf.output('blob'); fname=this._vortexIdFileName('pdf'); mime='application/pdf';
+      } else {
+        blob=await new Promise(res=>{ try{ canvas.toBlob(res, 'image/png'); }catch(e){ res(null); } });
+        if(!blob) throw new Error('encode failed');
+        fname=this._vortexIdFileName('png'); mime='image/png';
+      }
+      const r=await this._shareOrSaveFile(blob, fname, mime, 'Vortex ID');
+      this._flashVortexMsg(r==='shared'?'Shared ✓' : r==='saved'?'Saved ✓' : r==='abort'?'' : 'Could not save on this device.');
+    }catch(e){ this._flashVortexMsg('Could not save on this device.'); }
   }
   // Loads a CDN script ONCE (the promise is cached, so repeat shares are instant) and
   // NEVER hangs — rejects on error or after `ms` so the caller can fall back.
@@ -23733,8 +23812,11 @@ class Component extends DCLogic {
       swimmer:{name:swObj.name, age:this._swAge(swObj), ageLabel:this._swAgeLabel(swObj), dob:this._swDob(swObj), gender:swObj.gender, initials:swObj.initials, inactive:!this._swStatus(swObj.id).active, statusText:this._statusLabel(this._swStatus(swObj.id).reason), genIcon:this.genMeta(swObj.gender).icon, genBg:this.genMeta(swObj.gender).bg, progressBest,
         avatarEl: this.av(this.swimmerPhotos[swObj.id]||null, swObj.initials, 60, 17, 'rgba(255,255,255,.18)', '#fff', 20, 'rgba(255,255,255,.18)')},
       onPhotoChange:(e)=>this.handlePhotoUpload(e, swObj.id),
-      showVortexId:S.showVortexId, onCloseVortexId:()=>this.setState({showVortexId:false, vortexIdFlipped:false}),
+      showVortexId:S.showVortexId, onCloseVortexId:()=>this.setState({showVortexId:false, vortexIdFlipped:false, vortexIdMsg:''}),
       onFlipVortexId:()=>this.setState({vortexIdFlipped:!S.vortexIdFlipped}),
+      onDownloadVortexImage:()=>this.downloadVortexId('image'),
+      onDownloadVortexPdf:()=>this.downloadVortexId('pdf'),
+      vortexIdMsg:S.vortexIdMsg||'',
       vortexIdFlipLabel: S.vortexIdFlipped?'Show front':'Show back',
       vortexIdFrontDisplay: S.vortexIdFlipped?'none':'flex',
       vortexIdBackDisplay: S.vortexIdFlipped?'flex':'none',
@@ -23913,7 +23995,7 @@ class Component extends DCLogic {
             name:swObj.name, initials:swObj.initials, avatarEl: this.av(this.swimmerPhotos[swObj.id]||null, swObj.initials, 72, 20, 'rgba(255,255,255,.18)', '#fff', 22, 'rgba(255,255,255,.3)'),
             squadName:squad.name, age:swObj.age, gender:swObj.gender, genIcon:this.genMeta(swObj.gender).icon, genBg:this.genMeta(swObj.gender).bg,
             accent:squad.accent, glow:squad.glow, isSponsored:sponsorOn,
-            dob: this._swDob(swObj),
+            dob: this._swDob(swObj), dobKnown: this._swDob(swObj)!=='—',
             idNumber: this.vortexIdNumber(swObj.id),
             season:'2025 / 2026',
           },
@@ -24290,7 +24372,7 @@ class Component extends DCLogic {
           onOpenVortexId:()=>this.setState({showVortexId:true}),
           vortexIdCard:{ name:sw.name, initials:sw.initials, avatarEl: this.av(this.swimmerPhotos[sw.id]||null, sw.initials, 72, 20, 'rgba(255,255,255,.18)', '#fff', 22, 'rgba(255,255,255,.3)'),
             squadName:sq.name, age:sw.age, gender:sw.gender, genIcon:gm.icon, genBg:gm.bg, accent:sq.accent, glow:sq.glow, isSponsored:!!meta.sponsored,
-            dob:this._swDob(sw), idNumber:this.vortexIdNumber(sw.id), season:'2025 / 2026' },
+            dob:this._swDob(sw), dobKnown:this._swDob(sw)!=='—', idNumber:this.vortexIdNumber(sw.id), season:'2025 / 2026' },
           famEventChips, famProgEvent:selEvent||'—', famHasEvents:famEventChips.length>0,
           famCourseLcmBg: famCourse==='lcm'?sq.accent:'#fff', famCourseLcmFg: famCourse==='lcm'?'#fff':'#3A4152',
           famCourseScmBg: famCourse==='scm'?sq.accent:'#fff', famCourseScmFg: famCourse==='scm'?'#fff':'#3A4152',
