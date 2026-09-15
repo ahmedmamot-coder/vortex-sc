@@ -3831,40 +3831,90 @@ if ('serviceWorker' in navigator) {
                                 <textarea value="{{ st.txt }}" oninput="{{ st.onTxt }}" rows="{{ st.txtRows }}" placeholder="Notes — one line per thing, press Enter for the next (e.g. 1- 25 kick / 25 swim)…" style="width:100%;box-sizing:border-box;border:none;outline:none;background:none;font-family:inherit;font-size:12.5px;line-height:1.45;color:#3A4152;padding:6px 2px 0;resize:vertical;overflow:hidden;white-space:pre-wrap"></textarea>
                                 <!-- Every choice for this set in one box: type, stroke, tools, zone, focus. -->
                                 <div style="margin-top:9px;border:1px solid #E5E9F0;background:#FBFCFE;border-radius:11px;padding:3px 9px">
-                                <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:0">
-                                  <span style="font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#B9C0CC;align-self:center;margin-right:2px">Type</span>
-                                  <sc-for list="{{ st.types }}" as="ty" hint-placeholder-count="5">
-                                    <span style="display:inline-flex;align-items:center;gap:2px"><button onclick="{{ ty.onToggle }}" style="background:{{ ty.bg }};color:{{ ty.fg }};border:1px solid {{ ty.border }};border-radius:7px;padding:3px 9px;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:.02em;cursor:pointer">{{ ty.label }}</button><sc-if value="{{ ty.custom }}" hint-placeholder-val="{{ false }}"><button onclick="{{ ty.onRemove }}" title="Remove custom option" style="width:17px;height:17px;border:none;border-radius:50%;background:#FDECEC;color:#E5484D;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;font-size:12px;line-height:1">×</button></sc-if></span>
-                                  </sc-for>
-                                  <button onclick="{{ st.onAddType }}" title="Add your own type" style="flex:none;width:27px;height:23px;border:1.4px dashed #0C7A4F;background:#E4F3EC;color:#0C7A4F;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0"><i data-lucide="plus" style="width:13px;height:13px"></i></button>
+                                <div style="display:flex;align-items:flex-start;gap:7px;margin-top:5px">
+                                  <span style="font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#B9C0CC;width:42px;flex:none;padding-top:7px;display:flex;align-items:center;gap:3px">Type</span>
+                                  <div style="flex:1;min-width:0">
+                                    <button onclick="{{ st.onTypeMenu }}" style="width:100%;box-sizing:border-box;display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #E5E9F0;border-radius:8px;padding:6px 9px;cursor:pointer;font-family:inherit;text-align:left">
+                                      <span style="flex:1;min-width:0;font-size:11.5px;font-weight:700;color:#3A4152;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ st.typeSummary }}</span>
+                                      <i data-lucide="chevron-down" style="width:14px;height:14px;color:#9AA2B4;flex:none"></i>
+                                    </button>
+                                    <sc-if value="{{ st.typeOpen }}" hint-placeholder-val="{{ false }}">
+                                      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;padding:7px;background:#fff;border:1px solid #E5E9F0;border-radius:8px">
+                                        <sc-for list="{{ st.types }}" as="ty" hint-placeholder-count="5">
+                                          <span style="display:inline-flex;align-items:center;gap:2px"><button onclick="{{ ty.onToggle }}" style="background:{{ ty.bg }};color:{{ ty.fg }};border:1px solid {{ ty.border }};border-radius:7px;padding:3px 9px;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:.02em;cursor:pointer">{{ ty.label }}</button><sc-if value="{{ ty.custom }}" hint-placeholder-val="{{ false }}"><button onclick="{{ ty.onRemove }}" title="Remove custom option" style="width:17px;height:17px;border:none;border-radius:50%;background:#FDECEC;color:#E5484D;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;font-size:12px;line-height:1">×</button></sc-if></span>
+                                        </sc-for>
+                                        <button onclick="{{ st.onAddType }}" title="Add your own type" style="flex:none;width:27px;height:23px;border:1.4px dashed #0C7A4F;background:#E4F3EC;color:#0C7A4F;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0"><i data-lucide="plus" style="width:13px;height:13px"></i></button>
+                                      </div>
+                                    </sc-if>
+                                  </div>
                                 </div>
-                                <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:5px">
-                                  <span style="font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#B9C0CC;align-self:center;margin-right:2px">Stroke</span>
-                                  <sc-for list="{{ st.strokes }}" as="sk" hint-placeholder-count="5">
-                                    <span style="display:inline-flex;align-items:center;gap:2px"><button onclick="{{ sk.onToggle }}" style="background:{{ sk.bg }};color:{{ sk.fg }};border:1px solid {{ sk.border }};border-radius:7px;padding:3px 9px;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:.02em;cursor:pointer">{{ sk.label }}</button><sc-if value="{{ sk.custom }}" hint-placeholder-val="{{ false }}"><button onclick="{{ sk.onRemove }}" title="Remove custom option" style="width:17px;height:17px;border:none;border-radius:50%;background:#FDECEC;color:#E5484D;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;font-size:12px;line-height:1">×</button></sc-if></span>
-                                  </sc-for>
-                                  <button onclick="{{ st.onAddStroke }}" title="Add your own stroke" style="flex:none;width:27px;height:23px;border:1.4px dashed #0C7A4F;background:#E4F3EC;color:#0C7A4F;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0"><i data-lucide="plus" style="width:13px;height:13px"></i></button>
+                                <div style="display:flex;align-items:flex-start;gap:7px;margin-top:5px">
+                                  <span style="font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#B9C0CC;width:42px;flex:none;padding-top:7px;display:flex;align-items:center;gap:3px">Stroke</span>
+                                  <div style="flex:1;min-width:0">
+                                    <button onclick="{{ st.onStrokeMenu }}" style="width:100%;box-sizing:border-box;display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #E5E9F0;border-radius:8px;padding:6px 9px;cursor:pointer;font-family:inherit;text-align:left">
+                                      <span style="flex:1;min-width:0;font-size:11.5px;font-weight:700;color:#3A4152;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ st.strokeSummary }}</span>
+                                      <i data-lucide="chevron-down" style="width:14px;height:14px;color:#9AA2B4;flex:none"></i>
+                                    </button>
+                                    <sc-if value="{{ st.strokeOpen }}" hint-placeholder-val="{{ false }}">
+                                      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;padding:7px;background:#fff;border:1px solid #E5E9F0;border-radius:8px">
+                                        <sc-for list="{{ st.strokes }}" as="sk" hint-placeholder-count="5">
+                                          <span style="display:inline-flex;align-items:center;gap:2px"><button onclick="{{ sk.onToggle }}" style="background:{{ sk.bg }};color:{{ sk.fg }};border:1px solid {{ sk.border }};border-radius:7px;padding:3px 9px;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:.02em;cursor:pointer">{{ sk.label }}</button><sc-if value="{{ sk.custom }}" hint-placeholder-val="{{ false }}"><button onclick="{{ sk.onRemove }}" title="Remove custom option" style="width:17px;height:17px;border:none;border-radius:50%;background:#FDECEC;color:#E5484D;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;font-size:12px;line-height:1">×</button></sc-if></span>
+                                        </sc-for>
+                                        <button onclick="{{ st.onAddStroke }}" title="Add your own stroke" style="flex:none;width:27px;height:23px;border:1.4px dashed #0C7A4F;background:#E4F3EC;color:#0C7A4F;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0"><i data-lucide="plus" style="width:13px;height:13px"></i></button>
+                                      </div>
+                                    </sc-if>
+                                  </div>
                                 </div>
-                                <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:5px">
-                                  <span style="font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#B9C0CC;align-self:center;margin-right:2px">Tools</span>
-                                  <sc-for list="{{ st.equip }}" as="g" hint-placeholder-count="6">
-                                    <span style="display:inline-flex;align-items:center;gap:2px"><button onclick="{{ g.onToggle }}" style="background:{{ g.bg }};color:{{ g.fg }};border:1px solid {{ g.border }};border-radius:7px;padding:3px 9px;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:.02em;cursor:pointer">{{ g.label }}</button><sc-if value="{{ g.custom }}" hint-placeholder-val="{{ false }}"><button onclick="{{ g.onRemove }}" title="Remove custom option" style="width:17px;height:17px;border:none;border-radius:50%;background:#FDECEC;color:#E5484D;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;font-size:12px;line-height:1">×</button></sc-if></span>
-                                  </sc-for>
-                                  <button onclick="{{ st.onAddTool }}" title="Add your own tool" style="flex:none;width:27px;height:23px;border:1.4px dashed #0C7A4F;background:#E4F3EC;color:#0C7A4F;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0"><i data-lucide="plus" style="width:13px;height:13px"></i></button>
+                                <div style="display:flex;align-items:flex-start;gap:7px;margin-top:5px">
+                                  <span style="font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#B9C0CC;width:42px;flex:none;padding-top:7px;display:flex;align-items:center;gap:3px">Tools</span>
+                                  <div style="flex:1;min-width:0">
+                                    <button onclick="{{ st.onToolsMenu }}" style="width:100%;box-sizing:border-box;display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #E5E9F0;border-radius:8px;padding:6px 9px;cursor:pointer;font-family:inherit;text-align:left">
+                                      <span style="flex:1;min-width:0;font-size:11.5px;font-weight:700;color:#3A4152;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ st.toolsSummary }}</span>
+                                      <i data-lucide="chevron-down" style="width:14px;height:14px;color:#9AA2B4;flex:none"></i>
+                                    </button>
+                                    <sc-if value="{{ st.toolsOpen }}" hint-placeholder-val="{{ false }}">
+                                      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;padding:7px;background:#fff;border:1px solid #E5E9F0;border-radius:8px">
+                                        <sc-for list="{{ st.equip }}" as="g" hint-placeholder-count="6">
+                                          <span style="display:inline-flex;align-items:center;gap:2px"><button onclick="{{ g.onToggle }}" style="background:{{ g.bg }};color:{{ g.fg }};border:1px solid {{ g.border }};border-radius:7px;padding:3px 9px;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:.02em;cursor:pointer">{{ g.label }}</button><sc-if value="{{ g.custom }}" hint-placeholder-val="{{ false }}"><button onclick="{{ g.onRemove }}" title="Remove custom option" style="width:17px;height:17px;border:none;border-radius:50%;background:#FDECEC;color:#E5484D;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;font-size:12px;line-height:1">×</button></sc-if></span>
+                                        </sc-for>
+                                        <button onclick="{{ st.onAddTool }}" title="Add your own tool" style="flex:none;width:27px;height:23px;border:1.4px dashed #0C7A4F;background:#E4F3EC;color:#0C7A4F;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0"><i data-lucide="plus" style="width:13px;height:13px"></i></button>
+                                      </div>
+                                    </sc-if>
+                                  </div>
                                 </div>
-                                <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:5px">
-                                  <span style="font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#B9C0CC;align-self:center;margin-right:2px">Zone</span>
-                                  <sc-for list="{{ st.zoneChips }}" as="z" hint-placeholder-count="6">
-                                    <span style="display:inline-flex;align-items:center;gap:2px"><button onclick="{{ z.onToggle }}" style="background:{{ z.bg }};color:{{ z.fg }};border:none;border-radius:7px;padding:3px 8px;font-family:var(--font-mono);font-size:9.5px;font-weight:700;cursor:pointer">{{ z.label }}</button><sc-if value="{{ z.custom }}" hint-placeholder-val="{{ false }}"><button onclick="{{ z.onRemove }}" title="Remove custom option" style="width:17px;height:17px;border:none;border-radius:50%;background:#FDECEC;color:#E5484D;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;font-size:12px;line-height:1">×</button></sc-if></span>
-                                  </sc-for>
-                                  <button onclick="{{ st.onAddZone }}" title="Add your own zone" style="flex:none;width:27px;height:23px;border:1.4px dashed #0C7A4F;background:#E4F3EC;color:#0C7A4F;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0"><i data-lucide="plus" style="width:13px;height:13px"></i></button>
+                                <div style="display:flex;align-items:flex-start;gap:7px;margin-top:5px">
+                                  <span style="font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#B9C0CC;width:42px;flex:none;padding-top:7px;display:flex;align-items:center;gap:3px">Zone</span>
+                                  <div style="flex:1;min-width:0">
+                                    <button onclick="{{ st.onZoneMenu }}" style="width:100%;box-sizing:border-box;display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #E5E9F0;border-radius:8px;padding:6px 9px;cursor:pointer;font-family:inherit;text-align:left">
+                                      <span style="flex:1;min-width:0;font-size:11.5px;font-weight:700;color:#3A4152;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ st.zoneSummary }}</span>
+                                      <i data-lucide="chevron-down" style="width:14px;height:14px;color:#9AA2B4;flex:none"></i>
+                                    </button>
+                                    <sc-if value="{{ st.zoneOpen }}" hint-placeholder-val="{{ false }}">
+                                      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;padding:7px;background:#fff;border:1px solid #E5E9F0;border-radius:8px">
+                                        <sc-for list="{{ st.zoneChips }}" as="z" hint-placeholder-count="6">
+                                          <span style="display:inline-flex;align-items:center;gap:2px"><button onclick="{{ z.onToggle }}" style="background:{{ z.bg }};color:{{ z.fg }};border:1px solid {{ z.border }};border-radius:7px;padding:3px 9px;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:.02em;cursor:pointer">{{ z.label }}</button><sc-if value="{{ z.custom }}" hint-placeholder-val="{{ false }}"><button onclick="{{ z.onRemove }}" title="Remove custom option" style="width:17px;height:17px;border:none;border-radius:50%;background:#FDECEC;color:#E5484D;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;font-size:12px;line-height:1">×</button></sc-if></span>
+                                        </sc-for>
+                                        <button onclick="{{ st.onAddZone }}" title="Add your own zone" style="flex:none;width:27px;height:23px;border:1.4px dashed #0C7A4F;background:#E4F3EC;color:#0C7A4F;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0"><i data-lucide="plus" style="width:13px;height:13px"></i></button>
+                                      </div>
+                                    </sc-if>
+                                  </div>
                                 </div>
-                                <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:5px">
-                                  <span style="font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#B9C0CC;align-self:center;margin-right:2px;display:flex;align-items:center;gap:3px"><i data-lucide="tag" style="width:12px;height:12px"></i>Focus</span>
-                                  <sc-for list="{{ st.labels }}" as="lb" hint-placeholder-count="9">
-                                    <span style="display:inline-flex;align-items:center;gap:2px"><button onclick="{{ lb.onToggle }}" style="background:{{ lb.bg }};color:{{ lb.fg }};border:1px solid {{ lb.border }};border-radius:7px;padding:3px 9px;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:.02em;cursor:pointer">{{ lb.label }}</button><sc-if value="{{ lb.custom }}" hint-placeholder-val="{{ false }}"><button onclick="{{ lb.onRemove }}" title="Remove custom option" style="width:17px;height:17px;border:none;border-radius:50%;background:#FDECEC;color:#E5484D;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;font-size:12px;line-height:1">×</button></sc-if></span>
-                                  </sc-for>
-                                  <button onclick="{{ st.onAddLabel }}" title="Add your own label" style="flex:none;width:27px;height:23px;border:1.4px dashed #0C7A4F;background:#E4F3EC;color:#0C7A4F;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0"><i data-lucide="plus" style="width:13px;height:13px"></i></button>
+                                <div style="display:flex;align-items:flex-start;gap:7px;margin-top:5px">
+                                  <span style="font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#B9C0CC;width:42px;flex:none;padding-top:7px;display:flex;align-items:center;gap:3px"><i data-lucide="tag" style="width:11px;height:11px"></i>Focus</span>
+                                  <div style="flex:1;min-width:0">
+                                    <button onclick="{{ st.onFocusMenu }}" style="width:100%;box-sizing:border-box;display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #E5E9F0;border-radius:8px;padding:6px 9px;cursor:pointer;font-family:inherit;text-align:left">
+                                      <span style="flex:1;min-width:0;font-size:11.5px;font-weight:700;color:#3A4152;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ st.focusSummary }}</span>
+                                      <i data-lucide="chevron-down" style="width:14px;height:14px;color:#9AA2B4;flex:none"></i>
+                                    </button>
+                                    <sc-if value="{{ st.focusOpen }}" hint-placeholder-val="{{ false }}">
+                                      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;padding:7px;background:#fff;border:1px solid #E5E9F0;border-radius:8px">
+                                        <sc-for list="{{ st.labels }}" as="lb" hint-placeholder-count="9">
+                                          <span style="display:inline-flex;align-items:center;gap:2px"><button onclick="{{ lb.onToggle }}" style="background:{{ lb.bg }};color:{{ lb.fg }};border:1px solid {{ lb.border }};border-radius:7px;padding:3px 9px;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:.02em;cursor:pointer">{{ lb.label }}</button><sc-if value="{{ lb.custom }}" hint-placeholder-val="{{ false }}"><button onclick="{{ lb.onRemove }}" title="Remove custom option" style="width:17px;height:17px;border:none;border-radius:50%;background:#FDECEC;color:#E5484D;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;font-size:12px;line-height:1">×</button></sc-if></span>
+                                        </sc-for>
+                                        <button onclick="{{ st.onAddLabel }}" title="Add your own label" style="flex:none;width:27px;height:23px;border:1.4px dashed #0C7A4F;background:#E4F3EC;color:#0C7A4F;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0"><i data-lucide="plus" style="width:13px;height:13px"></i></button>
+                                      </div>
+                                    </sc-if>
+                                  </div>
                                 </div>
                                 </div>
                                 <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;align-items:center">
@@ -19875,6 +19925,17 @@ class Component extends DCLogic {
         strokes:p.strokes, labels:p.labels, zone:p.zone, rest:p.rest, sendoff:p.sendoff, hr:''}); }); }
   // Which set is open for editing. View state only — never written into the plan, so it is not
   // synced to the other coaches' phones.
+  // ---- one dropdown per choice group ----
+  // Type / Stroke / Tools / Zone / Focus each collapse to their label plus what is chosen;
+  // the options only appear when that one is tapped open. Coaches keep adding their own chips
+  // ("Nervous system", "Negative split", "200fr/200(25scull - 25 pull)") and five rows of them
+  // buried the set. Only one menu is open at a time, and it is view state, never saved.
+  toggleChipMenu(setId, kind){ const k=setId+'|'+kind;
+    this.setState({planChipMenu: this.state.planChipMenu===k ? null : k}); }
+  _chipMenuOpen(setId, kind){ return this.state.planChipMenu===(setId+'|'+kind); }
+  // What the closed dropdown reads: everything chosen, or a prompt when nothing is.
+  _chipSummary(vals, empty){ const a=(vals||[]).filter(Boolean);
+    return a.length ? a.join(', ') : empty; }
   togglePlanSet(setId){ this.setState({planOpenSet: this.state.planOpenSet===setId ? null : setId}); }
   // The one-line summary a collapsed set reads as: "4 × 100m FREE".
   _setHeadLine(s){ const reps=Number(s.reps)||1, dist=Number(s.dist)||0;
@@ -21147,6 +21208,17 @@ class Component extends DCLogic {
           strokes:(()=>{ const bi=this.strokeCatalog, cu=this.planCustom.stroke||[]; return bi.concat(cu).map((g,i)=>{ const on=(s.strokes||[]).includes(g); const custom=i>=bi.length; const col={FREE:'#067EEA',FLY:'#8A22D5',BK:'#12A0AE',BR:'#2733D6',IM:'#0C7A4F'}[g]||'#0A0F1A'; return {label:g,on,custom,onToggle:()=>this.toggleStroke(S.squadId,sm.id,s.id,g),onRemove:custom?()=>this.removeCustomOption('stroke',g):null,bg:on?col:'#fff',fg:on?'#fff':'#7A8296',border:on?col:'#E5E9F0'}; }); })(),
           zoneChips:(()=>{ const bi=['EN1','EN2','EN3','SP1','SP2','SP3'], cu=this.planCustom.zone||[]; return bi.concat(cu).map((z,i)=>{ const on=(s.zone||plan.zone)===z; const custom=i>=bi.length; return {label:z,on,custom,onToggle:()=>this.setSetField(S.squadId,sm.id,s.id,'zone',z),onRemove:custom?()=>this.removeCustomOption('zone',z):null,bg:on?squad.accent:'#F8FAFC',fg:on?'#fff':'#7A8296'}; }); })(),
           labels:(()=>{ const bi=this.labelCatalog, cu=this.planCustom.label||[]; return bi.concat(cu).map((g,i)=>{ const on=(s.labels||[]).includes(g); const custom=i>=bi.length; return {label:g,on,custom,onToggle:()=>this.toggleLabel(S.squadId,sm.id,s.id,g),onRemove:custom?()=>this.removeCustomOption('label',g):null,bg:on?'#4F46E5':'#fff',fg:on?'#fff':'#7A8296',border:on?'#4F46E5':'#E5E9F0'}; }); })(),
+          // one dropdown per choice group: what is chosen, and whether its list is open
+          typeSummary:this._chipSummary(s.types,'Choose type…'),   typeOpen:this._chipMenuOpen(s.id,'type'),
+          onTypeMenu:()=>this.toggleChipMenu(s.id,'type'),
+          strokeSummary:this._chipSummary(s.strokes,'Choose stroke…'), strokeOpen:this._chipMenuOpen(s.id,'stroke'),
+          onStrokeMenu:()=>this.toggleChipMenu(s.id,'stroke'),
+          toolsSummary:this._chipSummary(s.equip,'No tools'),      toolsOpen:this._chipMenuOpen(s.id,'tools'),
+          onToolsMenu:()=>this.toggleChipMenu(s.id,'tools'),
+          zoneSummary:this._chipSummary([s.zone||plan.zone],'Choose zone…'), zoneOpen:this._chipMenuOpen(s.id,'zone'),
+          onZoneMenu:()=>this.toggleChipMenu(s.id,'zone'),
+          focusSummary:this._chipSummary(s.labels,'No focus'),     focusOpen:this._chipMenuOpen(s.id,'focus'),
+          onFocusMenu:()=>this.toggleChipMenu(s.id,'focus'),
           onAddType:()=>this.addCustomOption('type'), onAddStroke:()=>this.addCustomOption('stroke'), onAddTool:()=>this.addCustomOption('tools'), onAddZone:()=>this.addCustomOption('zone'), onAddLabel:()=>this.addCustomOption('label'),
           restVal:s.rest||'', restShown:(s.rest && String(s.rest).trim())?String(s.rest).trim():'—',
           onRestDec:()=>this.stepSetRest(S.squadId,sm.id,s.id,-5), onRestInc:()=>this.stepSetRest(S.squadId,sm.id,s.id,5),
