@@ -424,6 +424,25 @@ declares a `meet_entries` table keyed on uuids the app never used, so this one i
 
 Existing memberships and entries are copied up once, automatically.
 
+## One plan per squad — no more duplicate trainings
+
+**Run `supabase/one_plan_per_squad.sql` in the Supabase SQL editor.** The app fix ships in the
+same change and stops the bleeding on its own; this cleans up the duplicates already in the
+database and adds the constraint that keeps them gone.
+
+The Plans editor keeps one plan per squad and reads it with a single-row query, but nothing
+enforced it. Two coaches — or one coach on two devices or two tabs — opening Plans for a squad
+with no plan yet each inserted a fresh default plan, a duplicate training. And once two rows
+existed the single-row read errored on every later visit, so the app fell through to "no plan,
+create one" and seeded **another** default each time the page opened — the edited plan left
+behind, a blank one in its place, the count climbing. That is the "it makes a double every time
+we edit and save" a coach reported.
+
+`getOrCreatePlan` now takes the most recently updated plan and never re-seeds while one exists,
+and guards the first-ever create against the race. The SQL collapses existing duplicates (keeping
+the newest plan per squad, its sections and sets riding along, the rest cascading away) and adds a
+`unique (squad_id)` constraint so a second plan can never be created again.
+
 ## Invoices live in the database, one row each
 
 **Run `supabase/invoices.sql` in the Supabase SQL editor.** Until it exists the app keeps working
