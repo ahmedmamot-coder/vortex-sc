@@ -16,25 +16,50 @@ const DEFAULT_SECTIONS = [
   { name: "Cool-down", sets: [{ distance: 200, description: "Easy swim/kick", zone: "EN1" }] },
 ];
 
-export async function getOrCreatePlan(squadId: string): Promise<PlanWithSections> {
-  const supabase = await createClient();
-
-  const { data: existing } = await supabase
+// Read a squad's single plan with all its sections and sets.
+//
+// A squad is meant to have exactly one plan, but a past race (two coaches, or one
+// coach on two devices/tabs, opening Plans at the same moment before the plan
+// existed) could leave more than one row. Order by updated_at and take a single row
+// so we always return the most recently edited plan and never error on the extras —
+// a plain .maybeSingle() throws when it sees more than one row, which is what made
+// every Plans visit fall through and seed yet another duplicate plan.
+async function fetchPlan(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  squadId: string,
+) {
+  const { data } = await supabase
     .from("plans")
     .select("*, plan_sections(*, plan_sets(*))")
     .eq("squad_id", squadId)
+    .order("updated_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
+  return data;
+}
 
+export async function getOrCreatePlan(squadId: string): Promise<PlanWithSections> {
+  const supabase = await createClient();
+
+  const existing = await fetchPlan(supabase, squadId);
   if (existing) {
     return normalizePlan(existing);
   }
 
+  // No plan yet — seed a default one. Guard the create against a race so two
+  // simultaneous first-loads can't each insert a plan and double the squad's
+  // training: if the unique squad_id constraint rejects our insert because another
+  // request won, read that plan back instead of creating a second one.
   const { data: plan, error: planErr } = await supabase
     .from("plans")
     .insert({ squad_id: squadId, title: "Session", zone: "EN2" })
     .select()
     .single();
-  if (planErr) throw planErr;
+  if (planErr || !plan) {
+    const raced = await fetchPlan(supabase, squadId);
+    if (raced) return normalizePlan(raced);
+    throw planErr ?? new Error("Could not create plan");
+  }
 
   for (let i = 0; i < DEFAULT_SECTIONS.length; i++) {
     const def = DEFAULT_SECTIONS[i];
@@ -57,7 +82,9 @@ export async function getOrCreatePlan(squadId: string): Promise<PlanWithSections
     }
   }
 
-  return getOrCreatePlan(squadId);
+  const created = await fetchPlan(supabase, squadId);
+  if (!created) throw new Error("Plan created but could not be read back");
+  return normalizePlan(created);
 }
 
 function normalizePlan(raw: Plan & { plan_sections: (PlanSection & { plan_sets: PlanSet[] })[] }): PlanWithSections {

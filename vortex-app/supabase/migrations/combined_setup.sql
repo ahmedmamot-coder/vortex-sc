@@ -128,7 +128,7 @@ create table meet_entries (
 -- ============================================================
 create table plans (
   id uuid primary key default gen_random_uuid(),
-  squad_id uuid not null references squads (id) on delete cascade,
+  squad_id uuid not null references squads (id) on delete cascade unique, -- one plan per squad
   title text not null default 'Session',
   zone text not null default 'EN2', -- EN1..SP3
   total_metres int not null default 0,
