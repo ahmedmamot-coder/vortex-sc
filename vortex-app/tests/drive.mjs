@@ -2787,6 +2787,49 @@ scene("two coaches marking two swimmers keep both marks", async (browser) => {
 });
 
 // ---------------------------------------------------------------------------------------------
+// A coach edits a session already saved to the training log and taps Save again. That must UPDATE
+// the session for that day, not stack a second one — the "it makes a double every time we edit and
+// save" a coach reported. savePlanSnapshot used to mint a fresh id on every call, so re-saving the
+// same day appended a duplicate row to plan_sessions. This drives the real method against the write
+// recorder and reads the ids that actually went to the database.
+// ---------------------------------------------------------------------------------------------
+scene("re-saving an edited session updates its training-log row instead of doubling it", async (browser) => {
+  const page = await openLive(browser);
+  const squad = await page.evaluate(`(() => Object.keys((${APP}).roster || {})[0] || (${APP}).state.squadId)()`);
+  if (!squad) throw new Error("no squad to build a plan for");
+  const save = (date, slot, title) => page.evaluate(
+    `(async () => { const a = ${APP};`
+    + ` a.setState({ planSessDate: ${JSON.stringify(date)}, planSessSlot: ${JSON.stringify(slot)}, planSessTime: "" });`
+    + ` a.setPlanMeta(${JSON.stringify(squad)}, "title", ${JSON.stringify(title)});`
+    + ` await a.savePlanSnapshot(${JSON.stringify(squad)}); return true; })()`);
+
+  page.writes.length = 0;
+  await save("2026-09-20", "AM", "Endurance A");            // first save for the day
+  await page.waitForTimeout(400);
+  await save("2026-09-20", "AM", "Endurance A (edited)");   // edit + save again, SAME day + slot
+  await page.waitForTimeout(400);
+  await save("2026-09-21", "AM", "A different day");        // a genuinely new session
+  await page.waitForTimeout(400);
+
+  const rows = page.writes
+    .filter((w) => w.table === "plan_sessions" && w.method === "POST")
+    .map((w) => { try { return JSON.parse(w.body)[0]; } catch { return null; } })
+    .filter(Boolean);
+  const idsByDay = {};
+  rows.forEach((r) => { (idsByDay[r.sday] = idsByDay[r.sday] || new Set()).add(r.id); });
+
+  eq(rows.length >= 2, true,
+     "the session never reached plan_sessions — tables written: "
+     + ([...new Set(page.writes.map((w) => w.table))].join(", ") || "none"));
+  eq([...(idsByDay["2026-09-20"] || [])].length, 1,
+     "re-saving the same day sent a second id — a duplicate training rather than an update");
+  eq([...(idsByDay["2026-09-21"] || [])].length, 1, "the new day did not get its own session id");
+  const day20 = rows.filter((r) => r.sday === "2026-09-20");
+  eq(day20[day20.length - 1].title, "Endurance A (edited)", "the update did not carry the edit");
+  return "one row per day, the edit written in place";
+});
+
+// ---------------------------------------------------------------------------------------------
 const only = process.argv[2];
 await start();
 const browser = await chromium.launch({ executablePath: CHROME });
