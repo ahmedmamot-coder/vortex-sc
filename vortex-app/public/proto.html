@@ -20081,16 +20081,28 @@ class Component extends DCLogic {
     const grouped={}; rows.forEach(r=>{ const sq=r.squad_id||'?'; (grouped[sq]=grouped[sq]||[]).push({ id:r.id, date:r.sday||'', title:r.title||'Session', zone:r.zone||'', totalM:r.total_m||0, slot:(r.plan&&r.plan._slot)||'', time:(r.plan&&r.plan._time)||'', pub:!!(r.plan&&r.plan._pub), plan:r.plan||{} }); });
     this.savedPlans=grouped; try{ this._saveJSON('vx_saved_plans', grouped); }catch(e){} this.setState({});
   }
-  async savePlanSnapshot(squadId){ const S=this.state; const plan=this.getPlan(squadId); const id=this._uid('sp')+'_'+Math.random().toString(36).slice(2,6);
+  async savePlanSnapshot(squadId){ const S=this.state; const plan=this.getPlan(squadId);
     const date=S.planSessDate||this.todayISO(); const slot=S.planSessSlot||'AM'; const time=S.planSessTime||'';
+    // One session per squad per date + slot. Re-saving after an edit — or loading a saved
+    // session, tweaking it and saving to reschedule — reuses that session's id so its row is
+    // UPDATED in place, not stacked as a second "training" in the log. Only a genuinely new
+    // date/slot mints a new id.
+    const existing=((this.savedPlans&&this.savedPlans[squadId])||[]).find(r=> (r.date||'')===date && (r.slot||'AM')===slot);
+    const id=existing ? existing.id : (this._uid('sp')+'_'+Math.random().toString(36).slice(2,6));
     const planCopy=JSON.parse(JSON.stringify(plan)); planCopy._slot=slot; planCopy._time=time;
-    const rec={ id, date, slot, time, title:plan.title||'Session', zone:plan.zone||'', totalM:this.planMetres(plan), plan:planCopy };
-    // Optimistic add
-    const list=[rec, ...((this.savedPlans&&this.savedPlans[squadId])||[])]; this.savedPlans={...(this.savedPlans||{}), [squadId]:list};
+    // Keep any publish / share state already on that session, so re-saving an edit does not
+    // silently unpublish it or forget who it was shared with.
+    if(existing && existing.plan){ ['_pub','_shareAll','_shareIds'].forEach(k=>{ if(existing.plan[k]!=null) planCopy[k]=existing.plan[k]; }); }
+    const rec={ id, date, slot, time, title:plan.title||'Session', zone:plan.zone||'', totalM:this.planMetres(plan), plan:planCopy, pub:!!planCopy._pub };
+    // Optimistic add (new session) or replace (re-saved one), keyed by id.
+    const prev=((this.savedPlans&&this.savedPlans[squadId])||[]);
+    const list = existing ? prev.map(r=> r.id===id ? rec : r) : [rec, ...prev];
+    this.savedPlans={...(this.savedPlans||{}), [squadId]:list};
     this.setState({savedPlanMsg:'Session saved for '+this._fmtDMY(date)+' · '+slot+(time?(' '+time):'')+' ✓'});
     try{ this.audit('plan.save', ((this.squadById[squadId]||{}).name||squadId)+' · '+rec.title,
       {squad:squadId, date:date, slot:slot, metres:rec.totalM, zone:rec.zone}); }catch(e){}
-    // Append a row (never overwrites another device's sessions), then refresh from the table.
+    // Upsert by id: a new session inserts, a re-saved one updates in place (never touches
+    // another device's sessions), then refresh from the table.
     const row={ id, squad_id:squadId, title:rec.title, zone:rec.zone, total_m:rec.totalM, plan:planCopy, sday:date, ts:Date.now() };
     try{ if(window.__vxUpsert){ const ok=await window.__vxUpsert('plan_sessions', [row]); if(ok) await this._plansFetch(); else this.setState({savedPlanMsg:'Saved on this device, but the database rejected it — run the plan_sessions SQL.'}); } }catch(e){} }
   // Publish a saved session to the squad's families — or take it back. A saved session is the
