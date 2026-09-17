@@ -13397,4 +13397,45 @@ describe("plan notation", () => {
   });
 });
 
+/* --------------------------------------------- the signal on a real handset (proto.html)
+   Coaches reported the start signal working on some phones and not others. The fallback that
+   covers a handset where Web Audio will not run fires on the send-off that has just gone, so
+   that arithmetic has to be exact: fire once per send-off, never twice, never skip one. */
+describe("send-off fallback signal", () => {
+  const ctx = {};
+  const prevSend = bind("_setPrevSend", ctx, []);
+  const C = 60000, G = 5000, REPS = 20, N = 8;
+
+  it("nothing has gone before the set starts", () => eq(prevSend(-1, C, G, REPS, N), null));
+  it("the first send-off is the one that just went", () => {
+    const p = prevSend(0, C, G, REPS, N);
+    eq(p.at, 0); eq(p.lane, 1); eq(p.rep, 1);
+  });
+  it("holds that send-off until the next swimmer goes", () => {
+    eq(prevSend(4999, C, G, REPS, N).at, 0);
+    eq(prevSend(5000, C, G, REPS, N).at, 5000);
+    eq(prevSend(5000, C, G, REPS, N).lane, 2);
+  });
+  it("rolls into the next repetition", () => {
+    const p = prevSend(60000, C, G, REPS, N);
+    eq(p.at, 60000); eq(p.rep, 2); eq(p.lane, 1);
+  });
+  it("every send-off is seen exactly once across a whole repetition", () => {
+    // Walking the clock a second at a time must yield each send-off once and in order.
+    const fired = [];
+    let last = null;
+    for (let ms = 0; ms <= 60000; ms += 250) {
+      const p = prevSend(ms, C, G, REPS, N);
+      if (p && p.at !== last) { fired.push(p.at); last = p.at; }
+    }
+    eq(fired.join(","), "0,5000,10000,15000,20000,25000,30000,35000,60000");
+  });
+  it("a single swimmer fires once per interval", () => {
+    eq(prevSend(0, C, G, REPS, 1).at, 0);
+    eq(prevSend(59999, C, G, REPS, 1).at, 0);
+    eq(prevSend(60000, C, G, REPS, 1).at, 60000);
+  });
+  it("a zero cycle cannot divide by zero", () => eq(prevSend(1000, 0, G, REPS, N), null));
+});
+
 await report();
