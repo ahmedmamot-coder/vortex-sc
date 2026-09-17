@@ -5352,6 +5352,17 @@ if ('serviceWorker' in navigator) {
                         <button onclick="{{ onSwModeMany }}" style="flex:1;padding:9px 4px;border-radius:9px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:11.5px;background:{{ modeManyBg }};color:{{ modeManyFg }}">Whole lane</button>
                         <button onclick="{{ onSwModeSet }}" style="flex:1;padding:9px 4px;border-radius:9px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:11.5px;background:{{ modeSetBg }};color:{{ modeSetFg }}">Send-off set</button>
                       </div>
+                      <!-- Sound check: a coach can prove the signal on their own handset here
+                           rather than finding out on the blocks. -->
+                      <div style="background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:9px 11px">
+                        <div style="display:flex;align-items:center;gap:9px">
+                          <button onclick="{{ onSwtTest }}" style="flex:none;display:flex;align-items:center;gap:7px;background:#0A0F1A;color:#fff;border:none;border-radius:10px;padding:9px 13px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer"><i data-vx-icon="{{ swtSoundIcon }}" style="width:16px;height:16px"></i>Test sound</button>
+                          <span style="flex:1;min-width:0;font-size:11px;color:#9AA2B4;line-height:1.4">No signal on this phone? Tap to check it.</span>
+                        </div>
+                        <sc-if value="{{ swtSoundMsgShow }}" hint-placeholder-val="{{ false }}">
+                          <p style="margin:8px 0 0;font-size:11.5px;color:#3A4152;line-height:1.45;background:#F6F7F9;border-radius:8px;padding:7px 9px">{{ swtSoundMsg }}</p>
+                        </sc-if>
+                      </div>
                     <sc-if value="{{ swModeOne }}" hint-placeholder-val="{{ true }}">
                       <!-- Clock face, painted straight onto the ref element. Tapping it, or the
                            expand button, opens the poolside full-screen display. -->
@@ -17741,7 +17752,7 @@ class Component extends DCLogic {
     el.textContent=this._fmtStopwatch(this._swtElapsedMs()/1000);
     this._swtEnsureRaf();
   }
-  onSwtMount(el){ this._swtAttach(el); }
+  onSwtMount(el){ this._swtAudioArm(); this._swtAttach(el); }
   onSwtFsMount(el){ this._swtAttach(el); }
   // A loud electronic starting signal, synthesised so it needs no audio file and works offline —
   // our own tone in the register of a competition start beep, not a recording of anyone's system.
@@ -17760,14 +17771,121 @@ class Component extends DCLogic {
   // and honours the silent switch, so a muted handset stays muted whatever we synthesise.
   _swtBeep(){
     if(this.state.swtSound===false) return;
-    const ctx=this._swtAudioCtx(); if(!ctx) return;
-    try{ this._swtSignal(ctx.currentTime+0.02, this._swtTone(), this._swtVol()); }catch(e){}
+    this._swtPlay(this._swtTone(), this._swtVol());
   }
+  // ---- Making a noise on a real phone ----
+  //
+  // Coaches reported the signal working on some handsets and not others. Three separate reasons,
+  // all of them device state rather than anything wrong with the tone:
+  //
+  //  1. iOS has a THIRD context state, 'interrupted', entered after a call, Siri, or another app
+  //     taking the audio session. It is not 'suspended', so the old check walked straight past it
+  //     and that phone stayed silent for the rest of the session.
+  //  2. A context is only unlocked once a sound has actually played inside a user gesture. If the
+  //     first thing a coach did was something other than tap Start, it could still be locked.
+  //  3. On iOS the hardware ring/silent switch silences Web Audio. An <audio> element is routed
+  //     differently and still plays, so it is the fallback when Web Audio will not run.
   _swtAudioCtx(){
     const AC=window.AudioContext||window.webkitAudioContext; if(!AC) return null;
-    const ctx=this._swtAudio||(this._swtAudio=new AC());
-    if(ctx.state==='suspended'){ try{ ctx.resume(); }catch(e){} }
+    let ctx=this._swtAudio;
+    if(!ctx){ try{ ctx=this._swtAudio=new AC(); }catch(e){ return null; } }
+    if(ctx.state!=='running'){ try{ const p=ctx.resume(); if(p&&p.catch) p.catch(function(){}); }catch(e){} }
     return ctx;
+  }
+  // Every tap nudges the audio back to life, so a context that was interrupted by a call recovers
+  // on the coach's next touch instead of staying dead until the page is reloaded.
+  _swtAudioArm(){
+    if(this._swtArmed) return; this._swtArmed=true;
+    const wake=()=>{
+      const ctx=this._swtAudioCtx();
+      if(ctx && ctx.state==='running' && !this._swtPrimed){
+        this._swtPrimed=true;
+        try{ const b=ctx.createBuffer(1,1,22050), src=ctx.createBufferSource();
+             src.buffer=b; src.connect(ctx.destination); src.start(0); }catch(e){}
+      }
+      const a=this._swtAudioEl();
+      if(a && !this._swtElPrimed){
+        this._swtElPrimed=true;
+        try{ a.src=this._swtWavUri('beep', 0.02); const p=a.play();
+             if(p&&p.then) p.then(function(){ try{ a.pause(); a.currentTime=0; }catch(e){} }).catch(function(){});
+        }catch(e){}
+      }
+    };
+    try{
+      ['pointerdown','touchend','click'].forEach(function(ev){ document.addEventListener(ev, wake, {passive:true}); });
+      document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) this._swtAudioCtx(); });
+    }catch(e){}
+  }
+  _swtAudioEl(){
+    if(this._swtTag) return this._swtTag;
+    try{
+      const a=document.createElement('audio');
+      a.setAttribute('playsinline',''); a.preload='auto';
+      a.style.cssText='position:absolute;width:0;height:0;opacity:0;pointer-events:none';
+      document.body.appendChild(a);
+      return this._swtTag=a;
+    }catch(e){ return null; }
+  }
+  // The same signal as a WAV, so it can go out through an <audio> element. Synthesised straight
+  // into PCM rather than rendered offline, so it needs nothing but arithmetic.
+  _swtWavUri(tone, vol){
+    const key=tone+'|'+vol;
+    this._swtWavs=this._swtWavs||{};
+    if(this._swtWavs[key]) return this._swtWavs[key];
+    const SR=22050, pat=this._swtPattern(tone), last=pat[pat.length-1];
+    const n=Math.max(1, Math.ceil(SR*(last.o+last.d+0.02)));
+    const voices=[[2500,1],[1250,0.7],[3750,0.5]];
+    const bytes=new Uint8Array(44+n*2), dv=new DataView(bytes.buffer);
+    const put=function(off,str){ for(let i=0;i<str.length;i++) dv.setUint8(off+i, str.charCodeAt(i)); };
+    put(0,'RIFF'); dv.setUint32(4, 36+n*2, true); put(8,'WAVEfmt ');
+    dv.setUint32(16,16,true); dv.setUint16(20,1,true); dv.setUint16(22,1,true);
+    dv.setUint32(24,SR,true); dv.setUint32(28,SR*2,true); dv.setUint16(32,2,true); dv.setUint16(34,16,true);
+    put(36,'data'); dv.setUint32(40, n*2, true);
+    const amp=Math.max(0.02, Math.min(1, vol==null?1:vol));
+    for(let i=0;i<n;i++){
+      const t=i/SR; let v=0;
+      for(let sgi=0;sgi<pat.length;sgi++){
+        const seg=pat[sgi], u=t-seg.o;
+        if(u<0||u>seg.d) continue;
+        const env=Math.min(1,u/0.008)*Math.min(1, Math.max(0,seg.d-u)/0.06);
+        for(let k=0;k<voices.length;k++)
+          v += voices[k][1]*env*((Math.sin(2*Math.PI*voices[k][0]*t)>=0)?1:-1);
+      }
+      v=Math.max(-1, Math.min(1, v*amp*0.45));
+      dv.setInt16(44+i*2, Math.round(v*32767), true);
+    }
+    let bin=''; const CH=0x8000;
+    for(let i=0;i<bytes.length;i+=CH) bin+=String.fromCharCode.apply(null, bytes.subarray(i, i+CH));
+    return this._swtWavs[key]='data:audio/wav;base64,'+btoa(bin);
+  }
+  _swtHtmlBeep(tone, vol){
+    const a=this._swtAudioEl(); if(!a) return false;
+    try{
+      const src=this._swtWavUri(tone, vol);
+      if(a.src!==src) a.src=src;
+      a.currentTime=0;
+      const p=a.play(); if(p&&p.catch) p.catch(function(){});
+      return true;
+    }catch(e){ return false; }
+  }
+  // One signal, now. Web Audio while it is actually running; otherwise the media element, which
+  // is the only thing that still makes a noise on a handset where Web Audio is blocked or muted.
+  _swtPlay(tone, vol){
+    const ctx=this._swtAudioCtx();
+    if(ctx && ctx.state==='running'){
+      try{ this._swtSignal(ctx.currentTime+0.02, tone, vol); return 'audio'; }catch(e){}
+    }
+    return this._swtHtmlBeep(tone, vol) ? 'media' : 'none';
+  }
+  // A coach can check their own handset on the spot instead of discovering it mid-session.
+  swtTestSound(){
+    this._swtAudioArm();
+    const how=this._swtPlay(this._swtTone(), this._swtVol());
+    const st=this._swtAudio ? this._swtAudio.state : 'none';
+    this.setState({swtSoundMsg:
+      how==='audio' ? 'Sent. Hear nothing? The ring/silent switch mutes this — flick it off and turn the volume up.'
+    : how==='media' ? 'Web Audio is blocked on this device, so the signal went out through the media channel instead.'
+    : 'This browser will not play a sound at all (audio: '+st+'). Try Safari or Chrome, or another device.' });
   }
   _swtTone(){ return this.state.swtTone||'horn'; }
   _swtVol(){ const v=this.state.swtVol; return (v==null?1:v); }
@@ -17873,7 +17991,7 @@ class Component extends DCLogic {
     const loop=()=>{ if(!this._swmPaint()){ this._swmRaf=null; return; } this._swmRaf=requestAnimationFrame(loop); };
     this._swmRaf=requestAnimationFrame(loop);
   }
-  onSwmMount(el){ this._swmRoot=el||null; if(el) this._swmEnsureRaf(); }
+  onSwmMount(el){ this._swtAudioArm(); this._swmRoot=el||null; if(el) this._swmEnsureRaf(); }
   // Every lane's clock is painted straight onto its element, for the same reason as the single
   // stopwatch: eight clocks through a re-render would redraw the screen sixty times a second.
   _swmPaint(){
@@ -17965,6 +18083,21 @@ class Component extends DCLogic {
     }
     return best;
   }
+  // The most recent send-off at or before `ms` — what the media-element fallback fires on, since
+  // it cannot be scheduled ahead the way the audio clock can.
+  _setPrevSend(ms, cycleMs, gapMs, reps, swimmers){
+    if(!(cycleMs>0)) return null;
+    const k0=Math.max(0, Math.floor(ms/cycleMs)-1);
+    let best=null;
+    for(let k=k0;k<=k0+2;k++){
+      if(k<0 || k>=reps) continue;
+      for(let i=0;i<swimmers;i++){
+        const at=k*cycleMs+i*gapMs;
+        if(at<=ms && (!best || at>best.at)) best={rep:k+1, lane:i+1, at:at};
+      }
+    }
+    return best;
+  }
   // How long swimmer i has been swimming their current repetition. Null before their first
   // send-off and once they have finished the set, so the screen can say so rather than lie.
   _setSwimMs(ms, i, cycleMs, gapMs, reps){
@@ -18003,8 +18136,13 @@ class Component extends DCLogic {
   // Lay every remaining send-off onto the audio clock, plus a triple at the end of the set.
   _setSchedule(){
     this._setCancel();
+    this._setNoWeb=false; this._setLastFired=null;
     if(this.state.swtSound===false) return;
-    const ctx=this._swtAudioCtx(); if(!ctx) return;
+    const ctx=this._swtAudioCtx();
+    // Web Audio blocked or muted on this handset: nothing can be laid on the audio clock, so the
+    // paint loop fires each send-off through the media element as it comes round instead. Less
+    // precise than scheduling, and the only alternative is a silent set.
+    if(!ctx || ctx.state!=='running'){ this._setNoWeb=true; return; }
     const cycle=this._setCycleMs()/1000, reps=this._setReps(), tone=this._swtTone(), vol=this._swtVol();
     const swimmers=this._setSwimmers(), gap=this._setGap();
     const done=this._setMs()/1000;                    // already elapsed when (re)scheduling
@@ -18031,7 +18169,7 @@ class Component extends DCLogic {
     const loop=()=>{ if(!this._setPaint()){ this._setRaf=null; return; } this._setRaf=requestAnimationFrame(loop); };
     this._setRaf=requestAnimationFrame(loop);
   }
-  onSetMount(el){ this._setRoot=el||null; if(el) this._setEnsureRaf(); }
+  onSetMount(el){ this._swtAudioArm(); this._setRoot=el||null; if(el) this._setEnsureRaf(); }
   _setPaint(){
     const root=this._setRoot;
     if(!root || !document.body.contains(root)){ this._setRoot=null; return false; }
@@ -18060,6 +18198,13 @@ class Component extends DCLogic {
     if(tot) tot.textContent=this._fmtMinSec(Math.min(ms,total), true);
     const bar=root.querySelector('[data-setbar]');
     if(bar) bar.style.width=(cycle>0 ? Math.max(0,Math.min(100,((ms%cycle)/cycle)*100)) : 0)+'%';
+    if(this._setRunning && this._setNoWeb && this.state.swtSound!==false){
+      const prev=this._setPrevSend(ms, cycle, gap, reps, swimmers);
+      if(prev && prev.at!==this._setLastFired){
+        this._setLastFired=prev.at;
+        this._swtHtmlBeep(this._swtTone(), this._swtVol());
+      }
+    }
     // The set has run its course: stop the clock once, and let the screen say so.
     if(this._setRunning && ms>=total){
       this._setRunning=false; this._setBase=total;
@@ -25226,6 +25371,9 @@ class Component extends DCLogic {
                   setVolChips: [[0.25,'Low'],[0.5,'Mid'],[0.75,'High'],[1,'Max']].map(v=>({label:v[1], ...chip(Math.abs(vol-v[0])<0.01), onClick:()=>self.setField('swtVol',v[0])})),
                 };
               })()),
+              onSwtTest:()=>self.swtTestSound(),
+              swtSoundMsg: S.swtSoundMsg||'',
+              swtSoundMsgShow: !!S.swtSoundMsg,
               onSwmMount: self._swmMountRef || (self._swmMountRef=(el)=>self.onSwmMount(el)),
               onSwmStartNext:()=>self.swmStartNext(), onSwmReset:()=>self.swmReset(),
               onSwmCountDec:()=>self.swmSetCount(-1), onSwmCountInc:()=>self.swmSetCount(1),
