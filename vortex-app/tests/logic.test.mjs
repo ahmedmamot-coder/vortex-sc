@@ -10627,9 +10627,18 @@ describe("sign-in speed", () => {
       const at = submit.indexOf("__vxSetAuth"), fetchAt = submit.indexOf("this._staffFetch()");
       eq(fetchAt > at && at > -1, true, "reading it earlier is the thing that cannot work");
     });
-    it("an email the app has never seen still gets in", () =>
-      eq(/if\(!real\) real=\{id:'st_'\+email/.test(submit), true,
-         "a coach whose row has not arrived yet must not be refused"));
+    // The staff row is still read AFTER the token (so a real coach on a new device is found the
+    // first time), but an email that authenticates and is on no staff account is a family account
+    // trying the staff door — parents and swimmers use this very same Supabase Auth. It used to be
+    // fabricated into a `role:'Coach'`, which is how parents reached the staff side. Now it is
+    // refused: the database session just opened is dropped and they are sent to the family sign-in.
+    it("an authenticated account that is not staff is refused, not fabricated into a coach", () => {
+      eq(/if\(!real\) real=\{id:'st_'\+email/.test(submit), false,
+         "fabricating a coach for any email that authenticates is exactly the parent-as-staff hole");
+      eq(/if\(!real \|\| !real\.email\)\{\s*if\(window\.__vxClearAuth\)/.test(submit), true,
+         "no staff row after the token means not staff — drop the session and turn them away");
+      eq(/for club staff only/i.test(submit), true, "and say why, pointing at the family sign-in");
+    });
     it("a known account still signs in without any extra fetch", () =>
       eq(/if\(!real \|\| !real\.email\)\{ try\{ await this\._staffFetch\(\); \}catch\(e\)\{\}/.test(submit), true,
          "the common path must not pay for the new-device path"));
