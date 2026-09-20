@@ -8,6 +8,7 @@ import { parseSetNotation, perRepDistance, describeSet } from "@/lib/plan-notati
 // rather than a regex-mangled copy of it.
 const AI_ROUTE = await import("../src/app/api/ai/coach/route.ts");
 const SW = await import("../src/lib/stopwatch.ts");
+const { upcomingMeets } = await import("@/lib/meetsUpcoming.ts");
 
 /* ---------------------------------------------------------------- attendance
    A swimmer signed off (traveling / sick / inactive) must count as absent, and a
@@ -13436,6 +13437,50 @@ describe("send-off fallback signal", () => {
     eq(prevSend(60000, C, G, REPS, 1).at, 60000);
   });
   it("a zero cycle cannot divide by zero", () => eq(prevSend(1000, 0, G, REPS, N), null));
+});
+
+/* ------------------------------------------------------- family upcoming meets
+   A parent's "Upcoming meets" was filtered on status alone (`status !== 'completed'`).
+   The meets.status column DEFAULTS to 'completed', so a real, future meet that nobody had
+   toggled off that default was hidden from families entirely. Upcoming must follow the date,
+   not just the flag. */
+describe("family upcoming meets", () => {
+  const now = new Date("2026-09-20T09:00:00Z");
+  const meet = (id, meet_date, status) => ({ id, name: id, meet_date, course: "L", status });
+
+  it("shows a future meet even when its status is the default 'completed'", () => {
+    const out = upcomingMeets([meet("future", "2026-10-15", "completed")], now);
+    eq(out.length, 1, "a meet three weeks away must not be hidden");
+    eq(out[0].id, "future");
+  });
+
+  it("shows a meet whose status a coach set to upcoming", () => {
+    const out = upcomingMeets([meet("open", "2026-11-01", "entries_open")], now);
+    eq(out.map((m) => m.id).join(","), "open");
+  });
+
+  it("hides a meet that is both completed and in the past", () => {
+    const out = upcomingMeets([meet("done", "2026-08-01", "completed")], now);
+    eq(out.length, 0);
+  });
+
+  it("still shows a past meet a coach has NOT marked completed", () => {
+    const out = upcomingMeets([meet("live", "2026-08-01", "in_progress")], now);
+    eq(out.map((m) => m.id).join(","), "live");
+  });
+
+  it("counts a meet dated today as upcoming", () => {
+    const out = upcomingMeets([meet("today", "2026-09-20", "completed")], now);
+    eq(out.map((m) => m.id).join(","), "today");
+  });
+
+  it("orders what it shows soonest first", () => {
+    const out = upcomingMeets(
+      [meet("c", "2026-12-01", "upcoming"), meet("a", "2026-10-01", "upcoming"), meet("b", "2026-11-01", "upcoming")],
+      now,
+    );
+    eq(out.map((m) => m.id).join(","), "a,b,c");
+  });
 });
 
 await report();
