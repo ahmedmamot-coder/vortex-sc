@@ -2,6 +2,8 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import type { Meet, MeetResult, Swimmer } from "@/lib/types";
 
+export { upcomingMeets } from "@/lib/meetsUpcoming";
+
 export async function getMeets(): Promise<Meet[]> {
   const supabase = await createClient();
   const { data, error } = await supabase.from("meets").select("*").order("meet_date", { ascending: false });

@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth";
 import { getLinkedSwimmers } from "@/lib/data/family";
 import { getPersonalBests, getSwimmerResults } from "@/lib/data/swimmers";
 import { getSwimmerAttendanceHistory } from "@/lib/data/attendance";
-import { getMeets } from "@/lib/data/meets";
+import { getMeets, upcomingMeets } from "@/lib/data/meets";
 import FamilyPortalClient from "./portal-client";
 
 export default async function FamilyPortalPage({
@@ -45,7 +45,7 @@ export default async function FamilyPortalPage({
       }))}
       attendancePct={attendancePct}
       attendanceHistory={attendance.slice(0, 10)}
-      upcomingMeets={meets.filter((m) => m.status !== "completed")}
+      upcomingMeets={upcomingMeets(meets)}
     />
   );
 }
