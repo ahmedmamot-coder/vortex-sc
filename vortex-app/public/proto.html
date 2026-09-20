@@ -23435,8 +23435,19 @@ class Component extends DCLogic {
             let real=acct;
             if(!real || !real.email){ try{ await this._staffFetch(); }catch(e){}
               real=this.accounts.find(a=>(a.email&&String(a.email).trim().toLowerCase()===email)) || acct; }
-            if(!real) real={id:'st_'+email, user:email, label:email.split('@')[0], role:'Coach',
-              accent:'#2733D6', initials:email.slice(0,2).toUpperCase(), squadId:'', email:email};
+            // A correct password is not by itself permission to be on the staff side. Parents and
+            // swimmers authenticate through this very same Supabase Auth — a family account gets
+            // one the moment it registers — so an email that signs in but matches no staff account
+            // is a family account trying the staff door, NOT a new coach. This used to fabricate a
+            // `role:'Coach'` account for exactly that case, which is how parents ended up signed in
+            // as staff. A real staff member is created by an admin in Admin → Staff, which writes
+            // their staff row (and sets this password) before they ever sign in, so `_staffFetch`
+            // above finds them the first time on a new device. Anyone it does not find is turned
+            // away: drop the database session we just opened and point them at the family sign-in.
+            if(!real || !real.email){
+              if(window.__vxClearAuth){ try{ window.__vxClearAuth(); }catch(e){} }
+              return this.setState({loginErr:'This sign-in is for club staff only. Parents and swimmers, please use “Family sign in” below.'});
+            }
             // Show the app first. The coach is signed in the moment the token lands; making
             // them watch "Checking…" while a dozen background fetches finish is time spent for
             // nothing, and the screens fill in as each one arrives anyway.
