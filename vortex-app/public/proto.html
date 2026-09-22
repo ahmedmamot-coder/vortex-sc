@@ -13900,7 +13900,7 @@ class Component extends DCLogic {
     body+='</tbody></table>';
     this._openPrintDoc('Attendance — '+sq.name+' — '+rangeLabel, body);
   }
-  exportResultsPdf(squadId){ const sq=this.squadById[squadId]||{name:'Squad'}; const resMeets=this._resultMeets(); const mMeta=resMeets[this._resultMeetSel(resMeets)]||{course:'LCM',date:''}; const meetName=mMeta.name||'';
+  exportResultsPdf(squadId){ const sq=this.squadById[squadId]||{name:'Squad'}; const resMeets=this._resultMeets(squadId); const mMeta=resMeets[this._resultMeetSel(resMeets)]||{course:'LCM',date:''}; const meetName=mMeta.name||'';
     let res=[]; (this.roster[squadId]||[]).forEach(sw=>{ (sw.results||[]).forEach(r=>{ if(r.meet===meetName) res.push({name:sw.name, event:r.event, time:r.time, sec:r.sec, place:r.place, splits:r.splits}); }); });
     res.sort((a,b)=> ((a.place||999)-(b.place||999)) || (a.sec-b.sec));
     let body='<h1>Results — '+this._esc(sq.name)+'</h1><p class="sub">'+this._esc(meetName)+' · '+this._esc(mMeta.course||'LCM')+(mMeta.date?(' · '+this._esc(mMeta.date)):'')+' · '+res.length+' swims</p>';
@@ -15794,7 +15794,9 @@ class Component extends DCLogic {
   // every other meet a swimmer has a result at. A meet imported from Hy-Tek lived only on the
   // swimmers' profiles — this tab only ever listed the bundled season, so it had no button.
   // Kept apart from meetsMeta, which allMeets() and the meet screens read.
-  _resultMeets(){
+  // With a squad, only the meets that squad swam: putting imports first opened every squad on the
+  // newest import, and a squad with nobody at it opened on "0 swims" — the results looked gone.
+  _resultMeets(squadId){
     const base=this.meetsMeta.length ? this.meetsMeta : this.meetsList.map(name=>({name, course:'LCM', date:''}));
     const known=new Set(base.map(m=>m.name)); const extra={};
     (this.squads||[]).forEach(sq=>(this.roster[sq.id]||[]).forEach(sw=>(sw.results||[]).forEach(r=>{
@@ -15803,7 +15805,11 @@ class Component extends DCLogic {
       if(iso>e._iso){ e._iso=iso; e.date=r.date; }
     })));
     const added=Object.values(extra).sort((a,b)=>b._iso.localeCompare(a._iso)).map(({_iso, ...m})=>m);
-    return [...added, ...base];
+    const all=[...added, ...base];
+    if(!squadId) return all;
+    const swam=new Set(); (this.roster[squadId]||[]).forEach(sw=>(sw.results||[]).forEach(r=>{ if(r&&r.meet) swam.add(String(r.meet).trim()); }));
+    const mine=all.filter(m=>swam.has(m.name));
+    return mine.length ? mine : all;
   }
   // Held by name, so an import that adds a meet ahead of the chosen one cannot swap it for another.
   _resultMeetSel(list){ const S=this.state||{};
@@ -21804,7 +21810,7 @@ class Component extends DCLogic {
     const attendView = S.attendView||'day';
 
     // ---- results ----
-    const resMeets=this._resultMeets(); const resSel=this._resultMeetSel(resMeets);
+    const resMeets=this._resultMeets(S.squadId); const resSel=this._resultMeetSel(resMeets);
     const meetChips=resMeets.map((m,i)=>({label:m.name, onClick:()=>this.setState({meetSel:i, meetSelName:m.name}),
       bg: i===resSel?squad.accent:'#fff', fg: i===resSel?'#fff':'#3A4152', border: i===resSel?squad.accent:'#E5E9F0'}));
     const meetName=(resMeets[resSel]||{}).name||'';

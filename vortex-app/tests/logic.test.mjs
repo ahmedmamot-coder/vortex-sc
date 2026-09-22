@@ -693,8 +693,24 @@ describe("a meet imported from Hy-Tek gets its own button on the squad Results t
     eq(sel(list()), 1);
   });
   it("the Results tab and its export both read this list", () => {
-    eq(/const resMeets=this\._resultMeets\(\)/.test(SOURCE.split("\n").find((l) => /const resMeets=/.test(l) && !/exportResultsPdf/.test(l)) || ""), true);
-    eq(/exportResultsPdf\(squadId\)\{[^\n]*this\._resultMeets\(\)/.test(SOURCE), true);
+    eq(/const resMeets=this\._resultMeets\(S\.squadId\)/.test(SOURCE.split("\n").find((l) => /const resMeets=/.test(l) && !/exportResultsPdf/.test(l)) || ""), true);
+    eq(/exportResultsPdf\(squadId\)\{[^\n]*this\._resultMeets\(squadId\)/.test(SOURCE), true);
+  });
+  // Live, every squad opened on the newest import — "H20 Short Course Meet · 0 Vortex SD swims" —
+  // because a swimmer in another squad had swum it. The results looked gone.
+  it("a squad only gets buttons for meets it swam, so it never opens on 0 swims", () => {
+    const { list } = mk([{ meet: "Winter Gala", date: "1/10/2026" }]);   // jr swam Winter Gala; sa swam Spring Cup
+    eq(list("jr").map((m) => m.name), ["Winter Gala"]);
+    eq(list("sa").map((m) => m.name), ["Spring Cup"]);
+  });
+  it("another squad's import does not become this squad's first button", () => {
+    const { list } = mk([{ meet: "H20 Short Course Meet", date: "12/24/2026" }, { meet: "Winter Gala", date: "1/10/2026" }]);
+    eq(list("sa").map((m) => m.name), ["Spring Cup"]);
+    eq(list("jr")[0].name, "H20 Short Course Meet");
+  });
+  it("a squad with no results at all still sees the season list", () => {
+    const { list } = mk([]);
+    eq(list("nobody").map((m) => m.name), ["Spring Cup", "Winter Gala"]);
   });
 });
 
