@@ -784,6 +784,40 @@ describe("family portal: the Meets tab gets the club's meets", () => {
   });
 });
 
+describe("a personal best shows the 50s of the swim that set it", () => {
+  const legs = bind("_pbLegChips", {}, ["_legChips", "resultLegs", "_legFmt", "parseTimeStr"]);
+  const sp = [[50, 30], [100, 63], [150, 96], [200, 128]];
+  const sw = { results: [
+    { event: "200 Free", sec: 131, course: "L", splits: [[50, 31], [100, 65], [150, 98], [200, 131]] },
+    { event: "200 Free", sec: 128, course: "S", splits: [[50, 29], [100, 62], [150, 95], [200, 128]] },
+    { event: "200 Free", sec: 128, course: "L", splits: sp },
+    { event: "100 Back", sec: 62.4, course: "L" },
+  ] };
+  const txt = (l) => l.map((x) => `${x.label} ${x.time}`);
+  it("the PB swim's own 50s, same course", () =>
+    eq(txt(legs(sw, { event: "200 Free", sec: 128, time: "2:08.00", course: "L" })), ["1st 50 30.00", "2nd 50 33.00", "3rd 50 33.00", "Last 50 32.00"]));
+  it("the short-course PB gets the short-course swim", () =>
+    eq(txt(legs(sw, { event: "200 Free", sec: 128, time: "2:08.00", course: "S" }))[0], "1st 50 29.00"));
+  it("a PB stored with only a time string still finds its swim", () =>
+    eq(legs(sw, { event: "200 Free", time: "2:08.00", course: "L" }).length, 4));
+  it("the fastest 50 is the green one", () =>
+    eq(legs(sw, { event: "200 Free", sec: 128, course: "L" }).filter((l) => l.color === "#0C7A4F").map((l) => l.label), ["1st 50"]));
+  it("no swim with splits at that time: nothing, rather than another swim's 50s", () => {
+    eq(legs(sw, { event: "100 Back", sec: 62.4, course: "L" }), []);
+    eq(legs(sw, { event: "200 Free", sec: 127, course: "L" }), []);
+  });
+  it("both profiles list every PB, not the first 4 / 8", () => {
+    const line = (re) => SOURCE.split("\n").find((l) => re.test(l)) || "";
+    eq(/pbs\|\|\[\]\)\.slice\(0, *\d+\)/.test(line(/const swimmerPbs=/)), false);
+    eq(/pbs\|\|\[\]\)\.slice\(0, *\d+\)/.test(line(/const famPbs=/)), false);
+  });
+  it("both profiles use it", () => {
+    eq(/const legs=this\._pbLegChips\(swObj, p\)/.test(SOURCE), true);
+    eq(/const legs=this\._pbLegChips\(sw, p\)/.test(SOURCE), true);
+    eq((SOURCE.match(/list="\{\{ p\.legs \}\}"/g) || []).length, 2);
+  });
+});
+
 describe("re-importing a meet adds the splits instead of every swim again", () => {
   const merge = bind("_mergeResults", {});
   const old = [{ meet: "Spring Cup", date: "6/5/2026", event: "200 Free", course: "L", sec: 128, time: "2:08.00" }];
