@@ -4169,10 +4169,19 @@ if ('serviceWorker' in navigator) {
                       </div>
                       <div style="display:flex;flex-direction:column;gap:7px">
                         <sc-for list="{{ resultRows }}" as="r" hint-placeholder-count="8">
-                          <div style="display:flex;align-items:center;gap:11px;background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:10px 12px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
+                          <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:10px 12px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
+                          <div style="display:flex;align-items:center;gap:11px">
                             <span style="width:28px;height:28px;flex:none;border-radius:8px;background:{{ r.medalBg }};color:{{ r.medalFg }};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px">{{ r.place }}</span>
                             <span style="flex:1;min-width:0"><span style="display:block;font-weight:600;font-size:13.5px;color:#0C1116">{{ r.name }}</span><span style="display:block;font-size:11px;color:#7A8296">{{ r.event }}</span></span>
                             <span style="text-align:right"><span style="display:block;font-family:var(--font-mono);font-weight:700;font-size:13.5px;color:#0C1116">{{ r.time }}</span><span style="display:block;font-size:10px;color:{{ r.deltaColor }};font-weight:600;margin-top:1px">{{ r.delta }}</span></span>
+                          </div>
+                            <sc-if value="{{ r.hasLegs }}" hint-placeholder-val="{{ false }}">
+                              <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px">
+                                <sc-for list="{{ r.legs }}" as="lg" hint-placeholder-count="4">
+                                  <span style="font-size:11px;background:#F4F6F8;color:#5B6472;border-radius:7px;padding:3px 7px;white-space:nowrap">{{ lg.label }} <b style="font-family:var(--font-mono);font-weight:700;color:{{ lg.color }}">{{ lg.time }}</b></span>
+                                </sc-for>
+                              </div>
+                            </sc-if>
                           </div>
                         </sc-for>
                       </div>
@@ -13892,11 +13901,11 @@ class Component extends DCLogic {
     this._openPrintDoc('Attendance — '+sq.name+' — '+rangeLabel, body);
   }
   exportResultsPdf(squadId){ const sq=this.squadById[squadId]||{name:'Squad'}; const meetName=this.meetsList[this.state.meetSel]||''; const mMeta=this.meetsMeta[this.state.meetSel]||{course:'LCM',date:''};
-    let res=[]; (this.roster[squadId]||[]).forEach(sw=>{ (sw.results||[]).forEach(r=>{ if(r.meet===meetName) res.push({name:sw.name, event:r.event, time:r.time, sec:r.sec, place:r.place}); }); });
+    let res=[]; (this.roster[squadId]||[]).forEach(sw=>{ (sw.results||[]).forEach(r=>{ if(r.meet===meetName) res.push({name:sw.name, event:r.event, time:r.time, sec:r.sec, place:r.place, splits:r.splits}); }); });
     res.sort((a,b)=> ((a.place||999)-(b.place||999)) || (a.sec-b.sec));
     let body='<h1>Results — '+this._esc(sq.name)+'</h1><p class="sub">'+this._esc(meetName)+' · '+this._esc(mMeta.course||'LCM')+(mMeta.date?(' · '+this._esc(mMeta.date)):'')+' · '+res.length+' swims</p>';
-    body+='<table><thead><tr><th class="r" style="width:44px">Place</th><th>Swimmer</th><th>Event</th><th class="r">Time</th></tr></thead><tbody>';
-    res.forEach((r,i)=>{ body+='<tr><td class="r">'+(r.place||(i+1))+'</td><td>'+this._esc(r.name)+'</td><td>'+this._esc(r.event)+'</td><td class="r mono">'+this._esc(r.time)+'</td></tr>'; });
+    body+='<table><thead><tr><th class="r" style="width:44px">Place</th><th>Swimmer</th><th>Event</th><th class="r">Time</th><th>Splits</th></tr></thead><tbody>';
+    res.forEach((r,i)=>{ const legs=this.resultLegs(r).map(l=>this._esc(l.label)+' <span class="mono">'+this._esc(l.time)+'</span>').join(' · '); body+='<tr><td class="r">'+(r.place||(i+1))+'</td><td>'+this._esc(r.name)+'</td><td>'+this._esc(r.event)+'</td><td class="r mono">'+this._esc(r.time)+'</td><td style="font-size:10px">'+legs+'</td></tr>'; });
     body+='</tbody></table>';
     this._openPrintDoc('Results — '+sq.name+' — '+meetName, body);
   }
@@ -21772,10 +21781,10 @@ class Component extends DCLogic {
     const meetName=this.meetsList[S.meetSel]||'';
     const mMeta=this.meetsMeta[S.meetSel]||{course:'LCM',entries:0,date:''};
     let meetRes=[];
-    (this.roster[S.squadId]||[]).forEach(sw=>{ (sw.results||[]).forEach(r=>{ if(r.meet===meetName) meetRes.push({name:sw.name, event:r.event, time:r.time, sec:r.sec, place:r.place}); }); });
+    (this.roster[S.squadId]||[]).forEach(sw=>{ (sw.results||[]).forEach(r=>{ if(r.meet===meetName) meetRes.push({name:sw.name, event:r.event, time:r.time, sec:r.sec, place:r.place, splits:r.splits}); }); });
     meetRes.sort((a,b)=> ((a.place||999)-(b.place||999)) || (a.sec-b.sec));
     const selMeet={name:meetName, meta:(mMeta.course||'LCM')+' · '+(mMeta.date||'')+' · '+meetRes.length+' '+squad.name+' swims'};
-    const resultRows=meetRes.slice(0,18).map((r,i)=>{ const place=r.place||(i+1); const [mb,mf]=this.medal(place); return {name:r.name, event:r.event, place, time:r.time, medalBg:mb, medalFg:mf, delta:(r.place?('Place '+r.place):''), deltaColor:'#9AA2B4'}; });
+    const resultRows=meetRes.slice(0,18).map((r,i)=>{ const place=r.place||(i+1); const [mb,mf]=this.medal(place); const legs=this._legChips(r); return {name:r.name, event:r.event, place, time:r.time, medalBg:mb, medalFg:mf, delta:(r.place?('Place '+r.place):''), deltaColor:'#9AA2B4', legs, hasLegs:legs.length>0}; });
 
     // ---- profile ----
     const swObj=(this.roster[S.squadId]||[]).find(x=>x.id===S.swimmerId) || (this.roster[S.squadId]||[])[0] || {name:'',pbs:[],results:[],initials:'',age:'',gender:'',meetCount:0};

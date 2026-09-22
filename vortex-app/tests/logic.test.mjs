@@ -646,6 +646,24 @@ describe("the swimmer profile lists every result, not the latest ten", () => {
   it("the heading says how many", () => eq(/All results · \{\{ swimmerResultCount \}\}/.test(SOURCE), true));
 });
 
+describe("the squad Results tab shows each swim's splits too", () => {
+  const line = SOURCE.split("\n").find((l) => /const resultRows=/.test(l)) || "";
+  const pushLine = SOURCE.split("\n").find((l) => /meetRes\.push\(/.test(l)) || "";
+  it("the meet's swims carry their splits", () => eq(/splits:r\.splits/.test(pushLine), true));
+  it("each row gets its legs", () => eq(/legs, hasLegs:legs\.length>0/.test(line), true));
+  it("the row template lists them", () => eq(/list="\{\{ resultRows \}\}"[\s\S]{0,1600}list="\{\{ r\.legs \}\}"/.test(SOURCE), true));
+
+  let printed = "";
+  const ctx = {
+    squadById: { jr: { name: "Junior" } }, meetsList: ["Spring Cup"], meetsMeta: [{ course: "LCM", date: "6/5/2026" }], state: { meetSel: 0 },
+    roster: { jr: [{ name: "Jana", results: [{ meet: "Spring Cup", event: "200 Free", time: "2:08.00", sec: 128, place: 2, splits: [[50, 30], [100, 63], [150, 96], [200, 128]] }] }] },
+    _esc: (x) => String(x), _openPrintDoc: (_t, body) => { printed = body; },
+  };
+  bind("exportResultsPdf", ctx, ["resultLegs", "_legFmt"])("jr");
+  it("the exported meet results have a Splits column", () => eq(/<th>Splits<\/th>/.test(printed), true));
+  it("with every 50 in it", () => eq(/1st 50 <span class="mono">30\.00<\/span> · 2nd 50 <span class="mono">33\.00<\/span> · 3rd 50 <span class="mono">33\.00<\/span> · Last 50 <span class="mono">32\.00<\/span>/.test(printed), true));
+});
+
 describe("re-importing a meet adds the splits instead of every swim again", () => {
   const merge = bind("_mergeResults", {});
   const old = [{ meet: "Spring Cup", date: "6/5/2026", event: "200 Free", course: "L", sec: 128, time: "2:08.00" }];
