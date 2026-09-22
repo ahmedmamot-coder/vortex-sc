@@ -639,6 +639,13 @@ describe("Hy-Tek splits → the 50s on a swimmer's profile", () => {
   });
 });
 
+describe("the swimmer profile lists every result, not the latest ten", () => {
+  const line = SOURCE.split("\n").find((l) => /const swimmerResults=/.test(l)) || "";
+  it("no cap on the list", () => eq(/\.slice\(0, *\d+\)/.test(line), false));
+  it("newest first", () => eq(/_resultISO\(b\)/.test(line), true));
+  it("the heading says how many", () => eq(/All results · \{\{ swimmerResultCount \}\}/.test(SOURCE), true));
+});
+
 describe("re-importing a meet adds the splits instead of every swim again", () => {
   const merge = bind("_mergeResults", {});
   const old = [{ meet: "Spring Cup", date: "6/5/2026", event: "200 Free", course: "L", sec: 128, time: "2:08.00" }];
