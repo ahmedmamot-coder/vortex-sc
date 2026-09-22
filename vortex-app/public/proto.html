@@ -6902,7 +6902,7 @@ if ('serviceWorker' in navigator) {
                     <div style="display:flex;flex-direction:column;gap:16px">
                       <div style="background:linear-gradient(135deg,#0C7A4F,#12A0AE);color:#fff;border-radius:16px;padding:16px;display:flex;align-items:center;gap:12px">
                         <span style="width:42px;height:42px;flex:none;border-radius:12px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center"><i data-lucide="users-round" style="width:22px;height:22px"></i></span>
-                        <div><p style="margin:0;font-size:14px;font-weight:800">Relay Builder</p><p style="margin:2px 0 0;font-size:12px;color:rgba(255,255,255,.8)">{{ relayScopeLabel }} · fastest logged PBs</p></div>
+                        <div><p style="margin:0;font-size:14px;font-weight:800">Relay Builder</p><p style="margin:2px 0 0;font-size:12px;color:rgba(255,255,255,.8)">{{ relayScopeLabel }} · 4×50/100/200 · fastest logged PBs</p></div>
                       </div>
                       <sc-if value="{{ relayHasGroups }}" hint-placeholder-val="{{ true }}">
                         <sc-for list="{{ relayGroups }}" as="grp" hint-placeholder-count="4">
@@ -6911,25 +6911,27 @@ if ('serviceWorker' in navigator) {
                               <h2 style="font-size:12px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:{{ grp.accent }};margin:0">{{ grp.title }}</h2>
                               <span style="font-size:11px;color:#9AA2B4;font-weight:600">{{ grp.count }}</span>
                             </div>
-                            <p style="margin:0 2px 6px;font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#9AA2B4">Medley relay</p>
-                            <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;box-shadow:0 2px 7px rgba(11,20,40,.05);overflow:hidden;margin-bottom:11px">
-                              <sc-for list="{{ grp.medleyRows }}" as="m" hint-placeholder-count="4">
-                                <button onclick="{{ m.onEdit }}" style="display:flex;align-items:center;gap:11px;padding:11px 13px;border:none;border-bottom:1px solid #EEF1F5;background:none;width:100%;text-align:left;cursor:pointer;font-family:inherit"><span style="flex:none;min-width:44px;height:26px;padding:0 7px;border-radius:8px;background:{{ m.badgeBg }};color:{{ m.badgeFg }};display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:800">{{ m.stroke }}</span><span style="flex:1;min-width:0;font-size:13px;font-weight:600;color:#0C1116;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ m.name }}</span><span style="flex:none;font-family:var(--font-mono);font-size:12.5px;color:#7A8296">{{ m.time }}</span><i data-lucide="pencil" style="width:13px;height:13px;color:#C7CDDA;flex:none"></i></button>
-                              </sc-for>
-                              <sc-if value="{{ grp.medleyHasTotal }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;justify-content:space-between;padding:9px 13px;background:#F5F8FF"><span style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:{{ grp.accent }}">Predicted total</span><span style="font-family:var(--font-mono);font-size:14px;font-weight:800;color:#0C1116">{{ grp.medleyTotal }}</span></div></sc-if>
-                            </div>
-                            <p style="margin:0 2px 6px;font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#9AA2B4">Freestyle relay</p>
-                            <sc-if value="{{ grp.hasFree }}" hint-placeholder-val="{{ true }}">
-                              <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;box-shadow:0 2px 7px rgba(11,20,40,.05);overflow:hidden;margin-bottom:16px">
-                                <sc-for list="{{ grp.freeRelayRows }}" as="f" hint-placeholder-count="4">
-                                  <button onclick="{{ f.onEdit }}" style="display:flex;align-items:center;gap:11px;padding:11px 13px;border:none;border-bottom:1px solid #EEF1F5;background:none;width:100%;text-align:left;cursor:pointer;font-family:inherit"><span style="flex:none;width:30px;height:26px;border-radius:8px;background:{{ f.badgeBg }};color:{{ f.badgeFg }};display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:800">L{{ f.leg }}</span><span style="flex:1;min-width:0;font-size:13px;font-weight:600;color:#0C1116;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ f.name }}</span><span style="flex:none;font-family:var(--font-mono);font-size:12.5px;color:#7A8296">{{ f.time }}</span><i data-lucide="pencil" style="width:13px;height:13px;color:#C7CDDA;flex:none"></i></button>
+                            <sc-for list="{{ grp.distances }}" as="d" hint-placeholder-count="3">
+                              <p style="margin:0 2px 6px;font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#9AA2B4">{{ d.medleyLabel }}</p>
+                              <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;box-shadow:0 2px 7px rgba(11,20,40,.05);overflow:hidden;margin-bottom:11px">
+                                <sc-for list="{{ d.medleyRows }}" as="m" hint-placeholder-count="4">
+                                  <button onclick="{{ m.onEdit }}" style="display:flex;align-items:center;gap:11px;padding:11px 13px;border:none;border-bottom:1px solid #EEF1F5;background:none;width:100%;text-align:left;cursor:pointer;font-family:inherit"><span style="flex:none;min-width:44px;height:26px;padding:0 7px;border-radius:8px;background:{{ m.badgeBg }};color:{{ m.badgeFg }};display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:800">{{ m.stroke }}</span><span style="flex:1;min-width:0;font-size:13px;font-weight:600;color:#0C1116;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ m.name }}</span><span style="flex:none;font-family:var(--font-mono);font-size:12.5px;color:#7A8296">{{ m.time }}</span><i data-lucide="pencil" style="width:13px;height:13px;color:#C7CDDA;flex:none"></i></button>
                                 </sc-for>
-                                <sc-if value="{{ grp.freeHasTotal }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;justify-content:space-between;padding:9px 13px;background:#F5F8FF"><span style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:{{ grp.accent }}">Predicted total</span><span style="font-family:var(--font-mono);font-size:14px;font-weight:800;color:#0C1116">{{ grp.freeTotal }}</span></div></sc-if>
+                                <sc-if value="{{ d.medleyHasTotal }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;justify-content:space-between;padding:9px 13px;background:#F5F8FF"><span style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:{{ grp.accent }}">Predicted total</span><span style="font-family:var(--font-mono);font-size:14px;font-weight:800;color:#0C1116">{{ d.medleyTotal }}</span></div></sc-if>
                               </div>
-                            </sc-if>
-                            <sc-if value="{{ grp.freeEmpty }}" hint-placeholder-val="{{ false }}">
-                              <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;text-align:center;padding:16px;color:#9AA2B4;font-size:12px;margin-bottom:16px">Not enough freestyle PBs for a full team.</div>
-                            </sc-if>
+                              <p style="margin:0 2px 6px;font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#9AA2B4">{{ d.freeLabel }}</p>
+                              <sc-if value="{{ d.hasFree }}" hint-placeholder-val="{{ true }}">
+                                <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;box-shadow:0 2px 7px rgba(11,20,40,.05);overflow:hidden;margin-bottom:16px">
+                                  <sc-for list="{{ d.freeRelayRows }}" as="f" hint-placeholder-count="4">
+                                    <button onclick="{{ f.onEdit }}" style="display:flex;align-items:center;gap:11px;padding:11px 13px;border:none;border-bottom:1px solid #EEF1F5;background:none;width:100%;text-align:left;cursor:pointer;font-family:inherit"><span style="flex:none;width:30px;height:26px;border-radius:8px;background:{{ f.badgeBg }};color:{{ f.badgeFg }};display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:800">L{{ f.leg }}</span><span style="flex:1;min-width:0;font-size:13px;font-weight:600;color:#0C1116;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ f.name }}</span><span style="flex:none;font-family:var(--font-mono);font-size:12.5px;color:#7A8296">{{ f.time }}</span><i data-lucide="pencil" style="width:13px;height:13px;color:#C7CDDA;flex:none"></i></button>
+                                  </sc-for>
+                                  <sc-if value="{{ d.freeHasTotal }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;justify-content:space-between;padding:9px 13px;background:#F5F8FF"><span style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:{{ grp.accent }}">Predicted total</span><span style="font-family:var(--font-mono);font-size:14px;font-weight:800;color:#0C1116">{{ d.freeTotal }}</span></div></sc-if>
+                                </div>
+                              </sc-if>
+                              <sc-if value="{{ d.freeEmpty }}" hint-placeholder-val="{{ false }}">
+                                <div style="background:#fff;border:1px solid #E5E9F0;border-radius:14px;text-align:center;padding:16px;color:#9AA2B4;font-size:12px;margin-bottom:16px">Not enough freestyle PBs for a full team.</div>
+                              </sc-if>
+                            </sc-for>
                           </div>
                         </sc-for>
                       </sc-if>
@@ -9470,7 +9472,7 @@ class Component extends DCLogic {
       ladderOpen:false, ladderSecId:null, ladderShape:'up', ladderRungs:5, ladderStart:100, ladderStep:100, ladderReps:1, ladderPaceSec:60, ladderNotes:'',
       ladderTab:'auto', manReps:1, manDist:50, manPaceSec:45, manStroke:'', manList:[],
       swPickerOpen:false, swPickerSecId:null, swPickerSetId:null, swPickerQuery:'',
-      relayPickerOpen:false, relayPickerKey:null, relayPickerGender:null, relayPickerBand:null, relayPickerLegId:null, relayPickerStroke:null, relayPickerKind:null,
+      relayPickerOpen:false, relayPickerKey:null, relayPickerGender:null, relayPickerBand:null, relayPickerLegId:null, relayPickerStroke:null, relayPickerKind:null, relayPickerDist:null,
       goalsSwId:null, goalsSwQuery:'', goalEditEvent:null, goalEditVal:'', goalMsg:'',
       academyTab:'trials', trialForm:{childName:'',age:'',parentName:'',phone:'',notes:''}, trialSubmitted:false,
       feesDraft:{}, memQuery:'',
@@ -19051,31 +19053,43 @@ class Component extends DCLogic {
     this.setState({calName:'', calLocation:'', calDate:'', calCourse:'LCM', calErr:'', calOpen:false});
   }
   allSwimmersFlat(){ const out=[]; this.squads.forEach(sq=>{ (this.roster[sq.id]||[]).forEach(sw=>out.push({...sw, squadId:sq.id, squadName:sq.name})); }); return out; }
-  // ---- Relay Builder helpers (distinct swimmers per leg + editable overrides) ----
+  // ---- Relay Builder helpers (distance-aware · distinct swimmers per leg + editable overrides) ----
+  // Each group builds six relays: 4×50 / 4×100 / 4×200, medley + freestyle for every distance.
+  RELAY_DISTANCES(){ return [50,100,200]; }
   _relayStrokeOf(ev){ return /free/i.test(ev)?'Free':/back/i.test(ev)?'Back':/breast/i.test(ev)?'Breast':/fly/i.test(ev)?'Fly':null; }
+  _relayDistOf(ev){ const m=String(ev||'').match(/(\d+)/); return m?parseInt(m[1],10):null; }
   _relayT2s(t){ if(!t) return Infinity; const s=String(t); return s.includes(':') ? (()=>{const[m,sec]=s.split(':'); return parseInt(m,10)*60+parseFloat(sec);})() : parseFloat(s); }
-  _relayBest(pool){ const best={}; pool.forEach(sw=>{ (sw.pbs||[]).forEach(pb=>{ const st=this._relayStrokeOf(pb.event); if(!st) return; const sec=this._relayT2s(pb.time); best[sw.id]=best[sw.id]||{name:sw.name, s:{}}; const cur=best[sw.id].s[st]; if(!cur||sec<cur.sec) best[sw.id].s[st]={time:pb.time, sec}; }); }); return best; }
+  // best PB per swimmer per stroke, restricted to a single relay distance (a 4×100 relay only
+  // draws on 100m stroke times, never a swimmer's 50m or 200m PB).
+  _relayBestAt(pool, dist){ const best={}; pool.forEach(sw=>{ (sw.pbs||[]).forEach(pb=>{ if(this._relayDistOf(pb.event)!==dist) return; const st=this._relayStrokeOf(pb.event); if(!st) return; const sec=this._relayT2s(pb.time); best[sw.id]=best[sw.id]||{name:sw.name, s:{}}; const cur=best[sw.id].s[st]; if(!cur||sec<cur.sec) best[sw.id].s[st]={time:pb.time, sec}; }); }); return best; }
   buildRelayGroup(pool, groupKey, gender, band, badgeBg, badgeFg){
-    const best=this._relayBest(pool); const ov=(this.relayOverrides&&this.relayOverrides[groupKey])||{};
+    const distances=this.RELAY_DISTANCES().map(dist=>this.buildRelayDistance(pool, groupKey, gender, band, badgeBg, badgeFg, dist));
+    return {distances, hasAny:distances.some(d=>d.hasMedley||d.hasFree)};
+  }
+  buildRelayDistance(pool, groupKey, gender, band, badgeBg, badgeFg, dist){
+    const best=this._relayBestAt(pool, dist); const ov=(this.relayOverrides&&this.relayOverrides[groupKey])||{};
     const strokes=['Back','Breast','Fly','Free']; const used=new Set(); const assign={};
-    strokes.forEach(st=>{ const id=ov['M-'+st]; if(id && best[id] && best[id].s[st] && !used.has(id)){ assign[st]={id, name:best[id].name, time:best[id].s[st].time, sec:best[id].s[st].sec}; used.add(id); } });
+    const mKey=st=>'M'+dist+'-'+st, fKey=n=>'F'+dist+'-'+n;
+    strokes.forEach(st=>{ const id=ov[mKey(st)]; if(id && best[id] && best[id].s[st] && !used.has(id)){ assign[st]={id, name:best[id].name, time:best[id].s[st].time, sec:best[id].s[st].sec}; used.add(id); } });
     const cand=[]; strokes.forEach(st=>{ if(assign[st]) return; Object.keys(best).forEach(id=>{ if(best[id].s[st]) cand.push({st, id, name:best[id].name, time:best[id].s[st].time, sec:best[id].s[st].sec}); }); });
     cand.sort((a,b)=>a.sec-b.sec);
     cand.forEach(c=>{ if(assign[c.st]||used.has(c.id)) return; assign[c.st]={id:c.id, name:c.name, time:c.time, sec:c.sec}; used.add(c.id); });
-    const medleyRows=strokes.map(st=>{ const a=assign[st]; const legId='M-'+st; return {stroke:st, legId, name:a?a.name:'—', time:a?a.time:'—', has:!!a, edited:!!ov['M-'+st], badgeBg, badgeFg, onEdit:()=>this.openRelayPicker(groupKey, gender, band, legId, st, 'medley')}; });
-    // freestyle: distinct swimmers, best free each
+    const medleyRows=strokes.map(st=>{ const a=assign[st]; const legId=mKey(st); return {stroke:st, legId, name:a?a.name:'—', time:a?a.time:'—', has:!!a, edited:!!ov[legId], badgeBg, badgeFg, onEdit:()=>this.openRelayPicker(groupKey, gender, band, legId, st, 'medley', dist)}; });
+    // freestyle: distinct swimmers, best free each at this distance
     const freeBest={}; Object.keys(best).forEach(id=>{ if(best[id].s['Free']) freeBest[id]={id, name:best[id].name, time:best[id].s['Free'].time, sec:best[id].s['Free'].sec}; });
     const legs=[1,2,3,4]; const fUsed=new Set(); const fAssign={};
-    legs.forEach(n=>{ const id=ov['F-'+n]; if(id && freeBest[id] && !fUsed.has(id)){ fAssign[n]=freeBest[id]; fUsed.add(id); } });
+    legs.forEach(n=>{ const id=ov[fKey(n)]; if(id && freeBest[id] && !fUsed.has(id)){ fAssign[n]=freeBest[id]; fUsed.add(id); } });
     const fCand=Object.keys(freeBest).map(id=>freeBest[id]).sort((a,b)=>a.sec-b.sec);
     legs.forEach(n=>{ if(fAssign[n]) return; const pick=fCand.find(c=>!fUsed.has(c.id)); if(pick){ fAssign[n]=pick; fUsed.add(pick.id); } });
-    const freeRelayRows=legs.filter(n=>fAssign[n]).map(n=>({leg:n, legId:'F-'+n, name:fAssign[n].name, time:fAssign[n].time, edited:!!ov['F-'+n], badgeBg, badgeFg, onEdit:()=>this.openRelayPicker(groupKey, gender, band, 'F-'+n, 'Free', 'free')}));
+    const freeRelayRows=legs.filter(n=>fAssign[n]).map(n=>({leg:n, legId:fKey(n), name:fAssign[n].name, time:fAssign[n].time, edited:!!ov[fKey(n)], badgeBg, badgeFg, onEdit:()=>this.openRelayPicker(groupKey, gender, band, fKey(n), 'Free', 'free', dist)}));
     // Predicted total = sum of the 4 legs (only when the lineup is complete).
     const medleyComplete=strokes.every(st=>assign[st]); const medleyTotal = medleyComplete ? this.fmt(strokes.reduce((s,st)=>s+assign[st].sec,0)) : null;
     const freeComplete=fAssign[1]&&fAssign[2]&&fAssign[3]&&fAssign[4]; const freeTotal = freeComplete ? this.fmt([1,2,3,4].reduce((s,n)=>s+fAssign[n].sec,0)) : null;
-    return {medleyRows, freeRelayRows, hasFree:freeRelayRows.length>0, medleyTotal, freeTotal};
+    return {dist, medleyLabel:'4×'+dist+'m medley relay', freeLabel:'4×'+dist+'m freestyle relay',
+      medleyRows, freeRelayRows, hasMedley:medleyRows.some(r=>r.has), hasFree:freeRelayRows.length>0, freeEmpty:freeRelayRows.length===0,
+      medleyTotal:medleyTotal||'', medleyHasTotal:!!medleyTotal, freeTotal:freeTotal||'', freeHasTotal:!!freeTotal};
   }
-  openRelayPicker(groupKey, gender, band, legId, stroke, kind){ this.setState({relayPickerOpen:true, relayPickerKey:groupKey, relayPickerGender:gender, relayPickerBand:band, relayPickerLegId:legId, relayPickerStroke:stroke, relayPickerKind:kind}); }
+  openRelayPicker(groupKey, gender, band, legId, stroke, kind, dist){ this.setState({relayPickerOpen:true, relayPickerKey:groupKey, relayPickerGender:gender, relayPickerBand:band, relayPickerLegId:legId, relayPickerStroke:stroke, relayPickerKind:kind, relayPickerDist:dist||null}); }
   closeRelayPicker(){ this.setState({relayPickerOpen:false}); }
   setRelayLeg(groupKey, legId, swId){ const all={...(this.relayOverrides||{})}; const grp={...(all[groupKey]||{})}; if(swId){ grp[legId]=swId; } else { delete grp[legId]; } all[groupKey]=grp; this.relayOverrides=all; this._saveJSON('vx_relay_ovr', all); this.setState({relayPickerOpen:false}); }
   exportCsv(filename, rows){
@@ -21388,7 +21402,7 @@ class Component extends DCLogic {
       {id:'improvers', icon:'trending-down', title:'Top Improvers', sub:'Biggest time drops this season', tint:'rgba(12,122,79,.1)', color:'#0C7A4F'},
       {id:'rankings', icon:'list-ordered', title:'Rankings', sub:'Fastest per event vs squad average', tint:'rgba(6,126,234,.1)', color:'#067EEA'},
       {id:'standards', icon:'badge-check', title:'Meet Standards', sub:'Cut times · who has qualified', tint:'rgba(12,122,79,.1)', color:'#0C7A4F'},
-      {id:'relay', icon:'users-round', title:'Relay Builder', sub:'Fastest lineup by stroke', tint:'rgba(12,122,79,.1)', color:'#0C7A4F'},
+      {id:'relay', icon:'users-round', title:'Relay Builder', sub:'4×50/100/200 · medley + free', tint:'rgba(12,122,79,.1)', color:'#0C7A4F'},
       {id:'season', icon:'calendar-range', title:'Season Plan', sub:'Phases · weeks · peak & taper', tint:'rgba(124,77,255,.12)', color:'#7C4DFF'},
       {id:'meetday', icon:'timer', title:'Meet Day', sub:'Live results poolside, heat by heat', tint:'rgba(200,30,91,.1)', color:'#C81E5B'},
       {id:'race', icon:'gauge', title:'Race Strategy', sub:'Split targets vs the race swum', tint:'rgba(200,30,91,.1)', color:'#C81E5B'},
@@ -21998,9 +22012,10 @@ class Component extends DCLogic {
         flat.forEach(sw=>{ const pb=(sw.pbs||[]).find(p=>p.event===ev); if(pb && pb.sec<=cutSec) rows.push([sw.name, sw.squadName||'', this._swAge?this._swAge(sw):(sw.age||''), ev, pb.time||this.fmt(pb.sec), cutStr, 'YES']); }); });
       this.exportCsv('vortex-meet-ready-'+(stdMeetName||'meet').replace(/[^a-z0-9]+/gi,'-').toLowerCase()+'.csv', rows); };
 
-    // ---- Relay Builder (per age group × gender · medley + freestyle · from PBs) ----
+    // ---- Relay Builder (per age group × gender · 4×50/100/200 medley + freestyle · from PBs) ----
     const relayPool = S.toolScopeClub ? this.allSwimmersFlat() : (this.roster[S.squadId]||[]).map(sw=>({...sw, squadId:S.squadId, squadName:squad.name}));
     const strokeOf=ev=>/free/i.test(ev)?'Free':/back/i.test(ev)?'Back':/breast/i.test(ev)?'Breast':/fly/i.test(ev)?'Fly':null;
+    const distOf=ev=>{ const m=String(ev||'').match(/(\d+)/); return m?parseInt(m[1],10):null; };
     const t2s=(t)=>{ if(!t) return Infinity; const s=String(t); return s.includes(':') ? (()=>{const[m,sec]=s.split(':'); return parseInt(m)*60+parseFloat(sec);})() : parseFloat(s); };
     const ageBand=(a)=>{ a=parseInt(a,10)||0; if(a<=10)return '10 & Under'; if(a<=12)return '11-12'; if(a<=14)return '13-14'; if(a<=16)return '15-16'; return '17 & Over'; };
     const bandOrder=['10 & Under','11-12','13-14','15-16','17 & Over'];
@@ -22011,25 +22026,23 @@ class Component extends DCLogic {
       if(!pool.length) return;
       const groupKey=g.key+'-'+band;
       const built=this.buildRelayGroup(pool, groupKey, g.key, band, g.tint, g.accent);
-      const hasMedley=built.medleyRows.some(r=>r.has);
-      if(!hasMedley && !built.hasFree) return;
-      relayGroups.push({ key:groupKey, title:g.label+' · '+band, count:pool.length+' swimmers', accent:g.accent,
-        medleyRows:built.medleyRows, freeRelayRows:built.freeRelayRows, hasFree:built.hasFree, freeEmpty:!built.hasFree,
-        medleyTotal:built.medleyTotal||'', medleyHasTotal:!!built.medleyTotal, freeTotal:built.freeTotal||'', freeHasTotal:!!built.freeTotal });
+      if(!built.hasAny) return;
+      relayGroups.push({ key:groupKey, title:g.label+' · '+band, count:pool.length+' swimmers', accent:g.accent, distances:built.distances });
     }); });
     const relayHasGroups=relayGroups.length>0;
     // relay leg picker
     const relayPicker=(()=>{ if(!S.relayPickerOpen) return {relayPickerOpen:false, relayPickerList:[]};
       const pool=relayPool.filter(sw=>String(sw.gender||'')===S.relayPickerGender && ageBand(sw.age)===S.relayPickerBand);
-      const stroke=S.relayPickerStroke||'Free'; const ov=(this.relayOverrides&&this.relayOverrides[S.relayPickerKey])||{}; const curId=ov[S.relayPickerLegId]||null;
-      const cands=[]; pool.forEach(sw=>{ let bf=null; (sw.pbs||[]).forEach(pb=>{ if(strokeOf(pb.event)===stroke){ const sec=t2s(pb.time); if(!bf||sec<bf.sec) bf={time:pb.time, sec}; } }); if(bf) cands.push({id:sw.id, name:sw.name, time:bf.time, sec:bf.sec}); });
+      const stroke=S.relayPickerStroke||'Free'; const dist=S.relayPickerDist; const ov=(this.relayOverrides&&this.relayOverrides[S.relayPickerKey])||{}; const curId=ov[S.relayPickerLegId]||null;
+      const cands=[]; pool.forEach(sw=>{ let bf=null; (sw.pbs||[]).forEach(pb=>{ if(strokeOf(pb.event)===stroke && (dist==null||distOf(pb.event)===dist)){ const sec=t2s(pb.time); if(!bf||sec<bf.sec) bf={time:pb.time, sec}; } }); if(bf) cands.push({id:sw.id, name:sw.name, time:bf.time, sec:bf.sec}); });
       cands.sort((a,b)=>a.sec-b.sec);
       const list=cands.map(c=>({ id:c.id, name:c.name, time:c.time, on:c.id===curId,
         rowBg:c.id===curId?'#F1F6FF':'#fff', rowBorder:c.id===curId?'#0C6CE0':'#E5E9F0',
         onPick:()=>this.setRelayLeg(S.relayPickerKey, S.relayPickerLegId, c.id) }));
-      const legName = S.relayPickerKind==='free' ? ('Freestyle · '+S.relayPickerLegId.replace('F-','Leg ')) : (stroke+' leg');
+      const distPre = dist ? ('4×'+dist+'m · ') : '';
+      const legName = S.relayPickerKind==='free' ? (distPre+'Freestyle · '+S.relayPickerLegId.replace(/^F\d*-/,'Leg ')) : (distPre+stroke+' leg');
       return { relayPickerOpen:true, onRelayPickerClose:()=>this.closeRelayPicker(),
-        relayPickerTitle:legName, relayPickerSub:S.relayPickerGender+' · '+S.relayPickerBand+' · '+stroke,
+        relayPickerTitle:legName, relayPickerSub:S.relayPickerGender+' · '+S.relayPickerBand+(dist?(' · 4×'+dist+'m'):'')+' · '+stroke,
         relayPickerList:list, relayPickerEmpty:list.length===0, relayPickerHasOverride:!!curId,
         onRelayPickerAuto:()=>this.setRelayLeg(S.relayPickerKey, S.relayPickerLegId, null) };
     })();
