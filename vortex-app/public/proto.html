@@ -4816,7 +4816,7 @@ if ('serviceWorker' in navigator) {
                     </sc-if>
 
                     <div>
-                      <h2 style="font-size:11.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#7A8296;margin:0 2px 9px">Recent results</h2>
+                      <h2 style="font-size:11.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#7A8296;margin:0 2px 9px">All results · {{ swimmerResultCount }}</h2>
                       <div style="display:flex;flex-direction:column;gap:7px">
                         <sc-for list="{{ swimmerResults }}" as="r" hint-placeholder-count="4">
                           <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:10px 12px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
@@ -21794,7 +21794,9 @@ class Component extends DCLogic {
     const progressBest = secsAll.length ? this.fmt(Math.min(...secsAll)) : '\u2014';
     const swRank=(this.roster[S.squadId]||[]).findIndex(x=>x.id===swObj.id);
     const swimmerKpis=[{value:(swObj.pbs||[]).length, label:'PB events'},{value:(swObj.meetCount||0), label:'Meets'},{value:'#'+(swRank>=0?swRank+1:1), label:'Squad rank'}];
-    const swimmerResults=(swObj.results||[]).slice(0,10).map((r,i)=>{ const hasPlace=r.place!=null; const [mb,mf]=hasPlace?this.medal(r.place):['#EEF2F7','#5B6472']; const badge=hasPlace?String(r.place):(r.courseLabel?String(r.courseLabel).replace('M','').replace('Y',''):(r.course==='S'?'SC':'LC')); const sub=[r.meet, r.date].filter(Boolean).join(' · '); const legs=this._legChips(r); return {event:r.event, meet:sub||r.meet||'—', place:badge, time:r.time, medalBg:mb, medalFg:mf, legs, hasLegs:legs.length>0}; });
+    // Every swim, newest first — the profile used to stop at ten, so a swimmer's older meets
+    // (and their splits) were only reachable through the printout.
+    const swimmerResults=(swObj.results||[]).slice().sort((a,b)=>String(this._resultISO(b)||'').localeCompare(String(this._resultISO(a)||''))).map((r,i)=>{ const hasPlace=r.place!=null; const [mb,mf]=hasPlace?this.medal(r.place):['#EEF2F7','#5B6472']; const badge=hasPlace?String(r.place):(r.courseLabel?String(r.courseLabel).replace('M','').replace('Y',''):(r.course==='S'?'SC':'LC')); const sub=[r.meet, r.date].filter(Boolean).join(' · '); const legs=this._legChips(r); return {event:r.event, meet:sub||r.meet||'—', place:badge, time:r.time, medalBg:mb, medalFg:mf, legs, hasLegs:legs.length>0}; });
 
     // ---- nav ----
     const tabs=[{id:'group',icon:'users',label:'Group'},{id:'plans',icon:'list-checks',label:'Plans'},{id:'attend',icon:'calendar-check',label:'Attend'},{id:'results',icon:'medal',label:'Results'},{id:'more',icon:'layout-grid',label:'More'}];
@@ -24152,7 +24154,7 @@ class Component extends DCLogic {
         return { swVideos: vids.map(r=>({ ...r, onOpen:()=>this.openVideoAnalysis(r.id, r.laneIdx) })),
                  swVideosHas: vids.length>0 };
       })(),
-      swimmerKpis, swimmerPbs, swimmerResults, swQualRows, swQualHas, onBackToSquad:()=>this.setState({view:'squad', tab:'group'}),
+      swimmerKpis, swimmerPbs, swimmerResults, swimmerResultCount:swimmerResults.length, swQualRows, swQualHas, onBackToSquad:()=>this.setState({view:'squad', tab:'group'}),
       // ---- edit a swimmer from their own profile ----
       // A manager looking at a wrong date of birth had to leave the swimmer, find them again
       // in Admin → Swimmers and fix it there. Now it is fixed where it is seen, and the
