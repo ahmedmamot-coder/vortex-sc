@@ -542,7 +542,7 @@ describe("academy membership", () => {
    Reads the club's real meet export. Times are stored as total seconds. */
 describe("Hy-Tek .hy3 import", () => {
   const ctx = {};
-  const parse = bind("meetParseHy3", ctx);
+  const parse = bind("meetParseHy3", ctx, ["_hy3Splits"]);
   const hy3 = [
     "A107Results From MM to TM    Hy-Tek, Ltd    MM5 8.0Ge     06062026  5:03 PM",
     "B1H2O Long Course Spring Cup 2026              Aspire Dome Doha Qatar",
@@ -575,6 +575,79 @@ describe("Hy-Tek .hy3 import", () => {
       "D1F 4113Nobody              Test                                                     38013452016 10     0",
     ].join("\n"));
     eq(bad[0].dob, "");
+  });
+});
+
+/* ------------------------------------------------------------ Hy-Tek splits
+   A 200 arrived as one number: the G1 split lines under it were skipped, so the profile
+   could never say the swimmer went out in 30 and came home in 32. */
+describe("Hy-Tek splits → the 50s on a swimmer's profile", () => {
+  const ctx = {};
+  const parse = bind("meetParseHy3", ctx, ["_hy3Splits"]);
+  const legsOf = bind("resultLegs", ctx, ["_legFmt"]);
+  // One G1 block = split number (2) + cumulative time (8) + the next block's P/F letter.
+  const g1 = (type, pairs) => "G1" + pairs.map(([n, t]) => type + String(n).padStart(2) + t.toFixed(2).padStart(8)).join("");
+  const D1 = "D1F 4113Abu Taleb           Jana                                                     38004052016 10     0";
+  const e1 = (dist, stroke) => "E1F 4113Abu TFW" + String(dist).padStart(6) + stroke + " 10 11  0S 50.00  3C  112.59L  112.59L    0.00    0.00   NN               N";
+  const e2 = (type, sec) => "E2" + type + sec.toFixed(2).padStart(8) + "L       0  2  6  6  11  0  115.27    0.00    0.00       119.18     0.00     06052026K";
+  const file = (...rows) => parse(["B1H2O Long Course Spring Cup 2026              Aspire Dome Doha Qatar", D1, ...rows].join("\n"))[0].results;
+  const legs = (r) => legsOf({ event: `${r.dist} ${r.stroke}`, sec: r.sec, splits: r.splits }).map((l) => `${l.label} ${l.time}`);
+
+  it("a 200 comes out as four 50s", () => {
+    const [r] = file(e1(200, "A"), e2("F", 128), g1("F", [[1, 30], [2, 63], [3, 96], [4, 128]]));
+    eq(legs(r), ["1st 50 30.00", "2nd 50 33.00", "3rd 50 33.00", "Last 50 32.00"]);
+  });
+  it("the same when the meet numbers its splits 2,4,6,8 (every 25, only 50s kept)", () => {
+    const [r] = file(e1(200, "A"), e2("F", 128), g1("F", [[2, 30], [4, 63], [6, 96], [8, 128]]));
+    eq(legs(r), ["1st 50 30.00", "2nd 50 33.00", "3rd 50 33.00", "Last 50 32.00"]);
+  });
+  it("splits every 25 still become 50s", () => {
+    const [r] = file(e1(100, "A"), e2("F", 62), g1("F", [[1, 14], [2, 30], [3, 46], [4, 62]]));
+    eq(legs(r), ["1st 50 30.00", "Last 50 32.00"]);
+  });
+  it("a 50 with a 25 split shows its two 25s", () => {
+    const [r] = file(e1(50, "D"), e2("F", 31.5), g1("F", [[1, 15], [2, 31.5]]));
+    eq(legs(r), ["1st 25 15.00", "Last 25 16.50"]);
+  });
+  it("a 400 over two G1 lines gives all eight 50s", () => {
+    const pts = [[1, 31], [2, 64], [3, 97], [4, 130], [5, 163]];
+    const [r] = file(e1(400, "A"), e2("F", 260), g1("F", pts), g1("F", [[6, 196], [7, 229], [8, 260]]));
+    eq(legs(r).length, 8);
+    eq(legs(r)[7], "Last 50 31.00");
+  });
+  it("a 1500 is read as a 1500, not a 500", () => {
+    const [r] = file(e1(1500, "A"), e2("F", 1100));
+    eq(r.dist, 1500);
+  });
+  it("legs over a minute read m:ss", () => {
+    const [r] = file(e1(400, "A"), e2("F", 280), g1("F", [[1, 135], [2, 280]]));
+    eq(legs(r), ["1st 200 2:15.00", "Last 200 2:25.00"]);
+  });
+  it("a final's splits are not pinned on the heat swim that was kept", () => {
+    const [r] = file(e1(200, "A"), e2("P", 130), e2("F", 128), g1("F", [[1, 30], [2, 63], [3, 96], [4, 128]]));
+    eq(r.sec, 130);
+    eq(r.splits, undefined);
+  });
+  it("splits that do not add up to the swim are dropped, not shown wrong", () => {
+    const [r] = file(e1(200, "A"), e2("F", 128), g1("F", [[1, 30], [2, 63], [3, 96], [4, 140]]));
+    eq(r.splits, undefined);
+    eq(legs(r), []);
+  });
+  it("a swim with no splits shows no legs", () => {
+    const [r] = file(e1(200, "A"), e2("F", 128));
+    eq(legs(r), []);
+  });
+});
+
+describe("re-importing a meet adds the splits instead of every swim again", () => {
+  const merge = bind("_mergeResults", {});
+  const old = [{ meet: "Spring Cup", date: "6/5/2026", event: "200 Free", course: "L", sec: 128, time: "2:08.00" }];
+  const again = [{ meet: "Spring Cup", date: "6/5/2026", event: "200 Free", course: "L", sec: 128, time: "2:08.00", splits: [[50, 30], [100, 63], [150, 96], [200, 128]] }];
+  it("the swim is not duplicated", () => eq(merge(old, again).length, 1));
+  it("and now carries its splits", () => eq(merge(old, again)[0].splits.length, 4));
+  it("a new swim is still added, newest first", () => {
+    const fresh = [{ meet: "Summer Cup", date: "7/1/2026", event: "200 Free", course: "L", sec: 127 }];
+    eq(merge(old, fresh).map((r) => r.meet), ["Summer Cup", "Spring Cup"]);
   });
 });
 
@@ -3133,7 +3206,7 @@ describe("exporting a meet's results", () => {
       eq(bind("_looksHy3", {}, [])(txt), true));
 
     // The parser that reads the club's real Hy-Tek files, run over ours.
-    const back = bind("meetParseHy3", {}, [])(txt);
+    const back = bind("meetParseHy3", {}, ["_hy3Splits"])(txt);
     it("both swimmers with a time come back out", () => eq(back.length, 2));
     it("the names survive the round trip", () =>
       eq(back.map((s) => s.name).sort().join("|"), "Aisha Karim|Dan Malek"));
