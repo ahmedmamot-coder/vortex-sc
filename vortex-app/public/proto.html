@@ -2958,9 +2958,18 @@ if ('serviceWorker' in navigator) {
                         <p style="margin:0 2px 8px;font-size:11.5px;font-weight:700;color:#7A8296;text-transform:uppercase;letter-spacing:.04em">{{ tx.personalBests }}</p>
                         <div style="display:flex;flex-direction:column;gap:8px">
                           <sc-for list="{{ famPbs }}" as="p" hint-placeholder-count="6">
-                            <div style="display:flex;align-items:center;justify-content:space-between;background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:12px 14px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
-                              <span style="font-size:13px;font-weight:600;color:#0C1116">{{ p.event }}</span>
-                              <span style="display:flex;align-items:center;gap:8px"><span style="font-family:var(--font-mono);font-weight:700;font-size:14px;color:{{ famAccent }}">{{ p.time }}</span><span style="font-size:11px;font-weight:700;color:#1CB87A">{{ p.drop }}</span></span>
+                            <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:12px 14px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
+                              <div style="display:flex;align-items:center;justify-content:space-between">
+                                <span style="font-size:13px;font-weight:600;color:#0C1116">{{ p.event }}</span>
+                                <span style="display:flex;align-items:center;gap:8px"><span style="font-family:var(--font-mono);font-weight:700;font-size:14px;color:{{ famAccent }}">{{ p.time }}</span><span style="font-size:11px;font-weight:700;color:#1CB87A">{{ p.drop }}</span></span>
+                              </div>
+                              <sc-if value="{{ p.hasLegs }}" hint-placeholder-val="{{ false }}">
+                                <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px">
+                                  <sc-for list="{{ p.legs }}" as="lg" hint-placeholder-count="4">
+                                    <span style="font-size:11px;background:#F4F6F8;color:#5B6472;border-radius:7px;padding:3px 7px;white-space:nowrap">{{ lg.label }} <b style="font-family:var(--font-mono);font-weight:700;color:{{ lg.color }}">{{ lg.time }}</b></span>
+                                  </sc-for>
+                                </div>
+                              </sc-if>
                             </div>
                           </sc-for>
                         </div>
@@ -4344,7 +4353,7 @@ if ('serviceWorker' in navigator) {
                       <h2 style="font-size:11.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#7A8296;margin:0 2px 9px">Personal bests</h2>
                       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
                         <sc-for list="{{ swimmerPbs }}" as="p" hint-placeholder-count="4">
-                          <div style="position:relative;background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:12px 13px;box-shadow:0 2px 7px rgba(11,20,40,.05)"><span style="display:block;font-size:11px;color:#7A8296;font-weight:600">{{ p.event }}</span><span style="display:block;font-family:var(--font-mono);font-size:20px;font-weight:700;color:#0C1116;margin-top:3px;letter-spacing:-.01em">{{ p.time }}</span><span style="display:block;font-size:9.5px;color:#9AA2B4;font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.meta }}</span><span style="display:flex;align-items:center;gap:4px;font-size:10.5px;color:#1CB87A;font-weight:600;margin-top:3px"><i data-lucide="trending-down" style="width:13px;height:13px"></i>{{ p.drop }}</span><button onclick="{{ p.onShare }}" title="Download PB card" style="position:absolute;top:9px;right:9px;background:#F4F6F8;border:none;border-radius:8px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;cursor:pointer"><i data-lucide="share-2" style="width:13px;height:13px;color:#3A4152"></i></button></div>
+                          <div style="position:relative;background:#fff;border:1px solid #E5E9F0;border-radius:14px;padding:12px 13px;box-shadow:0 2px 7px rgba(11,20,40,.05)"><span style="display:block;font-size:11px;color:#7A8296;font-weight:600">{{ p.event }}</span><span style="display:block;font-family:var(--font-mono);font-size:20px;font-weight:700;color:#0C1116;margin-top:3px;letter-spacing:-.01em">{{ p.time }}</span><span style="display:block;font-size:9.5px;color:#9AA2B4;font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.meta }}</span><span style="display:flex;align-items:center;gap:4px;font-size:10.5px;color:#1CB87A;font-weight:600;margin-top:3px"><i data-lucide="trending-down" style="width:13px;height:13px"></i>{{ p.drop }}</span><sc-if value="{{ p.hasLegs }}" hint-placeholder-val="{{ false }}"><span style="display:flex;flex-wrap:wrap;gap:4px;margin-top:7px"><sc-for list="{{ p.legs }}" as="lg" hint-placeholder-count="4"><span style="font-size:10px;background:#F4F6F8;color:#5B6472;border-radius:6px;padding:2px 5px;white-space:nowrap">{{ lg.label }} <b style="font-family:var(--font-mono);font-weight:700;color:{{ lg.color }}">{{ lg.time }}</b></span></sc-for></span></sc-if><button onclick="{{ p.onShare }}" title="Download PB card" style="position:absolute;top:9px;right:9px;background:#F4F6F8;border:none;border-radius:8px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;cursor:pointer"><i data-lucide="share-2" style="width:13px;height:13px;color:#3A4152"></i></button></div>
                         </sc-for>
                       </div>
                     </div>
@@ -19104,6 +19113,17 @@ class Component extends DCLogic {
   // A place badge's colours: a medal for 1–3, the usual chip for a real place, and a plain grey
   // one for a swim the meet gave no place to — never a medal it did not win.
   _placeBadge(place){ return place ? this.medal(place) : ['#EEF2F7','#9AA2B4']; }
+  // A personal best's 50s. A PB is kept as event + time only, so its splits are the ones saved
+  // with the swim that set it: same event, same time, same course (any course if none matches).
+  _pbLegChips(sw, pb){
+    if(!sw || !pb) return [];
+    const sec = pb.sec!=null ? +pb.sec : this.parseTimeStr(pb.time);
+    if(!sec) return [];
+    const course=pb.course||'L';
+    const hits=(sw.results||[]).filter(r=>r && r.event===pb.event && Array.isArray(r.splits) && r.splits.length && Math.abs((+r.sec)-sec)<0.005);
+    const r=hits.find(x=>(x.course||'L')===course) || hits[0];
+    return r ? this._legChips({event:pb.event, sec, splits:r.splits}) : [];
+  }
   _legFmt(t){ if(t<60) return t.toFixed(2); const m=Math.floor(t/60), s=t-m*60; return m+':'+(s<10?'0':'')+s.toFixed(2); }
   _looksHy3(txt){ return /(^|\n)A1\d/.test(txt) && /(^|\n)D1[MF ]/.test(txt) || /(^|\n)E2[MF ] /.test(txt); }
   _readHyZip(file){
@@ -21892,7 +21912,9 @@ class Component extends DCLogic {
 
     // ---- profile ----
     const swObj=(this.roster[S.squadId]||[]).find(x=>x.id===S.swimmerId) || (this.roster[S.squadId]||[])[0] || {name:'',pbs:[],results:[],initials:'',age:'',gender:'',meetCount:0};
-    const swimmerPbs=(swObj.pbs||[]).slice(0,4).map(p=>{ const cl=p.courseLabel||(p.course==='S'?'SCM':'LCM'); const src=[cl]; if(p.meet) src.push(p.meet); return {event:p.event, time:p.time, drop:p.drop, meta:src.join(' · '), onShare:()=>this.shareBestTimeCard(swObj, p)}; });
+    // Every PB, not the first four — after an import those were the four fastest, all sprints, so a
+    // 200 or a 400 (the swims with 50s worth reading) never made it onto the profile.
+    const swimmerPbs=(swObj.pbs||[]).map(p=>{ const cl=p.courseLabel||(p.course==='S'?'SCM':'LCM'); const src=[cl]; if(p.meet) src.push(p.meet); const legs=this._pbLegChips(swObj, p); return {event:p.event, time:p.time, drop:p.drop, meta:src.join(' · '), legs, hasLegs:legs.length>0, onShare:()=>this.shareBestTimeCard(swObj, p)}; });
     const swQualRows=this._swQualified(swObj).map(q=>({meet:q.meet, events:q.events.join(' · '), count:String(q.events.length)}));
     const swQualHas=swQualRows.length>0;
     const swEvents=(swObj.pbs||[]).map(p=>p.event);
@@ -24601,7 +24623,7 @@ class Component extends DCLogic {
         const gm=this.genMeta(sw.gender);
         const swIdx=(this.roster[sqid]||[]).findIndex(x=>x.id===sw.id); const swIdxSafe=swIdx<0?0:swIdx;
         const today=this.todayISO();
-        const famPbs=(sw.pbs||[]).slice(0,8).map(p=>({event:p.event, time:p.time, drop:p.drop}));
+        const famPbs=(sw.pbs||[]).map(p=>{ const legs=this._pbLegChips(sw, p); return {event:p.event, time:p.time, drop:p.drop, legs, hasLegs:legs.length>0}; });
         const famResults=(sw.results||[]).slice().sort((a,b)=>String(this._resultISO(b)||'').localeCompare(String(this._resultISO(a)||''))).map((r,i)=>{ const legs=this._legChips(r); return {event:r.event, meet:r.meet, date:this.shortDate(r.date), time:r.time, placeText:(r.place?(' · Place '+r.place):''), legs, hasLegs:legs.length>0}; });
         // What a family is actually shown about a meet.
         //
