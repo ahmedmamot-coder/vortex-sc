@@ -20439,10 +20439,22 @@ class Component extends DCLogic {
       +'for(var i=0;i<7;i++){s.style.zoom="1";s.style.width=(maxW/k)+"px";var lh=s.scrollHeight,ph=lh*k;if(!lh||ph<=maxH)break;k=k*(maxH/ph)*0.985;}'
       +'s.style.width=(maxW/k)+"px";s.style.zoom=(k<1?String(k):"");'
       +'}window.addEventListener("beforeprint",fit);})();</scr'+'ipt></body></html>';
+    // Android Chrome (and the Play Store app, which is Chrome) opens an empty pop-up and then
+    // never draws what is written into it — "View" landed on a blank white tab. Hand Android
+    // the same document as a Blob URL instead, which it renders exactly as an iPhone does.
+    if(this._isAndroid()){
+      try{ const url=URL.createObjectURL(new Blob([doc],{type:'text/html'}));
+        const bw=window.open(url,'_blank'); if(!bw) location.href=url;
+        setTimeout(()=>{ try{ URL.revokeObjectURL(url); }catch(e){} }, 60000);
+        return;
+      }catch(e){}
+    }
     const w=window.open('','_blank');
     if(!w){ this.setState({settingsMsg:'Allow pop-ups to open the PDF view.'}); return; }
     w.document.open(); w.document.write(doc); w.document.close();
   }
+  // Android phones and tablets in a browser or the Play Store app (not the iOS app).
+  _isAndroid(){ try{ return !window.__vxNative && /Android/i.test(navigator.userAgent||''); }catch(e){ return false; } }
   viewPlanSnapshotPdf(squadId, id){
     const rec=(this.savedPlans[squadId]||[]).find(r=>r.id===id); if(!rec) return;
     const sq=this.squadById[squadId]||{name:'',accent:'#067EEA'}; const plan=rec.plan||{};
@@ -20628,6 +20640,9 @@ class Component extends DCLogic {
   _printEscape(){
     const sheet=document.getElementById('vx-print-sheet');
     if(!sheet) return;
+    // Already out (the Print button escaped it and then `beforeprint` asked again): refit only.
+    // A second anchor here would orphan the first, and the sheet could never go home.
+    if(this._printAnchor && this._printAnchor.parentNode && sheet.parentNode===document.body){ this._fitPrintSheet(sheet); return; }
     this._printAnchor = document.createComment('vx-print-sheet-anchor');
     sheet.parentNode.insertBefore(this._printAnchor, sheet);
     document.body.appendChild(sheet);
@@ -20720,6 +20735,25 @@ class Component extends DCLogic {
     this._paperScale=scale; this._paperZoom=k;
     this.setState({printPaperScale:scale, printPaperZoom:k});
   }
+  // Android's window.print() does not wait: it returns at once, `afterprint` fires at once, and
+  // Chrome draws the pages afterwards, while the system print screen is up. Putting the sheet
+  // back on either of those (as iOS needs) meant Android printed the app with the sheet gone —
+  // a blank or broken page instead of the one in the preview. So on Android the fitted sheet
+  // stays out until the coach is back in the app, or closes the preview.
+  _printAndroid(){
+    this._printEscape();
+    this._androidPrintHold=true;
+    let away=false;
+    const onVis=()=>{
+      if(document.visibilityState==='hidden'){ away=true; return; }
+      if(!away) return;
+      document.removeEventListener('visibilitychange', onVis);
+      // A beat after coming back, so a print screen still finishing never sees it move.
+      setTimeout(()=>{ if(!this._androidPrintHold) return; this._androidPrintHold=false; this._printRestore(); }, 800);
+    };
+    document.addEventListener('visibilitychange', onVis);
+    setTimeout(()=>{ try{ window.print(); }catch(e){} }, 30);
+  }
   _printRestore(){
     const sheet=document.getElementById('vx-print-sheet');
     // Always strip every sizing style we applied, even if the sheet was never moved,
@@ -20733,7 +20767,7 @@ class Component extends DCLogic {
     this._printAnchor=null;
   }
   componentDidMount(){ this._applyLang(); this._icons(); setTimeout(()=>{ try{ this.birthdayRun(); }catch(e){} }, 6000); this._clock=setInterval(()=>{ if(this.state.clockRunning && this.state.tool==='clock') this.tickClock(); }, 1000);
-    this._onBeforePrint=()=>this._printEscape(); this._onAfterPrint=()=>this._printRestore();
+    this._onBeforePrint=()=>this._printEscape(); this._onAfterPrint=()=>{ if(!this._androidPrintHold) this._printRestore(); };
     window.addEventListener('beforeprint', this._onBeforePrint); window.addEventListener('afterprint', this._onAfterPrint);
     this._onPaperResize=()=>{ try{ this._measurePrintPaper(); }catch(e){} };
     window.addEventListener('resize', this._onPaperResize);
@@ -23986,10 +24020,11 @@ class Component extends DCLogic {
         else setTimeout(go, 300);
       }, onPrintPlan:()=>this.setState({printPreviewOpen:true}), onOpenPaceClock:()=>this.openTool('clock', false),
       onSubmitPlanReview:()=>this.submitPlanForReview(S.squadId, squad.name),
-      onClosePrintPreview:()=>{ this._printRestore(); this.setState({printPreviewOpen:false}); },
+      onClosePrintPreview:()=>{ this._androidPrintHold=false; this._printRestore(); this.setState({printPreviewOpen:false}); },
       // iOS often never fires `afterprint`, so always restore the sheet on a timer too —
       // otherwise the zoom-to-fit sizing stays applied and the app looks stuck zoomed.
-      onConfirmPrint:()=>{ this._printEscape(); setTimeout(()=>window.print(), 30); setTimeout(()=>this._printRestore(), 2500); },
+      onConfirmPrint:()=>{ if(this._isAndroid()) return this._printAndroid();
+        this._printEscape(); setTimeout(()=>window.print(), 30); setTimeout(()=>this._printRestore(), 2500); },
       printPreviewOpen:S.printPreviewOpen,
       // The preview paper, in the printer's own units: 186x273mm of printable A4, laid out at
       // the width the sheet is given and then scaled by the page fit and by the room on screen.
