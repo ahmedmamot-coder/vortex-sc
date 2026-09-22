@@ -646,6 +646,55 @@ describe("the swimmer profile lists every result, not the latest ten", () => {
   it("the heading says how many", () => eq(/All results · \{\{ swimmerResultCount \}\}/.test(SOURCE), true));
 });
 
+describe("the squad Results tab shows each swim's splits too", () => {
+  const line = SOURCE.split("\n").find((l) => /const resultRows=/.test(l)) || "";
+  const pushLine = SOURCE.split("\n").find((l) => /meetRes\.push\(/.test(l)) || "";
+  it("the meet's swims carry their splits", () => eq(/splits:r\.splits/.test(pushLine), true));
+  it("each row gets its legs", () => eq(/legs, hasLegs:legs\.length>0/.test(line), true));
+  it("the row template lists them", () => eq(/list="\{\{ resultRows \}\}"[\s\S]{0,1600}list="\{\{ r\.legs \}\}"/.test(SOURCE), true));
+
+  let printed = "";
+  const ctx = {
+    squadById: { jr: { name: "Junior" } }, squads: [{ id: "jr" }], meetsList: ["Spring Cup"], meetsMeta: [{ name: "Spring Cup", course: "LCM", date: "6/5/2026" }], state: { meetSel: 0 },
+    roster: { jr: [{ name: "Jana", results: [{ meet: "Spring Cup", event: "200 Free", time: "2:08.00", sec: 128, place: 2, splits: [[50, 30], [100, 63], [150, 96], [200, 128]] }] }] },
+    _esc: (x) => String(x), _openPrintDoc: (_t, body) => { printed = body; },
+  };
+  bind("exportResultsPdf", ctx, ["resultLegs", "_legFmt", "_resultMeets", "_resultMeetSel", "_toISODate"])("jr");
+  it("the exported meet results have a Splits column", () => eq(/<th>Splits<\/th>/.test(printed), true));
+  it("with every 50 in it", () => eq(/1st 50 <span class="mono">30\.00<\/span> · 2nd 50 <span class="mono">33\.00<\/span> · 3rd 50 <span class="mono">33\.00<\/span> · Last 50 <span class="mono">32\.00<\/span>/.test(printed), true));
+});
+
+describe("a meet imported from Hy-Tek gets its own button on the squad Results tab", () => {
+  const season = [{ name: "Spring Cup", date: "6/5/2026", course: "LCM", entries: 90 }, { name: "Winter Gala", date: "1/10/2026", course: "SCM", entries: 40 }];
+  const mk = (results, state = {}) => {
+    const ctx = { meetsMeta: season, meetsList: season.map((m) => m.name), squads: [{ id: "jr" }, { id: "sa" }], state,
+      roster: { jr: [{ results }], sa: [{ results: [{ meet: "Spring Cup", date: "6/5/2026" }] }] } };
+    return { list: bind("_resultMeets", ctx, ["_toISODate"]), sel: bind("_resultMeetSel", ctx) };
+  };
+  it("the season list alone when nothing new was imported", () =>
+    eq(mk([{ meet: "Spring Cup", date: "6/5/2026" }]).list().map((m) => m.name), ["Spring Cup", "Winter Gala"]));
+  it("an imported meet comes first, newest first, each once", () => {
+    const { list } = mk([
+      { meet: "Qatar Open", date: "9/20/2026", course: "S" }, { meet: "Qatar Open", date: "9/21/2026", course: "S" },
+      { meet: "Summer Cup", date: "7/1/2026" }, { meet: "Time trial", date: "8/1/2026" }, { meet: "", date: "8/1/2026" },
+    ]);
+    eq(list().map((m) => m.name), ["Qatar Open", "Summer Cup", "Spring Cup", "Winter Gala"]);
+    eq([list()[0].course, list()[0].date], ["SCM", "9/21/2026"]);
+  });
+  it("the chosen meet is kept by name when an import adds one ahead of it", () => {
+    const { list, sel } = mk([{ meet: "Qatar Open", date: "9/20/2026" }], { meetSel: 1, meetSelName: "Winter Gala" });
+    eq(list()[sel(list())].name, "Winter Gala");
+  });
+  it("an old position past the end of the list falls back to the last meet", () => {
+    const { list, sel } = mk([], { meetSel: 9 });
+    eq(sel(list()), 1);
+  });
+  it("the Results tab and its export both read this list", () => {
+    eq(/const resMeets=this\._resultMeets\(\)/.test(SOURCE.split("\n").find((l) => /const resMeets=/.test(l) && !/exportResultsPdf/.test(l)) || ""), true);
+    eq(/exportResultsPdf\(squadId\)\{[^\n]*this\._resultMeets\(\)/.test(SOURCE), true);
+  });
+});
+
 describe("re-importing a meet adds the splits instead of every swim again", () => {
   const merge = bind("_mergeResults", {});
   const old = [{ meet: "Spring Cup", date: "6/5/2026", event: "200 Free", course: "L", sec: 128, time: "2:08.00" }];

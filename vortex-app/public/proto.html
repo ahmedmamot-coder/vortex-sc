@@ -4169,10 +4169,19 @@ if ('serviceWorker' in navigator) {
                       </div>
                       <div style="display:flex;flex-direction:column;gap:7px">
                         <sc-for list="{{ resultRows }}" as="r" hint-placeholder-count="8">
-                          <div style="display:flex;align-items:center;gap:11px;background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:10px 12px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
+                          <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:10px 12px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
+                          <div style="display:flex;align-items:center;gap:11px">
                             <span style="width:28px;height:28px;flex:none;border-radius:8px;background:{{ r.medalBg }};color:{{ r.medalFg }};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px">{{ r.place }}</span>
                             <span style="flex:1;min-width:0"><span style="display:block;font-weight:600;font-size:13.5px;color:#0C1116">{{ r.name }}</span><span style="display:block;font-size:11px;color:#7A8296">{{ r.event }}</span></span>
                             <span style="text-align:right"><span style="display:block;font-family:var(--font-mono);font-weight:700;font-size:13.5px;color:#0C1116">{{ r.time }}</span><span style="display:block;font-size:10px;color:{{ r.deltaColor }};font-weight:600;margin-top:1px">{{ r.delta }}</span></span>
+                          </div>
+                            <sc-if value="{{ r.hasLegs }}" hint-placeholder-val="{{ false }}">
+                              <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px">
+                                <sc-for list="{{ r.legs }}" as="lg" hint-placeholder-count="4">
+                                  <span style="font-size:11px;background:#F4F6F8;color:#5B6472;border-radius:7px;padding:3px 7px;white-space:nowrap">{{ lg.label }} <b style="font-family:var(--font-mono);font-weight:700;color:{{ lg.color }}">{{ lg.time }}</b></span>
+                                </sc-for>
+                              </div>
+                            </sc-if>
                           </div>
                         </sc-for>
                       </div>
@@ -13891,12 +13900,12 @@ class Component extends DCLogic {
     body+='</tbody></table>';
     this._openPrintDoc('Attendance — '+sq.name+' — '+rangeLabel, body);
   }
-  exportResultsPdf(squadId){ const sq=this.squadById[squadId]||{name:'Squad'}; const meetName=this.meetsList[this.state.meetSel]||''; const mMeta=this.meetsMeta[this.state.meetSel]||{course:'LCM',date:''};
-    let res=[]; (this.roster[squadId]||[]).forEach(sw=>{ (sw.results||[]).forEach(r=>{ if(r.meet===meetName) res.push({name:sw.name, event:r.event, time:r.time, sec:r.sec, place:r.place}); }); });
+  exportResultsPdf(squadId){ const sq=this.squadById[squadId]||{name:'Squad'}; const resMeets=this._resultMeets(); const mMeta=resMeets[this._resultMeetSel(resMeets)]||{course:'LCM',date:''}; const meetName=mMeta.name||'';
+    let res=[]; (this.roster[squadId]||[]).forEach(sw=>{ (sw.results||[]).forEach(r=>{ if(r.meet===meetName) res.push({name:sw.name, event:r.event, time:r.time, sec:r.sec, place:r.place, splits:r.splits}); }); });
     res.sort((a,b)=> ((a.place||999)-(b.place||999)) || (a.sec-b.sec));
     let body='<h1>Results — '+this._esc(sq.name)+'</h1><p class="sub">'+this._esc(meetName)+' · '+this._esc(mMeta.course||'LCM')+(mMeta.date?(' · '+this._esc(mMeta.date)):'')+' · '+res.length+' swims</p>';
-    body+='<table><thead><tr><th class="r" style="width:44px">Place</th><th>Swimmer</th><th>Event</th><th class="r">Time</th></tr></thead><tbody>';
-    res.forEach((r,i)=>{ body+='<tr><td class="r">'+(r.place||(i+1))+'</td><td>'+this._esc(r.name)+'</td><td>'+this._esc(r.event)+'</td><td class="r mono">'+this._esc(r.time)+'</td></tr>'; });
+    body+='<table><thead><tr><th class="r" style="width:44px">Place</th><th>Swimmer</th><th>Event</th><th class="r">Time</th><th>Splits</th></tr></thead><tbody>';
+    res.forEach((r,i)=>{ const legs=this.resultLegs(r).map(l=>this._esc(l.label)+' <span class="mono">'+this._esc(l.time)+'</span>').join(' · '); body+='<tr><td class="r">'+(r.place||(i+1))+'</td><td>'+this._esc(r.name)+'</td><td>'+this._esc(r.event)+'</td><td class="r mono">'+this._esc(r.time)+'</td><td style="font-size:10px">'+legs+'</td></tr>'; });
     body+='</tbody></table>';
     this._openPrintDoc('Results — '+sq.name+' — '+meetName, body);
   }
@@ -15781,6 +15790,25 @@ class Component extends DCLogic {
     // writing over.
     try{ await this._calMigrateOnce(); }catch(e){}
   }
+  // The meets the squad Results tab offers: the season list the app ships with, and ahead of it
+  // every other meet a swimmer has a result at. A meet imported from Hy-Tek lived only on the
+  // swimmers' profiles — this tab only ever listed the bundled season, so it had no button.
+  // Kept apart from meetsMeta, which allMeets() and the meet screens read.
+  _resultMeets(){
+    const base=this.meetsMeta.length ? this.meetsMeta : this.meetsList.map(name=>({name, course:'LCM', date:''}));
+    const known=new Set(base.map(m=>m.name)); const extra={};
+    (this.squads||[]).forEach(sq=>(this.roster[sq.id]||[]).forEach(sw=>(sw.results||[]).forEach(r=>{
+      const nm=String((r&&r.meet)||'').trim(); if(!nm || nm==='Time trial' || known.has(nm)) return;
+      const iso=this._toISODate(r.date)||''; const e=extra[nm]||(extra[nm]={name:nm, date:r.date||'', course:r.course==='S'?'SCM':'LCM', entries:0, _iso:iso});
+      if(iso>e._iso){ e._iso=iso; e.date=r.date; }
+    })));
+    const added=Object.values(extra).sort((a,b)=>b._iso.localeCompare(a._iso)).map(({_iso, ...m})=>m);
+    return [...added, ...base];
+  }
+  // Held by name, so an import that adds a meet ahead of the chosen one cannot swap it for another.
+  _resultMeetSel(list){ const S=this.state||{};
+    const byName=S.meetSelName ? list.findIndex(m=>m.name===S.meetSelName) : -1;
+    return byName>=0 ? byName : Math.min(S.meetSel||0, Math.max(0, list.length-1)); }
   allMeets(){ return [...this.customMeets, ...this.meetsMeta]; }
   meetStatusCycle(name){ const order=['Upcoming','Entries open','In progress','Completed'];
     // From what the card is SHOWING, not from what the map happens to hold. A meet reading
@@ -21767,15 +21795,16 @@ class Component extends DCLogic {
     const attendView = S.attendView||'day';
 
     // ---- results ----
-    const meetChips=this.meetsList.map((m,i)=>({label:m, onClick:()=>this.setState({meetSel:i}),
-      bg: i===S.meetSel?squad.accent:'#fff', fg: i===S.meetSel?'#fff':'#3A4152', border: i===S.meetSel?squad.accent:'#E5E9F0'}));
-    const meetName=this.meetsList[S.meetSel]||'';
-    const mMeta=this.meetsMeta[S.meetSel]||{course:'LCM',entries:0,date:''};
+    const resMeets=this._resultMeets(); const resSel=this._resultMeetSel(resMeets);
+    const meetChips=resMeets.map((m,i)=>({label:m.name, onClick:()=>this.setState({meetSel:i, meetSelName:m.name}),
+      bg: i===resSel?squad.accent:'#fff', fg: i===resSel?'#fff':'#3A4152', border: i===resSel?squad.accent:'#E5E9F0'}));
+    const meetName=(resMeets[resSel]||{}).name||'';
+    const mMeta=resMeets[resSel]||{course:'LCM',entries:0,date:''};
     let meetRes=[];
-    (this.roster[S.squadId]||[]).forEach(sw=>{ (sw.results||[]).forEach(r=>{ if(r.meet===meetName) meetRes.push({name:sw.name, event:r.event, time:r.time, sec:r.sec, place:r.place}); }); });
+    (this.roster[S.squadId]||[]).forEach(sw=>{ (sw.results||[]).forEach(r=>{ if(r.meet===meetName) meetRes.push({name:sw.name, event:r.event, time:r.time, sec:r.sec, place:r.place, splits:r.splits}); }); });
     meetRes.sort((a,b)=> ((a.place||999)-(b.place||999)) || (a.sec-b.sec));
     const selMeet={name:meetName, meta:(mMeta.course||'LCM')+' · '+(mMeta.date||'')+' · '+meetRes.length+' '+squad.name+' swims'};
-    const resultRows=meetRes.slice(0,18).map((r,i)=>{ const place=r.place||(i+1); const [mb,mf]=this.medal(place); return {name:r.name, event:r.event, place, time:r.time, medalBg:mb, medalFg:mf, delta:(r.place?('Place '+r.place):''), deltaColor:'#9AA2B4'}; });
+    const resultRows=meetRes.slice(0,18).map((r,i)=>{ const place=r.place||(i+1); const [mb,mf]=this.medal(place); const legs=this._legChips(r); return {name:r.name, event:r.event, place, time:r.time, medalBg:mb, medalFg:mf, delta:(r.place?('Place '+r.place):''), deltaColor:'#9AA2B4', legs, hasLegs:legs.length>0}; });
 
     // ---- profile ----
     const swObj=(this.roster[S.squadId]||[]).find(x=>x.id===S.swimmerId) || (this.roster[S.squadId]||[])[0] || {name:'',pbs:[],results:[],initials:'',age:'',gender:'',meetCount:0};
