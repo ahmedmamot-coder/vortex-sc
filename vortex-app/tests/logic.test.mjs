@@ -563,6 +563,9 @@ describe("Hy-Tek .hy3 import", () => {
   it("reads the swim date", () => eq(out[0].results[0].date, "6/5/2026"));
   it("picks up the meet name", () => eq(out[0].results[0].meet, "H2O Long Course Spring Cup 2026"));
   it("marks it long course", () => eq(out[0].results[1].course, "L"));
+  // Columns 30–33 of E2 are the finishing place. They were dropped, so every ranked list invented
+  // a place from the swim's position. These two match the club's own saved results for Jana.
+  it("reads the finishing place the file records", () => eq(out[0].results.map((r) => r.place), [11, 16]));
 
   // The D1 record carries MMDDYYYY before the age. It was matched and discarded, so the
   // club's own meet files held every swimmer's birthday and the app kept only "age 10".
@@ -690,9 +693,39 @@ describe("a meet imported from Hy-Tek gets its own button on the squad Results t
     eq(sel(list()), 1);
   });
   it("the Results tab and its export both read this list", () => {
-    eq(/const resMeets=this\._resultMeets\(\)/.test(SOURCE.split("\n").find((l) => /const resMeets=/.test(l) && !/exportResultsPdf/.test(l)) || ""), true);
-    eq(/exportResultsPdf\(squadId\)\{[^\n]*this\._resultMeets\(\)/.test(SOURCE), true);
+    eq(/const resMeets=this\._resultMeets\(S\.squadId\)/.test(SOURCE.split("\n").find((l) => /const resMeets=/.test(l) && !/exportResultsPdf/.test(l)) || ""), true);
+    eq(/exportResultsPdf\(squadId\)\{[^\n]*this\._resultMeets\(squadId\)/.test(SOURCE), true);
   });
+  // Live, every squad opened on the newest import — "H20 Short Course Meet · 0 Vortex SD swims" —
+  // because a swimmer in another squad had swum it. The results looked gone.
+  it("a squad only gets buttons for meets it swam, so it never opens on 0 swims", () => {
+    const { list } = mk([{ meet: "Winter Gala", date: "1/10/2026" }]);   // jr swam Winter Gala; sa swam Spring Cup
+    eq(list("jr").map((m) => m.name), ["Winter Gala"]);
+    eq(list("sa").map((m) => m.name), ["Spring Cup"]);
+  });
+  it("another squad's import does not become this squad's first button", () => {
+    const { list } = mk([{ meet: "H20 Short Course Meet", date: "12/24/2026" }, { meet: "Winter Gala", date: "1/10/2026" }]);
+    eq(list("sa").map((m) => m.name), ["Spring Cup"]);
+    eq(list("jr")[0].name, "H20 Short Course Meet");
+  });
+  it("a squad with no results at all still sees the season list", () => {
+    const { list } = mk([]);
+    eq(list("nobody").map((m) => m.name), ["Spring Cup", "Winter Gala"]);
+  });
+});
+
+describe("no screen shows a place the meet did not record", () => {
+  const badge = bind("_placeBadge", { medal: (p) => (p == 1 ? ["gold", "#fff"] : p == 2 ? ["silver", "#000"] : p == 3 ? ["bronze", "#fff"] : ["chip", "#777"]) });
+  it("a real 1st is still gold", () => eq(badge(1)[0], "gold"));
+  it("a real 11th gets the usual chip", () => eq(badge(11)[0], "chip"));
+  it("no place: plain grey, never a medal", () => eq(badge(null), ["#EEF2F7", "#9AA2B4"]));
+  const line = (re) => SOURCE.split("\n").find((l) => re.test(l)) || "";
+  it("the squad tab lists every swim — no cap of 18", () => eq(/meetRes\.slice\(0, *18\)/.test(line(/const resultRows=/)), false));
+  for (const [where, re] of [["squad tab", /const resultRows=/], ["family meet results", /const famMeetResultRows=/], ["family results list", /const famResults=/], ["meet results PDF", /exportResultsPdf|res\.forEach\(\(r,i\)=>\{ const legs=/]]) {
+    it(`${where} never numbers a swim by its position`, () => eq(/place\|\|\(?i ?\+ ?1\)?/.test(line(re)), false));
+  }
+  it("the family results list says 'Place' only when there is one", () =>
+    eq(/\{\{ r\.date \}\}\{\{ r\.placeText \}\}/.test(SOURCE) && !/Place \{\{ r\.place \}\}/.test(SOURCE), true));
 });
 
 describe("re-importing a meet adds the splits instead of every swim again", () => {
@@ -701,6 +734,13 @@ describe("re-importing a meet adds the splits instead of every swim again", () =
   const again = [{ meet: "Spring Cup", date: "6/5/2026", event: "200 Free", course: "L", sec: 128, time: "2:08.00", splits: [[50, 30], [100, 63], [150, 96], [200, 128]] }];
   it("the swim is not duplicated", () => eq(merge(old, again).length, 1));
   it("and now carries its splits", () => eq(merge(old, again)[0].splits.length, 4));
+  it("a swim saved without a place picks up the one the file records", () => {
+    const placed = [{ ...again[0], place: 3 }];
+    eq(merge(old, placed)[0].place, 3);
+  });
+  it("a place somebody already has is never overwritten", () => {
+    eq(merge([{ ...old[0], place: 2 }], [{ ...again[0], place: 3 }])[0].place, 2);
+  });
   it("a new swim is still added, newest first", () => {
     const fresh = [{ meet: "Summer Cup", date: "7/1/2026", event: "200 Free", course: "L", sec: 127 }];
     eq(merge(old, fresh).map((r) => r.meet), ["Summer Cup", "Spring Cup"]);
