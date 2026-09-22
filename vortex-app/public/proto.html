@@ -3275,6 +3275,13 @@ if ('serviceWorker' in navigator) {
                             <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:11px 14px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
                               <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:13px;font-weight:700;color:#0C1116">{{ r.event }}</span><span style="font-family:var(--font-mono);font-weight:700;font-size:13px;color:{{ famAccent }}">{{ r.time }}</span></div>
                               <p style="margin:3px 0 0;font-size:11px;color:#7A8296">{{ r.meet }} · {{ r.date }} · Place {{ r.place }}</p>
+                              <sc-if value="{{ r.hasLegs }}" hint-placeholder-val="{{ false }}">
+                                <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px">
+                                  <sc-for list="{{ r.legs }}" as="lg" hint-placeholder-count="4">
+                                    <span style="font-size:11px;background:#F4F6F8;color:#5B6472;border-radius:7px;padding:3px 7px;white-space:nowrap">{{ lg.label }} <b style="font-family:var(--font-mono);font-weight:700;color:{{ lg.color }}">{{ lg.time }}</b></span>
+                                  </sc-for>
+                                </div>
+                              </sc-if>
                             </div>
                           </sc-for>
                         </div>
@@ -4812,10 +4819,19 @@ if ('serviceWorker' in navigator) {
                       <h2 style="font-size:11.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#7A8296;margin:0 2px 9px">Recent results</h2>
                       <div style="display:flex;flex-direction:column;gap:7px">
                         <sc-for list="{{ swimmerResults }}" as="r" hint-placeholder-count="4">
-                          <div style="display:flex;align-items:center;gap:11px;background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:10px 12px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
+                          <div style="background:#fff;border:1px solid #E5E9F0;border-radius:13px;padding:10px 12px;box-shadow:0 1px 4px rgba(11,20,40,.04)">
+                          <div style="display:flex;align-items:center;gap:11px">
                             <span style="width:28px;height:28px;flex:none;border-radius:8px;background:{{ r.medalBg }};color:{{ r.medalFg }};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px">{{ r.place }}</span>
                             <span style="flex:1;min-width:0"><span style="display:block;font-weight:600;font-size:13px;color:#0C1116">{{ r.event }}</span><span style="display:block;font-size:11px;color:#7A8296">{{ r.meet }}</span></span>
                             <span style="font-family:var(--font-mono);font-weight:700;font-size:13.5px;color:#0C1116">{{ r.time }}</span>
+                          </div>
+                            <sc-if value="{{ r.hasLegs }}" hint-placeholder-val="{{ false }}">
+                              <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px">
+                                <sc-for list="{{ r.legs }}" as="lg" hint-placeholder-count="4">
+                                  <span style="font-size:11px;background:#F4F6F8;color:#5B6472;border-radius:7px;padding:3px 7px;white-space:nowrap">{{ lg.label }} <b style="font-family:var(--font-mono);font-weight:700;color:{{ lg.color }}">{{ lg.time }}</b></span>
+                                </sc-for>
+                              </div>
+                            </sc-if>
                           </div>
                         </sc-for>
                       </div>
@@ -13890,8 +13906,8 @@ class Component extends DCLogic {
     let body='<h1>Results — '+this._esc(sw.name)+'</h1><p class="sub">'+this._esc(sq.name)+' · '+res.length+' swims · best times highlighted per event</p>';
     // best per event
     const best={}; res.forEach(r=>{ if(r.sec!=null && (best[r.event]==null || r.sec<best[r.event])) best[r.event]=r.sec; });
-    body+='<table><thead><tr><th>Event</th><th>Meet</th><th class="r">Date</th><th class="r">Time</th></tr></thead><tbody>';
-    res.forEach(r=>{ const isBest=(r.sec!=null && r.sec===best[r.event]); body+='<tr><td>'+this._esc(r.event||'')+'</td><td>'+this._esc(r.meet||'')+'</td><td class="r">'+this._esc(r.date||'')+'</td><td class="r mono"'+(isBest?' style="color:#0C7A4F;font-weight:800"':'')+'>'+this._esc(r.time||'')+(isBest?' ★':'')+'</td></tr>'; });
+    body+='<table><thead><tr><th>Event</th><th>Meet</th><th class="r">Date</th><th class="r">Time</th><th>Splits</th></tr></thead><tbody>';
+    res.forEach(r=>{ const isBest=(r.sec!=null && r.sec===best[r.event]); const legs=this.resultLegs(r).map(l=>this._esc(l.label)+' <span class="mono">'+this._esc(l.time)+'</span>').join(' · '); body+='<tr><td>'+this._esc(r.event||'')+'</td><td>'+this._esc(r.meet||'')+'</td><td class="r">'+this._esc(r.date||'')+'</td><td class="r mono"'+(isBest?' style="color:#0C7A4F;font-weight:800"':'')+'>'+this._esc(r.time||'')+(isBest?' ★':'')+'</td><td style="font-size:10px">'+legs+'</td></tr>'; });
     body+='</tbody></table>';
     this._openPrintDoc('Results — '+sw.name, body);
   }
@@ -18880,15 +18896,19 @@ class Component extends DCLogic {
     // Hy-Tek MM "results" data file (.hy3). Fixed-width, stateful:
     //   B1 = meet, D1 = athlete, E1 = individual event, E2 = the swum time, F* = relays (skipped).
     // Time fields are TOTAL SECONDS (e.g. "115.27" = 1:55.27). Course is meet-level.
+    //   G1 = the split times of the swim just above it: blocks of 11 characters, each a P/F
+    //   letter, a 2-digit split number and an 8-character CUMULATIVE time. They were skipped,
+    //   so every 200 arrived as one number and the 50s inside it were thrown away.
     const lines=(txt||'').split('\n');
     const STROKE={A:'Free',B:'Back',C:'Breast',D:'Fly',E:'IM'};
     const lc=txt.toLowerCase();
     const meetCourse = /short course/.test(lc) ? (/yard/.test(lc)?'Y':'S') : 'L';
     const mkdate=(s)=>{ if(!s||s.length!==8) return ''; return parseInt(s.slice(0,2),10)+'/'+parseInt(s.slice(2,4),10)+'/'+s.slice(4); };
     let meetName='Imported meet';
-    const swimmers=[]; let cur=null, ev=null;
+    const swimmers=[]; let cur=null, ev=null, last=null, lastType='';
     for(const raw of lines){
       const code=raw.slice(0,2);
+      if(code!=='G1'){ last=null; }
       if(code==='B1'){ const nm=raw.slice(2,47).trim(); if(nm) meetName=nm; }
       else if(code==='D1'){
         const gender = raw.charAt(2)==='F' ? 'G' : 'B';
@@ -18910,7 +18930,8 @@ class Component extends DCLogic {
         cur={name:(first+' '+last).trim(), first, last, age, dob, gender, results:[]}; swimmers.push(cur); ev=null;
       }
       else if(code==='E1' && cur){
-        const dist=parseInt(raw.slice(18,21),10);
+        // Six characters wide: slice(18,21) read the last three, so a 1500 came in as a 500.
+        const dist=parseInt(raw.slice(15,21),10);
         ev={dist:isNaN(dist)?null:dist, stroke:STROKE[raw.charAt(21)]||null};
       }
       else if(code==='E2' && cur && ev){
@@ -18918,12 +18939,65 @@ class Component extends DCLogic {
         const sec=parseFloat(tm);
         const dm=raw.slice(80,96).match(/(\d{8})/); const date=dm?mkdate(dm[1]):'';
         const valid = !isNaN(sec) && sec>0 && ev.stroke!=null && ev.dist!=null;
-        if(valid) cur.results.push({date, meet:meetName, sec:+sec.toFixed(2), timeStr:tm, course:meetCourse, dist:ev.dist, stroke:ev.stroke, place:null, relay:false, valid:true});
+        if(valid){ last={date, meet:meetName, sec:+sec.toFixed(2), timeStr:tm, course:meetCourse, dist:ev.dist, stroke:ev.stroke, place:null, relay:false, valid:true, _g1:{}}; lastType=raw.charAt(2); cur.results.push(last); }
         ev=null;
       }
+      // Only the splits of the swim that was kept: a final's G1 lines follow its own E2, which
+      // is not read, and must not be pinned onto the heat swim above it.
+      else if(code==='G1' && last && raw.charAt(2)===lastType){
+        for(let p=3; p+10<=raw.length; p+=11){
+          const n=parseInt(raw.slice(p,p+2),10), t=parseFloat(raw.slice(p+2,p+10));
+          if(isNaN(n) || isNaN(t) || n<=0 || t<=0) break;
+          last._g1[n]=t;
+        }
+      }
     }
+    swimmers.forEach(sw=>sw.results.forEach(r=>{ const sp=this._hy3Splits(r._g1, r.dist, r.sec); delete r._g1; if(sp) r.splits=sp; }));
     return swimmers;
   }
+  // Split numbers count split points, the last one at the wall, so a split's distance is its
+  // number × (race ÷ highest number) — true whether the meet counted 1,2,3,4 or 2,4,6,8.
+  // Returns [[metres, cumulative seconds], …] ending at the finish, or null if they do not add
+  // up to the swim: a wrong 50 on a swimmer's profile is worse than no 50 at all.
+  _hy3Splits(g1, dist, sec){
+    const nums=Object.keys(g1||{}).map(Number).sort((a,b)=>a-b);
+    if(!nums.length || !dist || !sec) return null;
+    let pts=nums.map(n=>g1[n]);
+    // Laps rather than running totals: turn them into running totals first.
+    if(pts.some((t,i)=>i && t<=pts[i-1])){
+      const sum=pts.reduce((a,b)=>a+b,0); if(Math.abs(sum-sec)>0.3) return null;
+      let c=0; pts=pts.map(t=>(c+=t));
+    }
+    const top=nums[nums.length-1], lastT=pts[pts.length-1];
+    let out;
+    if(Math.abs(lastT-sec)<=0.3){ const every=dist/top; out=nums.map((n,i)=>[n*every, pts[i]]); out[out.length-1][1]=sec; }
+    else if(lastT<sec){ const every=dist/(top+1); out=nums.map((n,i)=>[n*every, pts[i]]); out.push([dist, sec]); }
+    else return null;
+    if(out.some(([m])=>!Number.isInteger(m) || m<=0 || m>dist)) return null;
+    return out.map(([m,t])=>[m, +(+t).toFixed(2)]);
+  }
+  // A swim's splits as legs of equal length — 50s for anything over 50, 25s for a 50 — or,
+  // when the meet only timed every 100, 100s. Empty when there is nothing to break down.
+  resultLegs(r){
+    const dist=parseInt(String((r&&r.event)||''),10), sec=r&&+r.sec;
+    const sp=Array.isArray(r&&r.splits)?r.splits:[];
+    if(!dist || !sec || !sp.length) return [];
+    const at={}; sp.forEach(p=>{ if(Array.isArray(p) && p[1]>0) at[p[0]]=+p[1]; }); at[dist]=sec;
+    for(const step of (dist<=50?[25]:[50,100,200,400])){
+      if(dist%step || dist/step<2) continue;
+      const n=dist/step; let ok=true; const legs=[]; let prev=0;
+      for(let k=1;k<=n;k++){ const t=at[k*step]; if(t==null || t<=prev){ ok=false; break; } legs.push(t-prev); prev=t; }
+      if(!ok) continue;
+      const ord=k=>k+(k%100>=11&&k%100<=13?'th':(['th','st','nd','rd'][k%10]||'th'));
+      return legs.map((t,i)=>({label:(i===n-1?'Last':ord(i+1))+' '+step, time:this._legFmt(t), sec:+t.toFixed(2)}));
+    }
+    return [];
+  }
+  // Legs for a result card: the quickest leg in green so the fade (or the finish) reads at a glance.
+  _legChips(r){ const legs=this.resultLegs(r); if(!legs.length) return [];
+    const fast=Math.min(...legs.map(l=>l.sec));
+    return legs.map(l=>({...l, color:l.sec===fast?'#0C7A4F':'#0C1116'})); }
+  _legFmt(t){ if(t<60) return t.toFixed(2); const m=Math.floor(t/60), s=t-m*60; return m+':'+(s<10?'0':'')+s.toFixed(2); }
   _looksHy3(txt){ return /(^|\n)A1\d/.test(txt) && /(^|\n)D1[MF ]/.test(txt) || /(^|\n)E2[MF ] /.test(txt); }
   _readHyZip(file){
     return new Promise(async (resolve,reject)=>{
@@ -18941,9 +19015,9 @@ class Component extends DCLogic {
   meetImportPreview(){
     const txt=this.state.meetImportText||'';
     const parsed = this._looksHy3(txt) ? this.meetParseHy3(txt) : this.meetParseHytek(txt);
-    let newSwimmers=0, updatedSwimmers=0, newResults=0;
+    let newSwimmers=0, updatedSwimmers=0, newResults=0, withSplits=0;
     const flat=this.allSwimmersFlat();
-    parsed.forEach(p=>{ const match=flat.find(f=>f.name.toLowerCase()===p.name.trim().toLowerCase()); if(match) updatedSwimmers++; else newSwimmers++; p.results.forEach(r=>{ if(r.valid) newResults++; }); });
+    parsed.forEach(p=>{ const match=flat.find(f=>f.name.toLowerCase()===p.name.trim().toLowerCase()); if(match) updatedSwimmers++; else newSwimmers++; p.results.forEach(r=>{ if(r.valid){ newResults++; if(r.splits) withSplits++; } }); });
     // Count the dates of birth this file would fill in, so it is visible before confirming.
     const _flatDob=this.allSwimmersFlat();
     const dobToFill=parsed.filter(p=>{
@@ -18951,7 +19025,7 @@ class Component extends DCLogic {
       const m=_flatDob.find(f=>f.name.toLowerCase()===String(p.name||'').trim().toLowerCase());
       return m ? !m.dob : true;
     }).length;
-    this.setState({meetImportPreview:{count:parsed.length, newSwimmers, updatedSwimmers, newResults, dobToFill, parsed}});
+    this.setState({meetImportPreview:{count:parsed.length, newSwimmers, updatedSwimmers, newResults, withSplits, dobToFill, parsed}});
   }
   meetImportConfirm(){
     const prev=this.state.meetImportPreview; if(!prev) return;
@@ -18963,11 +19037,11 @@ class Component extends DCLogic {
       const flat=this.allSwimmersFlat(); const match=flat.find(f=>f.name.toLowerCase()===p.name.trim().toLowerCase());
       const validRes=p.results.filter(r=>r.valid);
       if(!validRes.length) return;
-      const asResults=validRes.map(r=>({meet:r.meet, date:r.date, event:r.dist+' '+r.stroke, time:r.timeStr.includes(':')?r.timeStr:fmt(r.sec), sec:+r.sec.toFixed(2), place:r.place||null, course:r.course||'L'}));
+      const asResults=validRes.map(r=>({meet:r.meet, date:r.date, event:r.dist+' '+r.stroke, time:r.timeStr.includes(':')?r.timeStr:fmt(r.sec), sec:+r.sec.toFixed(2), place:r.place||null, course:r.course||'L', ...(r.splits?{splits:r.splits}:{})}));
       if(match){
         const sw=(this.roster[match.squadId]||[]).find(x=>x.id===match.id);
         if(sw){
-          sw.results=[...asResults, ...(sw.results||[])];
+          sw.results=this._mergeResults(sw.results||[], asResults);
           const byEv={}; (sw.results||[]).forEach(r=>{ (byEv[r.event]=byEv[r.event]||[]).push(r); });
           const pbs=[]; for(const ev in byEv){ const best=byEv[ev].reduce((a,b)=>b.sec<a.sec?b:a); pbs.push({event:ev, sec:best.sec, time:best.time, drop:'', course:best.course||'L'}); }
           pbs.sort((a,b)=>a.sec-b.sec); sw.pbs=pbs;
@@ -18993,6 +19067,16 @@ class Component extends DCLogic {
     this.rebuildRoster();
     this.setState({meetImportOpen:false, meetImportText:'', meetImportPreview:null,
       settingsMsg: dobFilled ? ('Imported ✓ · '+dobFilled+' date'+(dobFilled===1?'':'s')+' of birth filled in from the file') : ''});
+  }
+  // The same swim imported twice is one swim. Re-importing a meet used to add every result a
+  // second time; now a swim already on file is kept and only picks up the splits it lacked —
+  // which is how results imported before splits were read get their 50s.
+  _mergeResults(have, incoming){
+    const key=r=>[r.meet||'', r.date||'', r.event||'', r.course||'L', (+r.sec).toFixed(2)].join('|');
+    const byKey=new Map(incoming.map(r=>[key(r), r]));
+    const kept=have.map(r=>{ const n=byKey.get(key(r)); if(!n) return r; byKey.delete(key(r));
+      return (n.splits && !(Array.isArray(r.splits) && r.splits.length)) ? {...r, splits:n.splits} : r; });
+    return [...byKey.values(), ...kept];
   }
   hytekSetMode(m){ this.setState({hytekMode:m, meetImportPreview:null}); }
   onHytekPdfClick(){ const el=document.getElementById('vx-hytek-pdf-input'); if(el) el.click(); }
@@ -21710,7 +21794,7 @@ class Component extends DCLogic {
     const progressBest = secsAll.length ? this.fmt(Math.min(...secsAll)) : '\u2014';
     const swRank=(this.roster[S.squadId]||[]).findIndex(x=>x.id===swObj.id);
     const swimmerKpis=[{value:(swObj.pbs||[]).length, label:'PB events'},{value:(swObj.meetCount||0), label:'Meets'},{value:'#'+(swRank>=0?swRank+1:1), label:'Squad rank'}];
-    const swimmerResults=(swObj.results||[]).slice(0,10).map((r,i)=>{ const hasPlace=r.place!=null; const [mb,mf]=hasPlace?this.medal(r.place):['#EEF2F7','#5B6472']; const badge=hasPlace?String(r.place):(r.courseLabel?String(r.courseLabel).replace('M','').replace('Y',''):(r.course==='S'?'SC':'LC')); const sub=[r.meet, r.date].filter(Boolean).join(' · '); return {event:r.event, meet:sub||r.meet||'—', place:badge, time:r.time, medalBg:mb, medalFg:mf}; });
+    const swimmerResults=(swObj.results||[]).slice(0,10).map((r,i)=>{ const hasPlace=r.place!=null; const [mb,mf]=hasPlace?this.medal(r.place):['#EEF2F7','#5B6472']; const badge=hasPlace?String(r.place):(r.courseLabel?String(r.courseLabel).replace('M','').replace('Y',''):(r.course==='S'?'SC':'LC')); const sub=[r.meet, r.date].filter(Boolean).join(' · '); const legs=this._legChips(r); return {event:r.event, meet:sub||r.meet||'—', place:badge, time:r.time, medalBg:mb, medalFg:mf, legs, hasLegs:legs.length>0}; });
 
     // ---- nav ----
     const tabs=[{id:'group',icon:'users',label:'Group'},{id:'plans',icon:'list-checks',label:'Plans'},{id:'attend',icon:'calendar-check',label:'Attend'},{id:'results',icon:'medal',label:'Results'},{id:'more',icon:'layout-grid',label:'More'}];
@@ -23070,6 +23154,7 @@ class Component extends DCLogic {
     const meetImportChevron = S.meetImportOpen ? 'chevron-up' : 'chevron-down';
     const meetImportHasPreview = !!S.meetImportPreview;
     const meetImportSummary = S.meetImportPreview ? (S.meetImportPreview.count+' swimmer block(s) parsed · '+S.meetImportPreview.newSwimmers+' new · '+S.meetImportPreview.updatedSwimmers+' matched existing · '+S.meetImportPreview.newResults+' results to add'
+      + (S.meetImportPreview.withSplits ? (' · '+S.meetImportPreview.withSplits+' with splits') : '')
       + (S.meetImportPreview.dobToFill ? (' · '+S.meetImportPreview.dobToFill+' date'+(S.meetImportPreview.dobToFill===1?'':'s')+' of birth to fill in') : '')) : '';
     // Which meet is open and which is being edited are held by NAME, not by position in a list.
     // The list is now two lists, and an index into "all meets" means something different in each
@@ -24402,7 +24487,7 @@ class Component extends DCLogic {
         const swIdx=(this.roster[sqid]||[]).findIndex(x=>x.id===sw.id); const swIdxSafe=swIdx<0?0:swIdx;
         const today=this.todayISO();
         const famPbs=(sw.pbs||[]).slice(0,8).map(p=>({event:p.event, time:p.time, drop:p.drop}));
-        const famResults=(sw.results||[]).slice().sort((a,b)=>String(this._resultISO(b)||'').localeCompare(String(this._resultISO(a)||''))).map((r,i)=>({event:r.event, meet:r.meet, date:this.shortDate(r.date), time:r.time, place:r.place||(i+1)}));
+        const famResults=(sw.results||[]).slice().sort((a,b)=>String(this._resultISO(b)||'').localeCompare(String(this._resultISO(a)||''))).map((r,i)=>{ const legs=this._legChips(r); return {event:r.event, meet:r.meet, date:this.shortDate(r.date), time:r.time, place:r.place||(i+1), legs, hasLegs:legs.length>0}; });
         // What a family is actually shown about a meet.
         //
         // This used to be the first three of meetsMeta — the imported ones, which are by
