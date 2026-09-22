@@ -728,6 +728,62 @@ describe("no screen shows a place the meet did not record", () => {
     eq(/\{\{ r\.date \}\}\{\{ r\.placeText \}\}/.test(SOURCE) && !/Place \{\{ r\.place \}\}/.test(SOURCE), true));
 });
 
+describe("family portal: club results by meet", () => {
+  const season = [{ name: "Spring Cup", date: "6/5/2026", course: "LCM" }, { name: "Winter Gala", date: "1/10/2026", course: "SCM" }, { name: "Empty Open", date: "1/1/2026", course: "LCM" }];
+  const mk = (state = {}) => {
+    const ctx = { meetsMeta: season, meetsList: season.map((m) => m.name), squads: [{ id: "jr" }, { id: "sa" }], state,
+      roster: { jr: [{ id: "a", results: [{ meet: "Qatar Open", date: "9/20/2026" }, { meet: "Winter Gala", date: "1/10/2026" }] }],
+                sa: [{ id: "b", results: [{ meet: "Spring Cup", date: "6/5/2026" }] }] } };
+    return { list: bind("_famMeets", ctx, ["_resultMeets", "_toISODate"]), sel: bind("_famMeetSel", ctx) };
+  };
+  it("imported meets included; only meets the club swam get a button", () =>
+    eq(mk().list().map((m) => m.name), ["Qatar Open", "Spring Cup", "Winter Gala"]));
+  it("a family lands on the newest meet their own swimmer swam", () => {
+    const { list, sel } = mk();
+    eq(list()[sel(list(), { results: [{ meet: "Spring Cup" }] })].name, "Spring Cup");
+  });
+  it("a swimmer with no meets yet lands on the club's newest", () => { const { list, sel } = mk(); eq(sel(list(), { results: [] }), 0); });
+  it("the meet a family picked is kept by name", () => {
+    const { list, sel } = mk({ famMeetSelName: "Winter Gala" });
+    eq(list()[sel(list(), { results: [{ meet: "Spring Cup" }] })].name, "Winter Gala");
+  });
+  const line = SOURCE.split("\n").find((l) => /const famMeetResultRows=/.test(l)) || "";
+  it("every swim at the meet is listed — no cap of 80", () => eq(/famAllRes\.slice\(0, *\d+\)/.test(line), false));
+  it("each swim carries its 50s", () => eq(/legs, hasLegs:legs\.length>0/.test(line), true));
+  // The rows were built and never rendered: no template referenced them.
+  it("the screen is actually on the page, behind a My/Club switch in Results", () => {
+    eq(/list="\{\{ famMeetResultRows \}\}"/.test(SOURCE), true);
+    eq(/list="\{\{ famMeetChips \}\}"/.test(SOURCE), true);
+    eq(/onclick="\{\{ onFamResClub \}\}"/.test(SOURCE) && /sc-if value="\{\{ famResClub \}\}"/.test(SOURCE), true);
+  });
+});
+
+describe("family portal: the Meets tab gets the club's meets", () => {
+  // club_meets is staff-read only. A family phone read it, got [], and with nothing in memory yet
+  // saved that over the meets /api/family/state had just delivered — "No meets coming up" for ever.
+  const store = {};
+  const ctx = {
+    _isFamilySession: () => true, customMeets: [], meetStatus: {}, forceUpdate() { this.updated = true; },
+    _loadLocalOnly: (k, fb) => (k in store ? JSON.parse(store[k]) : fb),
+    _saveLocalOnly: (k, v) => { store[k] = JSON.stringify(v); },
+  };
+  let selected = false;
+  globalThis.window.__vxSelect = async () => { selected = true; return []; };
+  const fetch = bind("_meetsFetch", ctx);
+  store.vx_custom_meets = JSON.stringify([{ name: "Qatar Open 2026", date: "12/24/2026", course: "SCM" }]);
+  store.vx_meet_status = JSON.stringify({ "Qatar Open 2026": "Upcoming" });
+  itAsync("a family device uses the meets the family route delivered", async () => {
+    await fetch();
+    eq(ctx.customMeets.map((m) => m.name), ["Qatar Open 2026"]);
+    eq(ctx.meetStatus["Qatar Open 2026"], "Upcoming");
+  });
+  itAsync("and never reads club_meets, so an empty answer cannot wipe them", async () => {
+    await fetch();
+    eq(selected, false);
+    eq(JSON.parse(store.vx_custom_meets).length, 1);
+  });
+});
+
 describe("re-importing a meet adds the splits instead of every swim again", () => {
   const merge = bind("_mergeResults", {});
   const old = [{ meet: "Spring Cup", date: "6/5/2026", event: "200 Free", course: "L", sec: 128, time: "2:08.00" }];
@@ -3107,6 +3163,7 @@ describe("the club's meets are rows, not one document", () => {
     events: [], status: "Upcoming", club_built: true, ...extra });
   const ctxWith = (patch = {}) => ({
     customMeets: [], meetsMeta: [], meetStatus: {}, meetInfo: {}, state: {}, forceUpdate() {},
+    _isFamilySession: () => false,   // a staff device: families take the meets from /api/family/state
     _saveLocalOnly() {}, todayISO: () => "2026-08-29",
     _meetUnsent: {}, _meetsMigrated: true, setState(p) { Object.assign(this.state, p); }, ...patch });
   const fetchDeps = ["_meetRowToMeet", "_meetHeldHere", "_meetsUnsent", "_meetsMigrateOnce"];
