@@ -13900,7 +13900,7 @@ class Component extends DCLogic {
     body+='</tbody></table>';
     this._openPrintDoc('Attendance — '+sq.name+' — '+rangeLabel, body);
   }
-  exportResultsPdf(squadId){ const sq=this.squadById[squadId]||{name:'Squad'}; const meetName=this.meetsList[this.state.meetSel]||''; const mMeta=this.meetsMeta[this.state.meetSel]||{course:'LCM',date:''};
+  exportResultsPdf(squadId){ const sq=this.squadById[squadId]||{name:'Squad'}; const resMeets=this._resultMeets(); const mMeta=resMeets[this._resultMeetSel(resMeets)]||{course:'LCM',date:''}; const meetName=mMeta.name||'';
     let res=[]; (this.roster[squadId]||[]).forEach(sw=>{ (sw.results||[]).forEach(r=>{ if(r.meet===meetName) res.push({name:sw.name, event:r.event, time:r.time, sec:r.sec, place:r.place, splits:r.splits}); }); });
     res.sort((a,b)=> ((a.place||999)-(b.place||999)) || (a.sec-b.sec));
     let body='<h1>Results — '+this._esc(sq.name)+'</h1><p class="sub">'+this._esc(meetName)+' · '+this._esc(mMeta.course||'LCM')+(mMeta.date?(' · '+this._esc(mMeta.date)):'')+' · '+res.length+' swims</p>';
@@ -15790,6 +15790,25 @@ class Component extends DCLogic {
     // writing over.
     try{ await this._calMigrateOnce(); }catch(e){}
   }
+  // The meets the squad Results tab offers: the season list the app ships with, and ahead of it
+  // every other meet a swimmer has a result at. A meet imported from Hy-Tek lived only on the
+  // swimmers' profiles — this tab only ever listed the bundled season, so it had no button.
+  // Kept apart from meetsMeta, which allMeets() and the meet screens read.
+  _resultMeets(){
+    const base=this.meetsMeta.length ? this.meetsMeta : this.meetsList.map(name=>({name, course:'LCM', date:''}));
+    const known=new Set(base.map(m=>m.name)); const extra={};
+    (this.squads||[]).forEach(sq=>(this.roster[sq.id]||[]).forEach(sw=>(sw.results||[]).forEach(r=>{
+      const nm=String((r&&r.meet)||'').trim(); if(!nm || nm==='Time trial' || known.has(nm)) return;
+      const iso=this._toISODate(r.date)||''; const e=extra[nm]||(extra[nm]={name:nm, date:r.date||'', course:r.course==='S'?'SCM':'LCM', entries:0, _iso:iso});
+      if(iso>e._iso){ e._iso=iso; e.date=r.date; }
+    })));
+    const added=Object.values(extra).sort((a,b)=>b._iso.localeCompare(a._iso)).map(({_iso, ...m})=>m);
+    return [...added, ...base];
+  }
+  // Held by name, so an import that adds a meet ahead of the chosen one cannot swap it for another.
+  _resultMeetSel(list){ const S=this.state||{};
+    const byName=S.meetSelName ? list.findIndex(m=>m.name===S.meetSelName) : -1;
+    return byName>=0 ? byName : Math.min(S.meetSel||0, Math.max(0, list.length-1)); }
   allMeets(){ return [...this.customMeets, ...this.meetsMeta]; }
   meetStatusCycle(name){ const order=['Upcoming','Entries open','In progress','Completed'];
     // From what the card is SHOWING, not from what the map happens to hold. A meet reading
@@ -21776,10 +21795,11 @@ class Component extends DCLogic {
     const attendView = S.attendView||'day';
 
     // ---- results ----
-    const meetChips=this.meetsList.map((m,i)=>({label:m, onClick:()=>this.setState({meetSel:i}),
-      bg: i===S.meetSel?squad.accent:'#fff', fg: i===S.meetSel?'#fff':'#3A4152', border: i===S.meetSel?squad.accent:'#E5E9F0'}));
-    const meetName=this.meetsList[S.meetSel]||'';
-    const mMeta=this.meetsMeta[S.meetSel]||{course:'LCM',entries:0,date:''};
+    const resMeets=this._resultMeets(); const resSel=this._resultMeetSel(resMeets);
+    const meetChips=resMeets.map((m,i)=>({label:m.name, onClick:()=>this.setState({meetSel:i, meetSelName:m.name}),
+      bg: i===resSel?squad.accent:'#fff', fg: i===resSel?'#fff':'#3A4152', border: i===resSel?squad.accent:'#E5E9F0'}));
+    const meetName=(resMeets[resSel]||{}).name||'';
+    const mMeta=resMeets[resSel]||{course:'LCM',entries:0,date:''};
     let meetRes=[];
     (this.roster[S.squadId]||[]).forEach(sw=>{ (sw.results||[]).forEach(r=>{ if(r.meet===meetName) meetRes.push({name:sw.name, event:r.event, time:r.time, sec:r.sec, place:r.place, splits:r.splits}); }); });
     meetRes.sort((a,b)=> ((a.place||999)-(b.place||999)) || (a.sec-b.sec));
