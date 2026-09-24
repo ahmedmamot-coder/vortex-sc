@@ -11005,7 +11005,7 @@ describe("a mark is not undone by a read that started before it", () => {
     const sent = [];
     globalThis.window = { __vxUpsert: (t, rows) => { sent.push(...rows); return Promise.resolve(true); } };
     ctx.attendLog.junior["2026-08-08"].r7 = "present";     // only on this device
-    bind("_attendMigrate", ctx, ["_attendUnsent"])();
+    await bind("_attendMigrate", ctx, ["_attendUnsent"])();
     eq(sent.map((r) => r.sw_id), ["r7"],
        "it re-uploaded a day the database has already answered with, over whatever has changed since");
   });
