@@ -13801,4 +13801,40 @@ describe("records: VIC 2026 pool records and Vortex short-course records", () =>
   it("the Records tool is on the tools screen", () => eq(/\{id:'records', icon:'trophy'/.test(SOURCE), true));
 });
 
+
+describe("swimmer nationality flags", () => {
+  const nats = bind("_swNats", {}, ["COUNTRY_CODES"]);
+  it("keeps up to two known codes, upper-cased, no repeats", () => {
+    eq(nats(["qa", "GB"]), ["QA", "GB"]);
+    eq(nats(["QA", "QA", "EG"]), ["QA", "EG"]);
+    eq(nats(["QA", "GB", "US"]), ["QA", "GB"]);
+  });
+  it("drops unknown or empty picks, so a blank second picker adds nothing", () => {
+    eq(nats(["", "ZZ", "EG"]), ["EG"]);
+    eq(nats(["", ""]), []);
+    eq(nats(undefined), []);
+  });
+  it("reads a hand-written 'QA, GB' as two nationalities", () => eq(nats("QA, GB"), ["QA", "GB"]));
+  it("a cleared nationality is an empty list, which the roster merge does not treat as blank", () =>
+    eq(Array.isArray(nats([])), true));
+
+  const flag = bind("_flagEmoji");
+  it("draws the flag from the two letters", () => {
+    eq(flag("QA"), "\u{1F1F6}\u{1F1E6}");
+    eq(flag("gb"), "\u{1F1EC}\u{1F1E7}");
+    eq(flag(""), "");
+  });
+  it("names the country, for screens that cannot draw the flag", () => eq(bind("_countryName")("EG"), "Egypt"));
+
+  const opts = bind("_countryOptions", {}, ["COUNTRY_CODES", "_countryName", "_flagEmoji"])();
+  it("the picker opens on Qatar and lists every country once", () => {
+    eq(opts[0].value, "QA");
+    eq(new Set(opts.map((o) => o.value)).size, opts.length);
+  });
+  it("the profile header shows the flags and the editor saves both", () => {
+    eq(/\{\{ swimmer\.natFlags \}\}/.test(SOURCE), true);
+    eq(/nat:this\._swNats\(\[d\.nat1, d\.nat2\]\)/.test(SOURCE), true);
+  });
+});
+
 await report();
