@@ -93,7 +93,8 @@ const FLAT_ARRAY_BY_SWID_KEYS = ["vx_event_requests"];
  * corrected.
  *
  * Hence: returned, and sliced the same way as everything else — this family's children and
- * nobody else's, in all three parts of the document.
+ * nobody else's, in all three parts of the document. Everybody else's SWIMS ride along too, cut
+ * to public fields only: see pickRosterDocForFamily().
  */
 const ROSTER_DOC_KEYS = ["vx_roster_edits"];
 
@@ -346,6 +347,153 @@ export function pickRosterDoc(value: unknown, mine: Set<string>): Json {
   return out;
 }
 
+/**
+ * Everybody else's swims, for the club's results and records.
+ *
+ * The club asked for families to see every meet result, not only their own child's. The base
+ * roster (public/assets/roster.js) already ships every swimmer's name, age, gender and results to
+ * every device, so the club's results were never the private part of the overlay. What the overlay
+ * adds is the newer ones: every meet imported since roster.js was generated lives only here, so a
+ * family's "Club results" stopped at 20 August for everybody but their own child.
+ *
+ * So the overlay is sent for everybody, BUT ONLY THROUGH AN ALLOWLIST — the same fields roster.js
+ * already makes public, and the fields of a swim. A date of birth never leaves: it is used here to
+ * stamp each swim with the swimmer's age that day (`ageAt`) and each club meet with it
+ * (`ageAtMeet`), so records land in the same age band as they do for coaches, without the device
+ * ever holding the date. Anything added to a swimmer next year is not sent, by default.
+ */
+const PUBLIC_SWIMMER_FIELDS = [
+  "id", "first", "last", "name", "initials", "age", "gender",
+  "results", "entries", "pbs", "meets", "meetCount", "topEvent", "topTime", "topSec",
+  "movedAt",   // which squad a swimmer moved to last: rebuildRoster() files them by it
+];
+const PUBLIC_SWIM_FIELDS = [
+  "meet", "date", "meetDate", "event", "time", "sec", "place", "course", "courseLabel",
+  "splits", "relay", "dq", "valid", "drop",
+];
+const SWIM_LIST_FIELDS = new Set(["results", "entries", "pbs"]);
+
+/** The app's _dobParts(): yyyy-mm-dd, or dd/mm/yyyy with an impossible month swapped back. */
+export function dobParts(v: unknown): { y: number; mo: number; d: number } | null {
+  const t = String(v ?? "").trim();
+  if (!t) return null;
+  const p = t.split(/[/\-.]/);
+  if (p.length !== 3) return null;
+  let y: number, mo: number, d: number;
+  if (p[0].length === 4) { y = +p[0]; mo = +p[1]; d = +p[2]; }
+  else { d = +p[0]; mo = +p[1]; y = +p[2]; }
+  if (mo > 12 && d >= 1 && d <= 12) { const t2 = d; d = mo; mo = t2; }
+  if (!y || !mo || !d || mo > 12 || d > 31) return null;
+  return { y, mo, d };
+}
+
+/** The app's _toISODate() for the shapes a swim's date is stored in: ISO, or M/D/YYYY. */
+export function swimISO(v: unknown): string {
+  const t = String(v ?? "").trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0, 10);
+  const us = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (us) return `${us[3]}-${us[1].padStart(2, "0")}-${us[2].padStart(2, "0")}`;
+  return "";
+}
+
+/** The app's _ageOnDate(): whole years on that day, or null. */
+export function ageOn(dob: unknown, iso: string): number | null {
+  const p = dobParts(dob);
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || "");
+  if (!p || !m) return null;
+  let a = +m[1] - p.y;
+  if (+m[2] < p.mo || (+m[2] === p.mo && +m[3] < p.d)) a--;
+  return a >= 0 && a < 120 ? a : null;
+}
+
+function publicSwim(swim: unknown, dob: unknown, meetDates: Map<string, string>): Json | null {
+  if (!swim || typeof swim !== "object") return null;
+  const src = swim as Json;
+  const out: Json = {};
+  for (const f of PUBLIC_SWIM_FIELDS) if (src[f] !== undefined) out[f] = src[f];
+  const iso = swimISO(src.meetDate) || swimISO(src.date) || meetDates.get(String(src.meet ?? "").trim()) || "";
+  const a = ageOn(dob, iso);
+  if (a != null) out.ageAt = a;
+  return out;
+}
+
+/** One swimmer (a patch or a whole row) cut to what roster.js already makes public. */
+export function publicSwimmer(row: unknown, meetDates: Map<string, string>): Json {
+  const out: Json = {};
+  if (!row || typeof row !== "object") return out;
+  const src = row as Json;
+  for (const f of PUBLIC_SWIMMER_FIELDS) {
+    if (src[f] === undefined) continue;
+    out[f] = SWIM_LIST_FIELDS.has(f) && Array.isArray(src[f])
+      ? (src[f] as unknown[]).map((s) => publicSwim(s, src.dob, meetDates)).filter(Boolean)
+      : src[f];
+  }
+  if (dobParts(src.dob) && meetDates.size) {
+    const byMeet: Json = {};
+    for (const [name, iso] of meetDates) { const a = ageOn(src.dob, iso); if (a != null) byMeet[name] = a; }
+    out.ageAtMeet = byMeet;
+  }
+  return out;
+}
+
+/**
+ * The roster document for a family: their own children whole (pickRosterDoc), everybody else
+ * through publicSwimmer(). Squad moves (deleted / added / removed) go to everyone, so a swimmer
+ * who changed squad is filed under the squad they are in now — squad membership is on roster.js
+ * already, and a swim credited to the wrong squad is its own kind of wrong.
+ */
+export function pickRosterDocForFamily(value: unknown, mine: Set<string>, meetDates: Map<string, string>): Json {
+  const out = pickRosterDoc(value, mine);
+  if (!value || typeof value !== "object") return out;
+  const doc = value as Json;
+  const others = (id: unknown) => !mine.has(bareId(id));
+
+  const edits = out.edits as Json;
+  if (doc.edits && typeof doc.edits === "object") {
+    for (const [sqid, inner] of Object.entries(doc.edits as Json)) {
+      if (!inner || typeof inner !== "object") continue;
+      for (const [swid, patch] of Object.entries(inner as Json)) {
+        if (!others(swid)) continue;
+        const kept = publicSwimmer(patch, meetDates);
+        // A patch that is only a date of birth still carries the ages it implies.
+        if (Object.keys(kept).length) ((edits[sqid] ||= {}) as Json)[swid] = kept;
+      }
+    }
+  }
+  const deleted = out.deleted as Json;
+  if (doc.deleted && typeof doc.deleted === "object") {
+    for (const [sqid, inner] of Object.entries(doc.deleted as Json)) {
+      if (!inner || typeof inner !== "object") continue;
+      for (const [swid, v] of Object.entries(inner as Json)) {
+        if (others(swid)) ((deleted[sqid] ||= {}) as Json)[swid] = v === true ? true : !!v;
+      }
+    }
+  }
+  const added = out.added as Json;
+  if (doc.added && typeof doc.added === "object") {
+    for (const [sqid, rows] of Object.entries(doc.added as Json)) {
+      if (!Array.isArray(rows)) continue;
+      const kept = rows.filter((r) => others((r as Json)?.id)).map((r) => publicSwimmer(r, meetDates));
+      if (kept.length) added[sqid] = [...((added[sqid] as unknown[]) || []), ...kept];
+    }
+  }
+  const removed = out.removed as Json;
+  if (doc.removed && typeof doc.removed === "object") {
+    for (const [swid, v] of Object.entries(doc.removed as Json)) if (others(swid)) removed[swid] = !!v;
+  }
+  return out;
+}
+
+/** meet name → ISO date, from the club's meets table. */
+export function meetDateMap(rows: MeetRow[] | null): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const r of rows || []) {
+    const iso = swimISO(r.meet_date);
+    if (r.name && iso) m.set(String(r.name).trim(), iso);
+  }
+  return m;
+}
+
 export function pickArraysBySwId(value: unknown, mine: Set<string>): Json {
   const out: Json = {};
   if (!value || typeof value !== "object") return out;
@@ -412,6 +560,7 @@ export async function GET(request: Request) {
   // the two keys are rebuilt here from the table, so the portal needs no change and no parent
   // gets a direct read of the club's meets.
   const [meetRows, planRows, fitRows] = await Promise.all([fetchMeets(), fetchPlans(), fetchFitPlans()]);
+  const meetDates = meetDateMap(meetRows);
   const out = rows
     .map((r) => {
       if (CLUB_KEYS.includes(r.key)) return r;
@@ -419,7 +568,7 @@ export async function GET(request: Request) {
       if (PERIOD_THEN_SWIMMER_KEYS.includes(r.key)) return { ...r, value: pickPeriodThenSwimmer(r.value, mine) };
       if (ARRAY_BY_SWID_KEYS.includes(r.key)) return { ...r, value: pickArraysBySwId(r.value, mine) };
       if (FLAT_ARRAY_BY_SWID_KEYS.includes(r.key)) return { ...r, value: pickFlatArrayBySwId(r.value, mine) };
-      if (ROSTER_DOC_KEYS.includes(r.key)) return { ...r, value: pickRosterDoc(r.value, mine) };
+      if (ROSTER_DOC_KEYS.includes(r.key)) return { ...r, value: pickRosterDocForFamily(r.value, mine, meetDates) };
       return null;   // unreachable — `wanted` is built from the six lists
     })
     .filter(Boolean);
