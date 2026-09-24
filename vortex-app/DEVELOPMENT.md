@@ -249,6 +249,7 @@ After Stage 4:
 | plans, seasons, dryland, lounge, sign-up alerts | everything | nothing |
 | messages, documents, wellness, HR, wearables | the club | only their own linked children |
 | attendance | mark and read | read their own children only |
+| meet results & club records | everything | every swimmer's swims — name, age, gender, results only, never a date of birth (`/api/family/state`, `pickRosterDocForFamily`) |
 | family accounts | the list | their own row |
 | staff accounts | change | look up a username to sign in; no changes |
 | announcements | write | read |
