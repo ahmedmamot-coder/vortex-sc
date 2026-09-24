@@ -13752,4 +13752,53 @@ describe("family upcoming meets", () => {
   });
 });
 
+describe("records: VIC 2026 pool records and Vortex short-course records", () => {
+  const pool = bind("VIC_POOL_RECORDS", {}, ["parseTimeStr"])();
+  it("every event on the sheet is there, 18 of them", () => eq(pool.events.length, 18));
+  it("rows keep the time as printed and parse it", () => {
+    const r = pool.rows.find((x) => x.event === "800 Free" && x.gender === "Girls" && x.age === "12");
+    eq([r.name, r.club, r.time, r.sec, r.date, r.vortex], ["Lilliana Millen", "VTX", "10:21.67", 621.67, "2026-04-30", true]);
+  });
+  it("relays are flagged and every time parses", () => {
+    eq(pool.rows.filter((x) => x.relay).length, 16);
+    eq(pool.rows.every((x) => x.sec > 0), true);
+  });
+
+  const ctx = { _resultISO: (r) => r.meetDate || "", _dobParts: (v) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v || ""); return m ? { y: +m[1], mo: +m[2], d: +m[3] } : null; }, _swAge: (sw) => sw.age || 0 };
+  const recs = bind("clubScRecords", ctx, ["_ageOnDate", "_recordBand", "RECORD_BANDS", "parseTimeStr", "fmt"]);
+  const swimmers = [
+    { id: "a", name: "Amy", gender: "Girls", age: 12, dob: "2014-06-01", squadName: "A", results: [
+      { event: "50 Free", sec: 31.5, course: "S", meet: "SC Cup", meetDate: "2025-11-10" },   // age 11 then
+      { event: "50 Free", sec: 30.9, course: "L", meet: "LC Open", meetDate: "2026-05-01" },  // long course: ignored
+      { event: "50 Free", sec: 30.2, course: "S", meet: "SC Champs", meetDate: "2026-09-01" },// age 12
+    ] },
+    { id: "b", name: "Bea", gender: "Girls", age: 12, squadName: "B", results: [
+      { event: "50 Free", sec: 30.8, course: "S", meet: "SC Cup" },                             // undated: today's age
+      { event: "200 Free Relay", sec: 120, course: "S", relay: true },
+    ] },
+    { id: "c", name: "Cal", gender: "Boys", age: 15, squadName: "C", results: [{ event: "100 Back", time: "1:05.40", course: "S" }] },
+  ];
+  const out = recs(swimmers);
+  const band = (ev, g, b) => (out[ev][g].find((r) => r.band === b) || {}).name;
+  it("fastest short-course swim per age band, at the age it was swum", () => {
+    eq(band("50 Free", "Girls", "11"), "Amy");
+    eq(band("50 Free", "Girls", "12"), "Amy");
+    eq(out["50 Free"].Girls.find((r) => r.band === "12").time, "30.20");
+  });
+  it("long-course swims never become short-course records", () =>
+    eq(out["50 Free"].Girls.some((r) => r.sec === 30.9), false));
+  it("Open is the fastest at any age, and comes last", () => {
+    const g = out["50 Free"].Girls; eq(g[g.length - 1].band, "Open"); eq(g[g.length - 1].sec, 30.2);
+  });
+  it("relays are left out; a swim with only a time string still counts", () => {
+    eq(out["200 Free Relay"], undefined);
+    eq(out["100 Back"].Boys.map((r) => [r.band, r.sec]), [["15", 65.4], ["Open", 65.4]]);
+  });
+  it("age bands match the pool sheet", () => {
+    const b = bind("_recordBand");
+    eq([6, 7, 8, 9, 10, 15, 16, 24, 27].map(b), ["6-7", "6-7", "8-9", "8-9", "10", "15", "16-24", "16-24", "25-29"]);
+  });
+  it("the Records tool is on the tools screen", () => eq(/\{id:'records', icon:'trophy'/.test(SOURCE), true));
+});
+
 await report();
