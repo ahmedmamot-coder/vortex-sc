@@ -4278,7 +4278,7 @@ if ('serviceWorker' in navigator) {
                         </label>
                         <span style="position:absolute;bottom:-4px;right:-4px;width:24px;height:24px;border-radius:50%;background:{{ swimmer.genBg }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;line-height:1;border:2.5px solid {{ profileHeaderBg }}">{{ swimmer.genIcon }}</span>
                       </span>
-                      <div style="flex:1"><span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><h1 style="font-size:23px;font-weight:700;letter-spacing:-.02em;margin:0">{{ swimmer.name }}</h1><sc-if value="{{ swimmer.inactive }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:4px;background:rgba(180,105,14,.9);color:#fff;font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:3px 8px;border-radius:999px"><i data-lucide="pause" style="width:11px;height:11px"></i>{{ swimmer.statusText }}</span></sc-if></span><p style="margin:3px 0 0;font-size:12.5px;color:{{ profileHeaderSubFg }}">{{ swimmer.ageLabel }} · DOB {{ swimmer.dob }} · {{ squad.name }} · {{ swimmer.gender }}</p></div>
+                      <div style="flex:1"><span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><h1 style="font-size:23px;font-weight:700;letter-spacing:-.02em;margin:0">{{ swimmer.name }}</h1><sc-if value="{{ swimmer.hasNats }}" hint-placeholder-val="{{ false }}"><span title="{{ swimmer.natNames }}" aria-label="{{ swimmer.natNames }}" style="font-size:21px;line-height:1;letter-spacing:.06em">{{ swimmer.natFlags }}</span></sc-if><sc-if value="{{ swimmer.inactive }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:4px;background:rgba(180,105,14,.9);color:#fff;font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:3px 8px;border-radius:999px"><i data-lucide="pause" style="width:11px;height:11px"></i>{{ swimmer.statusText }}</span></sc-if></span><p style="margin:3px 0 0;font-size:12.5px;color:{{ profileHeaderSubFg }}">{{ swimmer.ageLabel }} · DOB {{ swimmer.dob }} · {{ squad.name }} · {{ swimmer.gender }}{{ swimmer.natLine }}</p></div>
                     </div>
                     <div style="position:relative;display:flex;gap:8px;margin-top:15px">
                       <sc-for list="{{ swimmerKpis }}" as="k" hint-placeholder-count="3">
@@ -4316,6 +4316,18 @@ if ('serviceWorker' in navigator) {
                               <select value="{{ profEditSquad }}" onchange="{{ onProfEditSquad }}" style="width:100%;box-sizing:border-box;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:10px 12px;font-family:inherit;font-size:13px;color:#0C1116;outline:none">
                                 <sc-for list="{{ profEditSquadOptions }}" as="po" hint-placeholder-count="9"><option value="{{ po.value }}">{{ po.label }}</option></sc-for>
                               </select>
+                            </div>
+                            <div>
+                              <p style="margin:0 0 5px;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#9AA2B4">Nationality</p>
+                              <div style="display:flex;flex-direction:column;gap:7px">
+                                <select value="{{ profEditNat1 }}" onchange="{{ onProfEditNat1 }}" style="width:100%;box-sizing:border-box;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:10px 12px;font-family:inherit;font-size:13px;color:#0C1116;outline:none">
+                                  <sc-for list="{{ profEditNatOptions }}" as="no" hint-placeholder-count="12"><option value="{{ no.value }}">{{ no.label }}</option></sc-for>
+                                </select>
+                                <select value="{{ profEditNat2 }}" onchange="{{ onProfEditNat2 }}" aria-label="Second nationality" style="width:100%;box-sizing:border-box;background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:10px 12px;font-family:inherit;font-size:13px;color:#0C1116;outline:none">
+                                  <sc-for list="{{ profEditNat2Options }}" as="no2" hint-placeholder-count="12"><option value="{{ no2.value }}">{{ no2.label }}</option></sc-for>
+                                </select>
+                              </div>
+                              <p style="margin:5px 2px 0;font-size:11px;font-weight:600;color:#9AA2B4">{{ profEditNatHint }}</p>
                             </div>
                             <sc-if value="{{ profEditErrShow }}" hint-placeholder-val="{{ false }}">
                               <p style="margin:0;font-size:11.5px;font-weight:600;color:#B42318">{{ profEditErr }}</p>
@@ -9777,6 +9789,41 @@ class Component extends DCLogic {
   // Was: fall back to a date invented from the swimmer's age, which a profile then printed
   // as though somebody had checked it. A date nobody has given us is shown as missing.
   _swDob(sw){ const p=this._dobParts(sw&&sw.dob); return p ? p.label : '—'; }
+  // ---- nationality ----------------------------------------------------------------------------
+  // Held as ISO 3166-1 alpha-2 codes in `sw.nat`, at most two for a dual national. An ARRAY, not a
+  // string: the roster merge keeps any non-empty value over a blank string, so a nationality
+  // cleared to '' would come straight back from the next pull. An empty list is not blank to it.
+  COUNTRY_CODES(){ return ('AD AE AF AG AI AL AM AO AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BW BY BZ '
+    +'CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR '
+    +'GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GT GU GW GY HK HN HR HT HU ID IE IL IM IN IQ IR IS IT JE JM JO JP '
+    +'KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ '
+    +'NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW '
+    +'SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TG TH TJ TK TL TM TN TO TR TT TV TW TZ '
+    +'UA UG US UY UZ VA VC VE VG VI VN VU WF WS XK YE YT ZA ZM ZW').split(' '); }
+  // A swimmer's nationalities, cleaned: known codes only, upper-case, no repeats, two at most.
+  // Takes the stored list, a single code, or "QA,GB" from a hand-edited record.
+  _swNats(v){
+    const raw = Array.isArray(v) ? v : (v==null ? [] : String(v).split(/[\s,;/]+/));
+    const known = this.COUNTRY_CODES(); const out = [];
+    raw.forEach(c=>{ const k=String(c||'').trim().toUpperCase(); if(known.includes(k) && !out.includes(k) && out.length<2) out.push(k); });
+    return out;
+  }
+  // The flag is two regional-indicator letters; iOS, Android and macOS draw them as a flag.
+  _flagEmoji(code){ const k=String(code||'').toUpperCase(); if(!/^[A-Z]{2}$/.test(k)) return '';
+    return String.fromCodePoint(0x1F1E6+k.charCodeAt(0)-65, 0x1F1E6+k.charCodeAt(1)-65); }
+  // Windows shows those same letters as "QA" rather than a flag, so the name is always said too.
+  _countryName(code){ const k=String(code||'').toUpperCase();
+    try{ const n=new Intl.DisplayNames(['en'], {type:'region'}).of(k); if(n && n!==k) return n; }catch(e){}
+    return k; }
+  // Picker options, by name, with Qatar first — the club is in Doha.
+  _countryOptions(){
+    if(!this._countryOptsCache){
+      const opts=this.COUNTRY_CODES().map(c=>({value:c, name:this._countryName(c)})).sort((a,b)=>a.name.localeCompare(b.name));
+      const qa=opts.findIndex(o=>o.value==='QA'); if(qa>0) opts.unshift(opts.splice(qa,1)[0]);
+      this._countryOptsCache=opts.map(o=>({value:o.value, label:this._flagEmoji(o.value)+'  '+o.name}));
+    }
+    return this._countryOptsCache;
+  }
   vortexIdNumber(swId){ if(!this._vortexIdMap){ const map={}; this.allSwimmersFlat().forEach((sw,i)=>{ map[sw.id]=String(i+1).padStart(5,'0'); }); this._vortexIdMap=map; } return this._vortexIdMap[swId] || '00000'; }
   genMeta(g){ return g==='Girls' ? {icon:'\u2640', bg:'#E64B8B'} : {icon:'\u2642', bg:'#2F6BE0'}; }
   ageIn(sq, r){ const map={preteam:[5,6],advb:[7,8],adva:[9,10],junior:[11,12],seniorb:[13,13],seniora:[14,14],vortexb:[15,15],vortexa:[16,16],legend:[17,18]}; const [lo,hi]=map[sq]; return lo + Math.floor(r()*(hi-lo+1)); }
@@ -24440,6 +24487,9 @@ class Component extends DCLogic {
       attendSummary, attendList,
       meetChips, selMeet, resultRows,
       swimmer:{name:swObj.name, age:this._swAge(swObj), ageLabel:this._swAgeLabel(swObj), dob:this._swDob(swObj), gender:swObj.gender, initials:swObj.initials, inactive:!this._swStatus(swObj.id).active, statusText:this._statusLabel(this._swStatus(swObj.id).reason), genIcon:this.genMeta(swObj.gender).icon, genBg:this.genMeta(swObj.gender).bg, progressBest,
+        ...(()=>{ const nats=this._swNats(swObj.nat); const names=nats.map(c=>this._countryName(c));
+          return { hasNats:nats.length>0, natFlags:nats.map(c=>this._flagEmoji(c)).join(' '),
+                   natNames:names.join(' · '), natLine:names.length ? (' · '+names.join(' / ')) : '' }; })(),
         avatarEl: this.av(this.swimmerPhotos[swObj.id]||null, swObj.initials, 60, 17, 'rgba(255,255,255,.18)', '#fff', 20, 'rgba(255,255,255,.18)')},
       onPhotoChange:(e)=>this.handlePhotoUpload(e, swObj.id),
       showVortexId:S.showVortexId, onCloseVortexId:()=>this.setState({showVortexId:false, vortexIdFlipped:false, vortexIdMsg:''}),
@@ -24474,11 +24524,13 @@ class Component extends DCLogic {
         const gender = open ? d.gender : swObj.gender;
         return {
           profCanEdit:true, profEditOpen:open,
-          profEditSubtitle: 'Age '+this._swAge(swObj)+' · DOB '+this._swDob(swObj)+' · '+swObj.gender,
+          profEditSubtitle: 'Age '+this._swAge(swObj)+' · DOB '+this._swDob(swObj)+' · '+swObj.gender
+            +(this._swNats(swObj.nat).length ? (' · '+this._swNats(swObj.nat).map(c=>this._countryName(c)).join(' / ')) : ''),
           profEditBtnLabel: open ? 'Close' : 'Edit',
           profEditBtnBg: open ? '#F4F6F8' : '#fff', profEditBtnFg: open ? '#3A4152' : 'var(--vx-blue)',
           onProfEditToggle:()=> this.setState({ profEdit: open ? null : {
-            name:swObj.name, dob:(swObj.dob||''), gender:swObj.gender, squadId:S.squadId }, profEditErr:'', profEditSaved:'' }),
+            name:swObj.name, dob:(swObj.dob||''), gender:swObj.gender, squadId:S.squadId,
+            nat1:this._swNats(swObj.nat)[0]||'', nat2:this._swNats(swObj.nat)[1]||'' }, profEditErr:'', profEditSaved:'' }),
           profEditName: open ? d.name : '',
           onProfEditName:(e)=>this.setState({profEdit:{...d, name:e.target.value}, profEditErr:''}),
           profEditDob: dobRaw,
@@ -24496,6 +24548,14 @@ class Component extends DCLogic {
           profEditSquad: open ? d.squadId : S.squadId,
           profEditSquadOptions: this.squads.map(sq=>({value:sq.id, label:sq.name})),
           onProfEditSquad:(e)=>this.setState({profEdit:{...d, squadId:e.target.value}}),
+          // Two pickers: the second is only for a swimmer who holds two nationalities.
+          profEditNat1: open ? (d.nat1||'') : '', profEditNat2: open ? (d.nat2||'') : '',
+          profEditNatOptions: [{value:'', label:'— Not set —'}, ...this._countryOptions()],
+          profEditNat2Options: [{value:'', label:'— None —'}, ...this._countryOptions()],
+          onProfEditNat1:(e)=>this.setState({profEdit:{...d, nat1:e.target.value}}),
+          onProfEditNat2:(e)=>this.setState({profEdit:{...d, nat2:e.target.value}}),
+          profEditNatHint: (()=>{ const n=open ? this._swNats([d.nat1, d.nat2]) : [];
+            return n.length ? n.map(c=>this._flagEmoji(c)+' '+this._countryName(c)).join('  ·  ') : 'Shown as a flag beside the name — add a second one for a dual national'; })(),
           profEditErr:S.profEditErr||'', profEditErrShow:!!S.profEditErr,
           profEditSaved:S.profEditSaved||'', profEditSavedShow:!!S.profEditSaved,
           onProfEditCancel:()=>this.setState({profEdit:null, profEditErr:'', profEditSaved:''}),
@@ -24504,7 +24564,7 @@ class Component extends DCLogic {
             if(!name) return this.setState({profEditErr:'A swimmer needs a name.'});
             const dob=String((d&&d.dob)||'').trim();
             if(dob && !this._dobParts(dob)) return this.setState({profEditErr:'That date of birth is not a real date — write it as dd/mm/yyyy.'});
-            const patch={ name, dob, gender:d.gender };
+            const patch={ name, dob, gender:d.gender, nat:this._swNats([d.nat1, d.nat2]) };
             const age=dob ? this._ageFromDob(dob) : null;
             if(age!=null) patch.age=age;
             const parts=name.split(/\s+/); patch.first=parts[0]||''; patch.last=parts.slice(1).join(' ');
