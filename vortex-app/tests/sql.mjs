@@ -328,6 +328,40 @@ check("the repair in section 2 takes out the images and nothing else", () => {
   return "images gone, video links kept, URL photos untouched, record back under a kilobyte";
 });
 
+// Saving one field of a swimmer must not put back an old copy of the others. A phone open since
+// before the Dragons meet was imported fixed two swimmers' nationality and, by sending the whole
+// record, took their results with it.
+check("vx_roster_patch changes only the fields it is sent", () => {
+  const setup = psql(["-q"], `
+    do $$ begin create role anon; exception when duplicate_object then null; end $$;
+    do $$ begin create role authenticated; exception when duplicate_object then null; end $$;
+    create table if not exists vx_roster (id text primary key, squad_id text not null, sw_id text not null,
+      patch jsonb not null default '{}'::jsonb, deleted boolean not null default false,
+      added boolean not null default false, updated_at timestamptz not null default now());
+    insert into vx_roster (id, squad_id, sw_id, patch, deleted, added) values
+      ('vortexa::r157','vortexa','r157', '{"name":"Ali Dardir","nat":["EG"],"results":[{"meet":"Dragons"}],"old":1}', false, true);`);
+  if (setup.status !== 0) throw new Error(setup.stderr);
+  const f = psql(["-f", join(SUPA, "vx_roster_patch.sql")]);
+  if (f.status !== 0) throw new Error(f.stderr || f.stdout);
+  const again = psql(["-f", join(SUPA, "vx_roster_patch.sql")]);
+  if (again.status !== 0) throw new Error("not safe to run twice: " + again.stderr);
+  const r = psql(["-tAc", `select patch::text || '|' || deleted || '|' || added from vx_roster_patch('[
+      {"id":"vortexa::r157","squad_id":"vortexa","sw_id":"r157","set":{"nat":["EG","US"]},"unset":["old"],"deleted":null,"added":null},
+      {"id":"junior::new1","squad_id":"junior","sw_id":"new1","set":{"name":"New One"},"unset":[],"added":true}]'::jsonb)`]);
+  if (r.status !== 0) throw new Error(r.stderr);
+  const [a, b] = r.stdout.trim().split("\n");
+  const [pa, da, aa] = a.split("|"); const p = JSON.parse(pa);
+  if (JSON.stringify(p.results) !== '[{"meet":"Dragons"}]') throw new Error("the results it was not sent were lost: " + pa);
+  if (JSON.stringify(p.nat) !== '["EG","US"]') throw new Error("the field it was sent did not change: " + pa);
+  if ("old" in p) throw new Error("a field it was told to remove is still there");
+  if (p.name !== "Ali Dardir") throw new Error("the name was touched");
+  if (da !== "false" || aa !== "true") throw new Error("flags it was not sent changed: deleted=" + da + " added=" + aa);
+  if (!b || JSON.parse(b.split("|")[0]).name !== "New One" || b.split("|")[2] !== "true") throw new Error("a new row was not created: " + b);
+  const anon = psql(["-tAc", `select has_function_privilege('anon', 'vx_roster_patch(jsonb)', 'execute')`]);
+  if (anon.stdout.trim() !== "f") throw new Error("an anonymous visitor can call it");
+  return "results kept, one field changed, one removed, new row created, anon refused";
+});
+
 asPg(`${join(BIN, "pg_ctl")} -D ${DATA} stop`);
 try { rmSync(DATA, { recursive: true, force: true }); } catch {}
 console.log("\n  " + (checks - failed) + " passed, " + failed + " failed\n");
