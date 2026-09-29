@@ -581,6 +581,71 @@ describe("Hy-Tek .hy3 import", () => {
   });
 });
 
+/* ------------------------------------------------- Hy-Tek import: whose swims, which pool
+   The Dragons Invitational 2026 file was imported as long course (its name never says "short
+   course"), with every club at the meet in it, and names matched only letter for letter — so
+   130-odd swimmers were created, half of them other clubs' children, the rest our own swimmers a
+   second time. These are that file's own record layouts. */
+describe("Hy-Tek import: our club only, the right course, the right child", () => {
+  const parse = bind("meetParseHy3", {}, ["_hy3Splits"]);
+  const file = [
+    "B1Dragons Invitational ASDoha 2026             American School of Doha                      092420260926202609242026   0        95",
+    "C1ASD  American School of Doha       ASD               Mohamad El houjairi",
+    "D1F  219Gray                Albany                                                   21910",
+    "E1F  219GrayAF     50A  9 10  0A 40.00  1B   40.00S   40.00S    0.00    0.00   NN               N",
+    "E2F   39.10S       0  3  4  2   5  0   39.12    0.00    0.00        39.10     0.00     09242026                           0     85",
+    "C1VTX  VORTEX SWIMMING CLUB          VTX",
+    "D1M  152Abu Rezeq           Omar                                                     15205",
+    "E1M  152AbuReMB    50B 13 14  0A 40.00  8B   34.18S   34.18S    0.00    0.00   NN               N",
+    "E2F   32.22S       0  9  4  3   5  0   32.15    0.00    0.00        32.22     0.00     09242026                           0     85",
+  ].join("\n");
+  const out = parse(file);
+
+  it("reads short course from the swim's own record", () => eq(out[1].results[0].course, "S"));
+  it("the time is still the time", () => eq(out[1].results[0].sec, 32.22));
+  it("tags each swimmer with their club", () => eq(out.map((s) => s.team.code), ["ASD", "VTX"]));
+  it("an impossible time (a 100 in 28.38) is not taken as a swim", () => {
+    const bad = parse([
+      "C1VTX  VORTEX SWIMMING CLUB          VTX",
+      "D1M  174El Mahalawy         Yassin                                                   17401",
+      "E1M  174El MaMB   100A 15109  0A 40.00 26C   58.00S   58.00S    0.00    0.00   NN               N",
+      "E2F   28.38S       0 10  5  1   1  0   60.67    0.00    0.00        28.38     0.00     09262026K",
+    ].join("\n"));
+    eq(bad[0].results.filter((r) => r.valid).length, 0);
+  });
+  const ours = bind("_isOurTeam", {});
+  it("keeps Vortex", () => eq(ours(out[1].team), true));
+  it("leaves another club out", () => eq(ours(out[0].team), false));
+  it("a file with no club records (our own export) is all ours", () => eq(ours(null), true));
+
+  const match = bind("_matchImportSwimmer", {}, ["_nameKey"]);
+  const flat = [
+    { id: "a", name: "Ahmed Helmy Amara", gender: "Boys" },
+    { id: "b", name: "MARIA EIGHVRY TOBONGBANUA", gender: "Girls" },
+    { id: "c", name: "Omar Abu Rezeq", gender: "Boys" },
+    { id: "d", name: "Omar Bassem", gender: "Boys" },
+    { id: "e", name: "Sara Zaitouny", gender: "Girls" },
+  ];
+  const m = (first, last, gender) => (match({ first, last, gender }, flat) || {}).id || null;
+  it("an exact name", () => eq(m("Omar", "Abu Rezeq", "B"), "c"));
+  it("the short entry name finds the full registered one", () => eq(m("Ahmed", "Amara", "B"), "a"));
+  it("capitals and middle names do not matter", () => eq(m("Maria", "Tobongbanua", "G"), "b"));
+  it("a different child is never picked", () => eq(m("Sara", "Zitouni", "G"), null));
+  it("a first name alone is not a match", () => eq(m("Omar", "Belal", "B"), null));
+
+  const pbs = bind("_mergePbs", {});
+  const had = [{ event: "50 Back", sec: 33.5, time: "33.50", course: "L", drop: "−1.00s" },
+               { event: "100 Free", sec: 70, time: "1:10.00", course: "L" }];
+  const merged = pbs(had, [{ event: "50 Back", sec: 32.22, time: "32.22", course: "S", meet: "Dragons" }]);
+  it("a short-course swim does not replace a long-course PB", () =>
+    eq(merged.find((p) => p.event === "50 Back" && p.course === "L").sec, 33.5));
+  it("it is kept as the short-course PB beside it", () =>
+    eq(merged.find((p) => p.event === "50 Back" && p.course === "S").sec, 32.22));
+  it("PBs from elsewhere are not thrown away", () => eq(merged.some((p) => p.event === "100 Free"), true));
+  it("a slower swim never lowers a PB", () =>
+    eq(pbs(had, [{ event: "100 Free", sec: 75, time: "1:15.00", course: "L" }]).find((p) => p.event === "100 Free").sec, 70));
+});
+
 /* ------------------------------------------------------------ Hy-Tek splits
    A 200 arrived as one number: the G1 split lines under it were skipped, so the profile
    could never say the swimmer went out in 30 and came home in 32. */
@@ -9981,6 +10046,46 @@ describe("InBody sheet", () => {
       const out = c._rosterMergeRows([], mine, {});      // sent nothing: every row is pending
       eq(out.pending.length, 1);
       eq(c._rosterEditsFrom(out.rows).edits.seniora.sw2.age, 14);
+    });
+
+    // A server-side change survives the device's next two launches. The first launch took the
+    // table but kept its OLD copy on the phone; the second launch started from that old copy,
+    // saw it differ from the table it had last read, called it unsent work and pushed it — which
+    // is how 386 Dragons swims were undone on 115 swimmers with nobody touching them.
+    itAsync("a device's next launch never sends back a copy older than the table it read", async () => {
+      const store = {};
+      const mk = () => {
+        const c = rosterCtx();
+        c._rosterRowsOn = () => true;
+        c._loadJSON = (k, d) => (k in store ? JSON.parse(store[k]) : d);
+        c._saveLocalOnly = (k, v) => { store[k] = JSON.stringify(v); };
+        c._rosterSentSave = (m) => { c._rosterSent = m; store.sent = JSON.stringify(m); };
+        c.forceUpdate = () => {};
+        c.pushed = 0; c._rosterPersistRows = () => { c.pushed++; };
+        c._rosterFetch = bind("_rosterFetch", c);
+        return c;
+      };
+      const old = { edits: { junior: { sw1: { results: [] } } }, deleted: {}, added: {}, removed: { gone1: true } };
+      const table = [{ id: "junior::sw1", squad_id: "junior", sw_id: "sw1", patch: { results: [{ meet: "Dragons", sec: 30 }] } }];
+      globalThis.window.__vxSelect = async () => table;
+      // Launch 1: the phone holds the old copy and last saw the old table.
+      store.vx_roster_edits = JSON.stringify(old);
+      let c = mk();
+      c.rosterEdits = c._loadJSON("vx_roster_edits", null);
+      c._rosterSent = c._rowKeyMap(c._rosterRowsFrom(old));
+      await c._rosterFetch();
+      eq(c.pushed, 0, "the table changed, not this device");
+      eq(JSON.parse(store.vx_roster_edits).edits.junior.sw1.results[0].meet, "Dragons",
+         "the device keeps what it read as its own copy");
+      eq(JSON.parse(store.vx_roster_edits).removed.gone1, true, "deletion tombstones are not lost");
+      // Launch 2: starts from whatever the phone saved.
+      c = mk();
+      c.rosterEdits = c._loadJSON("vx_roster_edits", null);
+      c._rosterSent = JSON.parse(store.sent);
+      await c._rosterFetch();
+      eq(c.pushed, 0, "nothing stale is sent back over the club");
+      eq(c.rosterEdits.edits.junior.sw1.results[0].meet, "Dragons");
+      delete globalThis.window.__vxSelect;
     });
 
     it("going back needs no copying, because the document was never abandoned", () => {

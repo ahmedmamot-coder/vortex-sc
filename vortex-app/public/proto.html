@@ -11798,6 +11798,17 @@ class Component extends DCLogic {
     // below could never be found again.
     this._rosterSentSave(this._rowKeyMap(theirs));
     this.rosterEdits=this._rosterEditsFrom(merged.rows);
+    // And keep it as this device's own copy, which is what the next launch starts from. It was
+    // left at whatever the device held before, so a phone that had last saved an older roster
+    // opened next time with that older copy, found it different from the table it had last seen,
+    // took the difference for its own unsent work — and wrote it over the club. That is how a
+    // meet imported on the server vanished from 115 swimmers two hours later with nobody touching
+    // them. Local only: the table is where this came from, so there is nothing to send. The
+    // deletion tombstones are carried across, because rows do not hold them.
+    try{
+      const had=this._loadJSON('vx_roster_edits', null);
+      this._saveLocalOnly('vx_roster_edits', {...this.rosterEdits, removed:(had&&had.removed)||{}});
+    }catch(e){}
     try{ this.rebuildRoster(); }catch(e){}
     this.forceUpdate();
     // This device had something the table did not. Send exactly that, and nothing else.
@@ -19302,15 +19313,24 @@ class Component extends DCLogic {
     //   so every 200 arrived as one number and the 50s inside it were thrown away.
     const lines=(txt||'').split('\n');
     const STROKE={A:'Free',B:'Back',C:'Breast',D:'Fly',E:'IM'};
+    // Course: every E2 time carries its own letter (L / S / Y) at column 12, which is what the
+    // pool actually was. This used to be guessed from the words "short course" appearing
+    // somewhere in the file, so a short-course meet whose name did not say so — the Dragons
+    // Invitational — came in as long course, and every one of its times was filed against the
+    // wrong pool. The guess is kept only for a swim whose record has no letter.
     const lc=txt.toLowerCase();
     const meetCourse = /short course/.test(lc) ? (/yard/.test(lc)?'Y':'S') : 'L';
     const mkdate=(s)=>{ if(!s||s.length!==8) return ''; return parseInt(s.slice(0,2),10)+'/'+parseInt(s.slice(2,4),10)+'/'+s.slice(4); };
     let meetName='Imported meet';
+    // C1 opens each club's block: code in 3–7, name in 8–37. A meet's results file carries every
+    // club that swam, so each swimmer is tagged with theirs — the import keeps only our own.
+    let team=null;
     const swimmers=[]; let cur=null, ev=null, last=null, lastType='';
     for(const raw of lines){
       const code=raw.slice(0,2);
       if(code!=='G1'){ last=null; }
       if(code==='B1'){ const nm=raw.slice(2,47).trim(); if(nm) meetName=nm; }
+      else if(code==='C1'){ team={code:raw.slice(2,7).trim(), name:raw.slice(7,37).trim()}; cur=null; ev=null; }
       else if(code==='D1'){
         const gender = raw.charAt(2)==='F' ? 'G' : 'B';
         const last=raw.slice(8,28).trim(), first=raw.slice(28,48).trim();
@@ -19328,7 +19348,7 @@ class Component extends DCLogic {
           if(!isNaN(t) && t.getFullYear()===yn && (t.getMonth()+1)===parseInt(mm,10) && t.getDate()===parseInt(dd,10)
              && yn>1940 && yn<=new Date().getFullYear()) dob=yy+'-'+mm+'-'+dd;
         }
-        cur={name:(first+' '+last).trim(), first, last, age, dob, gender, results:[]}; swimmers.push(cur); ev=null;
+        cur={name:(first+' '+last).trim(), first, last, age, dob, gender, team, results:[]}; swimmers.push(cur); ev=null;
       }
       else if(code==='E1' && cur){
         // Six characters wide: slice(18,21) read the last three, so a 1500 came in as a 500.
@@ -19336,14 +19356,18 @@ class Component extends DCLogic {
         ev={dist:isNaN(dist)?null:dist, stroke:STROKE[raw.charAt(21)]||null};
       }
       else if(code==='E2' && cur && ev){
-        let tm=raw.slice(5,12).trim(); if(/[LSY]$/.test(tm)) tm=tm.slice(0,-1);
+        let tm=raw.slice(3,12).trim(); let course=meetCourse;
+        if(/[LSY]$/.test(tm)){ course=tm.slice(-1); tm=tm.slice(0,-1).trim(); }
         const sec=parseFloat(tm);
         const dm=raw.slice(80,96).match(/(\d{8})/); const date=dm?mkdate(dm[1]):'';
-        const valid = !isNaN(sec) && sec>0 && ev.stroke!=null && ev.dist!=null;
+        // A time no human can swim is a keying error in the meet file, not a record: the Dragons
+        // 2026 file has a 100 Free "in 28.38" (its own backup time for the swim says 60.67). The
+        // floor is 0.38 s a metre — under the short-course 50 Free world record, 19.90.
+        const valid = !isNaN(sec) && sec>0 && ev.stroke!=null && ev.dist!=null && sec >= ev.dist*0.38;
         // The finishing place is in the record too (columns 30–33), and was dropped for null —
         // so every screen that ranks a meet made one up from the swim's position in the list.
         const pl=parseInt(raw.slice(29,33),10); const place=(pl>0 && pl<1000) ? pl : null;
-        if(valid){ last={date, meet:meetName, sec:+sec.toFixed(2), timeStr:tm, course:meetCourse, dist:ev.dist, stroke:ev.stroke, place, relay:false, valid:true, _g1:{}}; lastType=raw.charAt(2); cur.results.push(last); }
+        if(valid){ last={date, meet:meetName, sec:+sec.toFixed(2), timeStr:tm, course, dist:ev.dist, stroke:ev.stroke, place, relay:false, valid:true, _g1:{}}; lastType=raw.charAt(2); cur.results.push(last); }
         ev=null;
       }
       // Only the splits of the swim that was kept: a final's G1 lines follow its own E2, which
@@ -19430,61 +19454,123 @@ class Component extends DCLogic {
       }catch(err){ reject(err); }
     });
   }
+  // Our own club in a meet file: its team code or its name. A file written by this app has no
+  // C1 record at all, and every swimmer in it is ours.
+  _isOurTeam(team){
+    if(!team) return true;
+    return /^(VTX|VSC|VORTEX)$/i.test(team.code||'') || /vortex/i.test(team.name||'');
+  }
+  // A name reduced to what two spellings of it share: lower case, no accents, no punctuation.
+  _nameKey(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
+    .replace(/[^a-z ]+/g,' ').replace(/\s+/g,' ').trim(); }
+  // The roster swimmer a meet-file name belongs to, or null. Meet files carry "first last" as the
+  // entry was typed; the roster often holds the full registered name ("Ahmed Helmy Amara") in
+  // capitals. Exact only, as before, matched a handful — and every miss became a new swimmer, so
+  // the Dragons import doubled half the club. Tried in order, and a step only counts when it
+  // names exactly one swimmer (gender breaks a tie): a wrong child's results are worse than none.
+  _matchImportSwimmer(p, flat){
+    const K=this._nameKey.bind(this);
+    const first=K(p.first!=null?p.first:String(p.name||'').split(/\s+/)[0]);
+    const last=K(p.last!=null?p.last:String(p.name||'').split(/\s+/).slice(1).join(' '));
+    const full=K(first+' '+last), squash=x=>x.replace(/ /g,'');
+    const g = p.gender==='G'?'Girls':p.gender==='B'?'Boys':'';
+    const toks=full.split(' ').filter(Boolean);
+    const steps=[
+      r=>K(r.name)===full,
+      r=>squash(K(r.name))===squash(full) || squash(K(r.name))===squash(K(last+' '+first)),
+      // every word of the file's name is in the roster name, in any order
+      r=>{ const t=K(r.name).split(' '); return toks.length>=2 && toks.every(w=>t.includes(w)); },
+      // first word of the first name, and the last word of the surname
+      r=>{ const t=K(r.name).split(' '); const f=first.split(' ')[0], l=last.split(' ').pop();
+           return !!f && !!l && t[0]===f && t.includes(l); },
+    ];
+    for(const test of steps){
+      let hits=flat.filter(r=>r && r.name && test(r));
+      const seen={}; hits=hits.filter(r=>!seen[r.id] && (seen[r.id]=1));
+      if(hits.length>1 && g){ const same=hits.filter(r=>r.gender===g); if(same.length) hits=same; }
+      if(hits.length===1) return hits[0];
+      if(hits.length>1) return null;
+    }
+    return null;
+  }
+  // Personal bests kept per event AND course, and only ever improved. They were rebuilt from the
+  // results list alone, which threw away every PB that did not come from an imported meet, and
+  // let a short-course time stand as the swimmer's PB for a long-course event.
+  _mergePbs(pbs, results){
+    const out=(pbs||[]).map(p=>({...p}));
+    const at=(ev, c)=>out.findIndex(p=>p.event===ev && (p.course||'L')===c);
+    (results||[]).forEach(r=>{
+      if(!r || !r.event || !(+r.sec>0)) return;
+      const c=r.course||'L', i=at(r.event, c);
+      const pb={event:r.event, sec:+r.sec, time:r.time, drop:'', course:c,
+        courseLabel:c==='S'?'SCM':c==='Y'?'SCY':'LCM', meet:r.meet||'', meetDate:r.date||''};
+      if(i<0) out.push(pb);
+      else if(+r.sec < +(out[i].sec!=null?out[i].sec:Infinity)){
+        const was=+out[i].sec; out[i]={...out[i], ...pb, drop:(was>0?('−'+(was-r.sec).toFixed(2)+'s'):'')};
+      }
+    });
+    out.sort((a,b)=>a.sec-b.sec);
+    return out;
+  }
   meetImportPreview(){
     const txt=this.state.meetImportText||'';
-    const parsed = this._looksHy3(txt) ? this.meetParseHy3(txt) : this.meetParseHytek(txt);
-    let newSwimmers=0, updatedSwimmers=0, newResults=0, withSplits=0;
+    const all = this._looksHy3(txt) ? this.meetParseHy3(txt) : this.meetParseHytek(txt);
+    const parsed=all.filter(p=>this._isOurTeam(p.team));
+    const otherClub=all.length-parsed.length;
     const flat=this.allSwimmersFlat();
-    parsed.forEach(p=>{ const match=flat.find(f=>f.name.toLowerCase()===p.name.trim().toLowerCase()); if(match) updatedSwimmers++; else newSwimmers++; p.results.forEach(r=>{ if(r.valid){ newResults++; if(r.splits) withSplits++; } }); });
-    // Count the dates of birth this file would fill in, so it is visible before confirming.
-    const _flatDob=this.allSwimmersFlat();
-    const dobToFill=parsed.filter(p=>{
-      if(!p.dob) return false;
-      const m=_flatDob.find(f=>f.name.toLowerCase()===String(p.name||'').trim().toLowerCase());
-      return m ? !m.dob : true;
-    }).length;
-    this.setState({meetImportPreview:{count:parsed.length, newSwimmers, updatedSwimmers, newResults, withSplits, dobToFill, parsed}});
+    let newResults=0, withSplits=0, dobToFill=0;
+    const unmatched=[], courses={};
+    parsed.forEach(p=>{
+      const m=this._matchImportSwimmer(p, flat);
+      p.matchId=m?m.id:null; p.matchSquad=m?m.squadId:null; p.matchName=m?m.name:'';
+      const valid=p.results.filter(r=>r.valid);
+      if(!m){ if(valid.length) unmatched.push(p.name); return; }
+      if(p.dob && !m.dob) dobToFill++;
+      valid.forEach(r=>{ newResults++; if(r.splits) withSplits++; courses[r.course||'L']=1; });
+    });
+    const matched=parsed.filter(p=>p.matchId).length;
+    this.setState({meetImportPreview:{count:parsed.length, otherClub, updatedSwimmers:matched, newSwimmers:0,
+      unmatched, newResults, withSplits, dobToFill, courses:Object.keys(courses), parsed}});
   }
   meetImportConfirm(){
     const prev=this.state.meetImportPreview; if(!prev) return;
-    let dobFilled=0;
-    const squadForAge=(a)=>a<=6?'preteam':a<=8?'advb':a<=10?'adva':a<=12?'junior':a==13?'seniorb':a==14?'seniora':a==15?'vortexb':a==16?'vortexa':'legend';
+    let dobFilled=0, merged=0;
     const fmt=(sec)=>{ if(sec<60) return sec.toFixed(2); const m=Math.floor(sec/60); const s=sec-m*60; return m+':'+(s<10?'0':'')+s.toFixed(2); };
     prev.parsed.forEach(p=>{
-      const sqid=squadForAge(p.age);
-      const flat=this.allSwimmersFlat(); const match=flat.find(f=>f.name.toLowerCase()===p.name.trim().toLowerCase());
+      // Only a swimmer matched to somebody already on the roster. Nobody is created from a meet
+      // file any more: a file lists every club at the meet, and a name we could not place is
+      // listed in the preview for a coach to add, rather than guessed into a new swimmer.
+      if(!p.matchId || !p.matchSquad) return;
       const validRes=p.results.filter(r=>r.valid);
       if(!validRes.length) return;
       const asResults=validRes.map(r=>({meet:r.meet, date:r.date, event:r.dist+' '+r.stroke, time:r.timeStr.includes(':')?r.timeStr:fmt(r.sec), sec:+r.sec.toFixed(2), place:r.place||null, course:r.course||'L', ...(r.splits?{splits:r.splits}:{})}));
-      if(match){
-        const sw=(this.roster[match.squadId]||[]).find(x=>x.id===match.id);
-        if(sw){
-          sw.results=this._mergeResults(sw.results||[], asResults);
-          const byEv={}; (sw.results||[]).forEach(r=>{ (byEv[r.event]=byEv[r.event]||[]).push(r); });
-          const pbs=[]; for(const ev in byEv){ const best=byEv[ev].reduce((a,b)=>b.sec<a.sec?b:a); pbs.push({event:ev, sec:best.sec, time:best.time, drop:'', course:best.course||'L'}); }
-          pbs.sort((a,b)=>a.sec-b.sec); sw.pbs=pbs;
-          this.rosterEdits.edits[match.squadId]=this.rosterEdits.edits[match.squadId]||{};
-          const _patch={results:sw.results, pbs:sw.pbs};
-          // Fill in a date of birth we did not have. Never overwrite one somebody typed —
-          // a person who checked a passport beats a meet file every time.
-          if(p.dob && !sw.dob){ _patch.dob=p.dob; sw.dob=p.dob; dobFilled++; }
-          this.rosterEdits.edits[match.squadId][match.id]=Object.assign(
-            {}, this.rosterEdits.edits[match.squadId][match.id]||{}, _patch);
-        }
-      } else {
-        const np=p.name.trim().split(/\s+/); const first=np[0]; const last=np.slice(1).join(' ');
-        const initials=((first[0]||'')+(last[0]||first[1]||'')).toUpperCase();
-        const byEv={}; asResults.forEach(r=>{ (byEv[r.event]=byEv[r.event]||[]).push(r); });
-        const pbs=[]; for(const ev in byEv){ const best=byEv[ev].reduce((a,b)=>b.sec<a.sec?b:a); pbs.push({event:ev, sec:best.sec, time:best.time, drop:'', course:best.course||'L'}); }
-        pbs.sort((a,b)=>a.sec-b.sec);
-        const sw={id:this._uid('sw'), first, last, name:p.name.trim(), initials, age:p.age, dob:p.dob||'', gender:p.gender==='G'?'Girls':'Boys', pbs, results:asResults, meets:[...new Set(asResults.map(r=>r.meet))], meetCount:new Set(asResults.map(r=>r.meet)).size, topEvent:pbs[0]?pbs[0].event:'—', topTime:pbs[0]?pbs[0].time:'—', topSec:pbs[0]?pbs[0].sec:999};
-        this.rosterEdits.added[sqid]=[...(this.rosterEdits.added[sqid]||[]), sw];
+      const sw=(this.roster[p.matchSquad]||[]).find(x=>x.id===p.matchId);
+      if(!sw) return;
+      sw.results=this._mergeResults(sw.results||[], asResults);
+      sw.pbs=this._mergePbs(sw.pbs||[], asResults);
+      const _patch={results:sw.results, pbs:sw.pbs};
+      // Fill in a date of birth we did not have. Never overwrite one somebody typed —
+      // a person who checked a passport beats a meet file every time.
+      if(p.dob && !sw.dob){ _patch.dob=p.dob; sw.dob=p.dob; dobFilled++; }
+      // A swimmer the club added carries their whole record in `added`, and that record wins over
+      // any edit filed beside it — so results written only as an edit would never be seen.
+      const own=((this.rosterEdits.added||{})[p.matchSquad]||[]).find(x=>x && x.id===p.matchId);
+      if(own) Object.assign(own, _patch);
+      else {
+        this.rosterEdits.edits[p.matchSquad]=this.rosterEdits.edits[p.matchSquad]||{};
+        this.rosterEdits.edits[p.matchSquad][p.matchId]=Object.assign(
+          {}, this.rosterEdits.edits[p.matchSquad][p.matchId]||{}, _patch);
       }
+      merged++;
     });
     this._saveJSON('vx_roster_edits', this.rosterEdits);
     this.rebuildRoster();
+    try{ this.audit('meet.import', (prev.parsed[0]&&prev.parsed[0].results[0]&&prev.parsed[0].results[0].meet)||'meet',
+      {swimmers:merged, unmatched:(prev.unmatched||[]).length, otherClub:prev.otherClub||0}); }catch(e){}
     this.setState({meetImportOpen:false, meetImportText:'', meetImportPreview:null,
-      settingsMsg: dobFilled ? ('Imported ✓ · '+dobFilled+' date'+(dobFilled===1?'':'s')+' of birth filled in from the file') : ''});
+      settingsMsg: 'Imported ✓ · '+merged+' swimmer'+(merged===1?'':'s')
+        +(dobFilled ? (' · '+dobFilled+' date'+(dobFilled===1?'':'s')+' of birth filled in from the file') : '')
+        +((prev.unmatched||[]).length ? (' · '+prev.unmatched.length+' not on the roster, skipped') : '')});
   }
   // The same swim imported twice is one swim. Re-importing a meet used to add every result a
   // second time; now a swim already on file is kept and only picks up the splits it lacked —
@@ -23631,7 +23717,12 @@ class Component extends DCLogic {
     // -- meets admin --
     const meetImportChevron = S.meetImportOpen ? 'chevron-up' : 'chevron-down';
     const meetImportHasPreview = !!S.meetImportPreview;
-    const meetImportSummary = S.meetImportPreview ? (S.meetImportPreview.count+' swimmer block(s) parsed · '+S.meetImportPreview.newSwimmers+' new · '+S.meetImportPreview.updatedSwimmers+' matched existing · '+S.meetImportPreview.newResults+' results to add'
+    const _cl={L:'long course (LCM)', S:'short course (SCM)', Y:'yards (SCY)'};
+    const meetImportSummary = S.meetImportPreview ? (S.meetImportPreview.count+' Vortex swimmer(s) in the file'
+      + (S.meetImportPreview.otherClub ? (' · '+S.meetImportPreview.otherClub+' from other clubs left out') : '')
+      + ' · '+S.meetImportPreview.updatedSwimmers+' matched to the roster · '+S.meetImportPreview.newResults+' results to add'
+      + ((S.meetImportPreview.courses||[]).length ? (' · '+S.meetImportPreview.courses.map(c=>_cl[c]||c).join(' + ')) : '')
+      + ((S.meetImportPreview.unmatched||[]).length ? (' · NOT on the roster, will be skipped: '+S.meetImportPreview.unmatched.join(', ')) : '')
       + (S.meetImportPreview.withSplits ? (' · '+S.meetImportPreview.withSplits+' with splits') : '')
       + (S.meetImportPreview.dobToFill ? (' · '+S.meetImportPreview.dobToFill+' date'+(S.meetImportPreview.dobToFill===1?'':'s')+' of birth to fill in') : '')) : '';
     // Which meet is open and which is being edited are held by NAME, not by position in a list.
