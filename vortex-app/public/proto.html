@@ -2817,7 +2817,7 @@ if ('serviceWorker' in navigator) {
                     <p style="position:relative;margin:16px 0 0;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:600">{{ tx.welcome }} {{ famPortalName }}</p>
                     <div style="position:relative;display:flex;align-items:center;gap:12px;margin-top:8px">
                       <span style="position:relative;flex:none"><span style="width:50px;height:50px;border-radius:14px;background:{{ famAccent }};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px;color:#fff">{{ famSwInit }}</span><span style="position:absolute;bottom:-3px;right:-3px;width:20px;height:20px;border-radius:50%;background:{{ famGenBg }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;border:2px solid #0A0F1A">{{ famGenIcon }}</span></span>
-                      <div style="flex:1;min-width:0"><h1 style="font-size:20px;font-weight:700;letter-spacing:-.02em;margin:0">{{ famSwName }}</h1><p style="margin:2px 0 0;font-size:12.5px;color:rgba(255,255,255,.6)">{{ famSwMeta }}</p></div>
+                      <div style="flex:1;min-width:0"><span style="display:flex;align-items:center;gap:7px;flex-wrap:wrap"><h1 style="font-size:20px;font-weight:700;letter-spacing:-.02em;margin:0">{{ famSwName }}</h1><sc-if value="{{ famHasNats }}" hint-placeholder-val="{{ false }}"><span title="{{ famNatNames }}" aria-label="{{ famNatNames }}" style="font-size:18px;line-height:1;letter-spacing:.06em">{{ famNatFlags }}</span></sc-if></span><p style="margin:2px 0 0;font-size:12.5px;color:rgba(255,255,255,.6)">{{ famSwMeta }}</p></div>
                       <button onclick="{{ onOpenVortexId }}" style="flex:none;align-self:flex-start;display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.22);border-radius:11px;padding:7px 11px;cursor:pointer;color:#fff"><i data-lucide="badge-check" style="width:15px;height:15px"></i><span style="font-size:11.5px;font-weight:700">{{ tx.vortexId }}</span></button>
                     </div>
                     <sc-if value="{{ famMultiKids }}" hint-placeholder-val="{{ false }}">
@@ -9875,8 +9875,9 @@ class Component extends DCLogic {
   _flagEmoji(code){ const k=String(code||'').toUpperCase(); if(!/^[A-Z]{2}$/.test(k)) return '';
     return String.fromCodePoint(0x1F1E6+k.charCodeAt(0)-65, 0x1F1E6+k.charCodeAt(1)-65); }
   // Windows shows those same letters as "QA" rather than a flag, so the name is always said too.
-  _countryName(code){ const k=String(code||'').toUpperCase();
-    try{ const n=new Intl.DisplayNames(['en'], {type:'region'}).of(k); if(n && n!==k) return n; }catch(e){}
+  // In Arabic on the family portal (lang 'ar'); English everywhere else.
+  _countryName(code, lang){ const k=String(code||'').toUpperCase();
+    try{ const n=new Intl.DisplayNames([lang==='ar'?'ar':'en'], {type:'region'}).of(k); if(n && n!==k) return n; }catch(e){}
     return k; }
   // Picker options, by name, with Qatar first — the club is in Doha.
   _countryOptions(){
@@ -25058,11 +25059,11 @@ class Component extends DCLogic {
       })(),
       famKidsChips:(S.familyUser?S.familyUser.swimmerIds:[]).map((uid,i)=>{ const h=this._famResolve(uid); const on=i===S.familyActiveIdx; const sw=h&&h.sw; let pb=''; if(sw){ if(sw.topEvent && sw.topTime && sw.topTime!=='—') pb=sw.topEvent+' · '+sw.topTime; else if(sw.pbs && sw.pbs[0] && sw.pbs[0].time) pb=sw.pbs[0].event+' · '+sw.pbs[0].time; } return {label:h?h.sw.name.split(' ')[0]:'Not linked', pb:(h?(pb||'No PB yet'):''), onClick:()=>this.setState({familyActiveIdx:i}), bg:on?'#fff':'rgba(255,255,255,.08)', fg:on?'#0A0F1A':'#fff', sub:on?'rgba(10,15,26,.55)':'rgba(255,255,255,.55)', border:on?'#fff':'rgba(255,255,255,.18)'}; }),
       famMultiKids: !!(S.familyUser && S.familyUser.swimmerIds.length>1),
-      ...(()=>{ const fu=S.familyUser; if(!fu) return {famResMineLabel:'My results', famSwName:'',famSwMeta:'',famSwInit:'',famGenIcon:'',famGenBg:'',famAccent:'#067EEA',famPbs:[],famResults:[],famMeetsUpcoming:[], famHasMeetsUpcoming:false, famNoMeetsUpcoming:true, famCamps:[], famHasCamps:false,famAttendPct:'—',famAttendHistory:[],famDocsRows:[],famAttMonthCells:[],famAttYearBars:[],famMeetChips:[],famMeetResultRows:[]};
+      ...(()=>{ const fu=S.familyUser; if(!fu) return {famResMineLabel:'My results', famHasNats:false, famNatFlags:'', famNatNames:'', famSwName:'',famSwMeta:'',famSwInit:'',famGenIcon:'',famGenBg:'',famAccent:'#067EEA',famPbs:[],famResults:[],famMeetsUpcoming:[], famHasMeetsUpcoming:false, famNoMeetsUpcoming:true, famCamps:[], famHasCamps:false,famAttendPct:'—',famAttendHistory:[],famDocsRows:[],famAttMonthCells:[],famAttYearBars:[],famMeetChips:[],famMeetResultRows:[]};
         const uid=fu.swimmerIds[Math.min(S.familyActiveIdx, fu.swimmerIds.length-1)]||fu.swimmerIds[0];
         const _hit=this._famResolve(uid);
         // No match → show an unlinked state. NEVER substitute another swimmer.
-        if(!_hit) return {famResMineLabel:'My results', famSwName:'Not linked', famSwMeta:'Ask the club to link your child to this account', famSwInit:'—', famGenIcon:'', famGenBg:'#EEF1F5', famAccent:'#067EEA', famPbs:[], famResults:[], famMeetsUpcoming:[], famHasMeetsUpcoming:false, famNoMeetsUpcoming:true, famCamps:[], famHasCamps:false, famAttendPct:'—', famAttendHistory:[], famDocsRows:[], famAttMonthCells:[], famAttYearBars:[], famMeetChips:[], famMeetResultRows:[]};
+        if(!_hit) return {famResMineLabel:'My results', famHasNats:false, famNatFlags:'', famNatNames:'', famSwName:'Not linked', famSwMeta:'Ask the club to link your child to this account', famSwInit:'—', famGenIcon:'', famGenBg:'#EEF1F5', famAccent:'#067EEA', famPbs:[], famResults:[], famMeetsUpcoming:[], famHasMeetsUpcoming:false, famNoMeetsUpcoming:true, famCamps:[], famHasCamps:false, famAttendPct:'—', famAttendHistory:[], famDocsRows:[], famAttMonthCells:[], famAttYearBars:[], famMeetChips:[], famMeetResultRows:[]};
         const sqid=_hit.sqid, sw=_hit.sw;
         const sq=this.squadById[sqid]||this.squads[0];
         const gm=this.genMeta(sw.gender);
@@ -25235,7 +25236,9 @@ class Component extends DCLogic {
           dateLabel:this.shortDateISO(r.date),
           summary:[r.pushups!=null?(r.pushups+' push-ups'):null, r.plankSec!=null?(r.plankSec+'s plank'):null, r.vjump!=null?(r.vjump+'cm jump'):null, r.sitreach!=null?(r.sitreach+'cm reach'):null].filter(Boolean).join(' · ') }));
         const _fwl=this._wearLatest(sw.id);
-        return {famSwName:sw.name, famSwMeta:sq.name+' · Age '+sw.age+' · '+sq.coach, famSwInit:sw.initials, famGenIcon:gm.icon, famGenBg:gm.bg, famAccent:sq.accent, famPbs, famResults, famMeetsUpcoming:upcoming, famHasMeetsUpcoming:upcoming.length>0, famNoMeetsUpcoming:upcoming.length===0,
+        const famNats=this._swNats(sw.nat), famNatList=famNats.map(c=>this._countryName(c, this._lang()));
+        return {famSwName:sw.name, famHasNats:famNats.length>0, famNatFlags:famNats.map(c=>this._flagEmoji(c)).join(' '), famNatNames:famNatList.join(' · '),
+          famSwMeta:sq.name+' · Age '+sw.age+' · '+sq.coach+(famNatList.length?(' · '+famNatList.join(' / ')):''), famSwInit:sw.initials, famGenIcon:gm.icon, famGenBg:gm.bg, famAccent:sq.accent, famPbs, famResults, famMeetsUpcoming:upcoming, famHasMeetsUpcoming:upcoming.length>0, famNoMeetsUpcoming:upcoming.length===0,
           famCamps, famHasCamps:famCamps.length>0,
           famHasPbs:famPbs.length>0, famHasResults:famResults.length>0, famNoResults:famResults.length===0,
           famWearHasData:!!_fwl,

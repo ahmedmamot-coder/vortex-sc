@@ -13990,4 +13990,28 @@ describe("swimmer nationality flags", () => {
   });
 });
 
+
+describe("family portal: nationality flags", () => {
+  itAsync("a family's own child keeps its nationality; nobody else's leaves the server", async () => {
+    const M = await import("../src/app/api/family/state/route.ts");
+    const doc = { edits: { junior: { r3: { nat: ["QA", "GB"] }, r76: { nat: ["EG"], name: "Bea Other" } } },
+                  deleted: {}, added: { junior: [ { id: "r77", name: "Cal New", nat: ["US"] } ] }, removed: {} };
+    const out = M.pickRosterDocForFamily(doc, new Set(["r3"]), new Map());
+    eq(out.edits.junior.r3.nat, ["QA", "GB"], "the family's own child must bring its flags");
+    eq(out.edits.junior.r76.nat, undefined, "another child's nationality is not public");
+    eq((out.added.junior || []).some((r) => r.nat), false, "nor an added swimmer's who is not theirs");
+  });
+  it("the family header shows the child's flags beside the name", () => {
+    eq(/\{\{ famSwName \}\}<\/h1><sc-if value="\{\{ famHasNats \}\}"/.test(SOURCE), true);
+    eq(/famNatFlags:famNats\.map\(c=>this\._flagEmoji\(c\)\)/.test(SOURCE), true);
+  });
+  it("country names follow the portal's language", () => {
+    const name = bind("_countryName");
+    eq([name("QA"), name("QA", "en"), name("QA", "ar")], ["Qatar", "Qatar", "قطر"]);
+    eq(/famNatList=famNats\.map\(c=>this\._countryName\(c, this\._lang\(\)\)\)/.test(SOURCE), true);
+  });
+  it("an unlinked child shows no flags", () =>
+    eq((SOURCE.match(/famHasNats:false, famNatFlags:''/g) || []).length, 2));
+});
+
 await report();
