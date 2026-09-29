@@ -19872,9 +19872,17 @@ class Component extends DCLogic {
     this._downloadFile(filename, this._zipStore(files),
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   }
+  // The events a swimmer has a PB in, each once. A PB is kept per event AND course, so a swimmer
+  // with a long- and a short-course 50 Free has two PBs and one event — and the profile showed
+  // "50 Free" twice, both lit when either was tapped, and counted 2 PB events for it.
+  _pbEvents(sw){
+    const seen={}, out=[];
+    ((sw&&sw.pbs)||[]).forEach(p=>{ const ev=p&&p.event; if(ev && !seen[ev]){ seen[ev]=1; out.push(ev); } });
+    return out;
+  }
   exportRosterCsv(){
     const rows=[['Name','Age','Gender','Squad','Meets','PB events']];
-    this.allSwimmersFlat().forEach(sw=>rows.push([sw.name, sw.age, sw.gender||'', sw.squadName, sw.meetCount||0, (sw.pbs||[]).length]));
+    this.allSwimmersFlat().forEach(sw=>rows.push([sw.name, sw.age, sw.gender||'', sw.squadName, sw.meetCount||0, this._pbEvents(sw).length]));
     this.exportCsv('vortex-roster.csv', rows);
   }
   shareBestTimeCard(sw, pb){
@@ -22407,7 +22415,7 @@ class Component extends DCLogic {
     const swimmerPbs=(swObj.pbs||[]).map(p=>{ const cl=p.courseLabel||(p.course==='S'?'SCM':'LCM'); const src=[cl]; if(p.meet) src.push(p.meet); const legs=this._pbLegChips(swObj, p); return {event:p.event, time:p.time, drop:p.drop, meta:src.join(' · '), legs, hasLegs:legs.length>0, onShare:()=>this.shareBestTimeCard(swObj, p)}; });
     const swQualRows=this._swQualified(swObj).map(q=>({meet:q.meet, events:q.events.join(' · '), count:String(q.events.length)}));
     const swQualHas=swQualRows.length>0;
-    const swEvents=(swObj.pbs||[]).map(p=>p.event);
+    const swEvents=this._pbEvents(swObj);
     const selEvent=(S.profileEvent && swEvents.includes(S.profileEvent)) ? S.profileEvent : (swEvents[0]||null);
     const eventChips=swEvents.map(ev=>({label:ev, onClick:()=>this.setState({profileEvent:ev}),
       bg: ev===selEvent?squad.accent:'#fff', fg: ev===selEvent?'#fff':'#3A4152', border: ev===selEvent?squad.accent:'#E5E9F0'}));
@@ -22418,7 +22426,7 @@ class Component extends DCLogic {
     const secsAll=progRes.map(r=>r.sec);
     const progressBest = secsAll.length ? this.fmt(Math.min(...secsAll)) : '\u2014';
     const swRank=(this.roster[S.squadId]||[]).findIndex(x=>x.id===swObj.id);
-    const swimmerKpis=[{value:(swObj.pbs||[]).length, label:'PB events'},{value:(swObj.meetCount||0), label:'Meets'},{value:'#'+(swRank>=0?swRank+1:1), label:'Squad rank'}];
+    const swimmerKpis=[{value:this._pbEvents(swObj).length, label:'PB events'},{value:(swObj.meetCount||0), label:'Meets'},{value:'#'+(swRank>=0?swRank+1:1), label:'Squad rank'}];
     // Every swim, newest first — the profile used to stop at ten, so a swimmer's older meets
     // (and their splits) were only reachable through the printout.
     const swimmerResults=(swObj.results||[]).slice().sort((a,b)=>String(this._resultISO(b)||'').localeCompare(String(this._resultISO(a)||''))).map((r,i)=>{ const hasPlace=r.place!=null; const [mb,mf]=hasPlace?this.medal(r.place):['#EEF2F7','#5B6472']; const badge=hasPlace?String(r.place):(r.courseLabel?String(r.courseLabel).replace('M','').replace('Y',''):(r.course==='S'?'SC':'LC')); const sub=[r.meet, r.date].filter(Boolean).join(' · '); const legs=this._legChips(r); return {event:r.event, meet:sub||r.meet||'—', place:badge, time:r.time, medalBg:mb, medalFg:mf, legs, hasLegs:legs.length>0}; });
@@ -25287,7 +25295,7 @@ class Component extends DCLogic {
         const famMeetResultRows=famAllRes.map((r,i)=>{ const [mb,mf]=this._placeBadge(r.place); const place=r.place||'–'; const legs=this._legChips(r); return {name:r.name, squadName:r.squadName, event:r.event, place, time:r.time, medalBg:mb, medalFg:mf, rowBg: r.mine?'#EFF6FF':'#fff', rowBorder: r.mine?'#BBD9FF':'#E5E9F0', legs, hasLegs:legs.length>0, mineTag:r.mine}; });
 
         // -- progression, KPIs, fitness (same data coaches see, read-only) --
-        const swEvents=(sw.pbs||[]).map(p=>p.event);
+        const swEvents=this._pbEvents(sw);
         const selEvent=(S.famProfileEvent && swEvents.includes(S.famProfileEvent)) ? S.famProfileEvent : (swEvents[0]||null);
         const famEventChips=swEvents.map(ev=>({label:ev, onClick:()=>this.setState({famProfileEvent:ev}),
           bg: ev===selEvent?sq.accent:'#fff', fg: ev===selEvent?'#fff':'#3A4152', border: ev===selEvent?sq.accent:'#E5E9F0'}));
@@ -25297,7 +25305,7 @@ class Component extends DCLogic {
         const famCourse = S.famProfileCourse==='scm' ? 'scm' : 'lcm';
         const swRank=(this.roster[sqid]||[]).findIndex(x=>x.id===sw.id);
         const meta=this._swMeta(sw.id);
-        const famKpis=[{value:(sw.pbs||[]).length, label:'PB events'},{value:(sw.meetCount||0), label:'Meets'},{value:'#'+(swRank>=0?swRank+1:1), label:'Squad rank'}];
+        const famKpis=[{value:this._pbEvents(sw).length, label:'PB events'},{value:(sw.meetCount||0), label:'Meets'},{value:'#'+(swRank>=0?swRank+1:1), label:'Squad rank'}];
         const famFitRows=this._fitTests(sw.id).slice(0,6).map(r=>({
           dateLabel:this.shortDateISO(r.date),
           summary:[r.pushups!=null?(r.pushups+' push-ups'):null, r.plankSec!=null?(r.plankSec+'s plank'):null, r.vjump!=null?(r.vjump+'cm jump'):null, r.sitreach!=null?(r.sitreach+'cm reach'):null].filter(Boolean).join(' · ') }));

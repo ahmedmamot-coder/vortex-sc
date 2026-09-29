@@ -646,6 +646,24 @@ describe("Hy-Tek import: our club only, the right course, the right child", () =
     eq(pbs(had, [{ event: "100 Free", sec: 75, time: "1:15.00", course: "L" }]).find((p) => p.event === "100 Free").sec, 70));
 });
 
+/* ---------------------------------------------- one button per event on a swimmer's profile
+   PBs are kept per event and course since the Dragons import, and the profile's event buttons
+   were one per PB: "50 Free" twice, both lit together. */
+describe("a swimmer's events, each once", () => {
+  const evs = bind("_pbEvents", {});
+  const sw = { pbs: [
+    { event: "50 Free", sec: 30.2, course: "S" }, { event: "50 Free", sec: 31.0, course: "L" },
+    { event: "50 Fly", sec: 33, course: "S" }, { event: "50 Fly", sec: 34, course: "L" },
+    { event: "50 Breast", sec: 40, course: "L" } ] };
+  it("each event once, in PB order", () => eq(evs(sw), ["50 Free", "50 Fly", "50 Breast"]));
+  it("counts 3 PB events, not 5", () => eq(evs(sw).length, 3));
+  it("no PBs, no events", () => eq(evs({}), []));
+  it("the profile and the family portal both use it", () => {
+    eq((SOURCE.match(/const swEvents=this\._pbEvents\(/g) || []).length, 2);
+    eq(/const swEvents=\((swObj|sw)\.pbs\|\|\[\]\)\.map/.test(SOURCE), false);
+  });
+});
+
 /* ------------------------------------------------------------ Hy-Tek splits
    A 200 arrived as one number: the G1 split lines under it were skipped, so the profile
    could never say the swimmer went out in 30 and came home in 32. */
