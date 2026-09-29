@@ -2830,6 +2830,91 @@ scene("re-saving an edited session updates its training-log row instead of doubl
 });
 
 // ---------------------------------------------------------------------------------------------
+// "6 changes have not been saved · attendance_marks · this device could not reach the database."
+//
+// Nobody had changed anything. The register read asked for limit=100000 and the server answered
+// with its own cap of 1000, so the device saw 1000 of the club's 2871 marks, took the rest for
+// marks the database had never received, and the backfill re-sent them in 500-row batches — six
+// of them — which on pool-hall signal did not get through and sat on the banner.
+//
+// The fake database here caps every read at 1000 rows exactly as the real one does.
+// ---------------------------------------------------------------------------------------------
+scene("a register history over 1000 rows is read in full and never re-sent", async (browser) => {
+  const iso = (n) => { const d = new Date(); d.setDate(d.getDate() - n);
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+  const db = [], log = {};
+  for (let day = 1; day <= 200; day++) for (let sw = 0; sw < 14; sw++) {
+    const r = { id: "sqA_" + iso(day) + "_sw" + sw, squad_id: "sqA", day: iso(day), sw_id: "sw" + sw,
+                status: sw % 3 ? "present" : "absent" };
+    db.push(r);
+    ((log.sqA = log.sqA || {})[r.day] = log.sqA[r.day] || {})[r.sw_id] = r.status;
+  }
+  db.sort((a, b) => (a.id < b.id ? -1 : 1));
+  // One old mark that only this device holds: the backfill should send it, as a gap-filler.
+  const lone = { day: iso(300), sw: "sw99" };
+  (log.sqA[lone.day] = {})[lone.sw] = "late";
+  // A 500-row batch the old backfill left in the queue, as it is on the club's phones today.
+  const stale = { id: "old_1", op: "upsert", table: "attendance_marks", status: 0, tries: 0, refused: false,
+    payload: db.slice(0, 500), sig: "upsert|attendance_marks|x", said: "", ts: Date.now() - 600000, since: Date.now() - 600000 };
+
+  const page = await (await browser.newContext({ viewport: { width: 1280, height: 1000 } })).newPage();
+  const problems = [], posts = [];
+  let biggestRead = 0;
+  page.on("pageerror", (e) => problems.push(String(e.message)));
+  await page.route("**/rest/v1/**", async (route) => {
+    const req = route.request(), m = req.method(), u = new URL(req.url());
+    const table = (u.pathname.split("/rest/v1/")[1] || "").split("?")[0];
+    if (table === "attendance_marks" && m === "POST") {
+      posts.push({ prefer: req.headers()["prefer"] || "", rows: JSON.parse(req.postData() || "[]") });
+      return route.fulfill({ status: 201, contentType: "application/json", body: "[]" });
+    }
+    if (table === "attendance_marks" && m === "GET") {
+      let rows = db;
+      const eqDay = (u.searchParams.get("day") || "").replace(/^eq\./, "");
+      const gte = (u.searchParams.get("day") || "").startsWith("gte.") ? u.searchParams.get("day").slice(4) : "";
+      if (gte) rows = rows.filter((r) => r.day >= gte);
+      else if (eqDay) rows = rows.filter((r) => r.day === eqDay);
+      const off = +(u.searchParams.get("offset") || 0);
+      const lim = Math.min(1000, +(u.searchParams.get("limit") || 1000));   // the server's cap
+      const out = rows.slice(off, off + lim);
+      biggestRead = Math.max(biggestRead, out.length);
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(out) });
+    }
+    return route.fulfill({ status: m === "GET" ? 200 : 201, contentType: "application/json", body: "[]" });
+  });
+  await page.addInitScript(({ log, stale }) => {
+    localStorage.setItem("vx_session", JSON.stringify({ type: "staff", id: "ahmed" }));
+    localStorage.setItem("vx_auth", JSON.stringify({ token: "drive-fake", refresh: "drive-fake", exp: Date.now() + 3600000 }));
+    localStorage.removeItem("vx_nav");
+    localStorage.removeItem("vx_attend_unsent");
+    localStorage.setItem("vx_attend_log", JSON.stringify(log));
+    if (!sessionStorage.getItem("seeded")) {
+      localStorage.setItem("vx_failed_writes", JSON.stringify([stale]));
+      sessionStorage.setItem("seeded", "1");
+    }
+  }, { log, stale });
+  await page.goto("http://127.0.0.1:" + PORT + "/proto.html?drive=" + Date.now(), { waitUntil: "domcontentloaded" });
+  // The full read waits 4 s, the backfill 2 s after it answers.
+  await page.waitForTimeout(12000);
+  const after = await page.evaluate(() => ({
+    queued: JSON.parse(localStorage.getItem("vx_failed_writes") || "[]").filter((x) => x && x.table === "attendance_marks").length,
+    held: Object.values(JSON.parse(localStorage.getItem("vx_attend_log") || "{}").sqA || {})
+      .reduce((n, d) => n + Object.keys(d).length, 0),
+  }));
+  await page.close();
+  eq(problems.length, 0, "the app threw: " + problems.slice(0, 2).join(" | "));
+  eq(biggestRead <= 1000, true, "the fake server answered more than its cap");
+  eq(after.queued, 0, "attendance backfill batches are still on the banner's queue");
+  const sent = posts.flatMap((p) => p.rows.map((r) => r.id));
+  eq(sent.length, 1, "the backfill re-sent marks the database already holds (" + sent.length + " rows)");
+  eq(sent[0], "sqA_" + lone.day + "_" + lone.sw, "the backfill did not send the one mark the database lacked");
+  eq(/ignore-duplicates/.test(posts[0].prefer), true,
+     "a gap-filling mark was sent as an overwrite: " + posts[0].prefer);
+  eq(after.held, db.length + 1, "the device lost marks after reading the table");
+  return "read " + db.length + " marks past the 1000 cap; sent only the 1 the database lacked";
+});
+
+// ---------------------------------------------------------------------------------------------
 const only = process.argv[2];
 await start();
 const browser = await chromium.launch({ executablePath: CHROME });
