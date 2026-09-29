@@ -10012,6 +10012,46 @@ describe("InBody sheet", () => {
       eq(c._rosterEditsFrom(out.rows).edits.seniora.sw2.age, 14);
     });
 
+    // A server-side change survives the device's next two launches. The first launch took the
+    // table but kept its OLD copy on the phone; the second launch started from that old copy,
+    // saw it differ from the table it had last read, called it unsent work and pushed it — which
+    // is how 386 Dragons swims were undone on 115 swimmers with nobody touching them.
+    itAsync("a device's next launch never sends back a copy older than the table it read", async () => {
+      const store = {};
+      const mk = () => {
+        const c = rosterCtx();
+        c._rosterRowsOn = () => true;
+        c._loadJSON = (k, d) => (k in store ? JSON.parse(store[k]) : d);
+        c._saveLocalOnly = (k, v) => { store[k] = JSON.stringify(v); };
+        c._rosterSentSave = (m) => { c._rosterSent = m; store.sent = JSON.stringify(m); };
+        c.forceUpdate = () => {};
+        c.pushed = 0; c._rosterPersistRows = () => { c.pushed++; };
+        c._rosterFetch = bind("_rosterFetch", c);
+        return c;
+      };
+      const old = { edits: { junior: { sw1: { results: [] } } }, deleted: {}, added: {}, removed: { gone1: true } };
+      const table = [{ id: "junior::sw1", squad_id: "junior", sw_id: "sw1", patch: { results: [{ meet: "Dragons", sec: 30 }] } }];
+      globalThis.window.__vxSelect = async () => table;
+      // Launch 1: the phone holds the old copy and last saw the old table.
+      store.vx_roster_edits = JSON.stringify(old);
+      let c = mk();
+      c.rosterEdits = c._loadJSON("vx_roster_edits", null);
+      c._rosterSent = c._rowKeyMap(c._rosterRowsFrom(old));
+      await c._rosterFetch();
+      eq(c.pushed, 0, "the table changed, not this device");
+      eq(JSON.parse(store.vx_roster_edits).edits.junior.sw1.results[0].meet, "Dragons",
+         "the device keeps what it read as its own copy");
+      eq(JSON.parse(store.vx_roster_edits).removed.gone1, true, "deletion tombstones are not lost");
+      // Launch 2: starts from whatever the phone saved.
+      c = mk();
+      c.rosterEdits = c._loadJSON("vx_roster_edits", null);
+      c._rosterSent = JSON.parse(store.sent);
+      await c._rosterFetch();
+      eq(c.pushed, 0, "nothing stale is sent back over the club");
+      eq(c.rosterEdits.edits.junior.sw1.results[0].meet, "Dragons");
+      delete globalThis.window.__vxSelect;
+    });
+
     it("going back needs no copying, because the document was never abandoned", () => {
       const back = sourceBetween("async rosterBackToDocument(){", "\n  // What the two copies say");
       eq(/clearTimeout\(this\._rosterDocT\)/.test(back), true, "flush the delayed write first");

@@ -11640,6 +11640,17 @@ class Component extends DCLogic {
     // below could never be found again.
     this._rosterSentSave(this._rowKeyMap(theirs));
     this.rosterEdits=this._rosterEditsFrom(merged.rows);
+    // And keep it as this device's own copy, which is what the next launch starts from. It was
+    // left at whatever the device held before, so a phone that had last saved an older roster
+    // opened next time with that older copy, found it different from the table it had last seen,
+    // took the difference for its own unsent work — and wrote it over the club. That is how a
+    // meet imported on the server vanished from 115 swimmers two hours later with nobody touching
+    // them. Local only: the table is where this came from, so there is nothing to send. The
+    // deletion tombstones are carried across, because rows do not hold them.
+    try{
+      const had=this._loadJSON('vx_roster_edits', null);
+      this._saveLocalOnly('vx_roster_edits', {...this.rosterEdits, removed:(had&&had.removed)||{}});
+    }catch(e){}
     try{ this.rebuildRoster(); }catch(e){}
     this.forceUpdate();
     // This device had something the table did not. Send exactly that, and nothing else.
