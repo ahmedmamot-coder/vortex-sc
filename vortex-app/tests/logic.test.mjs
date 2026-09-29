@@ -10088,6 +10088,72 @@ describe("InBody sheet", () => {
       delete globalThis.window.__vxSelect;
     });
 
+    // One field saved is one field sent. Ali Dardir's nationality was fixed from a phone opened
+    // before the Dragons meet was imported; the whole row went up and took his results with it.
+    const saveCtx = (rpc) => {
+      const c = rosterCtx();
+      c.forceUpdate = () => {}; c.upserts = []; c.rpcs = [];
+      c._saveLocalOnly = () => {}; c._rosterDocBackup = () => {};
+      c._rosterSentSave = (m) => { c._rosterSent = m; };
+      for (const m of ["_rosterPersistRows", "_rosterSendChanges", "_rowKeyParse", "_rowChanges", "_rosterTakeBack"])
+        c[m] = bind(m, c);
+      globalThis.window.__vxRpc = async (fn, args) => { c.rpcs.push({ fn, args }); return rpc(args); };
+      globalThis.window.__vxUpsert = (t, rows) => { c.upserts.push(rows); return Promise.resolve(true); };
+      return c;
+    };
+    const stale = { name: "Ali Dardir", nat: ["EG"], results: [] };
+    const server = { name: "Ali Dardir", nat: ["EG"], results: [{ meet: "Dragons", sec: 30 }] };
+    const flush = () => new Promise((r) => setTimeout(r, 0));
+    itAsync("a stale phone saving one field sends that field, not the old results", async () => {
+      const c = saveCtx((args) => args.p_rows.map((x) => ({ id: x.id, squad_id: x.squad_id, sw_id: x.sw_id,
+        patch: { ...server, ...x.set }, deleted: false, added: true })));
+      const before = { edits: {}, deleted: {}, added: { vortexa: [{ id: "r157", ...stale }] } };
+      c.rosterEdits = JSON.parse(JSON.stringify(before));
+      c._rosterSent = c._rowKeyMap(c._rosterRowsFrom(before));
+      c.rosterEdits.added.vortexa[0].nat = ["EG", "US"];          // the edit
+      c._rosterPersistRows(); await flush(); await flush();
+      const sent = c.rpcs[0].args.p_rows[0];
+      eq(Object.keys(sent.set), ["nat"], "only the field that was changed");
+      eq(sent.deleted, null); eq(sent.added, null);
+      eq(c.upserts.length, 0, "no whole-row write");
+      const now = c.rosterEdits.added.vortexa[0];
+      eq(now.results[0].meet, "Dragons", "and the phone now holds the results the table had");
+      eq(now.nat, ["EG", "US"]);
+    });
+    itAsync("before the function is installed it writes the whole row, as it always did", async () => {
+      const c = saveCtx(() => ({ __err: "HTTP 404 Could not find the function public.vx_roster_patch" }));
+      const before = { edits: {}, deleted: {}, added: { vortexa: [{ id: "r157", ...stale }] } };
+      c.rosterEdits = JSON.parse(JSON.stringify(before));
+      c._rosterSent = c._rowKeyMap(c._rosterRowsFrom(before));
+      c.rosterEdits.added.vortexa[0].nat = ["EG", "US"];
+      c._rosterPersistRows(); await flush(); await flush();
+      eq(c.upserts.length, 1); eq(c.upserts[0][0].patch.nat, ["EG", "US"]);
+      eq(c._rosterPatchOk, false, "and stops asking for a function that is not there");
+    });
+    itAsync("an edit made while the save was on its way is not overwritten by the reply", async () => {
+      let release; const gate = new Promise((r) => { release = r; });
+      const c = saveCtx(async (args) => { await gate; return args.p_rows.map((x) => ({ id: x.id, squad_id: x.squad_id, sw_id: x.sw_id,
+        patch: { ...server, ...x.set }, deleted: false, added: true })); });
+      const before = { edits: {}, deleted: {}, added: { vortexa: [{ id: "r157", ...stale }] } };
+      c.rosterEdits = JSON.parse(JSON.stringify(before));
+      c._rosterSent = c._rowKeyMap(c._rosterRowsFrom(before));
+      c.rosterEdits.added.vortexa[0].nat = ["EG", "US"];
+      c._rosterPersistRows();
+      c.rosterEdits.added.vortexa[0].name = "Ali M. Dardir";      // typed again, before the reply
+      release(); await flush(); await flush();
+      eq(c.rosterEdits.added.vortexa[0].name, "Ali M. Dardir", "the newer edit stays on screen and pending");
+    });
+    it("a row nobody has heard of goes up whole", () => {
+      const c = saveCtx(() => []);
+      const ch = c._rowChanges({ id: "junior::n1", squad_id: "junior", sw_id: "n1", patch: { name: "New" }, deleted: false, added: true }, null);
+      eq(ch.set, { name: "New" }); eq(ch.added, true);
+    });
+    it("a field taken away is sent as removed", () => {
+      const c = saveCtx(() => []);
+      const ch = c._rowChanges({ id: "a::b", squad_id: "a", sw_id: "b", patch: { name: "X" } }, { patch: { name: "X", dob: "2014-01-01" }, deleted: false, added: false });
+      eq(ch.set, {}); eq(ch.unset, ["dob"]);
+    });
+
     it("going back needs no copying, because the document was never abandoned", () => {
       const back = sourceBetween("async rosterBackToDocument(){", "\n  // What the two copies say");
       eq(/clearTimeout\(this\._rosterDocT\)/.test(back), true, "flush the delayed write first");

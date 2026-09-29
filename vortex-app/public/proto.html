@@ -12018,11 +12018,78 @@ class Component extends DCLogic {
     const gone=Object.keys(was).filter(k=>!(k in now));
     this._rosterSentSave(now);
     try{
-      if(changed.length && window.__vxUpsert)
-        for(let i=0;i<changed.length;i+=500) window.__vxUpsert('vx_roster', changed.slice(i,i+500));
+      if(changed.length) this._rosterSendChanges(changed, was, now);
       if(gone.length && window.__vxDelete)
         gone.forEach(k=>window.__vxDelete('vx_roster', 'id=eq.'+encodeURIComponent(k)));
     }catch(e){}
+  }
+  // Only what this device changed goes up. A row was written whole — every field the club has
+  // ever set on that swimmer — from whatever copy the phone was holding, so a phone left open
+  // since before a meet was imported, used to fix one child's nationality, sent back that child's
+  // old results and the meet vanished from their profile. vx_roster_patch merges the changed
+  // fields into the row as the database holds it and hands the row back, so this device also
+  // learns what the others did. Until that function exists (or while the device is not signed in,
+  // which queues) this falls back to the whole-row write it always did.
+  async _rosterSendChanges(changed, was, sentNow){
+    for(let i=0;i<changed.length;i+=200){
+      const part=changed.slice(i,i+200);
+      let back=null;
+      if(window.__vxRpc && this._rosterPatchOk!==false){
+        try{
+          back=await window.__vxRpc('vx_roster_patch', {p_rows:part.map(r=>this._rowChanges(r, this._rowKeyParse(was[r.id])))});
+        }catch(e){ back=null; }
+        if(!Array.isArray(back)){
+          if(back && /HTTP 404|PGRST202|Could not find the function/i.test(String(back.__err||''))) this._rosterPatchOk=false;
+          back=null;
+        }
+      }
+      if(back){ this._rosterTakeBack(back, sentNow); continue; }
+      if(window.__vxUpsert) window.__vxUpsert('vx_roster', part);
+    }
+  }
+  // What this device last knew of a row, read back out of its sent-map key.
+  _rowKeyParse(k){
+    if(typeof k!=='string') return null;
+    const i=k.lastIndexOf('|'); if(i<0) return null;
+    try{ const f=k.slice(i+1); return {patch:JSON.parse(k.slice(0,i))||{}, deleted:f.indexOf('d')>=0, added:f.indexOf('a')>=0}; }
+    catch(e){ return null; }
+  }
+  // The fields of one row that differ from what this device last knew. With nothing known, the
+  // row goes up whole — it is new, or this device has never heard from the table about it.
+  _rowChanges(r, before){
+    const now=(r&&r.patch)||{};
+    const head={id:r.id, squad_id:r.squad_id, sw_id:r.sw_id};
+    if(!before) return {...head, set:now, unset:[], deleted:!!r.deleted, added:!!r.added};
+    const set={}, unset=[];
+    Object.keys(now).forEach(k=>{ if(JSON.stringify(now[k])!==JSON.stringify(before.patch[k])) set[k]=now[k]; });
+    Object.keys(before.patch).forEach(k=>{ if(!(k in now)) unset.push(k); });
+    return {...head, set, unset,
+      deleted:(!!r.deleted!==before.deleted)?!!r.deleted:null,
+      added:(!!r.added!==before.added)?!!r.added:null};
+  }
+  // The rows as the database now holds them. Taken as this device's own — unless the swimmer was
+  // edited again here while the save was on its way, in which case that newer edit stays pending.
+  _rosterTakeBack(back, sentNow){
+    const rows=this._rosterRowsFrom(this.rosterEdits);
+    const cur=this._rowKeyMap(rows);
+    const sent={...(this._rosterSent||{})};
+    let touched=false;
+    (back||[]).forEach(b=>{
+      if(!b || !b.id || cur[b.id]!==sentNow[b.id]) return;
+      const row={id:b.id, squad_id:b.squad_id, sw_id:b.sw_id, patch:b.patch||{}, deleted:!!b.deleted, added:!!b.added};
+      const k=this._rowKeyMap([row])[b.id];
+      sent[b.id]=k;
+      if(k===cur[b.id]) return;
+      const at=rows.findIndex(r=>r.id===b.id);
+      if(at>=0) rows[at]=row; else rows.push(row);
+      touched=true;
+    });
+    this._rosterSentSave(sent);
+    if(!touched) return;
+    const removed=(this.rosterEdits&&this.rosterEdits.removed)||{};
+    this.rosterEdits={...this._rosterEditsFrom(rows), removed};
+    try{ this.rebuildRoster(); this.forceUpdate(); }catch(e){}
+    try{ this._rosterDocBackup(); }catch(e){}
   }
   // Kept on the device, not only in memory. See the constructor for why it has to survive a
   // reload. Local-only: it describes this device's own conversation with the table.
