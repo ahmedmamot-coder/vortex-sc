@@ -3280,6 +3280,7 @@ if ('serviceWorker' in navigator) {
                       <div style="display:flex;gap:6px;background:#fff;border:1px solid #E5E9F0;border-radius:12px;padding:4px;margin-bottom:12px">
                         <button onclick="{{ onFamResMine }}" style="flex:1;border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer;background:{{ famResMineBg }};color:{{ famResMineFg }}">{{ famResMineLabel }}</button>
                         <button onclick="{{ onFamResClub }}" style="flex:1;border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer;background:{{ famResClubBg }};color:{{ famResClubFg }}">Club results</button>
+                        <button onclick="{{ onFamResRecords }}" style="flex:1;border:none;border-radius:9px;padding:9px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer;background:{{ famResRecBg }};color:{{ famResRecFg }}">Records</button>
                       </div>
                       <sc-if value="{{ famResMine }}" hint-placeholder-val="{{ true }}">
                       <sc-if value="{{ famHasResults }}" hint-placeholder-val="{{ true }}">
@@ -3340,6 +3341,44 @@ if ('serviceWorker' in navigator) {
                           </sc-for>
                         </div>
                       </sc-if>
+                      </sc-if>
+                      <!-- The club's records: the VIC 2026 pool records and Vortex short-course records, the
+                           same screen coaches see in Tools. This family's swimmer is outlined. -->
+                      <sc-if value="{{ famResRecords }}" hint-placeholder-val="{{ false }}">
+                        <div style="display:flex;flex-direction:column;gap:12px">
+                          <div style="background:linear-gradient(135deg,#D9A93C,#9A6206);color:#fff;border-radius:16px;padding:16px;display:flex;align-items:center;gap:12px">
+                            <span style="width:42px;height:42px;flex:none;border-radius:12px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center"><i data-lucide="trophy" style="width:22px;height:22px"></i></span>
+                            <div style="flex:1;min-width:0"><p style="margin:0;font-size:14px;font-weight:800">{{ recTitle }}</p><p style="margin:2px 0 0;font-size:12px;color:rgba(255,255,255,.85)">{{ recSubtitle }}</p></div>
+                          </div>
+                          <div style="display:flex;gap:8px">
+                            <sc-for list="{{ recTabs }}" as="t" hint-placeholder-count="2">
+                              <button onclick="{{ t.onClick }}" style="flex:1;background:{{ t.bg }};color:{{ t.fg }};border:none;border-radius:11px;padding:10px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer">{{ t.label }}</button>
+                            </sc-for>
+                          </div>
+                          <div class="vx-scroll" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:2px">
+                            <sc-for list="{{ recEventChips }}" as="ec" hint-placeholder-count="8">
+                              <button onclick="{{ ec.onClick }}" style="flex:none;background:{{ ec.bg }};color:{{ ec.fg }};border:1px solid {{ ec.border }};border-radius:999px;padding:6px 12px;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap">{{ ec.label }}</button>
+                            </sc-for>
+                          </div>
+                          <button onclick="{{ onRecExport }}" style="display:flex;align-items:center;justify-content:center;gap:7px;background:#0C7A4F;color:#fff;border:none;border-radius:11px;padding:10px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer"><i data-lucide="download" style="width:14px;height:14px"></i>Export all records</button>
+                          <sc-if value="{{ recEmpty }}" hint-placeholder-val="{{ false }}">
+                            <div style="text-align:center;padding:36px 20px;color:#9AA2B4"><i data-lucide="trophy" style="width:30px;height:30px"></i><p style="font-size:12.5px;margin-top:10px;line-height:1.5">No short-course swims recorded yet.<br>They appear once the club imports a short-course meet.</p></div>
+                          </sc-if>
+                          <sc-for list="{{ recRows }}" as="r" hint-placeholder-count="8">
+                            <div>
+                              <sc-if value="{{ r.isHeader }}" hint-placeholder-val="{{ false }}">
+                                <p style="margin:8px 2px 2px;font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:{{ r.color }}">{{ r.label }}</p>
+                              </sc-if>
+                              <sc-if value="{{ r.isRow }}" hint-placeholder-val="{{ true }}">
+                                <button onclick="{{ r.onClick }}" style="display:flex;align-items:center;gap:11px;width:100%;background:#fff;border:1px solid {{ r.rowBorder }};border-radius:13px;padding:10px 12px;cursor:pointer;font-family:inherit;text-align:left;box-shadow:0 1px 4px rgba(11,20,40,.04)">
+                                  <span style="min-width:46px;height:30px;flex:none;border-radius:9px;background:{{ r.bandBg }};color:{{ r.bandFg }};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11.5px;padding:0 6px">{{ r.band }}</span>
+                                  <span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:13.5px;color:#0C1116;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.name }}</span><span style="display:block;font-size:11px;color:#7A8296;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.sub }}</span></span>
+                                  <span style="flex:none;font-family:var(--font-mono);font-weight:800;font-size:14px;color:#0C1116">{{ r.time }}</span>
+                                </button>
+                              </sc-if>
+                            </div>
+                          </sc-for>
+                        </div>
                       </sc-if>
                     </sc-if>
 
@@ -12037,6 +12076,8 @@ class Component extends DCLogic {
   // not from the PB list, which keeps one time per event across both courses (and whose course
   // tag follows whichever swim was fastest). For each event, gender and age band: the fastest
   // SCM swim done at that age. "Open" is the fastest at any age. Relays are left out.
+  // A family device holds no dates of birth: /api/family/state stamps each swim with the age that
+  // day (ageAt) and each club meet with it (ageAtMeet), from the same rules as _ageOnDate().
   clubScRecords(swimmers){
     const out={};
     (swimmers||[]).forEach(sw=>{
@@ -12046,7 +12087,7 @@ class Component extends DCLogic {
         if(!r || r.relay || r.dq || r.valid===false) return;
         if((r.course||'L')!=='S' && r.courseLabel!=='SCM') return;
         const sec=+(r.sec!=null ? r.sec : this.parseTimeStr(r.time)); if(!(sec>0)) return;
-        const iso=this._resultISO(r); const age=this._ageOnDate(sw, iso); const band=this._recordBand(age);
+        const iso=this._resultISO(r); const atMeet=sw.ageAtMeet&&sw.ageAtMeet[String(r.meet||'').trim()]; const age=(r.ageAt>0) ? r.ageAt : ((atMeet>0 && !this._dobParts(sw.dob)) ? atMeet : this._ageOnDate(sw, iso)); const band=this._recordBand(age);
         const rec={id:sw.id, squadId:sw.squadId, squadName:sw.squadName||'', name:sw.name, age, sec, time:this.fmt(sec), meet:r.meet||'', date:iso};
         const ev=(out[r.event]=out[r.event]||{Girls:{}, Boys:{}})[gender];
         [band, 'Open'].forEach(b=>{ if(!b) return; const cur=ev[b]; if(!cur || sec<cur.sec) ev[b]={...rec, band:b}; });
@@ -21641,6 +21682,51 @@ class Component extends DCLogic {
     this._icons();
   }
 
+  // The Records screen's props, for the coaches' Records tool and the family portal's Results →
+  // Records alike. Built only while one of them is on screen: the short-course records walk every
+  // swim in the club. On a family device a record does not open a profile (there is none to open
+  // there); the family's own swimmer is outlined instead.
+  _recordsVals(S, show){
+    const blank={recRows:[], recEmpty:true, recEventChips:[], recTabs:[], recTitle:'', recSubtitle:'', onRecExport:()=>{}, recIsSc:false};
+    if(!show) return blank;
+    const fam=this._isFamilySession();
+    const mineIds=new Set(fam ? ((S.familyUser&&S.familyUser.swimmerIds)||[]).map(u=>{ const h=this._famResolve(u); return h&&h.sw&&h.sw.id; }).filter(Boolean) : []);
+    const recView = S.recView==='pool' ? 'pool' : 'sc';
+    const recPool = this.VIC_POOL_RECORDS();
+    const recSc = recView==='sc' ? this.clubScRecords(this.allSwimmersFlat()) : {};
+    const recEvents = recView==='pool' ? recPool.events : this.EVENT_CATALOG().filter(ev=>recSc[ev]);
+    const recEvent = recEvents.includes(S.recEvent) ? S.recEvent : (recEvents[0]||'50 Free');
+    const recEventChips = recEvents.map(ev=>({ label:ev, onClick:()=>this.setState({recEvent:ev}),
+      bg: ev===recEvent?'#0A0F1A':'#F8FAFC', fg: ev===recEvent?'#fff':'#7A8296', border: ev===recEvent?'#0A0F1A':'#E5E9F0' }));
+    const _recOpen=(r)=>()=>{ this.setState({tool:null, view:'squad', squadId:r.squadId, tab:'group', swimmerId:r.id}); this.openSwimmer(r.id); };
+    const _recDay=(iso)=>iso ? this._fmtDMY(iso, true) : '';
+    const recRows=[]; let recCount=0;
+    ['Girls','Boys'].forEach(g=>{
+      const list = recView==='pool'
+        ? recPool.rows.filter(r=>r.event===recEvent && r.gender===g).map(r=>({band:r.age, name:r.name, sub:r.club+' · '+_recDay(r.date), time:r.time, vortex:r.vortex, outline:r.vortex, onClick:null}))
+        : ((recSc[recEvent]||{})[g]||[]).map(r=>({band:r.band, name:r.name, sub:[r.squadName, r.meet, _recDay(r.date)].filter(Boolean).join(' · '), time:r.time, vortex:true,
+            outline:fam && mineIds.has(r.id), onClick:fam?null:_recOpen(r)}));
+      if(!list.length) return;
+      recRows.push({isHeader:true, isRow:false, label:g+' · '+list.length, color:g==='Girls'?'#C81E5B':'#2733D6'});
+      list.forEach(r=>{ recCount++; recRows.push({isHeader:false, isRow:true, ...r, clickable:!!r.onClick, onClick:r.onClick||(()=>{}),
+        bandBg: r.vortex?'#0A0F1A':'#EEF2F7', bandFg: r.vortex?'#fff':'#5B6472', rowBorder: r.outline?'#067EEA':'#E5E9F0' }); });
+    });
+    const recVortexHeld = recPool.rows.filter(r=>r.vortex).length;
+    const recTitle = recView==='pool' ? 'Pool records — '+recEvent : 'Vortex SC records — '+recEvent;
+    const recSubtitle = recView==='pool'
+      ? recPool.meet+' · '+recPool.course+' · Vortex holds '+recVortexHeld+' of '+recPool.rows.length
+      : 'Short course (25m) · fastest swim per age band · '+recCount+' records';
+    const recTabs=[{id:'sc', label:'Vortex SC records'},{id:'pool', label:'VIC 2026 pool records'}].map(t=>({ label:t.label, onClick:()=>this.setState({recView:t.id}),
+      bg: t.id===recView?'#0A0F1A':'#F4F6F8', fg: t.id===recView?'#fff':'#3A4152' }));
+    const onRecExport=()=>{
+      if(recView==='pool'){ const rows=[['Event','Gender','Age','Athlete','Club','Time','Date']];
+        recPool.rows.forEach(r=>rows.push([r.event, r.gender, r.age, r.name, r.club, r.time, r.date]));
+        this.exportCsv('vic-2026-pool-records.csv', rows); return; }
+      const rows=[['Event','Gender','Age band','Swimmer','Squad','Time','Meet','Date']];
+      this.EVENT_CATALOG().forEach(ev=>{ const e=recSc[ev]; if(!e) return; ['Girls','Boys'].forEach(g=>(e[g]||[]).forEach(r=>rows.push([ev, g, r.band, r.name, r.squadName, r.time, r.meet, r.date]))); });
+      this.exportCsv('vortex-sc-records.csv', rows); };
+    return {recRows, recEmpty:recRows.length===0, recEventChips, recTabs, recTitle, recSubtitle, onRecExport, recIsSc:recView==='sc'};
+  }
   renderVals(){
     const S=this.state; const self=this;
     const picked = this.accounts.find(a=>a.id===S.pickedId) || this.accounts[0];
@@ -22380,42 +22466,9 @@ class Component extends DCLogic {
       bg: ev===rankEvent?'#0A0F1A':'#F8FAFC', fg: ev===rankEvent?'#fff':'#7A8296', border: ev===rankEvent?'#0A0F1A':'#E5E9F0' }));
     const rankEmpty = rankRows.length===0;
 
-    // ---- Records — the VIC 2026 pool records, and Vortex short-course records from our swims ----
-    // Always club-wide: a record is the club's, whichever squad the tool was opened from.
-    const recView = S.recView==='pool' ? 'pool' : 'sc';
-    const recPool = this.VIC_POOL_RECORDS();
-    const recSc = recView==='sc' ? this.clubScRecords(this.allSwimmersFlat()) : {};
-    const recEvents = recView==='pool' ? recPool.events : this.EVENT_CATALOG().filter(ev=>recSc[ev]);
-    const recEvent = recEvents.includes(S.recEvent) ? S.recEvent : (recEvents[0]||'50 Free');
-    const recEventChips = recEvents.map(ev=>({ label:ev, onClick:()=>this.setState({recEvent:ev}),
-      bg: ev===recEvent?'#0A0F1A':'#F8FAFC', fg: ev===recEvent?'#fff':'#7A8296', border: ev===recEvent?'#0A0F1A':'#E5E9F0' }));
-    const _recOpen=(r)=>()=>{ this.setState({tool:null, view:'squad', squadId:r.squadId, tab:'group', swimmerId:r.id}); this.openSwimmer(r.id); };
-    const _recDay=(iso)=>iso ? this._fmtDMY(iso, true) : '';
-    const recRows=[]; let recCount=0;
-    ['Girls','Boys'].forEach(g=>{
-      const list = recView==='pool'
-        ? recPool.rows.filter(r=>r.event===recEvent && r.gender===g).map(r=>({band:r.age, name:r.name, sub:r.club+' · '+_recDay(r.date), time:r.time, vortex:r.vortex, onClick:null}))
-        : ((recSc[recEvent]||{})[g]||[]).map(r=>({band:r.band, name:r.name, sub:[r.squadName, r.meet, _recDay(r.date)].filter(Boolean).join(' · '), time:r.time, vortex:true, onClick:_recOpen(r)}));
-      if(!list.length) return;
-      recRows.push({isHeader:true, isRow:false, label:g+' · '+list.length, color:g==='Girls'?'#C81E5B':'#2733D6'});
-      list.forEach(r=>{ recCount++; recRows.push({isHeader:false, isRow:true, ...r, clickable:!!r.onClick, onClick:r.onClick||(()=>{}),
-        bandBg: r.vortex?'#0A0F1A':'#EEF2F7', bandFg: r.vortex?'#fff':'#5B6472', rowBorder: (recView==='pool'&&r.vortex)?'#067EEA':'#E5E9F0' }); });
-    });
-    const recEmpty = recRows.length===0;
-    const recVortexHeld = recPool.rows.filter(r=>r.vortex).length;
-    const recTitle = recView==='pool' ? 'Pool records — '+recEvent : 'Vortex SC records — '+recEvent;
-    const recSubtitle = recView==='pool'
-      ? recPool.meet+' · '+recPool.course+' · Vortex holds '+recVortexHeld+' of '+recPool.rows.length
-      : 'Short course (25m) · fastest swim per age band · '+recCount+' records';
-    const recTabs=[{id:'sc', label:'Vortex SC records'},{id:'pool', label:'VIC 2026 pool records'}].map(t=>({ label:t.label, onClick:()=>this.setState({recView:t.id}),
-      bg: t.id===recView?'#0A0F1A':'#F4F6F8', fg: t.id===recView?'#fff':'#3A4152' }));
-    const onRecExport=()=>{
-      if(recView==='pool'){ const rows=[['Event','Gender','Age','Athlete','Club','Time','Date']];
-        recPool.rows.forEach(r=>rows.push([r.event, r.gender, r.age, r.name, r.club, r.time, r.date]));
-        this.exportCsv('vic-2026-pool-records.csv', rows); return; }
-      const all=this.clubScRecords(this.allSwimmersFlat()); const rows=[['Event','Gender','Age band','Swimmer','Squad','Time','Meet','Date']];
-      this.EVENT_CATALOG().forEach(ev=>{ const e=all[ev]; if(!e) return; ['Girls','Boys'].forEach(g=>(e[g]||[]).forEach(r=>rows.push([ev, g, r.band, r.name, r.squadName, r.time, r.meet, r.date]))); });
-      this.exportCsv('vortex-sc-records.csv', rows); };
+    // ---- Records — shared with the family portal's Results tab (see _recordsVals) ----
+    const recShow = S.tool==='records' || (S.view==='family' && S.famTab==='results' && S.famResView==='records');
+    const recVals = this._recordsVals(S, recShow);
 
     // ---- Meet Standards / cut times — set a cut per event, see who's qualified, export ----
     const stdMeets = this.allMeets();
@@ -25101,10 +25154,11 @@ class Component extends DCLogic {
             totalEx:(r.totalEx||0), sections:sections }; });
         return { famFit:fit, famHasFit:fit.length>0, famNoFit:fit.length===0 }; })(),
       // Results tab: this family's swimmer, or the whole club at one meet.
-      famResMine:S.famResView!=='club', famResClub:S.famResView==='club',
-      famResMineBg:S.famResView!=='club'?'#0A0F1A':'transparent', famResMineFg:S.famResView!=='club'?'#fff':'#5B6472',
+      famResMine:!['club','records'].includes(S.famResView), famResClub:S.famResView==='club', famResRecords:S.famResView==='records',
+      famResMineBg:!['club','records'].includes(S.famResView)?'#0A0F1A':'transparent', famResMineFg:!['club','records'].includes(S.famResView)?'#fff':'#5B6472',
       famResClubBg:S.famResView==='club'?'#0A0F1A':'transparent', famResClubFg:S.famResView==='club'?'#fff':'#5B6472',
-      onFamResMine:()=>this.setState({famResView:'mine'}), onFamResClub:()=>this.setState({famResView:'club'}),
+      famResRecBg:S.famResView==='records'?'#0A0F1A':'transparent', famResRecFg:S.famResView==='records'?'#fff':'#5B6472',
+      onFamResMine:()=>this.setState({famResView:'mine'}), onFamResClub:()=>this.setState({famResView:'club'}), onFamResRecords:()=>this.setState({famResView:'records'}),
       famShowPerf:(S.famTab||'perf')==='perf', famShowAttend:S.famTab==='attend', famShowResults:S.famTab==='results', famShowMeets:S.famTab==='meets', famShowPlans:S.famTab==='plans', famShowFit:S.famTab==='fit', famShowDocs:S.famTab==='docs', famShowFees:S.famTab==='fees', famShowMsgs:S.famTab==='msgs',
       // ---- what this family owes -----------------------------------------------------
       ...(()=>{
@@ -26016,7 +26070,7 @@ class Component extends DCLogic {
       toolRecovery:S.tool==='recovery', recoveryRows, recoveryEmpty, recoveryScopeLabel:toolScope, recoveryLowCount, recoveryHasLow:recoveryLowCount>0,
       toolImprovers:S.tool==='improvers', improverRows, improverEmpty, improverScopeLabel:toolScope,
       toolStandards:S.tool==='standards', stdRows, stdEmpty, stdMeetName, stdMeetChips, stdEventsWithCut, stdTotalQual, onStdExport,
-      toolRecords:S.tool==='records', recRows, recEmpty, recEventChips, recTabs, recTitle, recSubtitle, onRecExport, recIsSc:recView==='sc',
+      toolRecords:S.tool==='records', ...recVals,
       toolRankings:S.tool==='rankings', rankRows, rankEmpty, rankScopeLabel:toolScope, rankEvent, rankEventChips, rankAvgLabel, rankCount:rankSwimmerCount,
       rankByAge:!!S.rankByAge, onRankToggleAge:()=>this.setState({rankByAge:!S.rankByAge}), rankAgeBtnLabel: S.rankByAge?'Grouped by age':'Overall', rankAgeBtnBg: S.rankByAge?'#0A0F1A':'#F4F6F8', rankAgeBtnFg: S.rankByAge?'#fff':'#3A4152', onRankExport,
       toolRelay:S.tool==='relay', relayGroups, relayHasGroups, relayScopeLabel:toolScope, ...relayPicker,

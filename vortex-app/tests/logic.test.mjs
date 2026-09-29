@@ -5014,6 +5014,42 @@ describe("InBody sheet", () => {
       eq(JSON.stringify(M.pickFlatArrayBySwId({ notAnArray: true }, mine)), "[]");
     });
 
+    it("every family sees the club's swims — through an allowlist, never a date of birth", async () => {
+      // The club asked for every meet's results (and the records built from them) on a family
+      // phone, not only their own child's. roster.js already ships every name, age, gender and
+      // result to every device; what the overlay adds is the meets imported since. So others'
+      // patches come through, cut to those fields, and the dates of birth become ages.
+      const M = await import("../src/app/api/family/state/route.ts");
+      const mine = new Set(["r3"]);
+      const meets = M.meetDateMap([{ name: "SC Cup", meet_date: "2025-11-10" }, { name: "LC Open", meet_date: "2026-05-01" }]);
+      const doc = {
+        edits: { juniors: {
+          r3:  { dob: "2014-01-01", note: "mine, whole" },
+          r76: { dob: "01/06/2014", note: "a coach's note", medical: "asthma", phone: "555", name: "Bea Other",
+                 results: [ { meet: "SC Cup", event: "50 Free", time: "31.50", sec: 31.5, course: "S", coachNote: "x" },
+                            { meet: "Unknown meet", date: "9/1/2026", event: "50 Free", sec: 30.2, course: "S" } ] },
+        } },
+        deleted: { juniors: { r77: true } },
+        added: { seniors: [ { id: "r77", name: "Cal Moved", dob: "2010-02-02", gender: "Boys", movedAt: 5, parentEmail: "p@x" } ] },
+        removed: { r78: true },
+      };
+      const out = M.pickRosterDocForFamily(doc, mine, meets);
+      const other = out.edits.juniors.r76;
+      eq(out.edits.juniors.r3.note, "mine, whole", "the family's own child must come through whole");
+      eq(other.dob, undefined, "another child's date of birth left the server");
+      eq([other.note, other.medical, other.phone], [undefined, undefined, undefined], "a non-public field left the server");
+      eq(other.name, "Bea Other");
+      eq(other.results.map((r) => [r.meet, r.sec, r.ageAt, r.coachNote]),
+         [["SC Cup", 31.5, 11, undefined], ["Unknown meet", 30.2, 12, undefined]],
+         "swims: public fields only, each stamped with the age that day (meet date, or its own M/D/Y date)");
+      eq(other.ageAtMeet, { "SC Cup": 11, "LC Open": 11 }, "the age at each club meet, for swims roster.js holds");
+      const moved = out.added.seniors[0];
+      eq([moved.id, moved.name, moved.movedAt, moved.dob, moved.parentEmail], ["r77", "Cal Moved", 5, undefined, undefined],
+         "a squad move keeps its stamp and loses its private fields");
+      eq(out.deleted.juniors.r77, true); eq(out.removed.r78, true);
+      eq(M.dobParts("08/20/2014"), { y: 2014, mo: 8, d: 20 }, "the American-way-round dates read as the app reads them");
+    });
+
     it("plans reach only the families they were shared with; drafts never do", async () => {
       // Plans live in the plan_sessions TABLE, not club_state, so the allowlist alone never sent
       // them to a family. The route now fetches the table (like it does club_meets) and returns it
@@ -13797,6 +13833,18 @@ describe("records: VIC 2026 pool records and Vortex short-course records", () =>
   it("age bands match the pool sheet", () => {
     const b = bind("_recordBand");
     eq([6, 7, 8, 9, 10, 15, 16, 24, 27].map(b), ["6-7", "6-7", "8-9", "8-9", "10", "15", "16-24", "16-24", "25-29"]);
+  });
+  it("a family device, holding no DOBs, uses the server's ages", () => {
+    const fam = [{ id: "f", name: "Fay", gender: "Girls", age: 14, results: [
+      { event: "50 Back", sec: 33, course: "S", meet: "SC Cup", ageAt: 12 },
+      { event: "50 Back", sec: 34, course: "S", meet: "Old Meet" },
+    ], ageAtMeet: { "Old Meet": 11 } }];
+    const r = recs(fam)["50 Back"].Girls.map((x) => [x.band, x.sec]);
+    eq(r, [["11", 34], ["12", 33], ["Open", 33]]);
+  });
+  it("the family Results tab has a Records switch", () => {
+    eq(/onclick="\{\{ onFamResRecords \}\}"/.test(SOURCE), true);
+    eq(/<sc-if value="\{\{ famResRecords \}\}"/.test(SOURCE), true);
   });
   it("the Records tool is on the tools screen", () => eq(/\{id:'records', icon:'trophy'/.test(SOURCE), true));
 });
