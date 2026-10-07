@@ -431,15 +431,23 @@ describe("session printed on one page", () => {
     let copy = null;
     const body = { kids: [], appendChild(n) { n.parentNode = body; body.kids.push(n); },
       removeChild(n) { body.kids = body.kids.filter((k) => k !== n); n.parentNode = null; } };
-    sheet.cloneNode = () => { copy = fakeSheet({ rows: 8, rowH: (0.4 * MAX_H) / 8 });
-      copy.remove = () => body.removeChild(copy); return copy; };
+    sheet.cloneNode = () => { const c = fakeSheet({ rows: 8, rowH: (0.4 * MAX_H) / 8 });
+      c.remove = () => body.removeChild(c); copy = c; return c; };
     globalThis.document = { getElementById: () => sheet, body };
     withZoomSupport(true);
     const ctx = { state: { printPreviewOpen: false } };
-    bind("_printEscape", ctx, ["_printRestore", "_fitPrintSheet", "_pageFitZoom"])();
+    sheet.innerHTML = "<p>session</p>";
+    bind("_printEscape", ctx, ["_printRestore", "_syncPrintCopy", "_fitPrintSheet", "_pageFitZoom"])();
     eq(body.kids.length === 1 && body.kids[0] === copy, true, "the copy goes under <body>");
     eq(copy.style.has("zoom"), true, "and it is the copy that is fitted");
     eq(sheet.style.has("zoom") || sheet.style.has("width"), false, "the on-screen sheet is untouched");
+    // Printing again (or `beforeprint` arriving late) reuses the copy whose logo has loaded.
+    const first = copy;
+    ctx._printEscape();
+    eq(body.kids.length === 1 && body.kids[0] === first, true, "the same copy is reused while the sheet is unchanged");
+    sheet.innerHTML = "<p>edited</p>";
+    ctx._printEscape();
+    eq(body.kids.length === 1 && body.kids[0] !== first, true, "a changed sheet replaces the copy");
     ctx._printRestore();
     eq(body.kids.length, 0, "restoring takes the copy away");
   });

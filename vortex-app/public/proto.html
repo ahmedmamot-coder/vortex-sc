@@ -21315,15 +21315,28 @@ class Component extends DCLogic {
   // than the timer got a blank page. The copy is React-free, so it can simply stay put until
   // the preview closes. It is appended last, so getElementById still finds the real sheet.
   _printEscape(){
-    const sheet=document.getElementById('vx-print-sheet');
-    if(!sheet) return;
-    this._printRestore();
-    const copy=sheet.cloneNode(true);
-    document.body.appendChild(copy);
-    this._printCopy=copy;
+    const copy=this._syncPrintCopy();
+    if(!copy) return;
     // The preview measured this very page after its last render; measuring again is a dozen
     // forced layouts in the middle of a tap, which is the lag between tap and print screen.
     this._fitPrintSheet(copy, (this.state.printPreviewOpen && this._paperZoom) || 0);
+  }
+  // The copy is made when the preview opens, not when printing starts. A new <img> loads on its
+  // own clock even from the cache, and the print is taken from the page as it is at that moment:
+  // a copy made in `beforeprint` (which iOS and the browser's own Print menu fire on their own
+  // schedule) went to the printer before its club logo had loaded. Remade only when the sheet
+  // itself changes, so the logo has the whole time the coach is looking at the preview.
+  _syncPrintCopy(){
+    const sheet=document.getElementById('vx-print-sheet');
+    if(!sheet) return null;
+    const html=sheet.innerHTML;
+    const old=this._printCopy;
+    if(old && old.parentNode && this._printCopyHtml===html) return old;
+    const copy=sheet.cloneNode(true);
+    if(old && old.parentNode) old.remove();
+    document.body.appendChild(copy);
+    this._printCopy=copy; this._printCopyHtml=html;
+    return copy;
   }
   // The preview's Print button.
   _printFromPreview(){
@@ -21417,6 +21430,7 @@ class Component extends DCLogic {
   // checking a layout that was not the one that came out.
   _measurePrintPaper(){
     if(!this.state.printPreviewOpen) return;
+    this._syncPrintCopy();
     const host=document.getElementById('vx-preview-host');
     const sheet=document.getElementById('vx-print-sheet');
     if(!host || !sheet) return;
@@ -21451,7 +21465,7 @@ class Component extends DCLogic {
   }
   _printRestore(){
     this._printHold=false;
-    const copy=this._printCopy; this._printCopy=null;
+    const copy=this._printCopy; this._printCopy=null; this._printCopyHtml=null;
     if(copy && copy.parentNode) copy.remove();
   }
   componentDidMount(){ this._applyLang(); this._icons(); setTimeout(()=>{ try{ this.birthdayRun(); }catch(e){} }, 6000); this._clock=setInterval(()=>{ if(this.state.clockRunning && this.state.tool==='clock') this.tickClock(); }, 1000);
