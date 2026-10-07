@@ -423,12 +423,32 @@ describe("session printed on one page", () => {
     eq(/getElementById\('vx-print-sheet'\)/.test(preview), true, "and not off the sheet that prints");
   });
 
-  // The same element is on screen the rest of the time. Nothing from the fit may survive.
-  it("the fit is stripped off the sheet afterwards", () => {
-    const sheet = fit(fakeSheet({ rows: 8, rowH: (0.4 * MAX_H) / 8 }));
-    globalThis.document = { getElementById: () => sheet };
-    bind("_printRestore", { _printAnchor: null })();
-    eq(sheet.style.has("zoom") || sheet.style.has("width") || sheet.style.display !== "", false);
+  // The printer gets a fitted COPY under <body>; the sheet React owns is never moved or sized.
+  // iOS draws the printout while its print screen is up, so the copy must outlive the tap and
+  // go only when the preview closes — not on a timer.
+  it("only a copy is fitted, and restoring removes it", () => {
+    const sheet = fakeSheet({ rows: 8, rowH: (0.4 * MAX_H) / 8 });
+    let copy = null;
+    const body = { kids: [], appendChild(n) { n.parentNode = body; body.kids.push(n); },
+      removeChild(n) { body.kids = body.kids.filter((k) => k !== n); n.parentNode = null; } };
+    sheet.cloneNode = () => { copy = fakeSheet({ rows: 8, rowH: (0.4 * MAX_H) / 8 });
+      copy.remove = () => body.removeChild(copy); return copy; };
+    globalThis.document = { getElementById: () => sheet, body };
+    withZoomSupport(true);
+    const ctx = { state: { printPreviewOpen: false } };
+    bind("_printEscape", ctx, ["_printRestore", "_fitPrintSheet", "_pageFitZoom"])();
+    eq(body.kids.length === 1 && body.kids[0] === copy, true, "the copy goes under <body>");
+    eq(copy.style.has("zoom"), true, "and it is the copy that is fitted");
+    eq(sheet.style.has("zoom") || sheet.style.has("width"), false, "the on-screen sheet is untouched");
+    ctx._printRestore();
+    eq(body.kids.length, 0, "restoring takes the copy away");
+  });
+
+  it("the preview's Print button does not undo the print on a timer", () => {
+    const src = methodSource("_printFromPreview").body;
+    eq(/setTimeout\([^)]*_printRestore/.test(SOURCE), false, "no timed restore");
+    eq(/window\.print\(\)/.test(src) && !/setTimeout\(\s*\(\)\s*=>\s*window\.print/.test(src), true,
+      "print is called in the tap itself");
   });
 });
 
