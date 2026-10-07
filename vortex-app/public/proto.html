@@ -21277,6 +21277,15 @@ class Component extends DCLogic {
     if(!sheet){ window.print(); return; }
     const w=window.open('', '_blank');
     if(!w){ this._printEscape(); setTimeout(()=>window.print(),30); return; }
+    w.document.open(); w.document.write(this._planPrintDoc(sheet)); w.document.close();
+    const doPrint=()=>{ try{ w.focus(); w.print(); }catch(e){} };
+    if(w.document.readyState==='complete') setTimeout(doPrint,150);
+    else w.onload=()=>setTimeout(doPrint,150);
+  }
+  // The session plan as a document of its own: the sheet, its fonts and the one-page fit, with
+  // none of the app around it. This is what the iOS app's printer is handed — its window.print()
+  // would otherwise serialise the WHOLE app, scripts and all, and boot it again off-screen.
+  _planPrintDoc(sheet){
     const fontCss='@font-face{font-family:"Funnel Display";src:url("assets/ca12c5dd.ttf") format("truetype");font-weight:400}'
       +'@font-face{font-family:"Funnel Display";src:url("assets/ec678821.ttf") format("truetype");font-weight:500}'
       +'@font-face{font-family:"Funnel Display";src:url("assets/ccbe262f.ttf") format("truetype");font-weight:600}'
@@ -21298,21 +21307,41 @@ class Component extends DCLogic {
       +'else{var lo=MIN,hi=MAX;for(var i=0;i<12;i++){var mid=(lo+hi)/2;if(ph(mid)<=budget)lo=mid;else hi=mid;}k=lo;}'
       +'s.style.width=(maxW/k)+"px";s.style.height=(budget/k)+"px";s.style.overflow="hidden";s.style.zoom=String(k);})();</scr'+'ipt>'
       +'</body></html>';
-    w.document.open(); w.document.write(html); w.document.close();
-    const doPrint=()=>{ try{ w.focus(); w.print(); }catch(e){} };
-    if(w.document.readyState==='complete') setTimeout(doPrint,150);
-    else w.onload=()=>setTimeout(doPrint,150);
+    return html;
   }
+  // The printer is handed a COPY of the sheet, put straight under <body> where the print CSS
+  // looks for it. It used to be the sheet itself, carried out and then carried home on a timer —
+  // and iOS draws the printout lazily, while the print screen is up, so a coach who took longer
+  // than the timer got a blank page. The copy is React-free, so it can simply stay put until
+  // the preview closes. It is appended last, so getElementById still finds the real sheet.
   _printEscape(){
     const sheet=document.getElementById('vx-print-sheet');
     if(!sheet) return;
-    // Already out (the Print button escaped it and then `beforeprint` asked again): refit only.
-    // A second anchor here would orphan the first, and the sheet could never go home.
-    if(this._printAnchor && this._printAnchor.parentNode && sheet.parentNode===document.body){ this._fitPrintSheet(sheet); return; }
-    this._printAnchor = document.createComment('vx-print-sheet-anchor');
-    sheet.parentNode.insertBefore(this._printAnchor, sheet);
-    document.body.appendChild(sheet);
-    this._fitPrintSheet(sheet);
+    this._printRestore();
+    const copy=sheet.cloneNode(true);
+    document.body.appendChild(copy);
+    this._printCopy=copy;
+    // The preview measured this very page after its last render; measuring again is a dozen
+    // forced layouts in the middle of a tap, which is the lag between tap and print screen.
+    this._fitPrintSheet(copy, (this.state.printPreviewOpen && this._paperZoom) || 0);
+  }
+  // The preview's Print button.
+  _printFromPreview(){
+    // A second tap while the first is still opening the print screen: iOS answers the second
+    // window.print() by refusing to print at all.
+    const now=Date.now();
+    if(now-(this._printTapAt||0)<1500) return;
+    this._printTapAt=now;
+    if(window.__vxNative && window.__vxPrintHtml){
+      const sheet=document.getElementById('vx-print-sheet');
+      if(sheet){ try{ window.__vxPrintHtml('Session plan', this._planPrintDoc(sheet)); return; }catch(e){} }
+    }
+    if(this._isAndroid()) return this._printAndroid();
+    this._printEscape();
+    this._printHold=true;
+    // Called in the tap itself, not on a timer, so Safari still counts it as the coach's tap.
+    this._printing=true;
+    try{ window.print(); }catch(e){} finally{ this._printing=false; }
   }
   // The zoom at which a sheet fills one A4 page and no more. Two callers want this number:
   // the sheet the printer is handed, and the paper the coach checks in the preview. It is the
@@ -21366,7 +21395,7 @@ class Component extends DCLogic {
   //
   // Uses `zoom`, not `transform`: zoom changes the real layout box so the browser paginates
   // the resized sheet. `transform` is visual only — the page count would not change.
-  _fitPrintSheet(sheet){
+  _fitPrintSheet(sheet, known){
     try{
       const MM=96/25.4, maxW=186*MM, budget=273*MM*0.94;
       // Every part of this needs `zoom` to be honoured. Without it the sheet would print at
@@ -21375,7 +21404,7 @@ class Component extends DCLogic {
       if(!(typeof CSS!=='undefined' && CSS.supports && CSS.supports('zoom','1.5'))) return;
       const st=sheet.style;
       ['zoom','transform','width','height','overflow'].forEach(p=>st.removeProperty(p));
-      const k=this._pageFitZoom(sheet);
+      const k=known>0 ? known : this._pageFitZoom(sheet);
       st.setProperty('width', (maxW/k)+'px', 'important');   // keep the printed width full-bleed
       st.setProperty('height', (budget/k)+'px', 'important');// exactly one page, whatever happens
       st.setProperty('overflow','hidden','important');
@@ -21408,32 +21437,25 @@ class Component extends DCLogic {
   // stays out until the coach is back in the app, or closes the preview.
   _printAndroid(){
     this._printEscape();
-    this._androidPrintHold=true;
+    this._printHold=true;
     let away=false;
     const onVis=()=>{
       if(document.visibilityState==='hidden'){ away=true; return; }
       if(!away) return;
       document.removeEventListener('visibilitychange', onVis);
       // A beat after coming back, so a print screen still finishing never sees it move.
-      setTimeout(()=>{ if(!this._androidPrintHold) return; this._androidPrintHold=false; this._printRestore(); }, 800);
+      setTimeout(()=>{ if(!this._printHold) return; this._printRestore(); }, 800);
     };
     document.addEventListener('visibilitychange', onVis);
-    setTimeout(()=>{ try{ window.print(); }catch(e){} }, 30);
+    setTimeout(()=>{ this._printing=true; try{ window.print(); }catch(e){} finally{ this._printing=false; } }, 30);
   }
   _printRestore(){
-    const sheet=document.getElementById('vx-print-sheet');
-    // Always strip every sizing style we applied, even if the sheet was never moved,
-    // so nothing from the print fit can leak back into the on-screen app.
-    if(sheet){ const st=sheet.style;
-      ['zoom','transform','width','height','overflow','display','position','left','top','visibility'].forEach(p=>st.removeProperty(p));
-      st.transformOrigin=''; }
-    if(!sheet || !this._printAnchor || !this._printAnchor.parentNode) return;
-    this._printAnchor.parentNode.insertBefore(sheet, this._printAnchor);
-    this._printAnchor.remove();
-    this._printAnchor=null;
+    this._printHold=false;
+    const copy=this._printCopy; this._printCopy=null;
+    if(copy && copy.parentNode) copy.remove();
   }
   componentDidMount(){ this._applyLang(); this._icons(); setTimeout(()=>{ try{ this.birthdayRun(); }catch(e){} }, 6000); this._clock=setInterval(()=>{ if(this.state.clockRunning && this.state.tool==='clock') this.tickClock(); }, 1000);
-    this._onBeforePrint=()=>this._printEscape(); this._onAfterPrint=()=>{ if(!this._androidPrintHold) this._printRestore(); };
+    this._onBeforePrint=()=>{ if(!this._printing) this._printEscape(); }; this._onAfterPrint=()=>{ if(!this._printHold) this._printRestore(); };
     window.addEventListener('beforeprint', this._onBeforePrint); window.addEventListener('afterprint', this._onAfterPrint);
     this._onPaperResize=()=>{ try{ this._measurePrintPaper(); }catch(e){} };
     window.addEventListener('resize', this._onPaperResize);
@@ -24749,11 +24771,10 @@ class Component extends DCLogic {
         else setTimeout(go, 300);
       }, onPrintPlan:()=>this.setState({printPreviewOpen:true}), onOpenPaceClock:()=>this.openTool('clock', false),
       onSubmitPlanReview:()=>this.submitPlanForReview(S.squadId, squad.name),
-      onClosePrintPreview:()=>{ this._androidPrintHold=false; this._printRestore(); this.setState({printPreviewOpen:false}); },
-      // iOS often never fires `afterprint`, so always restore the sheet on a timer too —
-      // otherwise the zoom-to-fit sizing stays applied and the app looks stuck zoomed.
-      onConfirmPrint:()=>{ if(this._isAndroid()) return this._printAndroid();
-        this._printEscape(); setTimeout(()=>window.print(), 30); setTimeout(()=>this._printRestore(), 2500); },
+      onClosePrintPreview:()=>{ this._printRestore(); this.setState({printPreviewOpen:false}); },
+      // The printed copy stays out until the preview closes: iOS keeps drawing the printout for
+      // as long as its print screen is up, and takes it from whatever is under <body> then.
+      onConfirmPrint:()=>this._printFromPreview(),
       printPreviewOpen:S.printPreviewOpen,
       // The preview paper, in the printer's own units: 186x273mm of printable A4, laid out at
       // the width the sheet is given and then scaled by the page fit and by the room on screen.
