@@ -21101,10 +21101,21 @@ class Component extends DCLogic {
     const doc='<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><base href="'+location.href+'"><title>'+this._esc(title)+'</title><style>'+css+'</style></head><body>'
       +'<div class="topbar noprint"><button class="backbtn" onclick="if(window.opener){window.close();}else{history.back();}">Close</button><button class="printbtn" onclick="window.print()">Save as PDF / Print</button></div>'
       +'<div class="sheet">'+inner+'</div>'
-      +'<scr'+'ipt>(function(){function fit(){var s=document.querySelector(".sheet");if(!s)return;var MM=96/25.4,maxW=186*MM,maxH=273*MM,k=1;'
-      +'for(var i=0;i<7;i++){s.style.zoom="1";s.style.width=(maxW/k)+"px";var lh=s.scrollHeight,ph=lh*k;if(!lh||ph<=maxH)break;k=k*(maxH/ph)*0.985;}'
-      +'s.style.width=(maxW/k)+"px";s.style.zoom=(k<1?String(k):"");'
-      +'}window.addEventListener("beforeprint",fit);})();</scr'+'ipt></body></html>';
+      // The same one-page fit as _fitPrintSheet(): shrink a long session to fit, GROW a short
+      // one until the paper is full. It only ever shrank here, so a saved plan printed from View
+      // came out in small type on half a page. The fit lives in a print-only stylesheet, so the
+      // screen is never zoomed and there is nothing to put back — Android fires `afterprint`
+      // before it has drawn the pages, so undoing the fit there would print the unfitted sheet.
+      +'<scr'+'ipt>(function(){var MM=96/25.4,maxW=186*MM,budget=273*MM*0.94,MIN=0.35,MAX=1.9;'
+      +'var tag=document.createElement("style");tag.media="print";document.head.appendChild(tag);'
+      +'function fit(){var s=document.querySelector(".sheet");if(!s)return;var st=s.style,k=1;'
+      +'st.maxWidth="none";st.padding="20px";st.margin="0";'
+      +'function ph(z){st.zoom="1";st.width=(maxW/z)+"px";return s.scrollHeight*z;}'
+      +'if(!ph(1)){k=1;}else if(ph(MAX)<=budget){k=MAX;}else if(ph(MIN)>budget){k=MIN;}'
+      +'else{var lo=MIN,hi=MAX;for(var i=0;i<12;i++){var mid=(lo+hi)/2;if(ph(mid)<=budget)lo=mid;else hi=mid;}k=lo;}'
+      +'st.zoom="";st.width="";st.maxWidth="";st.padding="";st.margin="";'
+      +'tag.textContent=".sheet{width:"+(maxW/k)+"px !important;height:"+(budget/k)+"px !important;overflow:hidden !important;zoom:"+k+" !important}";}'
+      +'fit();window.addEventListener("load",fit);window.addEventListener("beforeprint",fit);})();</scr'+'ipt></body></html>';
     // Android Chrome (and the Play Store app, which is Chrome) opens an empty pop-up and then
     // never draws what is written into it — "View" landed on a blank white tab. Hand Android
     // the same document as a Blob URL instead, which it renders exactly as an iPhone does.
