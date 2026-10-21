@@ -674,6 +674,81 @@ describe("Hy-Tek import: our club only, the right course, the right child", () =
     eq(pbs(had, [{ event: "100 Free", sec: 75, time: "1:15.00", course: "L" }]).find((p) => p.event === "100 Free").sec, 70));
 });
 
+/* ------------------------------------------- Hy-Tek import: Hamilton Aquatics Short Course 2026
+   Every swim of that file came in dated "66/10/1820" — the meet recorded reaction times, written
+   straight against the date — and one of our own swimmers was in it without being on the roster
+   yet, so his four swims were skipped with nothing to do about it but retype them. The import was
+   also saved to this device's copy of the roster alone, so a club on the roster table lost it at
+   the next launch. */
+describe("Hy-Tek import: the Hamilton file", () => {
+  const parse = bind("meetParseHy3", {}, ["_hy3Splits"]);
+  const file = [
+    "B1Hamilton Aquatics Short Course               Abu Dhabi Aquatics Club                      101720261018202612312026   0        86",
+    "C1VTX  VORTEX SWIMMING CLUB          VTX",
+    "D1M 8543Ashry               Zeyad                                                    79708182010 16     0                   N   87",
+    "E1M 8543AshryMB   100D 15 16  0A 55.00306E   53.13S   53.13S    0.00    0.00   NN               N                               70",
+    "E2F   51.75S       0 10  4  1   1  0   51.72    0.00    0.00        51.75     0.00 0.6610182026                           0     66",
+    "G1F 2   10.91F 4   23.82F 6   37.24F 8   51.75",
+  ].join("\n");
+  const sw = parse(file)[0];
+  const r = sw.results[0];
+  it("the date beside a reaction time is the meet's date", () => eq(r.date, "10/18/2026"));
+  it("the date with no reaction time beside it still reads", () => {
+    const old = parse(file.replace("0.00 0.6610182026", "0.00     10182026"));
+    eq(old[0].results[0].date, "10/18/2026");
+  });
+  it("time, place and course are untouched", () => eq([r.sec, r.place, r.course], [51.75, 1, "S"]));
+  it("the date of birth is read", () => eq(sw.dob, "2010-08-18"));
+
+  const merge = bind("_mergeResults", {});
+  const broken = { meet: "Hamilton Aquatics Short Course", date: "66/10/1820", event: "100 Fly", course: "S", sec: 51.75, time: "51.75" };
+  const fixed = { ...broken, date: "10/18/2026" };
+  it("re-importing the file does not add the swim a second time", () => eq(merge([broken], [fixed]).length, 1));
+  it("it takes the real date", () => eq(merge([broken], [fixed])[0].date, "10/18/2026"));
+  it("a swim with a real date is never re-dated by a different swim", () => {
+    const other = { ...fixed, date: "10/17/2026" };
+    eq(merge([fixed], [other]).length, 2);
+  });
+  const pbs = bind("_mergePbs", {});
+  it("the PB that swim set takes the real date too", () =>
+    eq(pbs([{ event: "100 Fly", sec: 51.75, course: "S", meet: broken.meet, meetDate: "66/10/1820" }], [fixed])[0].meetDate, "10/18/2026"));
+
+  const previewCtx = (roster) => {
+    const ctx = {
+      state: { meetImportText: file }, setState(s) { Object.assign(this.state, s); },
+      allSwimmersFlat: () => roster.slice(), added: [],
+      adminAddSwimmer(squadId, form) { this.added.push({ squadId, form }); roster.push({ id: "new", name: form.name, gender: form.gender, squadId }); },
+      _ageFromDob: () => 16,
+    };
+    bind("meetImportAddSwimmer", ctx, ["meetImportPreview", "meetParseHy3", "meetParseHytek", "_hy3Splits", "_looksHy3",
+      "_isOurTeam", "_matchImportSwimmer", "_nameKey", "squadForAge"]);
+    ctx.meetImportPreview();
+    return ctx;
+  };
+  it("a club swimmer not on the roster is offered to be added", () => {
+    const ctx = previewCtx([{ id: "r112", name: "Zeyad Ahmed Nawwar", gender: "Boys" }]);
+    eq(ctx.state.meetImportPreview.unmatchedRows.map((u) => [u.name, u.swims, u.near]), [["Zeyad Ashry", 1, false]]);
+  });
+  it("adding him files him in his age's squad with the file's date of birth", () => {
+    const ctx = previewCtx([]);
+    ctx.meetImportAddSwimmer(ctx.state.meetImportPreview.unmatchedRows[0].idx);
+    eq([ctx.added[0].squadId, ctx.added[0].form.dob, ctx.added[0].form.gender], ["vortexa", "2010-08-18", "Boys"]);
+  });
+  it("and his swims are then part of the import", () => {
+    const ctx = previewCtx([]);
+    ctx.meetImportAddSwimmer(0);
+    eq([ctx.state.meetImportPreview.updatedSwimmers, ctx.state.meetImportPreview.newResults, ctx.state.meetImportPreview.unmatched.length], [1, 1, 0]);
+  });
+  it("two swimmers of that name on the roster: never offered as a third", () => {
+    const ctx = previewCtx([{ id: "a", name: "Zeyad Ashry", gender: "Boys" }, { id: "b", name: "Zeyad Ashry", gender: "Boys" }]);
+    eq(ctx.state.meetImportPreview.unmatchedRows[0].near, true);
+  });
+  it("the import saves the way every roster change does", () => {
+    const body = methodSource("meetImportConfirm").body;
+    eq([/this\.persistRosterEdits\(\)/.test(body), /_saveJSON\('vx_roster_edits'/.test(body)], [true, false]);
+  });
+});
+
 /* ---------------------------------------------- one button per event on a swimmer's profile
    PBs are kept per event and course since the Dragons import, and the profile's event buttons
    were one per PB: "50 Free" twice, both lit together. */

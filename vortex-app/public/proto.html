@@ -7676,6 +7676,12 @@ if ('serviceWorker' in navigator) {
                             <div style="background:#F8FAFC;border:1px solid #E5E9F0;border-radius:10px;padding:11px">
                               <p style="margin:0;font-size:12.5px;color:#3A4152;line-height:1.6">{{ meetImportSummary }}</p>
                             </div>
+                            <sc-for list="{{ meetImportUnmatched }}" as="u" hint-placeholder-count="1">
+                              <div style="display:flex;align-items:center;gap:9px;background:#FFF8EB;border:1px solid #F3DDB3;border-radius:10px;padding:9px 11px">
+                                <span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;font-weight:700;color:#0C1116">{{ u.name }}</span><span style="display:block;font-size:11px;color:#7A6A4F;line-height:1.45">{{ u.sub }}</span></span>
+                                <sc-if value="{{ u.canAdd }}" hint-placeholder-val="{{ true }}"><button onclick="{{ u.onAdd }}" style="flex:none;background:var(--vx-blue);color:#fff;border:none;border-radius:9px;padding:8px 11px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">Add to roster</button></sc-if>
+                              </div>
+                            </sc-for>
                             <button onclick="{{ onMeetImportConfirm }}" style="background:#0C7A4F;color:#fff;border:none;border-radius:10px;padding:10px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer">Confirm &amp; merge into roster</button>
                           </sc-if>
                         </div>
@@ -19426,7 +19432,10 @@ class Component extends DCLogic {
         let tm=raw.slice(3,12).trim(); let course=meetCourse;
         if(/[LSY]$/.test(tm)){ course=tm.slice(-1); tm=tm.slice(0,-1).trim(); }
         const sec=parseFloat(tm);
-        const dm=raw.slice(80,96).match(/(\d{8})/); const date=dm?mkdate(dm[1]):'';
+        // The date is the LAST eight digits of the run. A meet that records reaction times writes
+        // one straight against it — "0.6610182026" — and the first eight digits read as
+        // "66/10/1820": every swim of the Hamilton 2026 file came in dated 1820.
+        const dm=raw.slice(80,96).match(/(\d{8})(?!\d)/); const date=dm?mkdate(dm[1]):'';
         // A time no human can swim is a keying error in the meet file, not a record: the Dragons
         // 2026 file has a 100 Free "in 28.38" (its own backup time for the swim says 60.67). The
         // floor is 0.38 s a metre — under the short-course 50 Free world record, 19.90.
@@ -19575,6 +19584,8 @@ class Component extends DCLogic {
       else if(+r.sec < +(out[i].sec!=null?out[i].sec:Infinity)){
         const was=+out[i].sec; out[i]={...out[i], ...pb, drop:(was>0?('−'+(was-r.sec).toFixed(2)+'s'):'')};
       }
+      // The same swim again (a re-import): it keeps its PB and takes the file's date if it differs.
+      else if(Math.abs(+r.sec - +out[i].sec)<0.005 && (out[i].meet||'')===pb.meet && pb.meetDate) out[i]={...out[i], meetDate:pb.meetDate};
     });
     out.sort((a,b)=>a.sec-b.sec);
     return out;
@@ -19586,18 +19597,40 @@ class Component extends DCLogic {
     const otherClub=all.length-parsed.length;
     const flat=this.allSwimmersFlat();
     let newResults=0, withSplits=0, dobToFill=0;
-    const unmatched=[], courses={};
-    parsed.forEach(p=>{
+    const unmatched=[], unmatchedRows=[], courses={};
+    const K=this._nameKey.bind(this);
+    parsed.forEach((p, idx)=>{
       const m=this._matchImportSwimmer(p, flat);
       p.matchId=m?m.id:null; p.matchSquad=m?m.squadId:null; p.matchName=m?m.name:'';
       const valid=p.results.filter(r=>r.valid);
-      if(!m){ if(valid.length) unmatched.push(p.name); return; }
+      if(!m){
+        if(!valid.length) return;
+        unmatched.push(p.name);
+        // Somebody on the roster carrying the same first name and surname is more likely this
+        // swimmer under another spelling, or one of two with the name, than a new one, so they
+        // are not offered to be added: that is a coach's call, from the swimmer's own screen.
+        const f=K(p.first).split(' ')[0], l=K(p.last).split(' ').pop();
+        const near=flat.some(r=>{ const t=K(r.name).split(' '); return !!f && !!l && t.includes(f) && t.includes(l); });
+        unmatchedRows.push({idx, name:p.name, swims:valid.length, near});
+        return;
+      }
       if(p.dob && !m.dob) dobToFill++;
       valid.forEach(r=>{ newResults++; if(r.splits) withSplits++; courses[r.course||'L']=1; });
     });
     const matched=parsed.filter(p=>p.matchId).length;
     this.setState({meetImportPreview:{count:parsed.length, otherClub, updatedSwimmers:matched, newSwimmers:0,
-      unmatched, newResults, withSplits, dobToFill, courses:Object.keys(courses), parsed}});
+      unmatched, unmatchedRows, newResults, withSplits, dobToFill, courses:Object.keys(courses), parsed}});
+  }
+  // A club swimmer in the file who is not on the roster yet: added from the file's own record —
+  // name, date of birth, gender — into the squad for their age, and the preview run again so
+  // their swims go in with everyone else's when the import is confirmed.
+  meetImportAddSwimmer(idx){
+    const prev=this.state.meetImportPreview; const p=prev && prev.parsed[idx];
+    if(!p || p.matchId) return;
+    const age=(p.dob && this._ageFromDob(p.dob)!=null) ? this._ageFromDob(p.dob) : (p.age||0);
+    const squadId=this.squadForAge(age);
+    this.adminAddSwimmer(squadId, {name:p.name, dob:p.dob||'', age:String(age), gender:p.gender==='G'?'Girls':'Boys', pbs:[]});
+    this.meetImportPreview();
   }
   meetImportConfirm(){
     const prev=this.state.meetImportPreview; if(!prev) return;
@@ -19630,8 +19663,10 @@ class Component extends DCLogic {
       }
       merged++;
     });
-    this._saveJSON('vx_roster_edits', this.rosterEdits);
-    this.rebuildRoster();
+    // The same save every other roster change goes through. This wrote the document alone, and
+    // a club on the roster table reads the table: the import showed on the importing phone and
+    // was gone at the next launch, from every phone, with no error anywhere.
+    this.persistRosterEdits();
     try{ this.audit('meet.import', (prev.parsed[0]&&prev.parsed[0].results[0]&&prev.parsed[0].results[0].meet)||'meet',
       {swimmers:merged, unmatched:(prev.unmatched||[]).length, otherClub:prev.otherClub||0}); }catch(e){}
     this.setState({meetImportOpen:false, meetImportText:'', meetImportPreview:null,
@@ -19645,7 +19680,18 @@ class Component extends DCLogic {
   _mergeResults(have, incoming){
     const key=r=>[r.meet||'', r.date||'', r.event||'', r.course||'L', (+r.sec).toFixed(2)].join('|');
     const byKey=new Map(incoming.map(r=>[key(r), r]));
-    const kept=have.map(r=>{ const n=byKey.get(key(r)); if(!n) return r; byKey.delete(key(r));
+    // A swim already on file under a date no calendar has (a "66/10/1820" from before the date
+    // was read right) is still that swim: re-importing the file puts the real date on it instead
+    // of adding every swim a second time.
+    const badDate=d=>{ const m=String(d||'').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      return !!m && (+m[1]<1 || +m[1]>12 || +m[2]<1 || +m[2]>31 || +m[3]<1900); };
+    const loose=r=>[r.meet||'', r.event||'', r.course||'L', (+r.sec).toFixed(2)].join('|');
+    const kept=have.map(r=>{ let k=key(r), n=byKey.get(k);
+      if(!n && badDate(r.date)){
+        for(const [k2, c] of byKey){ if(loose(c)===loose(r)){ n=c; k=k2; break; } }
+        if(n) r={...r, date:n.date};
+      }
+      if(!n) return r; byKey.delete(k);
       let out=r;
       if(n.splits && !(Array.isArray(r.splits) && r.splits.length)) out={...out, splits:n.splits};
       if(n.place && !r.place) out={...out, place:n.place};
@@ -23828,6 +23874,11 @@ class Component extends DCLogic {
     // -- meets admin --
     const meetImportChevron = S.meetImportOpen ? 'chevron-up' : 'chevron-down';
     const meetImportHasPreview = !!S.meetImportPreview;
+    const meetImportUnmatched = ((S.meetImportPreview && S.meetImportPreview.unmatchedRows)||[]).map(u=>({
+      name:u.name, canAdd:!u.near, onAdd:()=>this.meetImportAddSwimmer(u.idx),
+      sub: u.swims+' swim'+(u.swims===1?'':'s')+' · '
+        + (u.near ? 'a swimmer with this name is on the roster under another spelling — fix the name there, then preview again'
+                  : 'not on the roster — add them and their swims go in with the rest') }));
     const _cl={L:'long course (LCM)', S:'short course (SCM)', Y:'yards (SCY)'};
     const meetImportSummary = S.meetImportPreview ? (S.meetImportPreview.count+' Vortex swimmer(s) in the file'
       + (S.meetImportPreview.otherClub ? (' · '+S.meetImportPreview.otherClub+' from other clubs left out') : '')
@@ -26033,7 +26084,7 @@ class Component extends DCLogic {
       compEventChips: this.EVENT_CATALOG().map(ev=>{ const on=S.compEvents.includes(ev); return {label:ev, onToggle:()=>this.toggleCompEvent(ev), bg:on?'#0C7A4F':'#fff', fg:on?'#fff':'#3A4152', border:on?'#0C7A4F':'#E5E9F0'}; }),
       compErr:S.compErr, compErrShow:!!S.compErr, onCompCreate:()=>this.createCompetition(),
       meetImportText:S.meetImportText, onMeetImportText:(e)=>this.setState({meetImportText:e.target.value}),
-      onMeetImportPreview:()=>this.meetImportPreview(), meetImportHasPreview, meetImportSummary, onMeetImportConfirm:()=>this.meetImportConfirm(),
+      onMeetImportPreview:()=>this.meetImportPreview(), meetImportHasPreview, meetImportSummary, meetImportUnmatched,onMeetImportConfirm:()=>this.meetImportConfirm(),
       meetEditImported: !!S.meetEditName && !this._isCustomMeet(S.meetEditName),
       meetRowsUpcoming, meetRowsDone, meetsHasUpcoming, meetsHasDone,
       meetsUpcomingLabel, meetsDoneLabel, meetsDoneOpen, onMeetsDoneToggle, meetsDoneChevron,
