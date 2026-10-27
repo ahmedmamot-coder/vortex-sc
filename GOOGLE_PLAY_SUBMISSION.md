@@ -6,7 +6,7 @@ order it asks, written so it can be pasted.
 ## How the Android app works
 
 Vortex SC on Android is a **Trusted Web Activity (TWA)**: a small Android shell that opens
-`https://vortexswimmingclub.com` full-screen in Chrome, with no address bar. Nothing in the web
+`https://www.vortexswimmingclub.com` full-screen in Chrome, with no address bar. Nothing in the web
 app changes and every Vercel deploy reaches Android users immediately — there is no rebuild
 for app changes, only for changes to the shell itself (icon, name, version).
 
@@ -19,7 +19,11 @@ like a website, and that is the most common reason a TWA gets a poor review.
 |---|---|
 | Package name | `com.vortexswimmingclub.app` (same as the iOS bundle ID — **permanent once uploaded**) |
 | App name | `Vortex SC` |
-| Start URL | `https://vortexswimmingclub.com/` |
+| Start URL | `https://www.vortexswimmingclub.com/` |
+
+> **Always use the `www.` address for Android.** Vercel redirects `vortexswimmingclub.com` to
+> `www.vortexswimmingclub.com` (308). PWABuilder does not follow that redirect and reports
+> "no manifest", and the Android app's host must be the address that actually serves the page.
 | Theme / background colour | `#0A0F1A` |
 | Icon | `vortex-app/public/assets/icon-512.png`, maskable `icon-maskable-512.png` |
 | Category | Sports |
@@ -29,13 +33,13 @@ like a website, and that is the most common reason a TWA gets a poor review.
 
 ## Step 1 — Build the Android package with PWABuilder
 
-1. Open **https://www.pwabuilder.com**, enter `https://vortexswimmingclub.com`, press **Start**.
+1. Open **https://www.pwabuilder.com**, enter `https://www.vortexswimmingclub.com`, press **Start**.
 2. Ignore the score; press **Package For Stores** → **Android** → **Generate Package**.
 3. Press **All Settings** and set:
    - **Package ID:** `com.vortexswimmingclub.app`
    - **App name:** `Vortex Swimming Club` · **Short name:** `Vortex SC`
    - **Version:** `1.0.0` · **Version code:** `1`
-   - **Host:** `vortexswimmingclub.com` · **Start URL:** `/`
+   - **Host:** `www.vortexswimmingclub.com` · **Start URL:** `/`
    - **Theme / background / nav bar colour:** `#0A0F1A`
    - **Display mode:** Standalone · **Orientation:** Portrait
    - **Notification delegation:** On (so club notifications reach the phone)
@@ -248,9 +252,9 @@ fingerprints:
 ]
 ```
 
-4. Deploy, then check `https://vortexswimmingclub.com/.well-known/assetlinks.json` shows the
+4. Deploy, then check `https://www.vortexswimmingclub.com/.well-known/assetlinks.json` shows the
    file, and run Google's checker:
-   `https://digitalassetlinks.googleapis.com/v1/statements:list?source.web.site=https://vortexswimmingclub.com&relation=delegate_permission/common.handle_all_urls`
+   `https://digitalassetlinks.googleapis.com/v1/statements:list?source.web.site=https://www.vortexswimmingclub.com&relation=delegate_permission/common.handle_all_urls`
 5. On the phone: uninstall, reinstall from the test link. The browser bar should be gone.
    (Android caches the check — if the bar is still there, clear Chrome's data or wait an hour.)
 
