@@ -20,7 +20,7 @@ with needed(t) as (values
   ('club_state'),('attendance_marks'),('plan_sessions'),('fitness_sessions'),('squad_plans'),
   ('season_plans'),('fitness_plans'),('family_accounts'),('staff_accounts'),('swimmer_docs'),
   ('push_subscriptions'),('announcements'),('family_messages'),('lounge_posts'),('lounge_comments'),
-  ('signup_alerts'),('vx_squads_t'),('vx_video_analyses'),('audit_log'),('vx_staff_emails'),
+  ('signup_alerts'),('vx_squads_t'),('vx_video_analyses'),('vx_stroke_analyses'),('audit_log'),('vx_staff_emails'),
   ('invoices'),('memberships'),('inbody_readings'),('hr_sets')
 )
 select n.t as table_name,

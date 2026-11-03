@@ -262,7 +262,7 @@ if ('serviceWorker' in navigator) {
   // would lose the edit while telling nobody.
   var APPEND_ONLY = ["plan_sessions","fitness_sessions","lounge_posts","lounge_comments",
                      "family_messages","signup_alerts","hr_sets","attendance_marks",
-                     "vx_video_analyses","audit_log"];
+                     "vx_video_analyses","audit_log","vx_stroke_analyses"];
   function _alreadyThere(table, said, body){
     if(APPEND_ONLY.indexOf(String(table||""))<0) return false;
     var s=String(said||"")+" "+String(body||"");
@@ -19121,7 +19121,7 @@ class Component extends DCLogic {
       // The tables added since the club started splitting single documents into rows. A restore
       // rewinds the database to a moment before they were created, so "does this table exist"
       // is a question the club has had to ask twice now, and it should not need me to answer it.
-      const tables = ['attendance_marks','plan_sessions','fitness_sessions','squad_plans','season_plans','fitness_plans','family_accounts','staff_accounts','swimmer_docs','push_subscriptions','announcements','family_messages','lounge_posts','lounge_comments','signup_alerts','vx_squads_t','vx_video_analyses'];
+      const tables = ['attendance_marks','plan_sessions','fitness_sessions','squad_plans','season_plans','fitness_plans','family_accounts','staff_accounts','swimmer_docs','push_subscriptions','announcements','family_messages','lounge_posts','lounge_comments','signup_alerts','vx_squads_t','vx_video_analyses','vx_stroke_analyses'];
       try{
         const res = await Promise.all(tables.map(t=>C(t)));
         tables.forEach((t,i)=>{ db[t]=res[i]; });
@@ -19153,6 +19153,7 @@ class Component extends DCLogic {
     const perRow=[
       ['Squads table (one row each)', db.vx_squads_t, 'squads.sql'],
       ['Video analyses table (one row each)', db.vx_video_analyses, 'video_analyses.sql'],
+      ['Stroke Lab analyses (one row each)', db.vx_stroke_analyses, 'stroke_analyses.sql'],
     ];
     perRow.forEach(([label, n, file])=>{
       const missing = (n==null || n<0);
@@ -19765,9 +19766,15 @@ class Component extends DCLogic {
   // names only — nothing else about a child leaves the app's own state for the analysis page.
   _strokeLabCtx(club){ const sq=this.squadById[this.state.squadId]||{};
     const pool = club ? this.allSwimmersFlat() : (this.roster[this.state.squadId]||[]).map(sw=>({...sw, squadName:sq.name}));
+    const who=this._auditWho();
     const ctx={ theme:this.state.theme==='dark'?'dark':'light', squad: club?null:(sq.name||null),
-      squads:this.squads.map(x=>x.name), swimmers:pool.map(sw=>({name:sw.name, squad:sw.squadName||''})) };
-    try{ sessionStorage.setItem('vx_strokelab_ctx', JSON.stringify(ctx)); }catch(e){} }
+      squads:this.squads.map(x=>x.name), swimmers:pool.map(sw=>({id:sw.id, name:sw.name, squad:sw.squadName||''})),
+      staff:{name:who.name||'', email:who.email||''} };
+    try{ sessionStorage.setItem('vx_strokelab_ctx', JSON.stringify(ctx)); }catch(e){}
+    // Stroke Lab saves through window.__vxUpsert like every other screen (same token, same retry
+    // queue, same banner when the database refuses). This records it in the Activity log too:
+    // who saved an analysis of whom — not the numbers, as with every other entry there.
+    window.__vxStrokeLabSaved = (name, detail)=>{ try{ this.audit('strokelab.save', name, detail); }catch(e){} }; }
   allSwimmersFlat(){ const out=[]; this.squads.forEach(sq=>{ (this.roster[sq.id]||[]).forEach(sw=>out.push({...sw, squadId:sq.id, squadName:sq.name})); }); return out; }
   // ---- Relay Builder helpers (distance-aware · distinct swimmers per leg + editable overrides) ----
   // Each group builds six relays: 4×50 / 4×100 / 4×200, medley + freestyle for every distance.

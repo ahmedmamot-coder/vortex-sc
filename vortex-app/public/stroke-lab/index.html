@@ -139,6 +139,13 @@ td.na{color:var(--muted);text-align:right}
 .field input,.field select{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:7px 9px;width:100%}
 .fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
 .note{font-size:12.5px;color:var(--muted);border-left:3px solid var(--line);padding:2px 0 2px 10px}
+.savebar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2);margin-top:12px}
+.savebar .msg{font-size:12.5px;color:var(--muted);flex:1;min-width:180px}
+.savebar .msg.ok{color:var(--good)} .savebar .msg.err{color:var(--bad)}
+.hist td.when{white-space:nowrap}
+.hist tr.open td{background:var(--panel-2)}
+.hist button.link{border:0;background:transparent;color:var(--accent);padding:0;font:inherit;text-decoration:underline;cursor:pointer}
+.delta-up{color:var(--good)} .delta-dn{color:var(--bad)}
 .toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:13px;z-index:20;max-width:90vw}
 .sumgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
 .sum{border:1px solid var(--line);border-radius:8px;padding:8px}
@@ -281,12 +288,19 @@ textarea{width:100%;min-height:150px;background:var(--panel-2);border:1px solid 
           <label class="field"><span class="lbl">Session date</span><input id="sdate" type="date"></label>
         </div>
         <div class="sumgrid" id="summary"></div>
+        <label class="field" style="margin-top:10px"><span class="lbl">Coach notes</span><input id="snotes" type="text" maxlength="500" placeholder="e.g. hips drop on breathing side, work on catch"></label>
+        <div class="savebar"><button class="btn primary" id="saveDb" type="button">Save to swimmer's record</button><span class="msg" id="saveMsg">Saves the summary, starts &amp; turns and every tracked frame to the club database.</span></div>
       </div>
       <div>
         <h3>Export</h3>
         <p>Frame-by-frame data (time, joint angles, body line, tracking quality) as CSV for Excel, plus a text summary to paste into the swimmer's profile.</p>
         <div class="row"><button class="btn primary" id="expCsv" type="button">Save CSV</button><button class="btn" id="copySum" type="button">Copy summary</button></div>
         <textarea id="sumText" readonly aria-label="Summary text" style="margin-top:10px"></textarea>
+      </div>
+      <div style="grid-column:1/-1">
+        <h3>Saved analyses <span id="histWho" style="color:var(--muted);font-weight:600"></span></h3>
+        <p id="histMsg">Pick a swimmer to see their saved analyses.</p>
+        <div class="tablewrap"><table class="hist"><thead><tr><th>Date</th><th>Stroke</th><th style="text-align:right">Rate</th><th style="text-align:right">Velocity</th><th style="text-align:right">DPS</th><th style="text-align:right">Catch</th><th style="text-align:right">Body line</th><th>Saved by</th></tr></thead><tbody id="histRows"></tbody></table></div>
       </div>
     </div>
   </section>
@@ -477,7 +491,7 @@ $('srcUpload').onclick=()=>$('file').click();
 $('file').onchange=async e=>{
   const f=e.target.files[0]; if(!f)return; stopLive();
   vid.srcObject=null; vid.src=URL.createObjectURL(f); vid.muted=true; vid.playbackRate=S.speed;
-  S.source='video'; S.track=[]; S.complete=false; S.marks={}; S.mpp=null; S.calib=null; S.playing=false;
+  S.source='video'; S.clipName=f.name.slice(0,120); S.track=[]; S.complete=false; S.marks={}; S.mpp=null; S.calib=null; S.playing=false;
   setSourceBtn(); renderMarks();
   $('chipMode').className='chip'; $('chipMode').lastElementChild.textContent='VIDEO · '+f.name.slice(0,28).toUpperCase();
   $('calState').textContent='Not set: velocity and DPS hidden until you set the scale';
@@ -520,7 +534,7 @@ $('analyse').onclick=async()=>{
     if(Math.round(t/step)%5===0)drawQStrip();
   }
   S.complete=!S.cancel; S.analysing=false; $('analyse').textContent=S.complete?'Re-analyse clip':'Analyse whole clip'; $('prog').hidden=true;
-  $('analyseNote').textContent=S.complete?`Analysed ${S.track.length} frames.`:'Stopped. Partial data kept.';
+  $('analyseNote').textContent=S.complete?`Analysed ${S.track.length} frames. Save it under Session & export.`:'Stopped. Partial data kept.';
   drawQStrip(); vid.currentTime=0;
 };
 
@@ -725,6 +739,7 @@ function summarise(){
   return items;
 }
 ['swimmer','squad','sdate'].forEach(id=>$(id).addEventListener('input',summarise));
+$('swimmer').addEventListener('change',()=>loadHistory());
 let dl=null; (async()=>{try{dl=await window.claude?.use?.('downloads')}catch(e){dl=null}})();
 $('expCsv').onclick=async()=>{
   if(!S.track.length){toast('No tracked frames to export yet.');return}
@@ -736,9 +751,73 @@ $('expCsv').onclick=async()=>{
 };
 $('copySum').onclick=async()=>{summarise();const ta=$('sumText');try{await navigator.clipboard.writeText(ta.value);toast('Summary copied.')}catch(e){ta.focus();ta.select();toast('Press Ctrl/Cmd+C to copy the selected summary.')}};
 
+// ---------- save to the club database (Vortex SC) ----------
+// The page runs on the app's own origin inside its tool screen, so it saves through the app's
+// own helpers: the signed-in coach's token, the retry queue, and the red banner if the database
+// refuses. Opened on its own (no app around it) there is nothing to save through, and it says so.
+function vx(){ try{ const w=window.parent; if(w&&w!==window&&w.__vxUpsert&&w.__vxSelectRaw)return w }catch(e){} return null }
+const r2=(v,d)=>isFinite(v)?+(+v).toFixed(d):null;
+let CTX=null; try{CTX=JSON.parse(sessionStorage.getItem('vx_strokelab_ctx')||'null')}catch(e){}
+function swimmerRef(){ const name=$('swimmer').value.trim(); const hit=(CTX&&CTX.swimmers||[]).find(s=>s.name.toLowerCase()===name.toLowerCase()); return {name:hit?hit.name:name, id:hit?hit.id:null, squad:hit?hit.squad:$('squad').value} }
+function numericSummary(){
+  const tr=S.track; const D=derive(tr)||{}; const avg=k=>{const a=tr.map(s=>s[k]).filter(isFinite);return a.length?a.reduce((x,y)=>x+y,0)/a.length:NaN};
+  return {sr:r2(D.SR,1), cycle_s:r2(D.cycleT,2), velocity_ms:S.mpp?r2(D.v,2):null, dps_m:S.mpp?r2(D.dps,2):null, catch_elbow_deg:r2(D.catchEl,0),
+    kicks_per_cycle:r2(D.kicks,1), body_line_deg:r2(avg('body'),1), head_tilt_deg:r2(avg('head'),1), knee_deg:r2(avg('knee'),0), hip_deg:r2(avg('hip'),0),
+    quality_pct:r2(avg('q')*100,0), cycles:D.cycles||0, arm_pattern:D.kind&&isFinite(D.kind.c)?(D.kind.sym?'together':'alternating'):null}
+}
+function framesForSave(){
+  // Same columns as the CSV. Capped at 3,000 frames (about 3 min at 15 frames/s) by even thinning,
+  // so one long live session cannot make a row too large to read back.
+  let tr=S.track; const cap=3000; if(tr.length>cap){const k=tr.length/cap;tr=Array.from({length:cap},(_,i)=>S.track[Math.floor(i*k)])}
+  return tr.map(s=>({t:r2(s.t,3),q:r2(s.q*100,0),side:s.near,el_l:r2(s.elL,1),el_r:r2(s.elR,1),knee:r2(s.knee,1),hip:r2(s.hip,1),body:r2(s.body,1),head:r2(s.head,1),reach_l:r2(s.reachL,3),reach_r:r2(s.reachR,3),hip_x_m:S.mpp?r2(s.hipX*S.mpp,3):null}))
+}
+function setSaveMsg(t,cls){const m=$('saveMsg');m.textContent=t;m.className='msg'+(cls?' '+cls:'')}
+let saving=false;
+$('saveDb').onclick=async()=>{
+  if(saving)return; const api=vx();
+  if(!api){setSaveMsg('Open Stroke Lab from Vortex SC (Tools → Stroke Lab) to save to the club database.','err');return}
+  const who=swimmerRef();
+  if(!who.name){setSaveMsg('Choose the swimmer first.','err');$('swimmer').focus();return}
+  if(S.source==='demo'){setSaveMsg('This is the simulated demo swimmer. Upload a clip or use the live camera, then save.','err');return}
+  if(S.track.length<12){setSaveMsg('Not enough tracked frames yet. Play the clip or press Analyse whole clip first.','err');return}
+  const marks={};Object.keys(S.marks).forEach(k=>marks[k]=r2(S.marks[k],3));
+  const splitRows=SPLITS.filter(([,a,b])=>S.marks[a]!=null&&S.marks[b]!=null).map(([n,a,b])=>({label:n,sec:r2(S.marks[b]-S.marks[a],2)}));
+  const row={ id:'sl'+Date.now().toString(36)+Math.random().toString(36).slice(2,7), swimmer_id:who.id, swimmer_name:who.name, squad_name:who.squad||$('squad').value,
+    session_date:$('sdate').value||new Date().toISOString().slice(0,10), stroke:S.stroke, camera:S.camera, source:S.source,
+    clip_name:S.clipName||'', duration_s:S.source==='video'?r2(S.duration,2):r2(S.track.length?S.track[S.track.length-1].t-S.track[0].t:0,2), scale_mpp:S.mpp?+S.mpp.toPrecision(6):null,
+    summary:numericSummary(), splits:{marks, splits:splitRows}, frames:framesForSave(), notes:$('snotes').value.trim(),
+    saved_by:(CTX&&CTX.staff&&CTX.staff.name)||'', saved_by_email:(CTX&&CTX.staff&&CTX.staff.email)||'' };
+  saving=true; $('saveDb').disabled=true; setSaveMsg('Saving…');
+  let ok=false; try{ok=!!(await api.__vxUpsert('vx_stroke_analyses',[row]))}catch(e){ok=false}
+  saving=false; $('saveDb').disabled=false;
+  if(ok){ setSaveMsg(`Saved to ${who.name}'s record ✓ (${row.frames.length} frames)`,'ok'); toast('Saved to the club database.');
+    try{api.__vxStrokeLabSaved&&api.__vxStrokeLabSaved(who.name, {date:row.session_date, stroke:row.stroke, frames:row.frames.length})}catch(e){}
+    loadHistory(row.id); return }
+  const err=api.__vxLastWriteErr; const said=err&&err.table==='vx_stroke_analyses'?err.said:'';
+  setSaveMsg(said?`Not saved: ${said}`:'Not saved yet. The app will retry when the sign-in or connection is back; keep this tab open or save again.','err');
+};
+async function loadHistory(highlight){
+  const api=vx(); const who=swimmerRef(); const rows=$('histRows'); $('histWho').textContent=who.name?'· '+who.name:'';
+  if(!api){$('histMsg').textContent='Open Stroke Lab from Vortex SC to see saved analyses.';rows.innerHTML='';return}
+  if(!who.name){$('histMsg').textContent='Pick a swimmer to see their saved analyses.';rows.innerHTML='';return}
+  $('histMsg').textContent='Loading…';
+  const q=(who.id?'swimmer_id=eq.'+encodeURIComponent(who.id):'swimmer_name=ilike.'+encodeURIComponent(who.name))+'&select=id,session_date,stroke,camera,summary,splits,notes,saved_by,saved_at,clip_name&order=session_date.desc,saved_at.desc&limit=30';
+  let res; try{res=await api.__vxSelectRaw('vx_stroke_analyses',q)}catch(e){res={status:0,rows:null,said:'it could not be reached'}}
+  if(!res||res.rows==null){ $('histMsg').textContent=res&&res.status===404?'The Stroke Lab table is missing. Run supabase/stroke_analyses.sql.':`Could not load saved analyses: ${(res&&res.said)||'no answer'}.`;rows.innerHTML='';return }
+  if(!res.rows.length){$('histMsg').textContent='Nothing saved for this swimmer yet.';rows.innerHTML='';return}
+  $('histMsg').textContent=`${res.rows.length} saved. Arrows compare with the analysis before it.`;
+  const SN={auto:'Auto',free:'Freestyle',back:'Backstroke',breast:'Breaststroke',fly:'Butterfly'};
+  const esc=t=>String(t==null?'':t).replace(/[<&>"]/g,c=>({'<':'&lt;','&':'&amp;','>':'&gt;','"':'&quot;'})[c]);
+  const cell=(cur,prev,d,unit,higherBetter)=>{ if(cur==null)return '<td class="na">—</td>'; let ar=''; if(prev!=null&&cur!==prev){const up=cur>prev;const good=higherBetter==null?null:(up===higherBetter);ar=` <span class="${good==null?'':good?'delta-up':'delta-dn'}">${up?'▲':'▼'}</span>`} return `<td class="num">${(+cur).toFixed(d)}${unit}${ar}</td>` };
+  rows.innerHTML=res.rows.map((r,i)=>{const s=r.summary||{},p=(res.rows[i+1]||{}).summary||{};const n=(r.splits&&r.splits.splits||[]).length;
+    return `<tr class="${r.id===highlight?'open':''}" title="${esc(r.notes||'')}"><td class="when mono">${esc(r.session_date)}</td><td>${esc(SN[r.stroke]||r.stroke)}${n?` <span style="color:var(--muted);font-size:11.5px">· ${n} split${n>1?'s':''}</span>`:''}${r.notes?`<div style="color:var(--muted);font-size:11.5px">${esc(r.notes)}</div>`:''}</td>`+
+      cell(s.sr,p.sr,1,'',null)+cell(s.velocity_ms,p.velocity_ms,2,'',true)+cell(s.dps_m,p.dps_m,2,'',true)+cell(s.catch_elbow_deg,p.catch_elbow_deg,0,'°',null)+cell(s.body_line_deg!=null?Math.abs(s.body_line_deg):null,p.body_line_deg!=null?Math.abs(p.body_line_deg):null,1,'°',false)+
+      `<td style="color:var(--muted)">${esc(r.saved_by||'')}</td></tr>`}).join('');
+}
+
 // tabs
 document.querySelector('.tabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x===b));
-  document.querySelectorAll('.pane').forEach(p=>p.hidden=p.dataset.pane!==b.dataset.tab);if(b.dataset.tab==='session')summarise();if(b.dataset.tab==='turns')drawQStrip()});
+  document.querySelectorAll('.pane').forEach(p=>p.hidden=p.dataset.pane!==b.dataset.tab);if(b.dataset.tab==='session'){summarise();loadHistory()}if(b.dataset.tab==='turns')drawQStrip()});
 
 let toastT; function toast(m){const t=$('toast');t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,4800)}
 
