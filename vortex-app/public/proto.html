@@ -5811,6 +5811,10 @@ if ('serviceWorker' in navigator) {
                     </div>
                   </sc-if>
 
+                  <sc-if value="{{ toolStrokeLab }}" hint-placeholder-val="{{ false }}">
+                    <iframe src="{{ strokeLabSrc }}" title="Stroke Lab" allow="camera; fullscreen; clipboard-write" style="display:block;width:calc(100% + 30px);margin:-14px -15px -22px;height:calc(100dvh - 120px);min-height:560px;border:0;background:#08131d"></iframe>
+                  </sc-if>
+
                   <sc-if value="{{ toolVideo }}" hint-placeholder-val="{{ true }}">
                     <div style="display:flex;flex-direction:column;gap:12px">
                       <sc-if value="{{ videoLibEmpty }}" hint-placeholder-val="{{ false }}">
@@ -9972,6 +9976,7 @@ class Component extends DCLogic {
     let mode=null; if(t==='meetday'){ t='entries'; mode='day'; }
     const patch={tool:t, toolScopeClub:!!club, aiOut:null, aiLoading:false};
     if(mode) patch.meetMode=mode; if(t==='clock'){ const seq=this.clockSeq(); patch.clockRunning=false; patch.clockSetIdx=0; patch.clockRep=1; patch.clockRemain=seq[0]?seq[0].interval:0; } this.setState(patch); if(t==='attday'){ try{ this._attendFetch(this.state.attDayISO||this.todayISO()); }catch(e){} }
+    if(t==='strokelab'){ try{ this._strokeLabCtx(!!club); }catch(e){} }
     if(t==='lounge'){ try{ this._loungeFetch(); }catch(e){} try{ this._blocksFetch(); }catch(e){} } if(t==='season'){ try{ this._seasonFetch(); }catch(e){} try{ this._plansFetch(); }catch(e){} try{ this._squadPlansFetch(); }catch(e){} } if(t==='fitness'){ try{ this._fitSessFetch(); }catch(e){} try{ this._fitPlansFetch(); }catch(e){} } }
 
   todayISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
@@ -19756,6 +19761,13 @@ class Component extends DCLogic {
     this.notify('all', 'calendar-plus', 'New meet added', meet.name+' \u2014 '+dateStr+(meet.location?(' \u00b7 '+meet.location):'')+'.');
     this.setState({calName:'', calLocation:'', calDate:'', calCourse:'LCM', calErr:'', calOpen:false});
   }
+  // Stroke Lab reads this when it opens (sessionStorage: this tab only, gone when it closes): which squad the coach came from, the squad names, and
+  // names only — nothing else about a child leaves the app's own state for the analysis page.
+  _strokeLabCtx(club){ const sq=this.squadById[this.state.squadId]||{};
+    const pool = club ? this.allSwimmersFlat() : (this.roster[this.state.squadId]||[]).map(sw=>({...sw, squadName:sq.name}));
+    const ctx={ theme:this.state.theme==='dark'?'dark':'light', squad: club?null:(sq.name||null),
+      squads:this.squads.map(x=>x.name), swimmers:pool.map(sw=>({name:sw.name, squad:sw.squadName||''})) };
+    try{ sessionStorage.setItem('vx_strokelab_ctx', JSON.stringify(ctx)); }catch(e){} }
   allSwimmersFlat(){ const out=[]; this.squads.forEach(sq=>{ (this.roster[sq.id]||[]).forEach(sw=>out.push({...sw, squadId:sq.id, squadName:sq.name})); }); return out; }
   // ---- Relay Builder helpers (distance-aware · distinct swimmers per leg + editable overrides) ----
   // Each group builds six relays: 4×50 / 4×100 / 4×200, medley + freestyle for every distance.
@@ -21808,6 +21820,7 @@ class Component extends DCLogic {
       'medal':'<circle cx="12" cy="14.6" r="5.6"/><path d="M12 11.9l.9 1.9 2 .3-1.5 1.4.4 2-1.8-1-1.8 1 .4-2-1.5-1.4 2-.3z"/><path d="M8.4 9.4L6.2 3.6h11.6l-2.2 5.8"/>',
       'users-round':'<circle cx="8" cy="7.6" r="2.7"/><circle cx="16.6" cy="8.4" r="2.2"/><path d="M3.2 19.6c0-2.8 2.2-5 4.8-5s4.8 2.2 4.8 5"/><path d="M14.2 19.6c0-2.2 1.4-4 3.2-4s3.2 1.8 3.2 4"/>',
       'target':'<circle cx="11" cy="13" r="7.6"/><circle cx="11" cy="13" r="3.6"/><path d="M13.6 10.4L20 4"/><path d="M16.6 4h3.6v3.6"/>',
+      'stroke-lab':'<circle cx="19.2" cy="8.2" r="1.7"/><path d="M17.2 9.6l-4.6 2.6-5 1.1-4.4 1.9"/><path d="M12.6 12.2l1.8 4.4 3.6.6"/><path d="M15.3 14.4a2.6 2.6 0 0 0-1.4-1.7"/><circle cx="12.6" cy="12.2" r=".9"/><circle cx="7.6" cy="13.3" r=".9"/><path d="M2.8 19.6c1.6 0 1.6 1.2 3.2 1.2s1.6-1.2 3.2-1.2 1.6 1.2 3.2 1.2 1.6-1.2 3.2-1.2 1.6 1.2 3.2 1.2"/>',
       'video':'<rect x="2.8" y="6" width="13" height="12" rx="2.2"/><path d="M15.8 11l5.4-3v8l-5.4-3z"/><path d="M7.6 10.6l3.4 1.9-3.4 1.9z"/>',
       'waves':'<path d="M2 7c2.5 0 2.5 2 5 2s2.5-2 5-2 2.5 2 5 2 2.5-2 5-2"/><path d="M2 13c2.5 0 2.5 2 5 2s2.5-2 5-2 2.5 2 5 2 2.5-2 5-2"/><path d="M2 19c2.5 0 2.5 2 5 2s2.5-2 5-2 2.5 2 5 2 2.5-2 5-2"/>',
       'timer':'<circle cx="12" cy="13.5" r="7.3"/><path d="M12 9.6v4l2.5 1.8"/><path d="M9.6 2.8h4.8"/><path d="M12 2.8v3.4"/>',
@@ -22207,6 +22220,10 @@ class Component extends DCLogic {
       {id:'insights', icon:'bar-chart-3', title:'Insights', sub:'Load · zones · attendance', tint:'rgba(6,126,234,.1)', color:'#067EEA'},
       {id:'boards', icon:'trophy', title:'Boards', sub:'Test-set leaderboards', tint:'rgba(245,166,35,.12)', color:'#C77E12'},
       {id:'video', icon:'video', title:'Video Analysis', sub:'Splits & velocity', tint:'rgba(138,34,213,.1)', color:'#8A22D5'},
+      // Stroke Lab: pose tracking on a clip or the live camera — joint angles, body line, stroke
+      // rate, DPS and start/turn splits. It runs as its own page (public/stroke-lab/) inside the
+      // tool screen, because the pose model is 20 MB of WebAssembly the rest of the app never needs.
+      {id:'strokelab', icon:'stroke-lab', title:'Stroke Lab', sub:'Pose tracking · angles · stroke rate', tint:'rgba(8,137,155,.12)', color:'#08899B'},
       {id:'lounge', icon:'messages-square', title:'Vortex Lounge', sub:'Squad social feed', tint:'rgba(34,193,218,.14)', color:'#12A0AE'},
       {id:'goals', icon:'target', title:'Season Goals', sub:'Target vs current PB', tint:'rgba(28,184,122,.12)', color:'#0C7A4F'},
       {id:'ai', icon:'sparkles', title:'AI Assistants', sub:'Season · dryland · nutrition', tint:'rgba(39,51,214,.1)', color:'#2733D6'},
@@ -22533,7 +22550,7 @@ class Component extends DCLogic {
     const mainPadBottom = (S.view==='squad') ? '78px' : '0px';
 
     // ---- tool overlay content ----
-    const toolTitleMap={attday:'Daily Attendance',insights:'Insights',boards:'Boards',video:'Video Analysis',lounge:'Vortex Lounge',goals:'Season Goals',ai:'AI Assistants',review:'AI Plan Review',clock:'Pace Clock',stopwatch:'Stopwatch',talent:'Talent Board',recovery:'Recovery Board',improvers:'Top Improvers',rankings:'Rankings',records:'Records',standards:'Meet Standards',relay:'Relay Builder',zoneeng:'Zone Engine',sponsors:'Sponsors',tpace:'T-Pace Tests',promo:'Level-Up Review',entries:'Meet Entries',fitness:'Fitness Plan',inbody:'InBody Import',season:'Season Plan',race:'Race Strategy',risk:'Load & Risk',meetday:'Meet Day',bdays:'Birthdays'};
+    const toolTitleMap={attday:'Daily Attendance',insights:'Insights',boards:'Boards',video:'Video Analysis',strokelab:'Stroke Lab',lounge:'Vortex Lounge',goals:'Season Goals',ai:'AI Assistants',review:'AI Plan Review',clock:'Pace Clock',stopwatch:'Stopwatch',talent:'Talent Board',recovery:'Recovery Board',improvers:'Top Improvers',rankings:'Rankings',records:'Records',standards:'Meet Standards',relay:'Relay Builder',zoneeng:'Zone Engine',sponsors:'Sponsors',tpace:'T-Pace Tests',promo:'Level-Up Review',entries:'Meet Entries',fitness:'Fitness Plan',inbody:'InBody Import',season:'Season Plan',race:'Race Strategy',risk:'Load & Risk',meetday:'Meet Day',bdays:'Birthdays'};
     const toolScope = S.toolScopeClub ? ('Club-wide · '+this.allSwimmersFlat().length+' swimmers') : squad.name+' · '+squad.count+' swimmers';
 
     // ---- Birthdays ----
@@ -26180,7 +26197,7 @@ class Component extends DCLogic {
       // tool overlay
       toolOpen: !!S.tool, onCloseTool:()=>this.setState({tool:null}),
       toolTitle: toolTitleMap[S.tool]||'', toolScope,
-      toolInsights:S.tool==='insights', toolBoards:S.tool==='boards', toolVideo:S.tool==='video', toolLounge:S.tool==='lounge', toolGoals:S.tool==='goals', toolAi:S.tool==='ai',
+      toolInsights:S.tool==='insights', toolBoards:S.tool==='boards', toolVideo:S.tool==='video', toolStrokeLab:S.tool==='strokelab', strokeLabSrc:'stroke-lab/index.html?theme='+(S.theme==='dark'?'dark':'light'), toolLounge:S.tool==='lounge', toolGoals:S.tool==='goals', toolAi:S.tool==='ai',
       toolReview:S.tool==='review', toolClock:S.tool==='clock', toolZone:S.tool==='zoneeng', toolTpace:S.tool==='tpace', toolPromo:S.tool==='promo',
       ...((self=>{
         const laps=(S.swtLaps||[]);
