@@ -59,6 +59,7 @@ swimmers.
    - `vortex-app/supabase/squads.sql`
    - `vortex-app/supabase/video_analyses.sql`
    - `vortex-app/supabase/audit_log.sql`
+   - `vortex-app/supabase/stroke_analyses.sql`
 
 > ### Why (b) has to come before (c)
 >

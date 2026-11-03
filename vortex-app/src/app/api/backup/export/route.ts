@@ -14,6 +14,7 @@ const TABLES = [
   "family_accounts", "staff_accounts", "swimmer_docs", "push_subscriptions",
   "announcements", "family_messages", "signup_alerts", "lounge_posts", "lounge_comments",
   "wearable_readings", "hr_sets",
+  "vx_stroke_analyses",
 ];
 
 function svc() {
