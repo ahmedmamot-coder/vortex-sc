@@ -14242,6 +14242,14 @@ describe("Fitness & body analysis", () => {
     eq(a.races[0].fit, "Best fit");
     eq(a.profile, "Power / sprint profile");
   });
+  it("parents see the same analysis, worded for them", () => {
+    const fam = make([], [{ date: "2026-11-01", weight: 55, pbf: 6, smm: 28 }])(sw(), true);
+    eq(fam.improve[0].title, "Fuelling");
+    eq(/Talk to the family/.test(fam.improve[0].how), false, "a parent is the family");
+    eq(/talk through with the coach/.test(fam.footnote), true);
+    eq(/famBfa: this\.swimmerBodyFitAnalysis\(sw, true\)/.test(SOURCE), true, "the family portal builds it");
+    eq(/<sc-if value="\{\{ famBfa\.has \}\}"/.test(SOURCE), true, "and shows it");
+  });
   it("is on the swimmer's profile, under the fitness test", () => {
     eq(/bfa: this\.swimmerBodyFitAnalysis\(swObj\)/.test(SOURCE), true);
     eq(SOURCE.indexOf("Log fitness test</button>") < SOURCE.indexOf('<sc-if value="{{ bfa.has }}"'), true);
