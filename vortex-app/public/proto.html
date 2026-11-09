@@ -9340,7 +9340,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-08-30a';
+const VX_BUILD='2026-11-09a';
 // Whether the roster is one document or one row per swimmer is NOT decided here any more.
 //
 // It was a constant in this file, which is the wrong place for it twice over: a build flag flips
@@ -15234,13 +15234,14 @@ class Component extends DCLogic {
     // printout; nobody should have to type it twice to find out.
     this._ibConfirmSave(swId, rec);
   }
-  async _ibConfirmSave(swId, rec){
-    if(!window.__vxUpsert){ this.setState({profileIbMsg:'Saved on this device \u2713'}); return; }
+  async _ibConfirmSave(swId, rec, msgKey, lead){
+    const K=msgKey||'profileIbMsg', L=lead||'';
+    if(!window.__vxUpsert){ this.setState({[K]:L+'Saved on this device \u2713'}); return; }
     let ok=false, why='';
     try{ ok=await window.__vxUpsert('inbody_readings', [this._ibToRow(swId, rec)]); }
     catch(e){ ok=false; why=(e&&e.message)||''; }
     if(!ok && !why){ const le=window.__vxLastWriteErr; if(le && le.table==='inbody_readings') why=le.said||('the database answered HTTP '+le.status); }
-    if(ok){ this.setState({profileIbMsg:'Saved to the club database \u2713 \u00b7 '+this._fmtDMY(rec.date)});
+    if(ok){ this.setState({[K]:L+'Saved to the club database \u2713 \u00b7 '+this._fmtDMY(rec.date)});
       // Read it back, so what is on screen is what the database actually holds.
       try{ await this._inbodyFetch(); }catch(e){}
       return; }
@@ -15249,7 +15250,7 @@ class Component extends DCLogic {
     // will close the page believing it is.
     const missing=/relation .*inbody_readings.* does not exist|could not find the table/i.test(why||'')
       ? ' The inbody_readings table has not been created yet \u2014 run supabase/inbody_readings.sql.' : '';
-    this.setState({profileIbMsg:'NOT saved to the club database yet'+(why?(' \u2014 '+why):'')+'.'+missing
+    this.setState({[K]:L+'NOT saved to the club database yet'+(why?(' \u2014 '+why):'')+'.'+missing
       +' It is kept here and will be sent again by itself; do not type it in again.'});
   }
   // ---- InBody scans live in their own table ------------------------------------------------
@@ -15680,6 +15681,21 @@ class Component extends DCLogic {
       if(badWeight){ delete data.weight; fromPhoto=true; }
     }
 
+    // A PDF saves itself. That is what coaches expect of the InBody print-out: pick the file,
+    // and the scan is on the swimmer's record. A clean text layer already did; a scanned PDF —
+    // the usual case, the machine's sheet put through a phone scanner — went to the server
+    // reader and then sat in the form waiting for a Save nobody knew they still had to press.
+    // The server reads it the way a person does, so a PDF it read is saved too, provided the
+    // weight is believable and the sheet's own arithmetic comes out. Anything less still waits
+    // for a person. A camera photo, or this device's own OCR, always waits.
+    const isPdf=/pdf/i.test(file.type||'') || /\.pdf$/i.test(file.name||'');
+    if(fromPhoto && isPdf && serverRead && !badWeight && data.weight!=null){
+      const checked=this._inbodySanity(data);
+      if(checked.reconciled){ data=checked.values; fromPhoto=false; }
+    }
+    // Nothing worth a record without a weight — every other reading is measured against it.
+    if(!data || data.weight==null) fromPhoto=true;
+
     if(pictureRead && !serverRead){
       const checked=this._inbodySanity(data);
       data=checked.values; reconciled=checked.reconciled;
@@ -15713,7 +15729,6 @@ class Component extends DCLogic {
       return;
     }
 
-    const m=this._swMeta(swId);
     const rec={date:data.testDate||new Date().toISOString().slice(0,10), weight:data.weight||null, fat:data.pbf||null, muscle:data.smm||null,
       bmr:data.bmr||null, visceralFat:data.visceralFat||null, whr:data.whr||null, protein:data.protein||null, minerals:data.minerals||null,
       tbw:data.tbw||null, bmi:data.bmi||null, score:data.score||null, phaseAngle:data.phaseAngle||null,
@@ -15721,12 +15736,20 @@ class Component extends DCLogic {
       boneMineral:data.boneMineral||null, bodyCellMass:data.bodyCellMass||null, obesityDegree:data.obesityDegree||null,
       height:data.height||null, bodyFatMass:data.bodyFatMass||null, slm:data.slm||null,
       fileUrl:fileUrl||null, fileName:file.name||''};
-    this._saveSwMeta(swId, {...m, inbody:[rec, ...(m.inbody||[])]});
-    let msg;
-    if(!fileUrl) msg='Saved, but the file upload failed \u2014 check your connection.';
-    else if(readCount) msg='Report saved & '+readCount+' values read automatically \u2713';
-    else msg='Report saved \u2713 \u2014 no text in that PDF, so type the values in below.';
-    this.setState({profileIbBusy:false, profileIbMsg:msg});
+    // Into its own row in inbody_readings, exactly as a typed sheet is — never the club-wide
+    // blob, which is what lost scans before.
+    this.setState({profileIbBusy:false, ibPending:null, inbodyForm:{weight:'',fat:'',muscle:''}, ibFullOpen:false});
+    this._ibCommit(swId, rec, 'profileIbMsg',
+      (fileUrl ? '' : 'The file itself did not upload \u2014 check your connection. ')
+      + readCount+' value'+(readCount===1?'':'s')+' read off the sheet. ');
+  }
+  // Put one scan on the record: its own row in inbody_readings, shown at once, then confirmed.
+  _ibCommit(swId, rec, msgKey, lead){
+    const cur=((this.inbodyRows||{})[swId]||[]).filter(r=>r.date!==rec.date);
+    this.inbodyRows={...(this.inbodyRows||{}), [swId]:[rec, ...cur].sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')))};
+    this.setState({[msgKey||'profileIbMsg']:(lead||'')+'Saving\u2026'});
+    try{ this.audit('inbody.save', swId+' \u00b7 '+rec.date, {swimmer:swId, date:rec.date}); }catch(e){}
+    return this._ibConfirmSave(swId, rec, msgKey, lead);
   }
   _fitTests(swId){ return this.fitnessTests[swId]||[]; }
   addFitTest(swId){ const f=this.state.fitForm;
@@ -19239,7 +19262,15 @@ class Component extends DCLogic {
       for(let i=1;i<=doc.numPages;i++){ const page=await doc.getPage(i); const c=await page.getTextContent(); text+=' '+c.items.map(it=>it.str).join(' '); }
       const data=this._extractInbodyFields(text);
       if(!data.weight) throw new Error('Couldn\u2019t find a weight value \u2014 is this an InBody report?');
-      this.setState({inbodyPdfBusy:false, inbodyPdfMsg:'Scan read \u2713', inbodyDraft:data});
+      // A readable PDF saves itself once a swimmer is picked and the weight is believable;
+      // otherwise it waits on screen for Confirm, as before.
+      const swId=this.state.inbodySwId;
+      if(swId && !this._weightImplausible(data.weight, data.height, data)){
+        this.setState({inbodyPdfBusy:false, inbodyDraft:data});
+        this.inbodyConfirmImport(swId);
+        return;
+      }
+      this.setState({inbodyPdfBusy:false, inbodyPdfMsg:'Scan read \u2713 \u2014 '+(swId?'check the weight, then Confirm.':'pick the swimmer, then Confirm.'), inbodyDraft:data});
     }catch(err){ this.setState({inbodyPdfBusy:false, inbodyPdfMsg:(err&&err.message)||'Import failed'}); }
   }
   // Read an InBody sheet, from a clean PDF text layer or from reading a photograph.
@@ -19352,10 +19383,15 @@ class Component extends DCLogic {
   }
   inbodyConfirmImport(swId){
     const d=this.state.inbodyDraft; if(!d || !swId) return;
-    const m=this._swMeta(swId);
-    const rec={date:new Date().toISOString().slice(0,10), weight:d.weight, fat:d.pbf, muscle:d.smm, bmr:d.bmr, visceralFat:d.visceralFat, whr:d.whr};
-    this._saveSwMeta(swId, {...m, inbody:[rec, ...(m.inbody||[])]});
-    this.setState({inbodyDraft:null, inbodyPdfMsg:'', inbodyQrMsg:''});
+    const n=v=>(v==null||isNaN(+v))?null:+v;
+    const rec={date:d.testDate||new Date().toISOString().slice(0,10), weight:n(d.weight), fat:n(d.pbf), muscle:n(d.smm),
+      bmr:n(d.bmr), visceralFat:n(d.visceralFat), whr:n(d.whr), protein:n(d.protein), minerals:n(d.minerals),
+      tbw:n(d.tbw), bmi:n(d.bmi), score:n(d.score), phaseAngle:n(d.phaseAngle), icw:n(d.icw), ecw:n(d.ecw),
+      ecwRatio:n(d.ecwRatio), smi:n(d.smi), ffm:n(d.ffm), boneMineral:n(d.boneMineral), bodyCellMass:n(d.bodyCellMass),
+      obesityDegree:n(d.obesityDegree), height:n(d.height), bodyFatMass:n(d.bodyFatMass), slm:n(d.slm), fileUrl:null, fileName:''};
+    // Its own row in inbody_readings, like every other scan — not the club-wide blob.
+    this.setState({inbodyDraft:null, inbodyQrMsg:''});
+    this._ibCommit(swId, rec, 'inbodyPdfMsg', '');
   }
   settingsReset(){ if(!window.confirm('Reset all local data? This clears saved plans, family logins, and roster edits on this device.')) return;
     try{ localStorage.removeItem('vx_plans'); localStorage.removeItem('vx_family'); localStorage.removeItem('vx_roster_edits'); localStorage.removeItem('vx_staff_ovr'); localStorage.removeItem('vx_api_key'); localStorage.removeItem('vx_extra_results'); }catch(e){}
