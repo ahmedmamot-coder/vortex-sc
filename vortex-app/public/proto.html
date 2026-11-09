@@ -4810,6 +4810,62 @@ if ('serviceWorker' in navigator) {
                       </div>
                     </div>
 
+                    <!-- Fitness & body analysis: the latest fitness test and InBody scan read
+                         against age benchmarks, what to work on, and the races that suit them.
+                         Refreshes as soon as a test or a scan is saved. Coaches only. -->
+                    <sc-if value="{{ bfa.has }}" hint-placeholder-val="{{ false }}">
+                      <div>
+                        <h2 style="font-size:11.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#7A8296;margin:0 2px 9px">Fitness &amp; body analysis</h2>
+                        <div style="background:#fff;border:1px solid #E5E9F0;border-radius:16px;padding:14px;box-shadow:0 2px 7px rgba(11,20,40,.05);display:flex;flex-direction:column;gap:12px">
+                          <div style="display:flex;align-items:center;gap:8px">
+                            <i data-lucide="activity" style="width:16px;height:16px;color:var(--vx-blue)"></i>
+                            <div style="min-width:0"><p style="margin:0;font-size:13.5px;font-weight:800;color:#0C1116">{{ bfa.profile }}</p><p style="margin:1px 0 0;font-size:10.5px;color:#9AA2B4">{{ bfa.basis }}</p></div>
+                          </div>
+                          <sc-if value="{{ bfa.hasRows }}" hint-placeholder-val="{{ false }}">
+                            <div>
+                              <p style="margin:0 0 6px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">Results</p>
+                              <div style="display:flex;flex-direction:column;gap:5px">
+                                <sc-for list="{{ bfa.rows }}" as="r" hint-placeholder-count="4">
+                                  <div style="display:flex;align-items:center;gap:8px;background:#F8FAFC;border:1px solid #EEF1F5;border-radius:9px;padding:7px 10px">
+                                    <span style="flex:1;min-width:0"><span style="display:block;font-size:12px;font-weight:700;color:#0C1116">{{ r.label }} · <span style="font-family:var(--font-mono)">{{ r.value }}</span></span><span style="display:block;font-size:10px;color:#9AA2B4;margin-top:1px">{{ r.bench }} {{ r.change }}</span></span>
+                                    <span style="flex:none;font-size:10.5px;font-weight:800;color:{{ r.color }}">{{ r.status }}</span>
+                                  </div>
+                                </sc-for>
+                              </div>
+                            </div>
+                          </sc-if>
+                          <sc-if value="{{ bfa.hasImprove }}" hint-placeholder-val="{{ false }}">
+                            <div>
+                              <p style="margin:0 0 6px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">What to improve</p>
+                              <div style="display:flex;flex-direction:column;gap:7px">
+                                <sc-for list="{{ bfa.improve }}" as="m" hint-placeholder-count="3">
+                                  <div style="display:flex;gap:9px">
+                                    <span style="flex:none;width:20px;height:20px;border-radius:50%;background:var(--vx-blue-tint);color:var(--vx-blue-dark);font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center">{{ m.n }}</span>
+                                    <div style="min-width:0"><p style="margin:0;font-size:12.5px;font-weight:700;color:#0C1116">{{ m.title }}</p><p style="margin:2px 0 0;font-size:11.5px;color:#5B6472;line-height:1.4">{{ m.why }}</p><p style="margin:3px 0 0;font-size:11.5px;color:#0C1116;line-height:1.4">{{ m.how }}</p></div>
+                                  </div>
+                                </sc-for>
+                              </div>
+                            </div>
+                          </sc-if>
+                          <div>
+                            <p style="margin:0 0 6px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A8296">Races that suit them</p>
+                            <sc-if value="{{ bfa.hasRaces }}" hint-placeholder-val="{{ false }}">
+                              <div style="display:flex;flex-direction:column;gap:5px">
+                                <sc-for list="{{ bfa.races }}" as="e" hint-placeholder-count="3">
+                                  <div style="background:#F8FAFC;border:1px solid #EEF1F5;border-radius:9px;padding:7px 10px">
+                                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="font-size:12.5px;font-weight:800;color:#0C1116">{{ e.event }}</span><span style="font-size:10.5px;font-weight:800;color:{{ e.color }}">{{ e.fit }}</span></div>
+                                    <p style="margin:2px 0 0;font-size:11px;color:#5B6472;line-height:1.4">{{ e.why }}</p>
+                                  </div>
+                                </sc-for>
+                              </div>
+                            </sc-if>
+                            <sc-if value="{{ bfa.noRaceNote }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:11.5px;color:#9AA2B4">{{ bfa.noRaceNote }}</p></sc-if>
+                          </div>
+                          <p style="margin:0;font-size:10px;color:#9AA2B4;line-height:1.4">Worked out on this device from their own tests, scans and times, against general youth benchmarks for their age and gender. A guide for the coach, not a medical assessment.</p>
+                        </div>
+                      </div>
+                    </sc-if>
+
                     <div>
                       <div style="display:flex;align-items:center;justify-content:space-between;margin:0 2px 9px"><h2 style="font-size:11.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#7A8296;margin:0">AI suggestion</h2><button onclick="{{ onAiEditToggle }}" style="display:flex;align-items:center;gap:5px;background:none;border:1px solid #E5E9F0;border-radius:8px;padding:5px 10px;cursor:pointer;font-family:inherit;font-size:11px;font-weight:700;color:#3A4152"><i data-lucide="pencil" style="width:12px;height:12px"></i>{{ aiEditLabel }}</button></div>
                       <sc-if value="{{ aiEditOpen }}" hint-placeholder-val="{{ false }}">
@@ -9340,7 +9396,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-11-09b';
+const VX_BUILD='2026-11-09c';
 // Whether the roster is one document or one row per swimmer is NOT decided here any more.
 //
 // It was a constant in this file, which is the wrong place for it twice over: a build flag flips
@@ -16056,6 +16112,172 @@ class Component extends DCLogic {
       fitnessInsight: ov.fitnessInsight!=null ? ov.fitnessInsight : fitnessInsight,
       nutritionTip: ov.nutritionTip!=null ? ov.nutritionTip : nutritionTip,
       isEdited: Object.keys(ov).length>0 };
+  }
+  // ---- Fitness & body analysis -------------------------------------------------------------
+  // What a coach wants after logging a dryland test or an InBody scan: where the swimmer
+  // stands, what to work on next, and which races their body and their times point to.
+  //
+  // Everything is arithmetic on this device, from the swimmer's own numbers: the latest fitness
+  // test and InBody scan, each against an age- and gender-scaled benchmark, the change since the
+  // test before, and the swimmer's World Aquatics points across the events they have swum. These
+  // are rule-of-thumb youth benchmarks, not norms for an individual child, and the card says so.
+  //
+  // Body composition is a child's data. Nothing here ever advises losing weight: a high fat
+  // reading is turned into training and fuelling advice, and a low one is flagged as a fuelling
+  // concern, because under-fuelling is the real risk in a young swimmer.
+  _bfaBench(age, girl){
+    const a=age||12;
+    const band=a<=10?0:a<=13?1:a<=15?2:3;
+    return {
+      pushups:  girl ? [10,17,22,26][band] : [15,25,32,38][band],
+      plankSec: [30,50,70,90][band],
+      vjump:    girl ? [23,28,33,37][band] : [25,32,40,48][band],
+      sitreach: girl ? [27,30,32,34][band] : [24,26,28,30][band],
+      // Percent body fat: the range an active young swimmer usually sits in.
+      pbf:      a<=11 ? (girl?[14,26]:[10,22]) : (girl?[15,25]:[8,18]),
+      smi:      girl ? [5.6,6.0,6.3,6.6][band] : [6.0,6.8,7.5,8.0][band],
+      muscleRatio: girl ? 0.40 : 0.44,     // skeletal muscle mass ÷ weight
+    };
+  }
+  swimmerBodyFitAnalysis(swObj){
+    if(!swObj) return {has:false};
+    const fits=this._fitTests(swObj.id||'');
+    const scans=this._swInbody(swObj.id||'');
+    if(!fits.length && !scans.length) return {has:false};
+    const girl=/girl|female|women|^f/i.test(String(swObj.gender||''));
+    const age=swObj.age||12;
+    const B=this._bfaBench(age, girl);
+    const ft=fits[0]||{}, ftPrev=fits[1]||{};
+    const ib=scans[0]?this._ibAsSheet(scans[0]):{}, ibPrev=scans[1]?this._ibAsSheet(scans[1]):{};
+    const num=v=>(v==null||v===''||isNaN(+v))?null:+v;
+    const GOOD='#047857', OK='#0369A1', WORK='#B45309';
+    const rows=[];
+    // score: 1 strong, 0 on track, -1 work on — reused below for the race profile.
+    const score={};
+    const delta=(cur, prev, unit, better)=>{
+      if(cur==null || prev==null) return '';
+      const d=+(cur-prev).toFixed(unit==='%'||unit===' kg/m²'?1:0);
+      if(!d) return 'same as last test';
+      const up=d>0, good=(better==='up')===up;
+      return (up?'+':'')+d+unit+' since last'+(good?' ✓':'');
+    };
+    const rate=(key, label, val, target, unit, higherBetter, prev)=>{
+      if(val==null) return;
+      const r = higherBetter ? val/target : target/val;
+      const s = r>=1.15 ? 1 : r>=0.9 ? 0 : -1;
+      score[key]=s;
+      rows.push({label, value:val+unit, bench:'benchmark '+target+unit,
+        status: s>0?'Strong':s===0?'On track':'Work on', color: s>0?GOOD:s===0?OK:WORK,
+        change: delta(val, prev, unit, higherBetter?'up':'down')});
+    };
+    rate('pushups','Push-ups', num(ft.pushups), B.pushups, '', true, num(ftPrev.pushups));
+    rate('plank','Plank hold', num(ft.plankSec), B.plankSec, 's', true, num(ftPrev.plankSec));
+    rate('vjump','Vertical jump', num(ft.vjump), B.vjump, ' cm', true, num(ftPrev.vjump));
+    rate('reach','Sit & reach', num(ft.sitreach), B.sitreach, ' cm', true, num(ftPrev.sitreach));
+
+    const W=num(ib.weight), smm=num(ib.smm), pbf=num(ib.pbf), smi=num(ib.smi),
+          pa=num(ib.phaseAngle), ecwR=num(ib.ecwRatio);
+    if(smm!=null && W){
+      const ratio=smm/W; const s= ratio>=B.muscleRatio+0.04 ? 1 : ratio>=B.muscleRatio-0.03 ? 0 : -1;
+      score.muscle=s;
+      const prevR=(num(ibPrev.smm)!=null && num(ibPrev.weight)) ? num(ibPrev.smm)/num(ibPrev.weight) : null;
+      rows.push({label:'Muscle (share of weight)', value:Math.round(ratio*100)+'%', bench:'benchmark '+Math.round(B.muscleRatio*100)+'%',
+        status:s>0?'Strong':s===0?'On track':'Work on', color:s>0?GOOD:s===0?OK:WORK,
+        change: prevR!=null ? delta(Math.round(ratio*100), Math.round(prevR*100), '%', 'up') : ''});
+    }
+    if(smi!=null) rate('smi','Skeletal muscle index', smi, B.smi, ' kg/m²', true, num(ibPrev.smi));
+    if(pbf!=null){
+      const [lo,hi]=B.pbf;
+      const s = pbf<lo ? -2 : pbf<=hi ? 0 : -1;    // -2: below the range — a fuelling flag
+      score.fat=s;
+      rows.push({label:'Body fat', value:pbf+'%', bench:'usual range '+lo+'–'+hi+'%',
+        status: s===0?'In range':s===-2?'Below range':'Above range', color: s===0?GOOD:WORK, change:''});
+    }
+    if(pa!=null){
+      const s = pa>=6 ? 1 : pa>=5 ? 0 : -1; score.phase=s;
+      rows.push({label:'Phase angle', value:pa+'°', bench:'6°+ is strong', status:s>0?'Strong':s===0?'On track':'Low', color:s>0?GOOD:s===0?OK:WORK,
+        change: delta(pa, num(ibPrev.phaseAngle), '°', 'up')});
+    }
+    if(ecwR!=null){
+      const s = ecwR<=0.39 ? 0 : -1; score.ecw=s;
+      rows.push({label:'Water balance (ECW)', value:String(ecwR), bench:'0.36–0.39 normal', status:s===0?'Normal':'High', color:s===0?GOOD:WORK, change:''});
+    }
+
+    // ---- What to work on, most important first ---------------------------------------------
+    const improve=[];
+    const add=(p, title, why, how)=>improve.push({p, title, why, how});
+    if(score.fat===-2) add(0,'Fuelling','Body fat is below the usual range for a swimmer of this age.',
+      'Talk to the family about eating enough around training — a carb + protein snack after every session. Under-fuelling slows growth and recovery.');
+    if(score.ecw===-1 || score.phase===-1) add(1,'Recovery','Phase angle or water balance points to fatigue or a body still recovering.',
+      'Check sleep and hydration, and keep the next few days aerobic before any hard race-pace work.');
+    if(score.plank===-1) add(2,'Core strength','Plank hold is under the benchmark — the core holds the streamline and carries power through turns.',
+      'Plank, hollow-hold and dead-bug circuits, 3× a week, 10 minutes.');
+    if(score.vjump===-1) add(2,'Leg power','Vertical jump is under the benchmark — this is the start and every wall push-off.',
+      'Squat jumps, box jumps and streamline jumps 2× a week; time 15 m off the blocks to see it carry over.');
+    if(score.pushups===-1) add(2,'Upper-body strength','Push-ups are under the benchmark — this is the pull, above all in fly and free.',
+      'Push-ups, band pull-aparts and stretch-cord pulls 2–3× a week.');
+    if(score.muscle===-1 || score.smi===-1) add(3,'Muscle','Muscle is under the benchmark for their age and size.',
+      'Body-weight strength work 2× a week and enough protein at every meal — no supplements needed at this age.');
+    if(score.reach===-1) add(3,'Flexibility','Sit & reach is under the benchmark — tight hamstrings and hips cost streamline and breaststroke kick.',
+      'Ten minutes of mobility after every session: hamstrings, hips and ankles.');
+    if(score.fat===-1) add(4,'Conditioning','Body fat is above the usual range for this age.',
+      'Keep aerobic volume consistent and meals balanced. This is about energy for training, never about dieting.');
+    improve.sort((a,b)=>a.p-b.p);
+    if(!improve.length && rows.length) improve.push({title:'Keep building', why:'Every measure is on track or strong.',
+      how:'Retest every 6–8 weeks so a drop is caught early, and keep the dryland routine as it is.'});
+
+    // ---- Which races suit them ---------------------------------------------------------------
+    // Two kinds of evidence. The swimmer's own times, as World Aquatics points, say what they
+    // are good at now. The body profile says what they are built for. Times count for more;
+    // the profile breaks ties and names events they have not tried yet.
+    const S=k=>score[k]==null?0:Math.max(-1,score[k]);
+    const power = S('vjump')+S('pushups')+S('muscle')+S('smi');
+    const endure= S('plank')+S('phase')+(score.fat===0?1:0);
+    const fitFor={
+      Free:  (power+endure)/2,
+      Fly:   S('pushups')*1.5+S('plank'),
+      Breast:S('vjump')*1.5+S('reach')*0.5,
+      Back:  S('plank')+S('reach'),
+      IM:    (S('pushups')+S('plank')+S('vjump')+S('reach'))/2,
+    };
+    const pts={};
+    (swObj.pbs||[]).forEach(p=>{ const b=this._waBase(p.event, swObj.gender, p.course);
+      const v=(b>0&&p.sec>0)?this._waPoints(b,p.sec):0; if(v>(pts[p.event]||0)) pts[p.event]=v; });
+    const maxPts=Math.max(0,...Object.values(pts));
+    const dist=ev=>{ const m=String(ev).match(/^(\d+)/); return m?+m[1]:0; };
+    const cand=['50 Free','100 Free','200 Free','400 Free','800 Free','50 Back','100 Back','200 Back',
+      '50 Breast','100 Breast','200 Breast','50 Fly','100 Fly','200 Fly','200 IM','400 IM']
+      .filter(ev=>!(age<=10 && dist(ev)>200));
+    const races=cand.map(ev=>{
+      const st=this.strokeOf(ev), d=dist(ev);
+      const len = d<=50 ? power : d<=100 ? (power*0.7+endure*0.3) : d<=200 ? (power+endure)/2 : endure;
+      const body = fitFor[st]+len*0.5;
+      const p=pts[ev]||0;
+      const timeScore = maxPts ? (p/maxPts)*6 : 0;
+      const why=[];
+      if(p && p===maxPts) why.push('their best event on World Aquatics points ('+p+')');
+      else if(p && p>=maxPts*0.85) why.push('close to their best on points ('+p+')');
+      if(d<=100 && power>=2) why.push('strong power profile for a sprint');
+      if(d>=400 && endure>=2) why.push('endurance profile suits distance');
+      if(st==='Fly' && S('pushups')>0) why.push('upper-body strength drives fly');
+      if(st==='Breast' && S('vjump')>0) why.push('leg power drives the breaststroke kick');
+      if(st==='Back' && S('plank')>0) why.push('core strength holds the backstroke line');
+      if(st==='IM' && Object.values(fitFor).every(v=>v>=0)) why.push('no weak area across the four strokes');
+      return {event:ev, total:timeScore+body, why, swum:!!p};
+    }).filter(r=>r.why.length).sort((a,b)=>b.total-a.total).slice(0,4)
+      .map((r,i)=>({event:r.event, fit:i===0?'Best fit':(r.total>=3?'Strong fit':'Good fit'),
+        why:r.why.join(' · ')+(r.swum?'':' — not swum yet, worth a try'), color:i===0?GOOD:OK}));
+
+    const profile = power>=2 && endure<1 ? 'Power / sprint profile'
+      : endure>=2 && power<1 ? 'Endurance profile'
+      : (power>=1 && endure>=1) ? 'All-round profile'
+      : power>=1 ? 'Leaning power / sprint' : endure>=1 ? 'Leaning endurance'
+      : 'Still developing — build the base first';
+    const src=[ fits.length?('fitness test '+this._fmtDMY(ft.date)):null, scans.length?('InBody '+this._fmtDMY(ib.date)):null ].filter(Boolean).join(' and ');
+    return { has:true, profile, basis:'From the '+src+'.', rows, hasRows:rows.length>0,
+      improve:improve.slice(0,4).map((x,i)=>({n:i+1, title:x.title, why:x.why, how:x.how})), hasImprove:improve.length>0,
+      races, hasRaces:races.length>0,
+      noRaceNote: races.length ? '' : 'Log a few race results and this will name the events that suit them.' };
   }
   _promoMeta(swId){ return this.promoStore[swId] || {lastReview:null, suggested:false, suggestedAt:null}; }
   _savePromo(swId, meta){ this.promoStore={...this.promoStore, [swId]:meta}; this._saveJSON('vx_promo', this.promoStore); this.forceUpdate(); }
@@ -25241,6 +25463,7 @@ class Component extends DCLogic {
           onFitVjump:(e)=>this.setState({fitForm:{...S2.fitForm, vjump:e.target.value}}),
           onFitSitreach:(e)=>this.setState({fitForm:{...S2.fitForm, sitreach:e.target.value}}),
           onFitAdd:()=>this.addFitTest(swObj.id),
+          bfa: this.swimmerBodyFitAnalysis(swObj),
           aiSugg: (()=>{ const a=this.swimmerAiSuggestion(swObj); const ets=(a.eventTargets||[]).map(e=>({...e, onEdit:()=>this.openTgtEdit(swObj.id, e.event, e.target)})); return {...a, eventTargets:ets, noData: !a.hasData, hasWeak: !!(a.hasData && a.weakStroke), hasEventTargets: !!(ets && ets.length)}; })(),
           ...(()=>{ const q=this._swimmerQual(swObj); return { waStdRows:q, waStdHas:q.length>0, onOpenWaStd:()=>this.setState({waqOpen:true}) }; })(),
           aiEditOpen:!!S.aiEditOpen, aiEditLabel: S.aiEditOpen?'Close':'Edit',

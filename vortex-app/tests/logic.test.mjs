@@ -14197,4 +14197,56 @@ describe("swimmer nationality flags", () => {
   });
 });
 
+/* ------------------------------------------------------------ Fitness & body analysis
+   After a coach logs a fitness test or an InBody scan, the profile reads it back: results
+   against age benchmarks, what to work on, and the races that suit the swimmer. */
+describe("Fitness & body analysis", () => {
+  const make = (fits, scans, pbs) => {
+    const ctx = {
+      fitnessTests: { s1: fits }, aiSuggOverrides: {},
+      _swInbody: () => scans,
+      _fmtDMY: (d) => d || "",
+      _waBase: (ev) => ({ "50 Free": 25, "100 Free": 55, "200 Free": 120, "50 Fly": 27, "100 Breast": 65, "400 Free": 260 })[ev] || null,
+      strokeOf: (ev) => { const m = String(ev).match(/Free|Back|Breast|Fly|IM/); return m ? m[0] : "Other"; },
+    };
+    return bind("swimmerBodyFitAnalysis", ctx, ["_fitTests", "_bfaBench", "_ibAsSheet", "_waPoints"]);
+  };
+  const sw = (pbs) => ({ id: "s1", age: 15, gender: "Boys", pbs: pbs || [] });
+
+  it("shows nothing until there is a test or a scan", () => {
+    eq(make([], [])(sw()).has, false);
+  });
+  it("reads a fitness test against the benchmark and says what changed", () => {
+    const a = make([{ date: "2026-11-01", pushups: 20, plankSec: 95, vjump: 50, sitreach: 29 },
+                    { date: "2026-09-01", pushups: 15, plankSec: 80 }], [])(sw());
+    const pu = a.rows.find((r) => r.label === "Push-ups");
+    eq(pu.status, "Work on", "20 push-ups at 15 is under the 32 benchmark");
+    eq(/\+5 since last ✓/.test(pu.change), true);
+    eq(a.rows.find((r) => r.label === "Plank hold").status, "Strong");
+    eq(a.improve[0].title, "Upper-body strength");
+  });
+  it("never advises a child to lose weight", () => {
+    const a = make([], [{ date: "2026-11-01", weight: 70, pbf: 26, smm: 30 }])(sw());
+    const text = JSON.stringify(a);
+    eq(/lose weight|diet(?!ing)/i.test(text.replace(/never about dieting/g, "")), false);
+    eq(a.rows.find((r) => r.label === "Body fat").status, "Above range");
+  });
+  it("flags low body fat as a fuelling concern, first", () => {
+    const a = make([], [{ date: "2026-11-01", weight: 55, pbf: 6, smm: 28 }])(sw());
+    eq(a.improve[0].title, "Fuelling");
+  });
+  it("names their best event from their own times", () => {
+    const a = make([{ date: "2026-11-01", pushups: 40, plankSec: 60, vjump: 55, sitreach: 28 }], [],
+      )(sw([{ event: "50 Free", sec: 26, course: "SC" }, { event: "400 Free", sec: 300, course: "SC" }]));
+    eq(a.races[0].event, "50 Free");
+    eq(a.races[0].fit, "Best fit");
+    eq(a.profile, "Power / sprint profile");
+  });
+  it("is on the swimmer's profile, under the fitness test", () => {
+    eq(/bfa: this\.swimmerBodyFitAnalysis\(swObj\)/.test(SOURCE), true);
+    eq(SOURCE.indexOf("Log fitness test</button>") < SOURCE.indexOf('<sc-if value="{{ bfa.has }}"'), true);
+  });
+});
+
 await report();
+
