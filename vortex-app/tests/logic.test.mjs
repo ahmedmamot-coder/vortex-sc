@@ -5609,12 +5609,17 @@ describe("InBody sheet", () => {
   // Coaches asked for it plainly: an InBody PDF goes straight onto the record. A scanned PDF
   // used to be read and then wait for a Save nobody knew was still needed, and the PDFs that did
   // save themselves went into the club-wide blob that has lost scans before.
-  it("an InBody PDF saves itself, into inbody_readings", () => {
+  it("an InBody PDF or photo saves itself, into inbody_readings", () => {
     const fn = (SOURCE.match(/async profileInbodyPdf\(e, swId\)\{[\s\S]*?\n  \}\n/) || [""])[0];
-    eq(/if\(fromPhoto && isPdf && serverRead && !badWeight && data\.weight!=null\)/.test(fn), true,
-       "a scanned PDF the server read must save itself");
+    eq(/if\(fromPhoto && pictureRead && !badWeight && data\.weight!=null\)/.test(fn), true,
+       "a photo or scanned PDF must save itself");
+    eq(/isPdf/.test(fn), false, "photos save too, not only PDFs");
     eq(/checked\.reconciled\)\{ data=checked\.values; fromPhoto=false; \}/.test(fn), true,
        "only once the sheet's own arithmetic comes out");
+    eq(/\} else if\(reconciled\)\{ fromPhoto=false; \}/.test(fn), true,
+       "this device's own reading saves only when it reconciled");
+    eq(fn.indexOf("if(pictureRead && !serverRead)") < fn.indexOf("if(fromPhoto && pictureRead"), true,
+       "the reconciliation has to run before the decision to save");
     eq(/this\._ibCommit\(swId, rec/.test(fn), true, "it must go to its own row");
     eq(/_saveSwMeta/.test(fn), false, "never the club-wide blob");
     const confirm = (SOURCE.match(/  inbodyConfirmImport\(swId\)\{[\s\S]*?\n  \}\n/) || [""])[0];

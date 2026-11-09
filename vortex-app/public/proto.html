@@ -9340,7 +9340,7 @@ if ('serviceWorker' in navigator) {
 // this file, and then a fix that is genuinely deployed appears to have changed nothing — you
 // end up debugging the fix instead of the cache. Shown by "Check the reader" so a screenshot
 // answers that question before anything else is argued about. Bump it when changing this file.
-const VX_BUILD='2026-11-09a';
+const VX_BUILD='2026-11-09b';
 // Whether the roster is one document or one row per swimmer is NOT decided here any more.
 //
 // It was a constant in this file, which is the wrong place for it twice over: a build flag flips
@@ -15681,21 +15681,6 @@ class Component extends DCLogic {
       if(badWeight){ delete data.weight; fromPhoto=true; }
     }
 
-    // A PDF saves itself. That is what coaches expect of the InBody print-out: pick the file,
-    // and the scan is on the swimmer's record. A clean text layer already did; a scanned PDF —
-    // the usual case, the machine's sheet put through a phone scanner — went to the server
-    // reader and then sat in the form waiting for a Save nobody knew they still had to press.
-    // The server reads it the way a person does, so a PDF it read is saved too, provided the
-    // weight is believable and the sheet's own arithmetic comes out. Anything less still waits
-    // for a person. A camera photo, or this device's own OCR, always waits.
-    const isPdf=/pdf/i.test(file.type||'') || /\.pdf$/i.test(file.name||'');
-    if(fromPhoto && isPdf && serverRead && !badWeight && data.weight!=null){
-      const checked=this._inbodySanity(data);
-      if(checked.reconciled){ data=checked.values; fromPhoto=false; }
-    }
-    // Nothing worth a record without a weight — every other reading is measured against it.
-    if(!data || data.weight==null) fromPhoto=true;
-
     if(pictureRead && !serverRead){
       const checked=this._inbodySanity(data);
       data=checked.values; reconciled=checked.reconciled;
@@ -15704,12 +15689,27 @@ class Component extends DCLogic {
       // sheet's own arithmetic does not come out, we did not read it — so nothing is offered.
       if(!reconciled) data={testDate:data.testDate};
     }
+
+    // Every InBody sheet saves itself — PDF or photo. That is what coaches asked for: pick the
+    // file, and the scan is on the swimmer's record, with no Save left to remember. A picture
+    // (a camera photo or a scanned PDF) is only saved when what was read off it holds up: the
+    // weight is believable and the sheet's own arithmetic comes out — fat mass and fat-free mass
+    // make the weight, PBF follows from fat mass, BMI from height. A sheet that fails either
+    // still waits in the form for a person, which is the only way a misread digit stays off a
+    // child's record. A text-layer PDF is read as text, not guessed at, and saves as before.
+    if(fromPhoto && pictureRead && !badWeight && data.weight!=null){
+      if(serverRead){
+        const checked=this._inbodySanity(data);
+        if(checked.reconciled){ data=checked.values; fromPhoto=false; }
+      } else if(reconciled){ fromPhoto=false; }
+    }
+    // Nothing worth a record without a weight — every other reading is measured against it.
+    if(!data || data.weight==null) fromPhoto=true;
     const readCount=Object.keys(data).filter(k=>data[k]!=null && k!=='testDate').length;
 
-    // Read off a photograph, these are a machine's guess at what a picture says. A misread
-    // digit would put a wrong body-fat figure on a child's record and look exactly as
-    // authoritative as a correct one. So a photo fills the form in and waits to be checked;
-    // a PDF, where the numbers are read as text rather than guessed at, still saves itself.
+    // Held back: a picture whose reading did not hold up, or no weight. A misread digit would
+    // put a wrong body-fat figure on a child's record and look exactly as authoritative as a
+    // correct one, so this fills the form in and waits to be checked.
     if(fromPhoto){
       this.setState({
         inbodyForm:{ weight: data.weight!=null?String(data.weight):'',
