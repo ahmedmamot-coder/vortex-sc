@@ -110,7 +110,7 @@ async function openLive(browser, seed, db) {
         const body = JSON.parse(req.postData() || "[]");
         keys = (Array.isArray(body) ? body : [body]).map((r) => r && r.key).filter(Boolean);
       } catch {}
-      writes.push({ method: m, table, keys, body: req.postData() || "" });
+      writes.push({ method: m, table, keys, body: req.postData() || "", prefer: req.headers()["prefer"] || "" });
     }
     // A read answers with whatever the caller seeded for that table, and [] otherwise.
     //
@@ -2912,6 +2912,91 @@ scene("a register history over 1000 rows is read in full and never re-sent", asy
      "a gap-filling mark was sent as an overwrite: " + posts[0].prefer);
   eq(after.held, db.length + 1, "the device lost marks after reading the table");
   return "read " + db.length + " marks past the 1000 cap; sent only the 1 the database lacked";
+});
+
+// ---------------------------------------------------------------------------------------------
+// "The attendance is not saving and it is gone." Today's register shows every unmarked swimmer as
+// Present, and only the swimmers a coach TAPPED were ever written. The next morning the day was in
+// the past, a past day with no row reads "Not taken", and everybody who was simply present had
+// vanished from the register.
+// ---------------------------------------------------------------------------------------------
+const openRegister = async (browser) => {
+  const page = await openLive(browser, { vx_attend_log: {}, vx_attend_unsent: {} });
+  await tap(page, "Tools & AI");
+  await tap(page, "Daily Attendance");
+  await tap(page, "Pre-Team");
+  await tap(page, "Take / edit this squad");
+  page.writes.length = 0;
+  return page;
+};
+// The coach's writes only. The one-time backfill also sends rows the (fake, empty) database
+// lacks, as ignore-duplicates — it can fill a gap and never overwrite, so it is not counted here.
+const markRows = (page) => page.writes.filter((w) => w.table === "attendance_marks" && !/ignore-duplicates/.test(w.prefer || ""))
+  .flatMap((w) => { try { return JSON.parse(w.body); } catch { return []; } });
+
+scene("one tap on today's register saves everyone shown as Present", async (browser) => {
+  const page = await openRegister(browser);
+  const info = await page.evaluate(`(() => { const a = ${APP}; const sq = a.state.squadId;
+    return { sq, n: (a.roster[sq] || []).filter((s) => !a._swAwayOn(s.id, a.todayISO())).length }; })()`);
+  eq(info.n > 1, true, "the squad needs more than one active swimmer for this to mean anything");
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll("button")].find((e) => e.offsetParent && /^present$/i.test((e.innerText || "").trim()));
+    b.click();
+  });
+  await page.waitForTimeout(1800);
+  const rows = markRows(page);
+  const who = new Set(rows.map((r) => r.sw_id));
+  eq(page.problems, [], "the app threw");
+  eq(who.size, info.n, "only " + who.size + " of " + info.n + " swimmers reached the database — the rest would read Not taken tomorrow");
+  eq(rows.filter((r) => r.status === "absent").length, 1, "the tapped swimmer is absent");
+  const text = await page.evaluate(() => document.body.innerText || "");
+  eq(/not saved yet/i.test(text), false, "the register still says swimmers are not saved");
+  return info.n + " swimmers saved from one tap";
+});
+
+scene("a missed day can be filled in with one tap", async (browser) => {
+  const page = await openRegister(browser);
+  // Back one day: nothing is recorded there.
+  await page.evaluate(`(() => { const a = ${APP}; a.setState({ attendDateISO: a.shiftDate(a.todayISO(), -1) }); })()`);
+  await page.waitForTimeout(700);
+  const before = await page.evaluate(() => document.body.innerText || "");
+  eq(/no mark for this day/i.test(before), true, "a missed day did not offer to fill itself in");
+  const pressed = await page.evaluate(() => {
+    const b = [...document.querySelectorAll("button")].find((e) => e.offsetParent && /^mark \d+ present$/i.test((e.innerText || "").trim()));
+    if (!b) return 0; const n = parseInt(b.innerText.match(/\d+/)[0], 10); b.click(); return n;
+  });
+  eq(pressed > 0, true, "there was no Mark N present button");
+  await page.waitForTimeout(1800);
+  const rows = markRows(page);
+  const day = await page.evaluate(`(() => { const a = ${APP}; return a.shiftDate(a.todayISO(), -1); })()`);
+  eq(rows.length, pressed, "the button said " + pressed + " and " + rows.length + " were sent");
+  eq(rows.every((r) => r.day === day && r.status === "present"), true, "rows went to the wrong day or status");
+  const after = await page.evaluate(() => document.body.innerText || "");
+  eq(/not taken/i.test(after), false, "swimmers still read Not taken after the day was filled in");
+  eq(page.problems, [], "the app threw");
+  return pressed + " swimmers filled in for " + day;
+});
+
+// The red "club_state (vx_roster_edits)" banner, at its root. jsonb hands keys back in its own
+// order; the pull compared strings, decided the database was behind, and sent the whole roster
+// again — and its own realtime echo started the next pull. Thousands of uploads an hour.
+scene("an unchanged roster is not uploaded again after a pull", async (browser) => {
+  const doc = { edits: { senior: { s1: { name: "A B", dob: "2015-01-02" } } }, deleted: { senior: { s9: true } },
+                added: { preteam: [{ id: "r1", name: "Drive Swimmer", movedAt: 5 }] }, removed: {} };
+  const jsonb = (v) => Array.isArray(v) ? v.map(jsonb) : (v && typeof v === "object")
+    ? Object.fromEntries(Object.keys(v).sort((a, b) => (a.length - b.length) || (a < b ? -1 : 1)).map((k) => [k, jsonb(v[k])])) : v;
+  const at = new Date(Date.now() - 60000).toISOString();
+  const page = await openLive(browser, { vx_roster_edits: doc },
+    { club_state: [{ key: "vx_roster_edits", value: jsonb(doc), updated_at: at }] });
+  page.writes.length = 0;
+  for (let i = 0; i < 3; i++) {                     // three pulls, as realtime echoes would cause
+    await page.evaluate(() => window.__vxRepull && window.__vxRepull());
+    await page.waitForTimeout(700);
+  }
+  const roster = page.writes.filter((w) => w.table === "club_state" && w.keys.includes("vx_roster_edits"));
+  eq(roster.length, 0, "the roster was uploaded " + roster.length + " time(s) with nothing changed");
+  eq(page.problems, [], "the app threw");
+  return "three pulls, no roster upload";
 });
 
 // ---------------------------------------------------------------------------------------------
