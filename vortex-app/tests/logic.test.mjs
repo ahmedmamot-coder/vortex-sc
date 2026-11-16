@@ -11295,13 +11295,134 @@ describe("a device's own write does not outrank the database for ever", () => {
   it("a copy the database already holds is not sent back", () => {
     const sends = pull.match(/pushKey\(r\.key,/g) || [];
     eq(sends.length, 3, "expected the three catch-up pushes; found " + sends.length);
-    eq(/if\(_mineStr!==_remoteStr\) pushKey\(r\.key,/.test(pull), true, "the mirror is pushed unconditionally");
-    eq(/if\(localVal!==_remoteStr\) pushKey\(r\.key,/.test(pull), true, "the disk copy is pushed unconditionally");
+    // Compared by CONTENT. club_state.value is jsonb, which hands keys back in its own order, so
+    // a raw string compare never matched and every pull pushed the roster again.
+    eq(/if\(!_sameDoc\(mirrored, r\.value\)\) pushKey\(r\.key,/.test(pull), true, "the mirror is pushed unconditionally");
+    eq(/if\(!_sameDoc\(localVal, r\.value\)\) pushKey\(r\.key,/.test(pull), true, "the disk copy is pushed unconditionally");
     // The third is the roster merged on the way down. Same rule, and the same reason: it is
     // sent only when merging actually produced something the database is not already holding,
     // so a device with nothing to add sends nothing and this cannot become a write per pull.
-    eq(/if\(_bothStr!==_incoming\)\{/.test(pull), true, "the merged roster is pushed unconditionally");
+    eq(/if\(_sameDoc\(_both, r\.value\)\)\{/.test(pull), true, "the merged roster is pushed unconditionally");
   });
+});
+
+describe("the roster is not re-uploaded because jsonb reordered its keys", () => {
+  const REAL_MERGE = new Function(
+    sourceBetween("function _rosterShaped(o){", "\n  window.__vxMergeRoster") + "\nreturn _mergeRoster;")();
+  const CANON = new Function(
+    sourceBetween("function _canonJSON(x){", "\n  window.__vxCanonJSON") + "\nreturn _canonJSON;")();
+  // What Postgres does to a jsonb object: shorter keys first, then bytewise. Applied all the way
+  // down, which is what the database hands back on every read.
+  const jsonbOrder = (v) => {
+    if (Array.isArray(v)) return v.map(jsonbOrder);
+    if (v && typeof v === "object") {
+      const o = {};
+      Object.keys(v).sort((a, b) => (a.length - b.length) || (a < b ? -1 : a > b ? 1 : 0))
+        .forEach((k) => { o[k] = jsonbOrder(v[k]); });
+      return o;
+    }
+    return v;
+  };
+  const run = (rows, disk, ts, withCanon) => {
+    const store = { ...disk };
+    Object.keys(ts).forEach((k) => { store["__vxts_" + k] = String(ts[k]); });
+    const pushed = [];
+    const env = {
+      localStorage: { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = v; },
+        get length() { return Object.keys(store).length; }, key: (i) => Object.keys(store)[i] },
+      window: { __VX_PULLED: {}, __vxMergeRoster: REAL_MERGE },
+      origSet: (k, v) => { store[k] = v; },
+      pushKey: (k, v) => pushed.push([k, v]),
+      _keepReplaced: () => {},
+      SYNC: [],
+    };
+    if (withCanon) env._canonJSON = CANON;
+    const src = sourceBetween("function applyPull(rows, seed){", "\n  // Re-pull the shared club");
+    runInSandbox(src + "\napplyPull(rows, false);", { ...env, rows });
+    return { pushed, disk: store };
+  };
+  // A roster exactly as the merge writes it: {edits, deleted, added, removed}.
+  const DOC = REAL_MERGE(
+    { edits: { senior: { s1: { name: "A", dob: "2015-01-02" } } }, deleted: { senior: { s9: true } },
+      added: { senior: [{ id: "r1", name: "B", movedAt: 5 }] }, removed: {} },
+    { edits: {}, deleted: {}, added: {}, removed: {} });
+
+  it("jsonb really does hand the keys back in another order (the premise)", () =>
+    eq(JSON.stringify(jsonbOrder(DOC)) === JSON.stringify(DOC), false));
+  it("the device's own write echoed back is not sent again", () => {
+    const stamp = Date.parse("2026-11-16T18:05:00Z");
+    const out = run([{ key: "vx_roster_edits", value: jsonbOrder(DOC), updated_at: new Date(stamp).toISOString() }],
+      { vx_roster_edits: JSON.stringify(DOC) }, { vx_roster_edits: stamp }, true);
+    eq(out.pushed.length, 0, "the same roster in jsonb key order was pushed back — this is the 2,700-an-hour loop");
+  });
+  it("another device's identical copy is not sent back either", () => {
+    const out = run([{ key: "vx_roster_edits", value: jsonbOrder(DOC), updated_at: "2026-11-16T18:06:00Z" }],
+      { vx_roster_edits: JSON.stringify(DOC) }, { vx_roster_edits: Date.parse("2026-11-16T18:05:00Z") }, true);
+    eq(out.pushed.length, 0);
+  });
+  it("a real difference is still sent", () => {
+    const mine = JSON.parse(JSON.stringify(DOC)); mine.deleted.senior.s7 = true;
+    const out = run([{ key: "vx_roster_edits", value: jsonbOrder(DOC), updated_at: "2026-11-16T18:06:00Z" }],
+      { vx_roster_edits: JSON.stringify(mine) }, { vx_roster_edits: Date.parse("2026-11-16T18:05:00Z") }, true);
+    eq(out.pushed.length, 1, "a deletion only this device holds has to go up");
+  });
+  it("a newer local copy identical in content is not pushed", () => {
+    const out = run([{ key: "vx_sw_meta", value: jsonbOrder({ zz: 1, a: { yy: 2, b: 3 } }), updated_at: "2026-11-16T18:00:00Z" }],
+      { vx_sw_meta: JSON.stringify({ zz: 1, a: { yy: 2, b: 3 } }) }, { vx_sw_meta: Date.parse("2026-11-16T18:05:00Z") }, true);
+    eq(out.pushed.length, 0);
+  });
+  it("the 20-second sweep compares by content too", () => {
+    const tick = sourceBetween("  async _autoSyncTick(){", "\n  // What this device has written, put back");
+    eq(/__vxCanonJSON\(was\)===window\.__vxCanonJSON\(r\.value\)/.test(tick), true);
+  });
+});
+
+describe("attendance: what the register shows is what is saved", () => {
+  const P = sourceBetween("  cycleAttend(id){", "\n  // Did anybody actually open this squad's register");
+  const S = sourceBetween("  setAttendStatus(squadId, dateISO, swId, status){", "\n  // Send a whole day's register again");
+  it("the first tap on today's register saves everyone shown as Present", () =>
+    eq(/date===this\.todayISO\(\)[\s\S]{0,200}setAttendBulk\(sq, date, rest, 'present'\)/.test(P), true));
+  it("a missed day can be filled in one tap", () =>
+    eq(/attendFillPresent\(\)\{[\s\S]{0,400}setAttendBulk\(sq, date, ids, 'present'\)/.test(P), true));
+  it("unsaved marks are sent again by themselves", () => {
+    eq(/async _attendFlushUnsent\(\)/.test(S), true);
+    eq(/_attendFlushInt=setInterval/.test(sourceBetween("  componentDidMount(){", "\n  async _autoSyncTick(){")), true);
+  });
+  it("a read never overwrites a mark still on its way", () =>
+    eq(/_attendInflight\|\|\{\}\)\[r\.squad_id\+'\|'\+r\.day\+'\|'\+r\.sw_id\]\) return;/.test(
+      sourceBetween("  async _attendFetch(dayFilter, sinceISO){", "\n  // One CSV of the whole club")), true));
+  it("the unrecorded list skips signed-off swimmers", () =>
+    eq(/!marks\[sw\.id\] && !this\._swAwayOn\(sw\.id, dateISO\)/.test(S), true));
+});
+
+describe("the retry queue never replays an older mark over a newer one", () => {
+  const src = sourceBetween("  function _rowsLanded(table, rows){", "\n  // Replay everything still pending.");
+  const make = (queue) => {
+    let q = queue.slice(); const landed = [];
+    const fn = new Function("_failLoad", "_failSave", "window", "CustomEvent", src + "\nreturn _rowsLanded;")(
+      () => q, (a) => { q = a; }, { dispatchEvent() {}, __vxRowsLanded: (t, r) => landed.push([t, r]) }, function () {});
+    return { fn, q: () => q, landed };
+  };
+  it("an older queued write to the same row is dropped when a newer one lands", () => {
+    const m = make([{ op: "upsert", table: "attendance_marks", payload: [{ id: "a_d_s", status: "absent", ts: 100 }] }]);
+    m.fn("attendance_marks", [{ id: "a_d_s", status: "present", ts: 200 }]);
+    eq(m.q().length, 0);
+    eq(m.landed.length, 1, "the register is told the row landed");
+  });
+  it("a NEWER queued write survives an older one landing late", () => {
+    const m = make([{ op: "upsert", table: "attendance_marks", payload: [{ id: "a_d_s", status: "late", ts: 300 }] }]);
+    m.fn("attendance_marks", [{ id: "a_d_s", status: "present", ts: 200 }]);
+    eq(m.q().length, 1);
+  });
+  it("other rows and other tables are untouched", () => {
+    const m = make([{ op: "upsert", table: "attendance_marks", payload: [{ id: "x", ts: 1 }] },
+                    { op: "upsert", table: "hr_sets", payload: [{ id: "a_d_s", ts: 1 }] }]);
+    m.fn("attendance_marks", [{ id: "a_d_s", ts: 200 }]);
+    eq(m.q().length, 2);
+  });
+  it("the replay sends the mark as it stands now", () =>
+    eq(/payload=window\.__vxFreshRows\(it\.table, payload\)/.test(
+      sourceBetween("window.__vxRetryFailed = function(){", "setInterval(function(){ if(_failLoad().length")), true));
 });
 
 /* ------------------------------------------------- the register's own reads

@@ -624,6 +624,28 @@ if ('serviceWorker' in navigator) {
       if(keep.length!==a.length){ _blockSave(keep); try{ window.dispatchEvent(new CustomEvent("vx-write-failed")); }catch(e){} }
     }catch(e){}
   }
+  // An upsert just landed. Any OLDER queued write to exactly these rows is now stale: replaying it
+  // would put the earlier value back over the one that just landed. A coach taps Absent on bad
+  // signal (queued), then Present on good signal (lands) — and 45 seconds later the queue used to
+  // write Absent back. Only entries whose every row is covered go; anything wider stays.
+  function _rowsLanded(table, rows){
+    try{
+      // id -> the ts of the row that landed. Only a queued row that is NOT newer is covered: a slow
+      // earlier write landing after a newer one failed must not cancel the newer one.
+      var ids={}; (Array.isArray(rows)?rows:[rows]).forEach(function(r){
+        if(r && r.id!=null && typeof r.ts==="number") ids[String(r.id)]=r.ts; });
+      var a=_failLoad();
+      var keep=a.filter(function(x){
+        if(!x || x.op!=="upsert" || x.table!==table) return true;
+        var p=Array.isArray(x.payload)?x.payload:[x.payload];
+        if(!p.length) return true;
+        return !p.every(function(r){ var t=r && r.id!=null ? ids[String(r.id)] : undefined;
+          return typeof t==="number" && typeof r.ts==="number" && r.ts<=t; });
+      });
+      if(keep.length!==a.length){ _failSave(keep); try{ window.dispatchEvent(new CustomEvent("vx-write-failed")); }catch(e){} }
+    }catch(e){}
+    try{ if(typeof window.__vxRowsLanded==="function") window.__vxRowsLanded(table, rows); }catch(e){}
+  }
   // Replay everything still pending. Anything that succeeds is dropped from the log.
   window.__vxRetryFailed = function(){
     if(!_failLoad().length) return Promise.resolve({tried:0, fixed:0});
@@ -673,7 +695,11 @@ if ('serviceWorker' in navigator) {
         }
         var fn = it.op==="insert" ? window.__vxInsert : it.op==="upsert" ? window.__vxUpsert : null;
         if(!fn) return;
-        return Promise.resolve(fn(it.table, it.payload)).then(function(ok){ if(ok) fixed++; });
+        // The rows as this device holds them now — same rule as the blob arm above. A register
+        // mark that failed and was then tapped again must not be replayed with its OLD status.
+        var payload=it.payload;
+        try{ if(it.op==="upsert" && typeof window.__vxFreshRows==="function") payload=window.__vxFreshRows(it.table, payload); }catch(e){}
+        return Promise.resolve(fn(it.table, payload)).then(function(ok){ if(ok) fixed++; });
       });
     }, Promise.resolve()).then(function(){
       try{ window.dispatchEvent(new CustomEvent("vx-write-failed")); }catch(e){}
@@ -1522,7 +1548,7 @@ if ('serviceWorker' in navigator) {
   // what is still missing: a failure is reported to the caller and nowhere else. Queuing it put
   // "6 changes have not been saved" on a coach's phone for six 500-row backfill batches of
   // history the database already held — nothing the coach had done, and nothing they could act on.
-  window.__vxUpsert = function(table, rows, opts){ var _nq=!!(opts&&opts.noQueue); return ready().then(function(){ if(_famDevice() && !_famMayWrite(table)){ return _famRefuse(table); } if(_nq && !_haveTok()) return false; if(!_haveTok()){ _vxQueue(function(){ window.__vxUpsert(table, rows, opts); }); _failAdd("upsert", table, rows, NOTSENT, "waiting for the sign-in to land"); return false; } return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":((opts&&opts.ignoreDuplicates)?"resolution=ignore-duplicates":"resolution=merge-duplicates")+",return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(r.ok){ _noteWriteOk(); window.__vxLastWriteErr=null; _blockClearTable(table); return true; } if(!_nq && (r.status===401||r.status===403)){ _vxQueue(function(){ window.__vxUpsert(table, rows, opts); }); } return r.text().then(function(t){ try{console.warn("vx upsert "+table+" HTTP "+r.status+": "+t);}catch(e){} if(!_nq) _failAdd("upsert", table, rows, r.status, t); var said=""; try{ said=(JSON.parse(t)||{}).message||""; }catch(e){} window.__vxLastWriteErr={table:table, status:r.status, said:said||String(t||"").slice(0,200)}; return false; }); }).catch(function(e){ if(!_nq) _failAdd("upsert", table, rows, 0, "network: "+(e&&e.message)); window.__vxLastWriteErr={table:table, status:0, said:"it could not be sent from this device"+((e&&e.message)?(" ("+e.message+")"):"")}; return false; }); });
+  window.__vxUpsert = function(table, rows, opts){ var _nq=!!(opts&&opts.noQueue); return ready().then(function(){ if(_famDevice() && !_famMayWrite(table)){ return _famRefuse(table); } if(_nq && !_haveTok()) return false; if(!_haveTok()){ _vxQueue(function(){ window.__vxUpsert(table, rows, opts); }); _failAdd("upsert", table, rows, NOTSENT, "waiting for the sign-in to land"); return false; } return fetch(SB_URL+"/rest/v1/"+table, { method:"POST", headers: dyn({"Prefer":((opts&&opts.ignoreDuplicates)?"resolution=ignore-duplicates":"resolution=merge-duplicates")+",return=minimal"}), body: JSON.stringify(rows) }).then(function(r){ if(r.ok){ _noteWriteOk(); window.__vxLastWriteErr=null; _blockClearTable(table); _rowsLanded(table, rows); return true; } if(!_nq && (r.status===401||r.status===403)){ _vxQueue(function(){ window.__vxUpsert(table, rows, opts); }); } return r.text().then(function(t){ try{console.warn("vx upsert "+table+" HTTP "+r.status+": "+t);}catch(e){} if(!_nq) _failAdd("upsert", table, rows, r.status, t); var said=""; try{ said=(JSON.parse(t)||{}).message||""; }catch(e){} window.__vxLastWriteErr={table:table, status:r.status, said:said||String(t||"").slice(0,200)}; return false; }); }).catch(function(e){ if(!_nq) _failAdd("upsert", table, rows, 0, "network: "+(e&&e.message)); window.__vxLastWriteErr={table:table, status:0, said:"it could not be sent from this device"+((e&&e.message)?(" ("+e.message+")"):"")}; return false; }); });
   };
   // Supabase Realtime (websocket) — best-effort live updates. On any change to `table`, calls
   // onChange(). Auto-reconnects, heartbeats, and re-auths on token refresh. If realtime isn't
@@ -1738,8 +1764,38 @@ if ('serviceWorker' in navigator) {
       });
     }catch(e){ return {ok:false, why:String(e&&e.message)}; }
   };
+  // The same document, written the same way whatever order its keys arrived in.
+  //
+  // club_state.value is jsonb, and jsonb does not keep the order keys were written in: it hands
+  // them back shortest first, then alphabetically. The roster merge builds {edits, deleted, added,
+  // removed}; the database answers {added, edits, deleted, removed}. Compared as raw strings those
+  // are never equal, so every pull decided the database was behind and sent the whole 1.9 MB
+  // roster back up — whose realtime echo started the next pull on every device, which sent it
+  // again. Measured on 16 November: 1,500–2,700 roster uploads an hour, byte-for-byte identical,
+  // from every phone that had the app open, and every one that dropped on poolside signal put
+  // "club_state (vx_roster_edits) · could not reach the database" on that coach's banner.
+  //
+  // So "is the database already holding this?" is asked of the content, never of the key order.
+  function _canonJSON(x){
+    try{
+      var walk=function(v){
+        if(Array.isArray(v)) return v.map(walk);
+        if(v && typeof v==="object"){
+          var o={}; Object.keys(v).sort().forEach(function(k){ o[k]=walk(v[k]); }); return o;
+        }
+        return v;
+      };
+      return JSON.stringify(walk(typeof x==="string" ? JSON.parse(x) : x));
+    }catch(e){ return typeof x==="string" ? x : JSON.stringify(x); }
+  }
+  window.__vxCanonJSON = _canonJSON;
   function applyPull(rows, seed){
     var have = {};
+    // Same content, whatever order jsonb handed the keys back in. See _canonJSON.
+    var _sameDoc = function(a, b){
+      if(typeof _canonJSON === "function") return _canonJSON(a) === _canonJSON(b);
+      return (typeof a==="string" ? a : JSON.stringify(a)) === (typeof b==="string" ? b : JSON.stringify(b));
+    };
     try { (rows||[]).forEach(function(r){ have[r.key]=true; if(r.value==null) return;
       // Only take the server copy when it is newer than the last local write — otherwise a page
       // refresh would wipe edits made locally that had not finished uploading yet.
@@ -1794,7 +1850,10 @@ if ('serviceWorker' in navigator) {
             if(_shaped(_mine) && _shaped(r.value)){
               var _both=window.__vxMergeRoster(_mine, r.value);
               var _bothStr=JSON.stringify(_both);
-              if(_bothStr!==_incoming){
+              if(_sameDoc(_both, r.value)){
+                // Nothing this device holds is missing from the database's copy. Key order is
+                // not content, so there is nothing to send — this is what stopped the loop.
+              } else {
                 _mirrorVal=_both; _incoming=_bothStr;
                 // The database is now the one that is behind. Sending the merge back settles it
                 // in one write: the next pull merges the same two copies to the same answer and
@@ -1814,7 +1873,7 @@ if ('serviceWorker' in navigator) {
         // roster every twenty seconds, and every one of those is a read-modify-write another
         // device can lose a change inside.
         var _mineStr=JSON.stringify(mirrored);
-        if(_mineStr!==_remoteStr) pushKey(r.key, _mineStr);   // the newest copy, straight back up
+        if(!_sameDoc(mirrored, r.value)) pushKey(r.key, _mineStr);   // the newest copy, straight back up
       } else {
         // Local is newer, so it has to win in the mirror as well — and this is the part that
         // was missing. The mirror was being set to the server's copy before this decision was
@@ -1827,7 +1886,7 @@ if ('serviceWorker' in navigator) {
         try{ parsed=JSON.parse(localVal); ok=true; }catch(e){}
         window.__VX_PULLED[r.key]= ok ? parsed : r.value;
         // Same rule as above: only if the database is not already holding it.
-        if(localVal!==_remoteStr) pushKey(r.key, localVal);   // push it up so the server catches up
+        if(!_sameDoc(localVal, r.value)) pushKey(r.key, localVal);   // push it up so the server catches up
       }
     }); } catch(e){}
     // The seed: a key the database did not send back, but that this device has a copy of, is
@@ -4242,6 +4301,12 @@ if ('serviceWorker' in navigator) {
                           <h2 style="font-size:11.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#7A8296;margin:0">{{ attendDayLabel }}</h2>
                           <button onclick="{{ onAttendDayNext }}" style="width:28px;height:28px;flex:none;border-radius:8px;border:1px solid #E5E9F0;background:#fff;color:#3A4152;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="chevron-right" style="width:15px;height:15px"></i></button>
                         </div>
+                        <sc-if value="{{ attendFillShow }}" hint-placeholder-val="{{ false }}">
+                          <div style="background:#E8F2FD;border:1px solid #B9D8F7;border-radius:12px;padding:10px 12px;margin:0 0 9px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                            <span style="flex:1;min-width:180px;font-size:11.5px;line-height:1.55;color:#0B4A86">{{ attendFillLine }}</span>
+                            <button onclick="{{ onAttendFill }}" style="flex:none;background:#067EEA;color:#fff;border:none;border-radius:10px;padding:8px 13px;font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer">{{ attendFillLabel }}</button>
+                          </div>
+                        </sc-if>
                         <sc-if value="{{ attendSendShow }}" hint-placeholder-val="{{ true }}">
                           <div style="background:{{ attendSendBg }};border:1px solid {{ attendSendBorder }};border-radius:12px;padding:10px 12px;margin:0 0 9px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
                             <span style="flex:1;min-width:180px;font-size:11.5px;line-height:1.55;color:{{ attendSendFg }}">{{ attendSendLine }}</span>
@@ -10146,13 +10211,103 @@ class Component extends DCLogic {
     // What is kept is which marks have not landed, per squad and day, on disk so it survives a
     // reload — and the register screen reports the total and offers to send them again.
     const _key=squadId+'|'+dateISO;
+    // In flight until the database answers. A read that comes back while this upsert is still on
+    // its way carries the row from BEFORE the tap, and must not be applied over it.
+    const _fk=squadId+'|'+dateISO+'|'+swId;
+    const _fl=(this._attendInflight=this._attendInflight||{});
+    _fl[_fk]=(_fl[_fk]||0)+1;
+    const _done=(ok)=>{ _fl[_fk]=Math.max(0,(_fl[_fk]||1)-1); if(!_fl[_fk]) delete _fl[_fk];
+      // Stamped again on landing: a read that STARTED while the write was in flight may have been
+      // answered before the row was committed, and is just as stale as one started before the tap.
+      try{ this._attendMarkTs[_fk]=Date.now(); }catch(e){}
+      this._attendMarkLanded(_key, swId, !!ok); };
     if(window.__vxUpsert){
       try{
         Promise.resolve(window.__vxUpsert('attendance_marks', [{ id:squadId+'_'+dateISO+'_'+swId, squad_id:squadId, day:dateISO, sw_id:swId, status:status, ts:Date.now(), updated_at:new Date().toISOString() }]))
-          .then(ok=>this._attendMarkLanded(_key, swId, !!ok))
-          .catch(()=>this._attendMarkLanded(_key, swId, false));
-      }catch(e){ this._attendMarkLanded(_key, swId, false); }
-    } else { this._attendMarkLanded(_key, swId, false); }
+          .then(ok=>_done(!!ok))
+          .catch(()=>_done(false));
+      }catch(e){ _done(false); }
+    } else { _done(false); }
+  }
+  // Swimmers on this register with no mark of their own for the day, and not signed off.
+  //
+  // On TODAY these are the swimmers the register shows as Present — the default — and that is
+  // the whole of the "attendance is not saving" report. A coach opens the register, everybody
+  // reads Present, they tap the three who are absent and walk away. Three rows reach the
+  // database. Tomorrow the day is in the past, a past day with no row reads "Not taken", and
+  // fifty swimmers who were in the water are gone from the register, the percentages and the
+  // export. Nothing the coach could see had said they were not saved.
+  _attendUnrecorded(squadId, dateISO){
+    const marks=((this.attendLog||{})[squadId]||{})[dateISO]||{};
+    return (this.roster[squadId]||[]).filter(sw=>sw && sw.id && !marks[sw.id] && !this._swAwayOn(sw.id, dateISO)).map(sw=>sw.id);
+  }
+  // Mark many swimmers at once, as ONE write. Used to save the swimmers shown as Present on
+  // today's register, and to fill in a day the coach missed without fifty separate taps.
+  setAttendBulk(squadId, dateISO, swIds, status){
+    swIds=(swIds||[]).filter(Boolean);
+    if(!swIds.length) return Promise.resolve(true);
+    try{ this.audit('attendance.bulk', ((this.squadById[squadId]||{}).name||squadId)+' \u00b7 '+dateISO,
+      {squad:squadId, day:dateISO, marks:swIds.length, status:status}); }catch(e){}
+    this.attendLog[squadId]=this.attendLog[squadId]||{};
+    const day=(this.attendLog[squadId][dateISO]=this.attendLog[squadId][dateISO]||{});
+    const now=Date.now(); const ts=(this._attendMarkTs=this._attendMarkTs||{});
+    const fl=(this._attendInflight=this._attendInflight||{});
+    swIds.forEach(id=>{ day[id]=status; const k=squadId+'|'+dateISO+'|'+id; ts[k]=now; fl[k]=(fl[k]||0)+1; });
+    try{ this._saveLocalOnly('vx_attend_log', this.attendLog); }catch(e){}
+    const key=squadId+'|'+dateISO;
+    // Listed as unsent BEFORE the write goes, so a tab closed mid-request still knows they never
+    // landed and sends them on the next launch. Cleared below the moment the database says yes.
+    try{ const m=this._attendUnsent(); const d=m[key]||{}; swIds.forEach(id=>{ d[id]=1; }); m[key]=d; this._saveLocalOnly('vx_attend_unsent', m); }catch(e){}
+    this.forceUpdate();
+    const rows=swIds.map(id=>({ id:squadId+'_'+dateISO+'_'+id, squad_id:squadId, day:dateISO, sw_id:id,
+                                status:status, ts:now, updated_at:new Date(now).toISOString() }));
+    const fin=(ok)=>{ swIds.forEach(id=>{ const k=squadId+'|'+dateISO+'|'+id; fl[k]=Math.max(0,(fl[k]||1)-1); if(!fl[k]) delete fl[k]; ts[k]=Date.now(); });
+      // Only the marks that still say what was sent — a swimmer tapped again meanwhile has their
+      // own write on the way and their own answer coming.
+      try{ const m=this._attendUnsent(); const d=m[key]||{};
+        swIds.forEach(id=>{ if(ok && day[id]===status) delete d[id]; });
+        if(Object.keys(d).length) m[key]=d; else delete m[key]; this._saveLocalOnly('vx_attend_unsent', m); }catch(e){}
+      this.forceUpdate(); return ok; };
+    if(!window.__vxUpsert) return Promise.resolve(fin(false));
+    // Not queued: these marks are already held in vx_attend_unsent, which the register reports
+    // and _attendFlushUnsent sends on its own. A second copy in the general queue would replay the
+    // status as it was NOW over whatever the coach changes next.
+    return Promise.resolve(window.__vxUpsert('attendance_marks', rows, {noQueue:true}))
+      .then(ok=>fin(!!ok), ()=>fin(false));
+  }
+  // Every mark on this device that has not reached the database, sent again, by itself.
+  //
+  // vx_attend_unsent was only ever emptied by a coach pressing "Send these to the database". A
+  // mark that failed on poolside signal stayed on that one phone until somebody noticed the line
+  // and pressed it — which, for a register taken on Monday and looked at on Thursday, is never.
+  // Upserts keyed squad_day_swimmer, so sending one twice changes nothing.
+  async _attendFlushUnsent(){
+    if(this._attendFlushing || !window.__vxUpsert || !this._isStaffSession || !this._isStaffSession()) return;
+    const a=window.__VX_AUTH; if(!(a && a.token && a.exp && Date.now() < a.exp-5000)) return;
+    const m=this._attendUnsent(); const keys=Object.keys(m); if(!keys.length) return;
+    const fl=this._attendInflight||{};
+    const rows=[]; const sent=[];
+    keys.forEach(key=>{ const i=key.lastIndexOf('|'); const sq=key.slice(0,i), day=key.slice(i+1);
+      const marks=((this.attendLog||{})[sq]||{})[day]||{};
+      Object.keys(m[key]||{}).forEach(sw=>{ const st=marks[sw]; if(!st || fl[sq+'|'+day+'|'+sw]) return;
+        rows.push({ id:sq+'_'+day+'_'+sw, squad_id:sq, day:day, sw_id:sw, status:st, ts:Date.now(), updated_at:new Date().toISOString() });
+        sent.push([key, sw, st]); }); });
+    if(!rows.length) return;
+    this._attendFlushing=true;
+    try{
+      let ok=true;
+      for(let i=0;i<rows.length;i+=500){
+        try{ if(!(await window.__vxUpsert('attendance_marks', rows.slice(i,i+500), {noQueue:true}))){ ok=false; break; } }catch(e){ ok=false; break; }
+      }
+      if(ok){
+        const now=this._attendUnsent();
+        sent.forEach(([key, sw, st])=>{ const i=key.lastIndexOf('|');
+          const cur=(((this.attendLog||{})[key.slice(0,i)]||{})[key.slice(i+1)]||{})[sw];
+          if(cur===st && now[key]){ delete now[key][sw]; if(!Object.keys(now[key]).length) delete now[key]; } });
+        this._saveLocalOnly('vx_attend_unsent', now);
+        this.forceUpdate();
+      }
+    } finally { this._attendFlushing=false; }
   }
   // Which marks are still only on this device. { "squad|2026-08-17": { swimmerId: 1 } }
   _attendUnsent(){ try{ return JSON.parse(localStorage.getItem('vx_attend_unsent')||'{}')||{}; }catch(e){ return {}; } }
@@ -10283,6 +10438,7 @@ class Component extends DCLogic {
       // Marked here since this read was asked for, or marked here and not yet accepted: this
       // device holds the newer answer either way.
       if((markTs[r.squad_id+'|'+r.day+'|'+r.sw_id]||0) >= startedAt) return;
+      if((this._attendInflight||{})[r.squad_id+'|'+r.day+'|'+r.sw_id]) return;
       if(((unsent[r.squad_id+'|'+r.day]||{})[r.sw_id])) return;
       (log[r.squad_id]=log[r.squad_id]||{}); (log[r.squad_id][r.day]=log[r.squad_id][r.day]||{}); log[r.squad_id][r.day][r.sw_id]=r.status; });
     this.attendLog=log; this._attendVer=(this._attendVer||0)+1; try{ this._saveLocalOnly('vx_attend_log', log); }catch(e){} this.forceUpdate();
@@ -10345,7 +10501,28 @@ class Component extends DCLogic {
     const cur=this.getAttendStatus(sq, date, id, idx<0?0:idx);
     const nx = cur==='present'?'absent':(cur==='absent'?'late':'present');
     this.setAttendStatus(sq, date, id, nx);
+    // Today, everybody without a mark is SHOWN as Present. Once the coach is taking the register,
+    // that has to be what the database holds too — otherwise the day turns into "Not taken" at
+    // midnight for every swimmer who was not tapped. One write for the rest of the squad.
+    if(date===this.todayISO()){
+      const rest=this._attendUnrecorded(sq, date).filter(x=>x!==id);
+      if(rest.length) this.setAttendBulk(sq, date, rest, 'present');
+    }
     this.forceUpdate();
+  }
+  // The register's own button: save the shown-as-Present swimmers today, or fill in every swimmer
+  // a missed day has no mark for. Absentees are then tapped one by one, as on any register.
+  attendFillPresent(){
+    const sq=this.state.squadId; const date=this.curAttendDate();
+    if(date>this.todayISO()) return;
+    const ids=this._attendUnrecorded(sq, date);
+    if(!ids.length) return;
+    this.setState({attendResendMsg:'', attendResendOk:false});
+    Promise.resolve(this.setAttendBulk(sq, date, ids, 'present')).then(ok=>{
+      this.setState({attendResendOk:!!ok, attendResendMsg: ok
+        ? (ids.length+' swimmer'+(ids.length===1?'':'s')+' saved as Present \u2713 Tap anyone who was absent or late.')
+        : ('Saved on this device \u2014 they will be sent to the database by themselves as soon as it can be reached.')});
+    });
   }
   // Did anybody actually open this squad's register on this day?
   //
@@ -21879,6 +22056,32 @@ class Component extends DCLogic {
     this._loungeInt=setInterval(()=>{ if(this.state.tool==='lounge') this._loungeFetch(); }, 6000);
     // Live attendance: while a coach (or a family) is looking at the attendance view, re-pull the
     // currently-viewed day every few seconds so another device's taps appear almost immediately.
+    // Marks that did not reach the database go up by themselves — every 30 seconds while signed
+    // in, and the moment the connection comes back.
+    this._attendFlushInt=setInterval(()=>{ try{ this._attendFlushUnsent(); }catch(e){} }, 30000);
+    setTimeout(()=>{ try{ this._attendFlushUnsent(); }catch(e){} }, 8000);
+    this._onAttendOnline=()=>{ try{ this._attendFlushUnsent(); }catch(e){} };
+    window.addEventListener('online', this._onAttendOnline);
+    // The general retry queue replays a refused mark later. It must replay the mark as it stands
+    // NOW, not as it was when it failed — a coach who tapped Absent (failed) and then Present
+    // (landed) would otherwise have Absent written over Present 45 seconds later.
+    window.__vxFreshRows=(table, rows)=>{
+      if(table!=='attendance_marks' || !Array.isArray(rows)) return rows;
+      return rows.map(r=>{ const cur=r && (((this.attendLog||{})[r.squad_id]||{})[r.day]||{})[r.sw_id];
+        return (cur && cur!==r.status) ? Object.assign({}, r, {status:cur, ts:Date.now(), updated_at:new Date().toISOString()}) : r; });
+    };
+    // And whichever path lands a mark — a tap, a replay, a resend — the register stops listing it
+    // as unsent. The replay used to land the row and leave "1 mark has not reached the database"
+    // on the register for ever.
+    window.__vxRowsLanded=(table, rows)=>{
+      if(table!=='attendance_marks' || !Array.isArray(rows)) return;
+      try{ const m=this._attendUnsent(); let touched=false;
+        rows.forEach(r=>{ if(!r) return; const key=r.squad_id+'|'+r.day;
+          const cur=(((this.attendLog||{})[r.squad_id]||{})[r.day]||{})[r.sw_id];
+          if(m[key] && m[key][r.sw_id] && cur===r.status){ delete m[key][r.sw_id]; if(!Object.keys(m[key]).length) delete m[key]; touched=true; } });
+        if(touched){ this._saveLocalOnly('vx_attend_unsent', m); clearTimeout(this._attUnsentT); this._attUnsentT=setTimeout(()=>{ try{ this.forceUpdate(); }catch(e){} }, 400); }
+      }catch(e){}
+    };
     this._attendInt=setInterval(()=>{ const s=this.state; if((s.view==='squad'&&s.tab==='attend')||(s.view==='family'&&s.famTab==='attend')){ const day = s.view==='family' ? (s.famAttDateISO||this.todayISO()) : this.curAttendDate(); try{ this._attendFetch(day); }catch(e){} } }, 2500);
     // Truly live: subscribe to the attendance table over a websocket. On any change, re-pull the
     // viewed day instantly. Falls back to the poll above if realtime isn't available.
@@ -21977,7 +22180,10 @@ class Component extends DCLogic {
         try{ localStorage.setItem('__vxsize_'+r.key, String(JSON.stringify(r.value).length)); }catch(e){}
         const s=JSON.stringify(r.value);
         const was=localStorage.getItem(r.key);
-        if(was!==s){
+        // By content, not by key order — jsonb hands keys back in its own order, so a raw string
+        // compare called the roster "changed" on every sweep and rebuilt the screen every 20s.
+        const same = (was===s) || (was!=null && window.__vxCanonJSON && window.__vxCanonJSON(was)===window.__vxCanonJSON(r.value));
+        if(!same){
           // Same net as applyPull. This sweep runs every twenty seconds against every synced key,
           // so it is the path that actually replaced the roster in the background while somebody
           // was looking at it, with nothing kept and nothing said.
@@ -22129,7 +22335,7 @@ class Component extends DCLogic {
     // Remember where we are, so a page refresh returns to the SAME screen (not the hub).
     try{ const s=this.state; if(s.screen==='app'){ const nav={view:s.view, squadId:s.squadId, tab:s.tab, tool:s.tool||null, swimmerId:s.swimmerId||null, adminSection:s.adminSection||null, famTab:s.famTab||null, familyActiveIdx:s.familyActiveIdx||0}; const j=JSON.stringify(nav); if(j!==this._lastNavJson){ this._lastNavJson=j; localStorage.setItem('vx_nav', j); } } }catch(e){}
   }
-  componentWillUnmount(){ clearInterval(this._clock); clearTimeout(this._t); clearInterval(this._statusInt); clearInterval(this._syncInt); clearInterval(this._loungeInt); clearInterval(this._attendInt); clearInterval(this._liveInt); clearInterval(this._plansInt); clearInterval(this._staffInt); try{ document.removeEventListener('visibilitychange', this._onVis); }catch(e){} window.removeEventListener('beforeprint', this._onBeforePrint); window.removeEventListener('afterprint', this._onAfterPrint); window.removeEventListener('resize', this._onPaperResize); window.removeEventListener('online', this._onStatusEvt); window.removeEventListener('offline', this._onStatusEvt); if(this._battery){ try{ this._battery.removeEventListener('levelchange', this._onStatusEvt); this._battery.removeEventListener('chargingchange', this._onStatusEvt); }catch(e){} } }
+  componentWillUnmount(){ clearInterval(this._clock); clearTimeout(this._t); clearInterval(this._statusInt); clearInterval(this._syncInt); clearInterval(this._loungeInt); clearInterval(this._attendInt); clearInterval(this._attendFlushInt); try{ window.removeEventListener('online', this._onAttendOnline); }catch(e){} clearInterval(this._liveInt); clearInterval(this._plansInt); clearInterval(this._staffInt); try{ document.removeEventListener('visibilitychange', this._onVis); }catch(e){} window.removeEventListener('beforeprint', this._onBeforePrint); window.removeEventListener('afterprint', this._onAfterPrint); window.removeEventListener('resize', this._onPaperResize); window.removeEventListener('online', this._onStatusEvt); window.removeEventListener('offline', this._onStatusEvt); if(this._battery){ try{ this._battery.removeEventListener('levelchange', this._onStatusEvt); this._battery.removeEventListener('chargingchange', this._onStatusEvt); }catch(e){} } }
   // Icons drawn for what the screen actually does, rather than the nearest library match:
   // a register with a tick AND roll lines, a podium with three real steps because we rank
   // swimmers, a stopwatch with its crown. Rendered before lucide runs and the data-lucide
@@ -22750,6 +22956,16 @@ class Component extends DCLogic {
       : (_attTaken+' mark'+(_attTaken===1?'':'s')+' taken on this day. If another device is not showing them, send them again — it changes nothing if they are already there.');
     const attendSendLabel = S.attendResendBusy ? 'Sending…' : (_attUnsent>0 ? 'Send these to the database' : 'Send this register again');
     const onAttendResend = ()=>this.attendResend(S.squadId, attendCurDate);
+    // Swimmers on this day with no saved mark. Today they read "Present" — the default — and are
+    // not in the database until saved; on a past day they read "Not taken". One tap fixes either.
+    const _attNoMark = attendCurDate<=this.todayISO() ? this._attendUnrecorded(S.squadId, attendCurDate).length : 0;
+    const _attIsToday = attendCurDate===this.todayISO();
+    const attendFillShow = _attNoMark>0;
+    const attendFillLine = _attIsToday
+      ? (_attNoMark+' swimmer'+(_attNoMark===1?' is':'s are')+' showing as Present but '+(_attNoMark===1?'is':'are')+' not saved yet. Save the register, then tap anyone who is absent or late.')
+      : (_attNoMark+' swimmer'+(_attNoMark===1?' has':'s have')+' no mark for this day. Mark '+(_attNoMark===1?'them':'them all')+' present in one go, then tap anyone who was absent or late.');
+    const attendFillLabel = _attIsToday ? ('Save register ('+_attNoMark+' present)') : ('Mark '+_attNoMark+' present');
+    const onAttendFill = ()=>this.attendFillPresent();
     const attendSendBg = attendSendWarn ? '#FCEFD6' : '#F4F6F8';
     const attendSendBorder = attendSendWarn ? '#F0D9A8' : '#E5E9F0';
     const attendSendFg = attendSendWarn ? '#8A5606' : '#3A4152';
@@ -25069,6 +25285,7 @@ class Component extends DCLogic {
       attendViewYearBg: attendView==='year'?'#0A0F1A':'transparent', attendViewYearFg: attendView==='year'?'#fff':'#7A8296',
       onAttendViewDay:()=>this.setState({attendView:'day'}), onAttendViewMonth:()=>this.setState({attendView:'month'}), onAttendViewYear:()=>this.setState({attendView:'year'}),
       attendDayLabel, onAttendDayPrev, onAttendDayNext,
+      attendFillShow, attendFillLine, attendFillLabel, onAttendFill,
       attendSendShow, attendSendLine, attendSendLabel, onAttendResend, attendSendBg, attendSendBorder,
       attendSendFg, attendSendMsg, attendSendMsgShow, attendSendMsgFg,
       attendMonthLabel, attendWeekdayLabels, attendMonthCells, attendMonthAvgPct, attendMonthSessions, onAttendMonthPrev, onAttendMonthNext,
